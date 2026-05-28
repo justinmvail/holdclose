@@ -53,9 +53,15 @@ automation. Each phase leaves the suite green.
   carrying the four tabs in exact order `Home · Journal · Library ·
   Crisis`, using Cupertino-style icons (home, book, library_books,
   warning_amber_outlined for Crisis — verify a calm-looking icon set).
-  Active tab uses `primary` color; inactive uses `primarySoft`. Tests:
-  bar renders 4 items in the right order; tapping each switches the
-  shell branch.
+  Active tab uses `primary` color; inactive uses `primarySoft`.
+  **Also: set up `alchemist` golden infrastructure for the project.**
+  Create `test/golden/flutter_test_config.dart` per the alchemist
+  README so goldens run with consistent font + platform settings.
+  Tests: widget tests assert bar renders 4 items in the right order
+  and tapping each switches the shell branch; ALSO add a golden test
+  `test/golden/tab_scaffold_golden_test.dart` capturing the bar's
+  default state (one CI golden per the alchemist convention). Last
+  scaffold-phase task — coverage threshold becomes 80% from Task 5 on.
 
 ## Phase 2 — Provider interfaces + fakes
 
@@ -141,6 +147,12 @@ automation. Each phase leaves the suite green.
   is built per §7.2 verbatim.
 
 ## Phase 3 — Decoder flow (the wedge)
+
+> **From here on**, every screen task includes a golden test at
+> `test/golden/<screen>_golden_test.dart` capturing the default
+> light-theme state. The coverage gate is at 80%. Tasks that ship
+> screens without their goldens — or that drop coverage — will be
+> rolled back by the autoloop.
 
 - [ ] **Task 11: Home screen
   (`lib/screens/home_screen.dart`).** Implement Home per BUILD_SPEC.md

@@ -31,6 +31,18 @@ as an automated `integration_test/` walkthrough over the same code. See
 - Tests required for every screen + service + provider. Widget tests
   under `test/screens/`, service tests under `test/services/`,
   repository / provider tests under `test/providers/`.
+- **Coverage threshold is enforced by the autoloop test gate.** 60%
+  during tasks 1–4 (scaffold), 80% from task 5 onward. Generated
+  files (`*.g.dart`, `*.freezed.dart`, anything under `generated/`)
+  are excluded from the count. The gate strips these via `lcov
+  --remove` before computing the percentage. New code without
+  tests will roll the iter back.
+- **Every screen needs an alchemist golden.** Goldens live under
+  `test/golden/<screen_name>_golden_test.dart` and use
+  `goldenTest(...)` with the screen wrapped in a ProviderScope +
+  the brand theme. Goldens run as part of `flutter test`.
+  Regenerate after intentional visual changes:
+  `flutter test --update-goldens test/golden/`.
 - Pattern-discovery: read 3 nearby screens or services in the same dir
   before adding code there.
 - Don't introduce new state-management libs, routing libs, DB libs,

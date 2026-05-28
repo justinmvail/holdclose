@@ -56,6 +56,11 @@ dev_dependencies:
   integration_test:
     sdk: flutter
 
+  # Golden tests (visual regression). Alchemist handles platform-
+  # specific font rendering differences so goldens pass on both
+  # macOS and Linux CI.
+  alchemist: ^0.11.0
+
   # Code gen
   build_runner: ^2.4.0
   freezed: ^2.5.0

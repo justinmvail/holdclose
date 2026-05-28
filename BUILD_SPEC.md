@@ -72,6 +72,24 @@ pre-staged content beyond the seed-data scaffolding.
   builds never reset.
 - **`flutter analyze` must be clean** before any task can ship.
   `flutter test` must be green.
+- **Test coverage gate.** The autoloop's test gate runs
+  `flutter test --coverage`, strips generated files
+  (`*.g.dart`, `*.freezed.dart`, `**/generated/**`), and parses
+  the resulting `coverage/lcov.info` via `lcov`. Threshold is
+  **ramped by phase**:
+  - Tasks 1–4 (scaffold + theme + routing + tab scaffold):
+    **60%** line coverage minimum
+  - Tasks 5+ (all subsequent tasks): **80%** line coverage minimum
+  Phase is detected by counting `^- [x]` lines in `TASKS.md` at
+  gate run time. Iters that drop coverage below threshold roll
+  back automatically. New code without tests is not acceptable.
+- **Golden tests for every screen.** Use the `alchemist`
+  package — handles font-rendering differences across host
+  platforms so goldens stay portable. Every screen widget gets
+  at least one default-light-theme golden. Dark-mode and
+  large-font variants are added during the manual polish pass
+  (Phase 8 + after), not by the autoloop. Goldens live under
+  `test/golden/` and run as part of `flutter test`.
 
 ---
 
@@ -1404,7 +1422,9 @@ The build is done when all hold:
 1. `flutter pub get && flutter analyze` is clean (no errors,
    warnings tolerated).
 2. `flutter test` is green — every screen, service, provider has
-   at least one test.
+   at least one test, and every screen has at least one
+   `alchemist` golden test under `test/golden/`. Line coverage
+   (per the ramped threshold in §1) holds.
 3. `flutter test integration_test/demo_tour.dart
    --dart-define=DEMO_MODE=true` walks through the full tour
    without exceptions.
