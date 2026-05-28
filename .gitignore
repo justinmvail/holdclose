@@ -1,0 +1,54 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+**/.DS_Store
+
+# Drift / generated
+*.g.dart
+*.freezed.dart
+**/generated/
+**/*.gen.dart
+
+# iOS
+ios/Pods/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Runner.xcworkspace/xcuserdata/
+ios/Runner.xcodeproj/xcuserdata/
+ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Android
+android/.gradle/
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/app/release/
+android/.idea/
+
+# Secrets (none expected, but defensive)
+.env
+.env.local
+google-services.json
+GoogleService-Info.plist
+
+# Python shim
+tools/__pycache__/
+tools/.venv/
+
+# Misc
+*.log
+coverage/
+.coverage
