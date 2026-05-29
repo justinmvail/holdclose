@@ -69,6 +69,32 @@ flutter analyze                       # static
 
 See `BUILD_SPEC.md` §13 for the full risk-and-compliance posture.
 
+## Pitch day checklist
+
+Run through this in order on the demo machine the morning of the
+pitch. Don't skip steps — the failure modes are all "obvious in
+retrospect."
+
+1. `git pull` latest on `main`.
+2. `flutter pub get` — fetches any pinned dep updates.
+3. `flutter test` — must be green. If a golden fails, regenerate
+   only after confirming the visual change is intentional
+   (`flutter test --update-goldens test/golden/`).
+4. In one terminal: `python3 tools/claude_shim.py` — confirm the
+   "listening on localhost:8765" line prints and the `claude` CLI
+   is logged in (`claude --version` works).
+5. In another terminal: `flutter run -d <ios-sim>` — pick the
+   demo sim (`flutter devices` to list).
+6. Confirm the home screen renders: navy header, orange "Decode
+   a behavior" CTA, Mary Henderson seeded as the active loved
+   one.
+7. Settings → **Reset on launch** is ON. This wipes the journal
+   and decoder history on each cold start so the demo always
+   begins from a clean slate.
+8. Record a backup video with QuickTime (File → New Movie
+   Recording → select the iOS sim). If the live demo wedges,
+   you can fall back to the recording without losing the room.
+
 ## Status
 
 Pre-pitch. Built for a private partnership conversation with Dr.

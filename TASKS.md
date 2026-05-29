@@ -427,7 +427,7 @@ automation. Each phase leaves the suite green.
   `expect(...)`. Tests run as part of the demo tour itself — the
   tour IS the test.
 
-- [ ] **Task 35: README dev section + final smoke.** Update README.md
+- [x] **Task 35: README dev section + final smoke.** Update README.md
   with the exact dev commands: how to run the shim, how to run the
   Flutter app against it, how to run the demo tour. Add a "Pitch day
   checklist" section: (1) `git pull` latest, (2) `flutter pub get`,
