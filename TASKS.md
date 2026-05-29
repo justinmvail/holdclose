@@ -579,3 +579,111 @@ runs on iPhone.
   this iter. README "Audio" section: brief mention of bundled voice
   + Settings toggle. Tests: unit covering the fallback path
   (mock-fail the channel, assert factory returns OSTTSProvider).
+
+---
+
+## Phase 10 — espeak-ng text-to-phoneme integration (the production fix)
+
+Phase 9.3's `EspeakNGPhonemizer` ships with a TODO calling out that it
+**does NOT actually wire espeak-ng** — it falls through to a character-
+by-character lookup against `phoneme_id_map`, which produces non-empty
+output (so the audio pipeline + tests stay alive) but feeds the Piper
+model the wrong IDs. The audible result is gibberish: the letter `c`
+maps to whatever ID `c` happens to have in the Piper IPA table, not to
+the sound `k`. Surfaced on the 2026-05-29 simulator demo as
+"it speaks, but it's jibberish."
+
+The pitch-week interim (HTTP phonemize endpoint on
+`tools/claude_shim.py` consumed by `HttpPhonemizer` in
+TTSBridge.swift) keeps the demo working without espeak-ng on-device,
+but it requires the shim to be running — not a path that ships to
+TestFlight users. Phase 10 lands the proper on-device integration
+that lets the bundled voice work standalone.
+
+Why this is the right long-term answer (vs. switching engines):
+  - Piper + espeak-ng total bundle is ~35 MB (smallest in class)
+  - Both MIT-licensed; no commercial-use restrictions
+  - The voicecloner project (`~/IdeaProjects/voicecloner`) targets
+    Piper — a custom-trained Dr. Natali voice ships as a Piper
+    `.onnx` swap, no engine change needed
+  - Production-validated: Home Assistant ships Piper to hundreds of
+    thousands of users via their voice add-on
+
+Sized as ~5 atomic iters; iOS slice ships first since the pitch demo
+runs on iPhone.
+
+- [ ] **Phase 10.1: Vendor espeak-ng for iOS.** Two paths to evaluate
+  in this iter — pick the one with a maintained pod:
+    - **CocoaPod path**: `pod 'espeak-ng-ios'` (community, verify
+      it tracks espeak-ng 1.52.x) added to ios/Podfile alongside
+      `onnxruntime-objc`.
+    - **Vendor path**: pull espeak-ng C sources at a pinned commit,
+      compile with the iOS arm64 + arm64-simulator toolchain via a
+      Pods-vendored static library. Reference Home Assistant's
+      published iOS voice library for the build flags.
+
+  Either way, after this iter:
+    - `espeak_Initialize`, `espeak_TextToPhonemes`, `espeak_Terminate`
+      are linkable from Swift via a bridging header
+    - `assets/tts/espeak-ng-data/` directory is bundled with the iOS
+      target (~5 MB of language rules / dictionaries espeak-ng
+      consults at runtime)
+
+  Tests: a tiny XCTest that initializes espeak-ng, calls
+  `espeak_TextToPhonemes("hello world")`, asserts the output is
+  non-empty IPA. No audio comparison — just "the library loads and
+  produces something."
+
+- [ ] **Phase 10.2: Replace `EspeakNGPhonemizer`'s fallback with the
+  real call.** In `ios/Runner/TTSBridge.swift`, replace the character-
+  by-character loop (lines 386–403 as of commit 7500ff7) with:
+    1. Initialize espeak-ng once per `TTSEngine` instance, pointed at
+       the bundled `espeak-ng-data/` directory.
+    2. Per `phonemeIds(for:config:)` call: invoke
+       `espeak_TextToPhonemes` with the input English text, capture
+       the IPA-phoneme output string.
+    3. Tokenize the IPA string and map each phoneme to the int64 IDs
+       from `config.phonemeIdMap`. Wrap with BOS (`^`), pad (`_`),
+       EOS (`$`) tokens as Piper's tokenizer expects.
+
+  Drop the `HttpPhonemizer` interim path from the pitch-week shim
+  work — Phase 10's on-device implementation supersedes it. Keep
+  the `tools/claude_shim.py` phonemize endpoint as a test helper
+  (golden phoneme outputs in unit tests).
+
+  Tests: XCTest fixture comparing
+  `EspeakNGPhonemizer.phonemeIds(for: "hello world", config: amyCfg)`
+  against the same call made via Piper's Python `piper-phonemize`
+  reference impl. Tolerance: exact match — the model is sensitive to
+  phoneme ID drift.
+
+- [ ] **Phase 10.3: Mirror on Android — `espeak-ng-android` JNI +
+  Kotlin bridge.** Same shape as 10.1 + 10.2 on Android.
+  `android/app/build.gradle` pulls a maintained `espeak-ng-android`
+  AAR (verify community publication) OR vendors the C library
+  cross-compiled for arm64/x86_64. Kotlin bridge in `TTSBridge.kt`
+  routes the existing phoneme-conversion call to the JNI layer
+  instead of the placeholder.
+
+  Tests: instrumented Android test mirroring the iOS XCTest from 10.2.
+
+- [ ] **Phase 10.4: Audio-quality acceptance + sample regen.** Record
+  3 known scripts (the decoder's "I see you're worried…" + the crisis
+  card welcome line + Settings reset confirmation) through the
+  bundled voice with the real phonemizer. Side-by-side WAV files in
+  `docs/tts_samples/<voice>/` for manual ear validation. Acceptance:
+  the recorded WAVs sound like natural English; the operator approves
+  them subjectively. Document in TTS_BUNDLED.md.
+
+- [ ] **Phase 10.5: Decommission the shim phonemizer + docs.** Delete
+  `HttpPhonemizer` from TTSBridge.swift and the Kotlin equivalent;
+  remove the `/phonemize` HTTP call from `BundledTTSProvider`. Keep
+  the `tools/claude_shim.py` endpoint as a test helper but stop
+  calling it from app code. Update `docs/TTS_BUNDLED.md`:
+    - Mark Phase 9.3's TODO as resolved
+    - Document the espeak-ng integration (data path, init/teardown
+      contract, phoneme set used)
+    - Add a "swapping voices" section explaining how to drop a
+      voicecloner-trained `.onnx` into `assets/tts/<voice-id>/`
+      (the espeak-ng setup is voice-agnostic; same data dir works
+      for any en-* Piper voice)
