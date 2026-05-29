@@ -37,12 +37,13 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<!-- Phase 9.3 pitch-week interim: the BundledTTSProvider's
-	     HttpPhonemizer calls http://localhost:8765/phonemize on the
-	     dev shim for text→IPA conversion. iOS App Transport
-	     Security blocks plain HTTP by default; this exception
-	     allows localhost only. Retired by Phase 10 (on-device
-	     espeak-ng integration). -->
+	<!-- Dev-only: the Dart-side ClaudeCLIProvider POSTs to the
+	     local `tools/claude_shim.py` LLM shim at
+	     http://localhost:8765/generate. iOS App Transport Security
+	     blocks plain HTTP by default; this exception allows
+	     localhost only. The bundled-TTS path no longer hits HTTP —
+	     Phase 10's on-device espeak-ng integration replaced the
+	     pitch-week HttpPhonemizer. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSExceptionDomains</key>

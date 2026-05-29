@@ -33,14 +33,17 @@ device class — but expect 1–3 s of first-token latency on CPU.
 
 ## Phonemizer status
 
-The espeak-ng wrapping is stubbed behind the `Phonemizer` protocol.
-`EspeakNGPhonemizer` currently performs a character-by-character
-lookup against `phoneme_id_map` from the voice config (BOS/EOS + pad
-tokens around each grapheme). That keeps the audio pipeline alive
-and the tests honest, but it isn't production-grade English
-phonemization. The real espeak-ng integration lands in a follow-up:
-vendor `libespeak-ng.a` + the espeak-ng-data tree into the Runner
-target and route through `espeak_TextToPhonemes`.
+> **Resolved in Phase 10.5.** The Phase 9.3 stub — `EspeakNGPhonemizer`
+> doing a character-by-character lookup against `phoneme_id_map` — and
+> the pitch-week `HttpPhonemizer` shim workaround have both been
+> retired. On-device espeak-ng now drives text → IPA on both platforms;
+> see the **Phase 10.5 — espeak-ng integration (production state)**
+> section below for the data path, init/teardown contract, and phoneme
+> set details. The class-header fallback path is still present (the
+> bridge falls through to the character lookup when the vendor script
+> hasn't run on a fresh checkout) but no longer ships to TestFlight —
+> any release build has `CAREBLAZERS_HAS_ESPEAK_NG=1` and `useEspeak:
+> true`.
 
 ## Manual smoke sequence
 
@@ -124,16 +127,14 @@ clears <500 ms on a Pixel 6+.
 
 ## Phonemizer status
 
-The espeak-ng wrapping is stubbed behind the `Phonemizer` interface,
-parallel to iOS. `EspeakNGPhonemizer` performs a character-by-
-character lookup against `phoneme_id_map` from the voice config
-(BOS/EOS + pad tokens around each grapheme) — same shape as the
-Swift counterpart, same tradeoffs. The real espeak-ng integration
-lands in a follow-up: vendor `libespeak-ng.so` + the
-espeak-ng-data tree via JNI (or the `espeakng-java` Maven artifact)
-and route through `espeak_TextToPhonemes`. The two bridges share
-the follow-up — when iOS gets the production phonemizer, Android
-gets the matching binding in the same iter.
+> **Resolved in Phase 10.5.** Mirror of the iOS resolution above. The
+> Android `EspeakNGPhonemizer` now routes through the JNI shim
+> (`libcareblazers_espeak_ng.so`) when `EspeakNGNative.isAvailable` is
+> true; the character-by-character fallback remains in the code path
+> for fresh checkouts that haven't run `tools/vendor_espeak_ng.sh`, but
+> ships disabled in any release APK. See the **Phase 10.5 — espeak-ng
+> integration (production state)** section for the cross-platform
+> contract.
 
 ## Audio output
 
@@ -797,3 +798,212 @@ Decision rule:
   through the OS TTS path regardless of the bundled-voice toggle.
   That contract is covered by the widget-test semantics labels, not
   this regen.
+
+## Phase 10.5 — espeak-ng integration (production state)
+
+This section is the canonical reference for how text gets turned into
+phoneme IDs on both platforms once Phase 10's vendor-and-link work has
+landed. It supersedes the Phase 9.3 / 9.4 "Phonemizer status" stubs
+above (kept as breadcrumbs for the historical record).
+
+### What got decommissioned
+
+- `HttpPhonemizer` (iOS, Swift) — deleted. The pitch-week shim that
+  POSTed to `tools/claude_shim.py`'s `/phonemize` endpoint for IPA is
+  no longer in the binary; the bridge calls `espeak_TextToPhonemes`
+  directly. The `tools/claude_shim.py` `/phonemize` route stays
+  available as a **test helper** (golden IPA generation for the
+  reference comparison documented in Phase 10.2), but app code never
+  dials it.
+- The `NSAppTransportSecurity → localhost` exception in
+  `ios/Runner/Info.plist` still exists, but only for the
+  `ClaudeCLIProvider → /generate` LLM shim — the TTS path is now
+  network-free.
+- Android never shipped an HTTP phonemizer (Phase 10.3 went straight
+  from the Phase 9.4 character-lookup stub to the JNI vendor), so
+  there is nothing to delete on that side; the resolution is purely
+  on the Kotlin/JNI surface.
+
+### Data path
+
+espeak-ng is a plain C library — it walks a filesystem tree of
+language rule files at runtime. The vendor script
+(`tools/vendor_espeak_ng.sh`) drops that tree in two places so each
+platform can resolve it natively:
+
+| Platform | On-disk location at runtime                                            | Source         |
+| -------- | ---------------------------------------------------------------------- | -------------- |
+| iOS      | `Runner.app/espeak-ng.bundle/espeak-ng-data/`                          | CocoaPods `resource_bundles` from `ios/Vendored/espeak-ng/Resources/espeak-ng-data/` |
+| Android  | `<cacheDir>/espeak-ng-data/` (copied at first launch from APK assets)   | `assets/tts/espeak-ng-data/` → flutter asset bundle → APK |
+
+The path passed to `espeak_Initialize` is the **parent** of
+`espeak-ng-data/` (the upstream contract), so:
+
+- iOS: `TTSEngine.locateEspeakDataParent()` returns the `.bundle` path
+  itself. The Flutter-asset mirror is the secondary fallback when the
+  Pod resource bundle doesn't resolve (rare packaging mode).
+- Android: `TTSEngine.extractEspeakNGData()` returns `cacheDir`. The
+  extracted subtree is cached across launches; `cacheDir` is
+  user-clearable (Settings → Apps → Storage → Clear Cache) and
+  re-extracts silently on the next launch because the source is the
+  APK itself.
+
+### Init / teardown contract
+
+The lifecycle is process-scoped on both platforms — one
+initialization per app launch, never re-init mid-session.
+
+| Step           | iOS (Swift)                                                | Android (Kotlin + JNI)                                                         |
+| -------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Init           | `TTSEngine.init()` → `initializeEspeakNG()` → `espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, parentPath, 0)` then `espeak_SetVoiceByName("en-us")`. | `TTSEngine.init { espeakReady = initializeEspeakNG() }` → `EspeakNGNative.nativeInitialize(parentPath)` → JNI calls into `espeak_Initialize` + `espeak_SetVoiceByName("en-us")`. |
+| Ready signal   | `espeakReady: Bool` (private). True iff `espeak_Initialize` returned a positive sample rate AND `EE_OK` came back from voice select. | `espeakReady: Boolean` (private). Same predicate; also gated on `EspeakNGNative.isAvailable` (the `System.loadLibrary` + `nativeHasEspeakNG` compile-time guard). |
+| Phonemizer use | `EspeakNGPhonemizer(useEspeak: espeakReady)` — when `useEspeak` is false the call falls through to character lookup against the voice config's `phoneme_id_map`. | `EspeakNGPhonemizer(useEspeak: espeakReady)` — same fallback semantics. |
+| Teardown       | `TTSEngine.deinit` calls `espeak_Terminate()` when `espeakReady` was true. | `EspeakNGNative.nativeTerminate()` exists but is unused — the engine is a process singleton and espeak state is fine to leak for the process lifetime. (The native binding is exposed so a future test harness can reset between runs.) |
+
+The audio output mode is `AUDIO_OUTPUT_SYNCHRONOUS` on both
+platforms. We only use the **text-to-phoneme** half of the espeak-ng
+API; the library's own audio path is suppressed so AVAudioEngine /
+AudioTrack stay in charge of playback.
+
+### Phoneme set used
+
+- **Output mode**: IPA Unicode, no separator. `espeak_TextToPhonemes`
+  is called with `phonememode = 0x02`. Multi-sentence inputs (decoder
+  scripts often span two or three) are handled by looping the call
+  until the cursor reaches the trailing NUL — espeak processes one
+  sentence per invocation and advances the cursor for the next.
+- **Tokenization**: the IPA string returned by espeak is split into
+  per-Unicode-scalar tokens. The Piper Amy voice config's
+  `phoneme_id_map` keys (verified against
+  `en_US-amy-medium.onnx.json`: all 154 keys are exactly one scalar
+  each) match that granularity, so a token-by-token lookup against
+  the map gives the int64 ID sequence.
+- **Framing**: the sequence is wrapped with **BOS (`^`)**, **pad
+  (`_`) between phonemes**, and **EOS (`$`)** — the layout Piper's
+  tokenizer is trained against. The BOS/pad/EOS wrapper is in
+  `EspeakNGPhonemizer.idsForTokens` (Swift static, Kotlin companion);
+  the espeak and character-fallback paths share that wrapper so
+  framing can never drift between them.
+- **Voice selection**: hard-coded to `en-us` at init time. Piper's
+  Amy voice was trained against the espeak-ng 1.52 en-us IPA set and
+  the bundled `phoneme_id_map` was generated against that — pinning
+  here keeps the engine deterministic. Voices with a different
+  espeak language (e.g., a hypothetical `es_MX-carmen-medium` Spanish
+  drop) would require swapping `espeak_SetVoiceByName`'s arg to
+  match.
+- **Pinned upstream**: espeak-ng tag **1.52.0**, commit
+  `4870adfa25b1a32b4361592f1be8a40337c58d6c`. Bumping past 1.52
+  requires re-validating the phoneme set against the bundled voice
+  config — flagged in Phase 10.4's acceptance section.
+
+### Acceptance tests
+
+The Phase 10.2 / 10.3 contracts are pinned by:
+
+- `ios/RunnerTests/RunnerTests.swift` →
+  `testEspeakPhonemizerProducesIpaBackedIdsForHelloWorld`
+- `android/app/src/androidTest/.../TTSBridgeInstrumentedTest.kt` →
+  `espeakPhonemizerProducesIpaBackedIdsForHelloWorld`
+
+Both assert that the espeak path returns a non-empty ID sequence
+prefixed by BOS, suffixed by EOS, and **different from the
+character-lookup fallback** — that delta is what proves
+`espeak_TextToPhonemes` actually ran. Both skip cleanly when the
+vendor script hasn't run (the `__has_include` / `isAvailable` guards
+flip the skip).
+
+## Swapping voices (voicecloner workflow)
+
+The Phase 9.6 "Voice catalog swap process" section above covers
+**adding a Piper voice from the upstream catalog** (Spanish Carmen,
+UK Daniel, etc.). This section covers the **Dr. Natali custom voice**
+workflow specifically — dropping a `.onnx` produced by the sibling
+`voicecloner` project into the app.
+
+The espeak-ng setup is **voice-agnostic**: it phonemizes English text
+to IPA against the espeak data directory, and any en-* Piper voice
+that was trained against the same IPA phoneme set consumes the same
+ID sequence. So swapping voices is a pure asset drop — no native
+code changes, no espeak config tweaks.
+
+### Drop-in steps
+
+1. **Train the voice in voicecloner.** The
+   `~/IdeaProjects/voicecloner` project produces two artifacts per
+   trained voice:
+     - `<voice-id>.onnx` — the Piper graph (typically ~25–30 MB at
+       the `medium` quality tier).
+     - `<voice-id>.onnx.json` — the voice config (Piper's standard
+       schema: `phoneme_id_map`, `inference.{noise_scale,length_scale,
+       noise_w}`, audio sample rate, speaker id).
+   Voice ids follow the Piper convention
+   `<lang>_<COUNTRY>-<name>-<quality>` — for the custom Dr. Natali
+   voice, use `en_US-natali-medium` (or `-high` if voicecloner's
+   high-quality tier was used).
+
+2. **Drop the files into `assets/tts/<voice-id>/`.** Two files only:
+   ```
+   assets/tts/en_US-natali-medium/
+     en_US-natali-medium.onnx
+     en_US-natali-medium.onnx.json
+   ```
+   Match the existing `assets/tts/en_US-amy-medium/` layout.
+
+3. **List the asset directory in `pubspec.yaml`.** Add
+   `- assets/tts/en_US-natali-medium/` to the `flutter.assets:`
+   array, matching the trailing-slash form already used for Amy. The
+   trailing slash includes both files in the directory — no need to
+   enumerate `.onnx` and `.onnx.json` separately.
+
+4. **Register the voice in `lib/widgets/voice_picker.dart`.** Add a
+   `{id, displayName, locale, gender}` entry to the static catalog
+   so the Settings → Voice picker dropdown surfaces it. The bridge
+   reads voice metadata from this catalog — the native side doesn't
+   enumerate.
+
+5. **Smoke-test on a real device.** Tap a decoder result's ▶ button
+   with the new voice selected:
+     - **iOS**: `flutter run -d <iphone-device-id>`. The bridge picks
+       up the new `phoneme_id_map` automatically from
+       `<voice-id>.onnx.json`.
+     - **Android**: `flutter run -d <android-device-id>`. Same path.
+
+That's it. No `vendor_espeak_ng.sh` re-run is needed (the espeak data
+dir is voice-agnostic), no `pod install` (no native dependency
+changed), no JNI rebuild (the phonemizer doesn't care which voice
+the IDs map into).
+
+### Why this works without bridge changes
+
+The bridge owns three concerns: ONNX session lifecycle, IPA →
+int64-ID lookup, and PCM playback. All three are parameterized by
+the voice config:
+
+- The ONNX session loads whichever `<voice-id>.onnx` the Dart side
+  asks for (`speak({voiceId})` flows through to `ensureLoaded`).
+- The IPA lookup walks `phoneme_id_map` from the voice's
+  `.onnx.json` — different voices may have different ID assignments
+  for the same IPA character, and the lookup just reads whatever the
+  config says.
+- The playback path consumes whatever sample rate the voice config
+  declares (Amy is 22 050 Hz; a custom voice could be 16 000 Hz or
+  24 000 Hz — the AVAudioEngine / AudioTrack format is set from the
+  config, not hard-coded).
+
+So as long as the voicecloner-trained `.onnx` follows Piper's
+standard schema (which voicecloner produces by default), the bridge
+picks it up without a code change. Non-standard configs (custom
+speaker-id ranges, extra metadata fields) require a bridge-side
+parser update — those would be caught at smoke time when the new
+voice fails to render audio, surfacing as a
+`configMalformed`/`ConfigMalformed` exception with the offending
+field name in the message.
+
+### Envelope budget reminder
+
+The Phase 9.6 "Voice catalog swap process" section notes the
+~3-voice / ~90 MB cap before on-demand download starts to be worth
+the design conversation. A custom Dr. Natali voice would be voice #2
+(after Amy), so envelope cost is not a near-term concern for v1 —
+but if the catalog grows past Amy + Natali, revisit the
+on-demand-download path before shipping voice #4.

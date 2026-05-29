@@ -281,12 +281,10 @@ final class TTSEngine {
         self.ortEnv = env
         self.session = session
         self.voiceConfig = config
-        // Phase 10.2: on-device espeak-ng via the vendored Pod. When
+        // On-device espeak-ng via the vendored Pod (Phase 10.2). When
         // `espeakReady` is true the phonemizer calls
         // `espeak_TextToPhonemes` for real IPA; otherwise it falls
-        // back to the Phase 9.3 character lookup (documented in the
-        // class header). HttpPhonemizer is no longer wired — Phase
-        // 10.5 deletes the class.
+        // back to the character-lookup path documented on the class.
         self.phonemizer = EspeakNGPhonemizer(useEspeak: espeakReady)
         self.loadedVoiceId = voiceId
     }
@@ -546,88 +544,6 @@ final class EspeakNGPhonemizer: Phonemizer {
         }
     }
     #endif
-}
-
-/// Pitch-week interim: defers text-to-IPA conversion to the
-/// `tools/claude_shim.py` HTTP server (which embeds Piper's Python
-/// `piper_phonemize` package, which embeds espeak-ng). Keeps the demo
-/// sounding right while Phase 10 (real on-device espeak-ng) is queued.
-///
-/// Contract: POST `http://localhost:8765/phonemize` with
-/// `{"text": "<english>", "voice": "en-us"}`. Response is
-/// `{"phonemes": ["h","ə","l",...]}` — the IPA characters that the
-/// caller (this class) then maps through `config.phonemeIdMap` to the
-/// int64 IDs the model wants. The shim has no per-voice knowledge.
-///
-/// Falls back to `EspeakNGPhonemizer` (the character-by-character
-/// path) when the shim is unreachable, so a TestFlight build without
-/// the dev shim still says SOMETHING — gibberish, but not silence.
-/// Phase 10 retires this whole class.
-final class HttpPhonemizer: Phonemizer {
-    private let endpoint: URL
-    private let fallback: Phonemizer
-    private let timeoutSeconds: TimeInterval
-
-    init(endpoint: URL = URL(string: "http://localhost:8765/phonemize")!,
-         fallback: Phonemizer = EspeakNGPhonemizer(),
-         timeoutSeconds: TimeInterval = 2.0) {
-        self.endpoint = endpoint
-        self.fallback = fallback
-        self.timeoutSeconds = timeoutSeconds
-    }
-
-    func phonemeIds(for text: String, config: VoiceConfig) -> [Int64] {
-        guard let phonemes = fetchPhonemes(text: text) else {
-            // Shim unreachable or errored — fall through so the audio
-            // path stays alive (even if it sounds wrong).
-            return fallback.phonemeIds(for: text, config: config)
-        }
-        var ids: [Int64] = []
-        if let bos = config.phonemeIdMap["^"] { ids.append(contentsOf: bos) }
-        for phoneme in phonemes {
-            if let mapped = config.phonemeIdMap[phoneme] {
-                ids.append(contentsOf: mapped)
-                if let pad = config.phonemeIdMap["_"] {
-                    ids.append(contentsOf: pad)
-                }
-            }
-        }
-        if let eos = config.phonemeIdMap["$"] { ids.append(contentsOf: eos) }
-        return ids
-    }
-
-    private func fetchPhonemes(text: String) -> [String]? {
-        var request = URLRequest(url: endpoint, timeoutInterval: timeoutSeconds)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: String] = ["text": text, "voice": "en-us"]
-        guard let data = try? JSONSerialization.data(withJSONObject: body) else {
-            return nil
-        }
-        request.httpBody = data
-        // Synchronous HTTP via semaphore — we're already off the main
-        // thread (the speak() call comes through a background dispatch
-        // queue) so blocking here doesn't stall UI. URLSession itself
-        // dispatches the request on its own internal queue.
-        let semaphore = DispatchSemaphore(value: 0)
-        var responseData: Data?
-        var responseError: Error?
-        let task = URLSession.shared.dataTask(with: request) { d, _, e in
-            responseData = d
-            responseError = e
-            semaphore.signal()
-        }
-        task.resume()
-        _ = semaphore.wait(timeout: .now() + timeoutSeconds + 0.5)
-        if responseError != nil { return nil }
-        guard let payload = responseData,
-              let json = try? JSONSerialization.jsonObject(with: payload)
-                as? [String: Any],
-              let arr = json["phonemes"] as? [String] else {
-            return nil
-        }
-        return arr
-    }
 }
 
 // MARK: - Errors

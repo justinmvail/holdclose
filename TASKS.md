@@ -675,7 +675,7 @@ runs on iPhone.
   the recorded WAVs sound like natural English; the operator approves
   them subjectively. Document in TTS_BUNDLED.md.
 
-- [ ] **Phase 10.5: Decommission the shim phonemizer + docs.** Delete
+- [x] **Phase 10.5: Decommission the shim phonemizer + docs.** Delete
   `HttpPhonemizer` from TTSBridge.swift and the Kotlin equivalent;
   remove the `/phonemize` HTTP call from `BundledTTSProvider`. Keep
   the `tools/claude_shim.py` endpoint as a test helper but stop
