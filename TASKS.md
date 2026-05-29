@@ -107,7 +107,7 @@ automation. Each phase leaves the suite green.
   through `DriftStorageProvider`; `reset()` empties everything;
   in-memory impl matches the interface.
 
-- [ ] **Task 8: TTSProvider + OSTTSProvider
+- [x] **Task 8: TTSProvider + OSTTSProvider
   (`lib/providers/tts_provider.dart`).** Interface per §6.3.
   `OSTTSProvider` wraps `flutter_tts`: `availableVoices()` queries the
   OS voice list; `speak(text, voiceId, speed)` sets the voice + speed
