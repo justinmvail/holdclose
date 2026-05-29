@@ -687,3 +687,295 @@ runs on iPhone.
       voicecloner-trained `.onnx` into `assets/tts/<voice-id>/`
       (the espeak-ng setup is voice-agnostic; same data dir works
       for any en-* Piper voice)
+
+---
+
+## Phase 11 — Dementia-care chatbot (ChatGPT-style, persisted)
+
+Multi-turn conversational coach for the moments the decoder's single-
+shot pattern doesn't cover. The decoder handles "what do I do RIGHT
+NOW?" — the chatbot handles "tell me more about sundowning," "she
+asked for her mother again yesterday, what's happening," and the
+exploratory back-and-forth a caregiver needs at 11pm with no one to
+talk to.
+
+Builds on existing infrastructure:
+  - `ClaudeCLIProvider` (Phase 2) already streams responses via the
+    `tools/claude_shim.py` HTTP bridge
+  - Drift storage (Phase 2) is the natural persistence layer
+  - Library cards (Phases 22-23) are the canonical Dr. Natali content
+    — the chatbot CITES them rather than reinventing
+
+The bot is grounded: every substantive response cites a library card
+when one applies ("Dr. Natali on sundowning: tap to read more →"),
+which keeps the LLM's voice aligned with the brand's vetted content
+and gives the caregiver a path deeper into the app.
+
+Sized as 6 atomic iters.
+
+- [ ] **Phase 11.1: Chat models (`lib/models/chat.dart`).** Freezed
+  classes for `Conversation` (id, title, createdAt, updatedAt) and
+  `Message` (id, conversationId, role: user/assistant, body, citations:
+  list of library card IDs, createdAt, streamingDone bool). Run
+  `build_runner build --delete-conflicting-outputs`. Tests in
+  `test/models/chat_test.dart`: round-trip through fromJson/toJson;
+  Message with citations preserves the list; role enum values match
+  spec.
+
+- [ ] **Phase 11.2: Drift schema + ChatRepository
+  (`lib/db/tables.dart` + `lib/services/chat_repository.dart`).** Two
+  new tables: `chat_conversations` and `chat_messages` (FK on
+  conversation_id with ON DELETE CASCADE). Migration bumps the drift
+  schema version. `ChatRepository` exposes `createConversation()`,
+  `appendMessage()`, `listConversations()`, `loadMessages(conversationId)`,
+  `deleteConversation()`. Tests round-trip a 5-message conversation;
+  cascade-delete leaves zero orphan messages.
+
+- [ ] **Phase 11.3: ChatService — LLM streaming with dementia-care
+  system prompt (`lib/services/chat_service.dart`).** Wraps the
+  existing `LLMProvider` (defaults to `ClaudeCLIProvider`). System
+  prompt locked verbatim in `lib/seed/chat_system_prompt.dart` —
+  reproduces Dr. Natali's voice from the decoder system prompt but
+  reframed for multi-turn dialogue: warm, de-escalating, evidence-
+  based, refers to professional help for crisis content (BUILD_SPEC.md
+  §6 scope guardrails). Per-message flow: append user message to
+  repository → stream assistant response via LLMProvider → on each
+  delta, update the in-flight Message's body → on final chunk, parse
+  citation hints (`[card:<id>]` syntax in the model's response) into
+  the Message's `citations` field → mark `streamingDone: true`.
+
+  Tests: feed a canned LLM stream (mock provider yielding partial →
+  done), assert the Message is built incrementally; citation parsing
+  handles 0, 1, and multiple `[card:<id>]` markers.
+
+- [ ] **Phase 11.4: Chat screen UI (`lib/screens/chat/chat_screen.dart`
+  + `lib/screens/chat/conversation_list_screen.dart`).** Two screens:
+    - `ConversationListScreen` at `/chat`: list of past conversations
+      (title = first user message's first 60 chars, or a +Quick Chat
+      button to start new). Tap → push the ChatScreen.
+    - `ChatScreen` at `/chat/:id`: message list (assistant messages
+      use the warm-coach styling from the decoder; user messages
+      right-aligned in a subtle navy bubble), input field at bottom,
+      send button (salmon CTA). Streaming responses fade in word-by-
+      word using the existing `CaptionFade` widget from Phase 16 —
+      consistent visual language with the decoder.
+
+  Add a "Chat" tab to the bottom tab bar — but only when the new
+  `chatEnabled` AppSettings flag is true (defaults to true; can be
+  hidden in demo mode if it interferes with the tour). Update the
+  4-tab `TabScaffoldBar` to a 5-tab variant; preserve the existing
+  golden tests by updating them for the new tab.
+
+  Tests + golden: ConversationListScreen with 0/1/many conversations;
+  ChatScreen with streaming-in-flight + final state.
+
+- [ ] **Phase 11.5: Library card citations + deeplink.** When the
+  assistant cites a card via `[card:<id>]`, render an inline chip in
+  the message body: "Dr. Natali on <card title>" with the brand
+  salmon background, white text, 14pt. Tap → push
+  `/library/<card-id>` (the existing library detail route from
+  Phase 23). Update `lib/seed/chat_system_prompt.dart` to enumerate
+  the 12 library card IDs the model can cite, with brief titles —
+  the model picks from that closed set so we never get hallucinated
+  IDs.
+
+  Tests: a Message with citations renders one chip per cited card;
+  tapping a chip calls `context.push('/library/<id>')` (use a mock
+  router).
+
+- [ ] **Phase 11.6: Acceptance + demo tour update.** Add a chat
+  walkthrough to `integration_test/demo_tour.dart`: open chat tab,
+  type "what's sundowning?", verify a response streams in with at
+  least one library card citation, tap the citation, verify
+  navigation lands on the library screen. Document the chat flow in
+  `docs/CHAT_FEATURE.md` covering the system prompt customization,
+  citation syntax, and the chat-disabled-via-settings escape hatch.
+  Update README §Features to mention the chatbot.
+
+---
+
+## Phase 12 — Medication + appointment tracker
+
+The two highest-frequency caregiver utility needs: what meds, when,
+did they take them; what doctor visits are coming up, who's the
+provider, what to ask. Both fit cleanly into the existing local-first
+drift architecture — no backend, no auth, just local persistence +
+local notifications.
+
+The "Bring to your next visit" PDF export (Phase 20's existing
+exporter) should ideally pick up medications + recent dose history +
+upcoming appointments — a follow-up iter extends the PDF schema.
+
+Sized as 8 atomic iters across two related sub-areas: medications
+(12.1–12.4) and appointments (12.5–12.7), plus 12.8 wiring.
+
+### Medications
+
+- [ ] **Phase 12.1: Medication models + drift schema
+  (`lib/models/medication.dart` + `lib/db/tables.dart`).** Three
+  freezed models + tables:
+    - `Medication`: id, name, dosage (free text e.g. "10 mg"),
+      route (oral/topical/injection/other enum), prescriber, notes
+    - `DoseSchedule`: id, medicationId (FK), frequencyKind
+      (daily / twiceDaily / weekly / asNeeded), timesOfDay
+      (list of TimeOfDay), daysOfWeek (Set<int> for weekly), startsOn,
+      endsOn (nullable)
+    - `DoseLog`: id, medicationId (FK), scheduledFor (DateTime),
+      takenAt (nullable DateTime), status (taken/missed/skipped/late),
+      notes
+
+  Migration bumps drift schema version. CASCADE on medication delete
+  removes its schedule + logs. Tests: round-trip each model; cascade-
+  delete invariants; FrequencyKind serialization.
+
+- [ ] **Phase 12.2: MedicationRepository
+  (`lib/services/medication_repository.dart`).** CRUD over the three
+  tables + computed helpers: `upcomingDoses(within: Duration)`,
+  `dosesByDay(date)`, `adherenceRate(forMedication, window)`. The
+  upcoming-doses helper expands a Medication's DoseSchedule into
+  concrete scheduled times for the next 7 days, intersecting with
+  existing DoseLog entries (so already-logged doses don't show as
+  upcoming). Tests cover the schedule-expansion logic for each
+  FrequencyKind variant.
+
+- [ ] **Phase 12.3: Medication list screen + add-med form
+  (`lib/screens/medication/medication_list_screen.dart` +
+  `lib/screens/medication/medication_form_screen.dart`).** List
+  screen at `/medications`: each medication card shows name, dosage,
+  next dose time, adherence chip (last 7 days). Floating action
+  button (salmon CTA) → add-med form. Form fields: name, dosage,
+  route dropdown, prescriber (optional), notes. Submit creates the
+  Medication + a default DoseSchedule (daily, 8am) the operator
+  edits next. Tests: list with 0 / 1 / 10 medications; form
+  validation (name required); add-med flow round-trips through the
+  repository.
+
+- [ ] **Phase 12.4: Dose logging UI
+  (`lib/screens/medication/dose_log_screen.dart`).** "Today's doses"
+  screen at `/medications/today`: chronological list of every dose
+  scheduled today, with a checkbox + "Mark taken" CTA per row. Tap
+  a logged dose to change status (taken → late, skipped → taken,
+  etc.). Late entries show a small badge. Bulk-action: "Mark all
+  before noon taken" for the common batch case. Tests: dose log
+  state transitions; rendering with mixed taken/missed/upcoming.
+
+### Appointments
+
+- [ ] **Phase 12.5: Appointment models + drift schema.** Two new
+  models:
+    - `Provider`: id, name, role (doctor/neurologist/social worker/
+      other enum), phone, address, notes
+    - `Appointment`: id, providerId (FK), startsAt, durationMinutes,
+      location (free text — may differ from provider address e.g.
+      home visits), agenda (list of bullet strings), notes
+      (post-appointment), status (upcoming/completed/canceled)
+
+  Migration + CASCADE behavior + tests mirror 12.1.
+
+- [ ] **Phase 12.6: Appointment list + detail screens
+  (`lib/screens/appointment/appointment_list_screen.dart` +
+  `lib/screens/appointment/appointment_detail_screen.dart`).** List
+  at `/appointments`: grouped by "Upcoming" + "Past." Each card:
+  date+time, provider name, location, agenda item count. Detail
+  screen: full agenda (editable as checkboxes — caregivers cross
+  items off in the waiting room), post-visit notes field, call
+  provider button (tel: URL), get directions button (maps: URL).
+  Tests cover both screens with each appointment status.
+
+- [ ] **Phase 12.7: Add/edit appointment form +
+  ProviderRepository.** Form covers all Appointment fields +
+  inline "add new provider" (so the caregiver doesn't have to set
+  up providers separately). ProviderRepository CRUD. Tests for
+  form round-trip + the inline provider creation.
+
+### Wiring
+
+- [ ] **Phase 12.8: Notifications, Settings, tab bar, tour, PDF
+  pickup.**
+    - Wire `flutter_local_notifications` (new pubspec dep) to
+      schedule per-dose + per-appointment reminders. Dose reminders
+      fire at the scheduled time; appointment reminders fire 24h
+      before + 1h before. Permission ask flow on first med/appointment
+      add. Notification tap deep-links to the relevant screen.
+    - Add "Medications" + "Appointments" tabs to the bottom tab bar
+      (now 7 tabs total OR consolidate "Decoder/Journal" into one
+      "Coach" tab — pick whichever scrolls less awkwardly on small
+      iPhone widths).
+    - Settings additions: per-feature enable toggles + a master
+      "Use trackers" switch for caregivers who want to keep the app
+      lean.
+    - Demo tour additions: add a med + log a dose + add an
+      appointment + verify list rendering.
+    - Phase 20 PDF exporter extension: include "Active medications"
+      and "Upcoming appointments" sections in the exported doctor-
+      visit PDF.
+
+---
+
+## Phase 13 — Care Collective integration (peer support via Dr. Natali's existing community)
+
+The "social platform" feature in its lowest-risk form: rather than
+building a peer-support network from scratch — which would require
+identity, moderation, abuse handling, crisis-detection, and ongoing
+trust-and-safety operations careblazers isn't set up to run — we
+**integrate** with the **Care Collective** community Dr. Natali
+already operates on careblazers.com. The website surfaces it
+prominently ("Join the Care Collective" CTA on the homepage), it has
+existing moderation + revenue + brand fit, and the integration is
+the strongest possible pitch to her: "we plug your existing
+community directly into the app, with single sign-on, and drive your
+member growth."
+
+Strategy: in-app browser to start (fastest to ship, zero backend
+work), with a Phase 13.x follow-up for a native feed UI once the
+Care Collective surfaces an API. Single sign-on via OAuth using the
+careblazers.com auth — Phase 9 of the original arc already wired the
+infrastructure (`AuthProvider`), Phase 13 wires the Care Collective
+OAuth provider as a third sign-in option alongside Google + Apple.
+
+Sized as 4 atomic iters; Phase 13.1 is mostly a research + spec
+iter that confirms what Care Collective's authentication looks like
+in 2026.
+
+- [ ] **Phase 13.1: Care Collective integration design.** Manually
+  inspect careblazers.com to determine: (a) is there a public
+  Care Collective auth endpoint we can OAuth against? (b) is the
+  community accessible via a stable URL pattern we can route a
+  WebView at? (c) is there a JSON API for posts/comments (would
+  enable a native feed)? Write `docs/CARE_COLLECTIVE_INTEGRATION.md`
+  covering the answers, the chosen integration model (WebView vs
+  native feed), the auth flow, and the per-iter breakdown for the
+  remaining Phase 13 work. Acceptance: the doc names the specific
+  Care Collective endpoint(s) we'll target. If the Care Collective
+  doesn't expose either a WebView-friendly URL or an API, the doc
+  documents that and flips Phase 13 to "blocked pending partnership
+  discussion with Dr. Natali" — at which point Phase 11 + 12 are the
+  full feature set for v1.
+
+- [ ] **Phase 13.2: Community tab — WebView + nav bar
+  (`lib/screens/community/community_screen.dart`).** New tab in the
+  bottom bar (icon: `Icons.people_outline`, label: "Community"),
+  pointed at the Care Collective URL identified in 13.1. WebView
+  via `webview_flutter` (new pubspec dep). In-app top bar shows
+  the current page title + a "Back to careblazers" button that
+  pops to the app's home tab. Tests: WebView smoke (does the page
+  load), back button behavior, navigation guards (don't let the
+  WebView drag the user to arbitrary off-Care-Collective URLs).
+
+- [ ] **Phase 13.3: SSO via Care Collective auth.** Add a third
+  sign-in button on the sign-in screen: "Continue with Care
+  Collective." Triggers an OAuth flow against the Care Collective
+  endpoint identified in 13.1. On success, the resulting session
+  cookie / token is stored in the WebView's cookie jar so the
+  community tab opens already signed in — no double sign-in.
+  Update `AuthProvider` to record the OAuth source ("careCollective")
+  alongside "google" and "apple" so the Settings → Account section
+  shows the right disconnect path.
+
+- [ ] **Phase 13.4: Deep links + tour + docs.** Care Collective
+  notification deep links: when Dr. Natali's team sends an email or
+  push about a new post, the link opens the careblazers app directly
+  to the relevant Community tab section (universal links / Android
+  app links). Add a community walkthrough to the demo tour. Update
+  README + the pitch-deck talking points doc with the integration
+  story.
