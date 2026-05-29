@@ -263,7 +263,7 @@ automation. Each phase leaves the suite green.
   voice note record + playback wire (mock the audio plugin);
   delete flow with confirm.
 
-- [ ] **Task 20: PDF exporter (`lib/services/pdf_exporter.dart`).**
+- [x] **Task 20: PDF exporter (`lib/services/pdf_exporter.dart`).**
   Uses the `pdf` package to generate the doctor-visit packet. Inputs:
   `(List<JournalEntry> entries, Patient patient, DateRange range)`.
   Output: a PDF byte buffer. Layout: cover page with patient name +
