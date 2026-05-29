@@ -309,7 +309,7 @@ automation. Each phase leaves the suite green.
   TTS; chip taps push triage with correct behavior; share action
   fires.
 
-- [ ] **Task 24: Crisis card screen
+- [x] **Task 24: Crisis card screen
   (`lib/screens/crisis/crisis_card_screen.dart`).** Per §5.9.
   Scrollable single card. Reads/writes Patient through
   `storageProvider.getPatient()` / `upsertPatient()`. Editable fields
