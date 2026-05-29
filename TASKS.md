@@ -14,7 +14,7 @@ automation. Each phase leaves the suite green.
 
 ## Phase 1 — Scaffold + theme
 
-- [⟳ worker-45868 @2026-05-29T01:02:19Z] **Task 1: Flutter project init + folder structure.** Run `flutter
+- [ ] **Task 1: Flutter project init + folder structure.** Run `flutter
   create careblazers --org com.careblazers --platforms ios,android` and
   reconcile against the layout in BUILD_SPEC.md §2 — create the
   `lib/{providers,models,services,screens/{decoder,journal,library,crisis,onboarding,settings},widgets,db,seed,routing}/`,
