@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'models/settings.dart';
+import 'providers/quiet_hours_provider.dart';
 import 'providers/settings_provider.dart';
 import 'routing/router.dart';
 import 'theme.dart';
@@ -29,12 +30,17 @@ class _CareblazersAppState extends ConsumerState<CareblazersApp> {
   Widget build(BuildContext context) {
     final FontSizeMultiplier fontSize =
         ref.watch(settingsProvider.select((AppSettings s) => s.fontSize));
+    // BUILD_SPEC.md §11.4 — `nightThemeModeProvider` flips to
+    // ThemeMode.dark after 6pm (unless the caregiver overrode via
+    // Settings → "Dark mode at night"). Polls a one-minute timer so
+    // the transition happens without app interaction.
+    final ThemeMode themeMode = ref.watch(nightThemeModeProvider);
     return MaterialApp.router(
       title: 'Careblazers',
       debugShowCheckedModeBanner: false,
       theme: careblazersLightTheme,
       darkTheme: careblazersDarkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       routerConfig: _router,
       // BUILD_SPEC.md §11.3 — apply the user's font multiplier to every
       // routed screen by wrapping the router's child in a MediaQuery

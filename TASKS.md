@@ -345,7 +345,7 @@ automation. Each phase leaves the suite green.
   with the define, reset happens on launch and seed populates; with
   the toggle off (or DEMO_MODE off), state survives.
 
-- [ ] **Task 27: Quiet hours + dark mode auto-switch
+- [x] **Task 27: Quiet hours + dark mode auto-switch
   (`lib/providers/quiet_hours_provider.dart`).** A riverpod provider
   that returns whether quiet hours are active based on
   `DateTime.now()` + settings. Updates on a Timer that fires every
