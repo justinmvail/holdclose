@@ -366,7 +366,7 @@ automation. Each phase leaves the suite green.
 
 ## Phase 7 — Auth + onboarding
 
-- [ ] **Task 29: Welcome carousel
+- [x] **Task 29: Welcome carousel
   (`lib/screens/onboarding/welcome_carousel.dart`).** Per §5.11. Three
   PageView pages with the exact copy locked in §5.11. Skip top-right
   → routes to `/sign-in`. Bottom CTA: "Next →" on pages 1–2, "Get
