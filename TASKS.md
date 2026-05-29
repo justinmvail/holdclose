@@ -417,7 +417,7 @@ automation. Each phase leaves the suite green.
   Henderson has the right meds + allergies + 3 calms + 3 escalates;
   populating an empty store results in 6 entries + 1 patient.
 
-- [ ] **Task 34: `integration_test/demo_tour.dart`.** Implement the
+- [x] **Task 34: `integration_test/demo_tour.dart`.** Implement the
   scripted walkthrough per BUILD_SPEC.md §10.1. Eighteen steps, each
   with at least one `tester.tap()` + assertion. Use the
   `integration_test` package's binding. Pre-condition: app launched
