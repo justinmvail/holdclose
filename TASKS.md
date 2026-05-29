@@ -79,7 +79,7 @@ automation. Each phase leaves the suite green.
   every model round-trips through fromJson/toJson; the 8 canonical
   `Behavior` instances exist with the BUILD_SPEC.md §5.2 ids.
 
-- [ ] **Task 6: LLMProvider interface + FakeLLMProvider
+- [x] **Task 6: LLMProvider interface + FakeLLMProvider
   (`lib/providers/llm_provider.dart`, `lib/seed/fake_llm_seeds.dart`).**
   Abstract class per BUILD_SPEC.md §6.1 with `DecoderChunk` freezed
   union (`partial` / `done` / `error`). Implement `FakeLLMProvider`
