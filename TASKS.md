@@ -731,7 +731,7 @@ Sized as 6 atomic iters.
   `deleteConversation()`. Tests round-trip a 5-message conversation;
   cascade-delete leaves zero orphan messages.
 
-- [ ] **Phase 11.3: ChatService — LLM streaming with dementia-care
+- [x] **Phase 11.3: ChatService — LLM streaming with dementia-care
   system prompt (`lib/services/chat_service.dart`).** Wraps the
   existing `LLMProvider` (defaults to `ClaudeCLIProvider`). System
   prompt locked verbatim in `lib/seed/chat_system_prompt.dart` —
