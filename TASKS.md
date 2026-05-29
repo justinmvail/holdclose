@@ -323,7 +323,7 @@ automation. Each phase leaves the suite green.
 
 ## Phase 6 — Settings + accessibility
 
-- [ ] **Task 25: Settings screen + SettingsProvider
+- [x] **Task 25: Settings screen + SettingsProvider
   (`lib/screens/settings/settings_screen.dart`,
   `lib/providers/settings_provider.dart`).** Per §5.10. Riverpod
   `SettingsNotifier` wraps `AppSettings`, persists every change via
