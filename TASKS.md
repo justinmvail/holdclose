@@ -37,7 +37,7 @@ automation. Each phase leaves the suite green.
   `careblazersLightTheme.colorScheme.primary` returns the navy;
   textTheme styles map to the expected sizes.
 
-- [ ] **Task 3: App scaffold + routing (`lib/app.dart`, `lib/main.dart`,
+- [x] **Task 3: App scaffold + routing (`lib/app.dart`, `lib/main.dart`,
   `lib/routing/router.dart`).** Wire `MaterialApp.router` with
   `careblazersLightTheme` + dark theme + system-mode fallback. Build
   `go_router` config covering ALL routes from BUILD_SPEC.md §5 with
