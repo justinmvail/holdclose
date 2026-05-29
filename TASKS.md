@@ -713,7 +713,7 @@ and gives the caregiver a path deeper into the app.
 
 Sized as 6 atomic iters.
 
-- [ ] **Phase 11.1: Chat models (`lib/models/chat.dart`).** Freezed
+- [x] **Phase 11.1: Chat models (`lib/models/chat.dart`).** Freezed
   classes for `Conversation` (id, title, createdAt, updatedAt) and
   `Message` (id, conversationId, role: user/assistant, body, citations:
   list of library card IDs, createdAt, streamingDone bool). Run
