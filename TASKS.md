@@ -289,7 +289,7 @@ automation. Each phase leaves the suite green.
   cards have non-empty title/hook/body; ids are unique; every related
   behavior id is a real one from §5.2.
 
-- [ ] **Task 22: Library screen
+- [x] **Task 22: Library screen
   (`lib/screens/library/library_screen.dart`).** Per §5.7. AppBar:
   "Library". "Today's card" computed by `(date.dayOfYear % 12)` mod
   the seed list. Section "Most-asked behaviors" + "For YOU, the
