@@ -444,3 +444,138 @@ acceptance criteria. The autoloop stops; the operator + Claude Code
 take over for the manual polish pass (animations, the 12 library card
 bodies, copy refinement). The polish pass is NOT in this task list —
 it's deliberately hand-driven.
+
+---
+
+## Phase 9 — Bundled neural TTS (Piper via ONNX Runtime)
+
+iOS/Android default TTS voices sound robotic; Apple gates the
+high-quality voices behind a Settings download (~150 MB) and never
+exposes the Siri voice to third-party apps. Solution: bundle a
+small Piper voice model (`.onnx`, ~30 MB) into the app and run it
+via ONNX Runtime on both platforms. Same model, same inference
+layer; only the audio output path differs per platform.
+
+Why Piper + ONNX (not CoreML + TFLite separately):
+  - ONE voice model file works on both iOS and Android — no parallel
+    conversion pipelines, no version drift.
+  - iOS: ONNX Runtime's CoreML execution provider routes inference
+    to the Neural Engine (A14+); first-token latency ~100–300 ms.
+  - Android: ONNX Runtime's NNAPI execution provider hits the device's
+    NPU/DSP — similar latency on modern Pixels / Snapdragon devices.
+  - Simulators don't expose the Neural Engine; CPU fallback adds
+    1–3 s of latency per sentence. Real devices fix this.
+
+Voice pick: `en_US-amy-medium` (~30 MB, 22 kHz, warm female) as the
+v1 default. Documented at https://github.com/rhasspy/piper/blob/master/VOICES.md.
+Custom-trained voices (Dr. Natali, future personalities) are produced
+by the **voicecloner** project (separate repo) and dropped into
+`assets/tts/<voice-id>/` — careblazers consumes the `.onnx` artifact
+without caring how it was produced.
+
+Sized as 7 atomic iters; iOS slice ships first since the pitch demo
+runs on iPhone.
+
+- [ ] **Phase 9.1: Add `onnxruntime` dependency + bundle the `amy`
+  voice model.** Add `onnxruntime: ^1.18.0` (Flutter community
+  plugin) to pubspec.yaml. Download `en_US-amy-medium.onnx` (~30 MB)
+  + `en_US-amy-medium.onnx.json` from the Piper repo VOICES.md
+  links; place under `assets/tts/en_US-amy-medium/`. Add to
+  pubspec.yaml `flutter.assets`. Audit: `flutter build apk
+  --analyze-size` reports the bundled model size; verify 30–35 MB
+  envelope. Update BUILD_SPEC.md §1 to list onnxruntime + the voice
+  model under bundled assets. No tests this iter (asset bundling
+  is a build-step affair).
+
+- [ ] **Phase 9.2: Dart-side `BundledTTSProvider` skeleton +
+  platform channel contract.** Implement `BundledTTSProvider` in
+  `lib/providers/bundled_tts_provider.dart` conforming to
+  `TTSProvider`. Bridge to a new `careblazers/tts` MethodChannel
+  with three methods: `speak({text, voiceId, speed}) → void`,
+  `cancel() → void`, `availableVoices() → List<TTSVoice>`. Add
+  stubs in `ios/Runner/AppDelegate.swift` and Android's
+  `MainActivity.kt` returning immediately — actual ONNX inference
+  lands in 9.3/9.4. Tests in `test/providers/bundled_tts_provider_test.dart`
+  use Flutter's MethodChannel mock to assert forwarding shape.
+
+- [ ] **Phase 9.3: iOS Swift bridge — ONNX Runtime + CoreML EP +
+  AVAudioEngine.** Add `onnxruntime-objc` via SPM (or CocoaPods if
+  Flutter's Pods setup forces it). In `ios/Runner/TTSBridge.swift`:
+  load `en_US-amy-medium.onnx` from the bundle, init an ORTSession
+  with the CoreML execution provider enabled (Neural Engine on
+  A14+), implement `speak(text:speed:completion:)` — text →
+  phonemes via the bundled `.onnx.json` espeak-ng config →
+  inference → 16-bit PCM @ 22 050 Hz → AVAudioEngine playback.
+  Wire the MethodChannel handler in AppDelegate. Smoke test:
+  manual `flutter run` → home → decoder → result → hear Amy
+  speaking. Document the smoke sequence in TTS_BUNDLED.md.
+
+  espeak-ng phoneme conversion: ship the matching dataset under
+  `assets/tts/en_US-amy-medium/` (covered by 9.1) and wrap espeak-ng
+  via a small Swift helper around its C library.
+
+  Test: XCTest unit asserts the bridge loads the model and inference
+  produces non-silent audio (RMS > 0).
+
+- [ ] **Phase 9.4: Android Kotlin bridge — ONNX Runtime + NNAPI EP +
+  AudioTrack.** Mirror of 9.3. Add
+  `com.microsoft.onnxruntime:onnxruntime-android:1.18.0` to
+  `android/app/build.gradle`. In
+  `android/app/src/main/kotlin/com/careblazers/careblazers/TTSBridge.kt`:
+  load model from AssetManager, build OrtSession with NNAPI EP (CPU
+  fallback on older devices), phoneme conversion via `espeakng-java`
+  (Maven Central) or a thin JNI wrapper, PCM → AudioTrack streaming
+  write (22 050 Hz mono 16-bit). Wire MethodChannel from
+  MainActivity. Smoke test parallel to 9.3 on an emulator/device.
+
+  Test: instrumented Android test asserts model load + non-silent
+  audio. Document in TTS_BUNDLED.md.
+
+- [ ] **Phase 9.5: Wire `BundledTTSProvider` into the TTS factory +
+  Settings toggle + retire Siri/banner UX.** Update
+  `lib/providers/tts_provider.dart`'s `tts(Ref ref)` factory: when
+  `AppSettings.useBundledVoice` is true (new field, default true),
+  return `BundledTTSProvider`; otherwise `OSTTSProvider`. Add the
+  field via freezed regen; add `Settings.setUseBundledVoice(bool)`
+  notifier. New SwitchListTile in the Audio section:
+  *"High-quality bundled voice — uses ~30 MB of storage for a
+  natural-sounding offline voice (recommended)."* Voice picker
+  dropdown shows `Amy (bundled)` until the v1.1 catalog expansion.
+
+  Remove obsolete UX:
+  - `preferSiriVoice` field + `Settings.setPreferSiriVoice` +
+    the "Use Siri voice" toggle. Apple won't expose Siri voices
+    and the bundled path is strictly better.
+  - `VoiceQualityBanner` widget + its imports in
+    `lib/screens/home_screen.dart` and
+    `lib/screens/settings/settings_screen.dart`. The download-
+    nudge banner becomes irrelevant once bundled is the default.
+
+  Tests: three table-driven cases in
+  `test/providers/tts_provider_test.dart` pinning the factory
+  choice per (useBundledVoice, OS-mute) combo.
+
+- [ ] **Phase 9.6: Real-device performance smoke + acceptance.**
+  Per-platform smoke runs documented in TTS_BUNDLED.md:
+    - iPhone 12 / 14 / 17: first-token latency target <500 ms on A14+
+    - Pixel 6 / 7 / 9: same target on NNAPI path
+    - Older devices (iPhone 11, Pixel 4): document fallback latency;
+      acceptance is "usable" (~1–2 s first-token), not "snappy"
+
+  Audio quality A/B: record a 3-line decoder script via Amy bundled
+  vs. OS-compact Samantha. Subjective rating in the doc.
+
+  No automated tests — ear validation only.
+
+- [ ] **Phase 9.7: Docs + ONNX-load failure fallback.** Write
+  `docs/TTS_BUNDLED.md` covering: why bundled vs. OS TTS, voice
+  catalog swap process (drop new `.onnx` + `.onnx.json` under
+  `assets/tts/<voice-id>/`, list in pubspec.yaml, register in
+  VoicePicker), simulator-vs-device latency gap, and the failure-
+  mode fallback: if ONNX Runtime fails to load the model (rare —
+  missing CoreML symbol, NNAPI version mismatch), the
+  `BundledTTSProvider` transparently falls back to `OSTTSProvider`
+  with a single WARN log. Implement the fallback in the Dart slice
+  this iter. README "Audio" section: brief mention of bundled voice
+  + Settings toggle. Tests: unit covering the fallback path
+  (mock-fail the channel, assert factory returns OSTTSProvider).
