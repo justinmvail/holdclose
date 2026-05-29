@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:careblazers/models/behavior.dart';
 import 'package:careblazers/models/decoder_result.dart';
 import 'package:careblazers/models/triage.dart';
 import 'package:careblazers/providers/llm_provider.dart';
 import 'package:careblazers/seed/fake_llm_seeds.dart';
+import 'package:careblazers/seed/system_prompt.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
@@ -230,4 +234,430 @@ void main() {
       expect(chunks.last, isA<DecoderChunkDone>());
     });
   });
+
+  group('ClaudeCLIProvider — user message construction (§7.2)', () {
+    test('canonical behavior emits behavior:<label> + verbatim §7.2 lines',
+        () {
+      final String msg = ClaudeCLIProvider.buildUserMessage(
+        behavior: Behavior.byId('accusing')!,
+        triage: const TriageAnswers(
+          when: TriageWhen.lateAfternoonEvening,
+          whatChanged: TriageWhatChanged.nothing,
+          whatTried: TriageWhatTried.triedToExplain,
+        ),
+        patient: const PatientContext(
+          stage: 'stage 5 (moderately severe)',
+          age: 78,
+        ),
+        attempt: 1,
+      );
+
+      // BUILD_SPEC.md §7.2 — exact field order + line shape.
+      expect(
+        msg,
+        equals(
+          'behavior: Accusing me\n'
+          'when: late afternoon / evening\n'
+          'what_changed: nothing\n'
+          'what_tried: tried to explain\n'
+          'attempt: 1\n'
+          'patient_context: stage 5 (moderately severe), age 78',
+        ),
+      );
+    });
+
+    test('free-text behavior swaps in behavior_freetext:<label>', () {
+      const Behavior freeform = Behavior(
+        id: 'freetext-something-else',
+        label: 'She paces near the front door and won\'t sit',
+        glyph: '✍',
+      );
+      final String msg = ClaudeCLIProvider.buildUserMessage(
+        behavior: freeform,
+        triage: const TriageAnswers(
+          when: TriageWhen.morning,
+          whatChanged: TriageWhatChanged.medication,
+          whatTried: TriageWhatTried.walkedAway,
+        ),
+        patient: const PatientContext(
+          stage: 'stage 4',
+          age: 72,
+        ),
+        attempt: 2,
+      );
+
+      expect(msg.split('\n').first,
+          'behavior_freetext: She paces near the front door and won\'t sit');
+      expect(msg, contains('\nwhen: morning\n'));
+      expect(msg, contains('\nwhat_changed: medication\n'));
+      expect(msg, contains('\nwhat_tried: walked away\n'));
+      expect(msg, contains('\nattempt: 2\n'));
+      expect(msg, endsWith('patient_context: stage 4, age 72'));
+    });
+
+    test('every triage enum maps to its §7.1-style lowercase label', () {
+      // Sanity-pin: if we ever rename one of these labels the few-shot
+      // example in the system prompt diverges and the model's output
+      // shape drifts.
+      const PatientContext patient = PatientContext(stage: 'S', age: 1);
+      const Behavior anyBehavior = Behavior(
+          id: 'upset', label: 'Upset / crying', glyph: '💔');
+
+      String fieldFor({TriageWhen? when}) =>
+          ClaudeCLIProvider.buildUserMessage(
+            behavior: anyBehavior,
+            triage: TriageAnswers(when: when),
+            patient: patient,
+            attempt: 0,
+          ).split('\n')[1];
+
+      expect(fieldFor(when: TriageWhen.morning), 'when: morning');
+      expect(fieldFor(when: TriageWhen.afternoon), 'when: afternoon');
+      expect(fieldFor(when: TriageWhen.lateAfternoonEvening),
+          'when: late afternoon / evening');
+      expect(fieldFor(when: TriageWhen.night), 'when: night');
+      expect(fieldFor(when: TriageWhen.justStarted),
+          "when: just started — don't know yet");
+    });
+  });
+
+  group('ClaudeCLIProvider — SSE streaming', () {
+    const TriageAnswers callTriage = TriageAnswers(
+      when: TriageWhen.lateAfternoonEvening,
+      whatChanged: TriageWhatChanged.nothing,
+      whatTried: TriageWhatTried.triedToExplain,
+    );
+    const PatientContext callPatient = PatientContext(
+      stage: 'stage 5 (moderately severe)',
+      age: 78,
+    );
+    final Behavior callBehavior = Behavior.byId('accusing')!;
+
+    test('canned SSE assistant deltas yield partials then done', () async {
+      // Split the §7.1 example output across four assistant events
+      // so the test exercises the multi-chunk accumulation path.
+      const String chunkA = '{"say": ["That sounds really upsetting.';
+      const String chunkB = ' I\'m here with you.", "Tell me more."]';
+      const String chunkC = ', "tweak": ["Sit at eye level."]';
+      const String chunkD = ', "dont_say": ["Do not argue the facts."]}';
+
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _assistantEvent(chunkA),
+        _assistantEvent(chunkB),
+        _assistantEvent(chunkC),
+        _assistantEvent(chunkD),
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(
+        dio: dio,
+        clock: () => DateTime.utc(2026, 5, 29, 19, 42),
+      );
+
+      final List<DecoderChunk> chunks = await provider
+          .generateDecoderScript(
+            behavior: callBehavior,
+            triage: callTriage,
+            patient: callPatient,
+            attempt: 1,
+          )
+          .toList();
+
+      // Four partials (one per assistant event) + one done.
+      final List<DecoderChunkPartial> partials =
+          chunks.whereType<DecoderChunkPartial>().toList();
+      expect(partials, hasLength(4));
+      expect(partials[0].accumulatedJson, chunkA);
+      expect(partials[1].accumulatedJson, chunkA + chunkB);
+      expect(partials[2].accumulatedJson, chunkA + chunkB + chunkC);
+      expect(
+        partials[3].accumulatedJson,
+        chunkA + chunkB + chunkC + chunkD,
+      );
+
+      expect(chunks.last, isA<DecoderChunkDone>());
+      final DecoderChunkDone done = chunks.last as DecoderChunkDone;
+      expect(
+        done.result.say,
+        equals(<String>[
+          "That sounds really upsetting. I'm here with you.",
+          'Tell me more.',
+        ]),
+      );
+      expect(done.result.tweak,
+          equals(<String>['Sit at eye level.']));
+      expect(done.result.dontSay,
+          equals(<String>['Do not argue the facts.']));
+      expect(done.result.generatedAt, DateTime.utc(2026, 5, 29, 19, 42));
+    });
+
+    test('shim POST body carries system prompt + verbatim user message',
+        () async {
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _assistantEvent(
+            '{"say": ["a", "b"], "tweak": ["c"], "dont_say": ["d"]}'),
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider =
+          ClaudeCLIProvider(dio: dio, clock: () => DateTime.utc(2026));
+
+      await provider
+          .generateDecoderScript(
+            behavior: callBehavior,
+            triage: callTriage,
+            patient: callPatient,
+            attempt: 1,
+          )
+          .toList();
+
+      expect(adapter.lastRequest, isNotNull);
+      expect(adapter.lastRequest!.uri.toString(),
+          claudeShimEndpoint);
+      expect(adapter.lastRequest!.method, 'POST');
+
+      final Map<String, dynamic> sent = adapter.lastRequestBody!;
+      expect(sent['system'], equals(claudeSystemPrompt));
+      expect(
+        sent['user'],
+        equals(
+          'behavior: Accusing me\n'
+          'when: late afternoon / evening\n'
+          'what_changed: nothing\n'
+          'what_tried: tried to explain\n'
+          'attempt: 1\n'
+          'patient_context: stage 5 (moderately severe), age 78',
+        ),
+      );
+    });
+
+    test('shim error event terminates the stream with DecoderChunk.error',
+        () async {
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        'data: ${json.encode(<String, String>{'error': 'claude binary not found on PATH'})}\n\n',
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(dio: dio);
+
+      final List<DecoderChunk> chunks = await provider
+          .generateDecoderScript(
+            behavior: callBehavior,
+            triage: callTriage,
+            patient: callPatient,
+            attempt: 1,
+          )
+          .toList();
+
+      expect(chunks, hasLength(1));
+      expect(chunks.single, isA<DecoderChunkError>());
+      final DecoderChunkError err = chunks.single as DecoderChunkError;
+      expect(err.message, contains('claude binary not found'));
+    });
+
+    test('unparseable final JSON yields DecoderChunk.error', () async {
+      // Assistant text never closes the object — final parse must fail.
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _assistantEvent('{"say": ["a",'),
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(dio: dio);
+
+      final List<DecoderChunk> chunks = await provider
+          .generateDecoderScript(
+            behavior: callBehavior,
+            triage: callTriage,
+            patient: callPatient,
+            attempt: 1,
+          )
+          .toList();
+
+      expect(chunks.first, isA<DecoderChunkPartial>());
+      expect(chunks.last, isA<DecoderChunkError>());
+      final DecoderChunkError err = chunks.last as DecoderChunkError;
+      expect(err.message, contains('parse failed'));
+    });
+
+    test('empty stream (no assistant events) yields DecoderChunk.error',
+        () async {
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        // A system-init event the provider must ignore, then DONE.
+        'data: ${json.encode(<String, dynamic>{'type': 'system', 'subtype': 'init'})}\n\n',
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(dio: dio);
+
+      final List<DecoderChunk> chunks = await provider
+          .generateDecoderScript(
+            behavior: callBehavior,
+            triage: callTriage,
+            patient: callPatient,
+            attempt: 1,
+          )
+          .toList();
+
+      expect(chunks, hasLength(1));
+      expect(chunks.single, isA<DecoderChunkError>());
+      expect(
+        (chunks.single as DecoderChunkError).message,
+        contains('without emitting any script text'),
+      );
+    });
+
+    test('transport failure surfaces as DecoderChunk.error', () async {
+      final _ThrowingAdapter adapter = _ThrowingAdapter();
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(dio: dio);
+
+      final List<DecoderChunk> chunks = await provider
+          .generateDecoderScript(
+            behavior: callBehavior,
+            triage: callTriage,
+            patient: callPatient,
+            attempt: 1,
+          )
+          .toList();
+
+      expect(chunks, hasLength(1));
+      expect(chunks.single, isA<DecoderChunkError>());
+      expect(
+        (chunks.single as DecoderChunkError).message,
+        contains('shim request failed'),
+      );
+    });
+
+    test(
+      'JSON arriving in one assistant event still yields partial + done',
+      () async {
+        // claude-CLI sometimes emits the whole result in one assistant
+        // snapshot; the provider should not require multiple chunks.
+        final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+          _assistantEvent(
+              '{"say": ["x", "y"], "tweak": ["z"], "dont_say": ["q"]}'),
+          'data: [DONE]\n\n',
+        ]);
+        final Dio dio = Dio()..httpClientAdapter = adapter;
+        final ClaudeCLIProvider provider = ClaudeCLIProvider(
+          dio: dio,
+          clock: () => DateTime.utc(2026, 6, 1),
+        );
+
+        final List<DecoderChunk> chunks = await provider
+            .generateDecoderScript(
+              behavior: callBehavior,
+              triage: callTriage,
+              patient: callPatient,
+              attempt: 1,
+            )
+            .toList();
+
+        expect(chunks, hasLength(2));
+        expect(chunks.first, isA<DecoderChunkPartial>());
+        expect(chunks.last, isA<DecoderChunkDone>());
+        final DecoderChunkDone done = chunks.last as DecoderChunkDone;
+        expect(done.result.say, equals(<String>['x', 'y']));
+        expect(done.result.generatedAt, DateTime.utc(2026, 6, 1));
+      },
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+/// Build one SSE `data: ...\n\n` frame for a Claude-Code-style
+/// `assistant` event with [text] as the sole text content block.
+String _assistantEvent(String text) {
+  final Map<String, dynamic> event = <String, dynamic>{
+    'type': 'assistant',
+    'message': <String, dynamic>{
+      'content': <Map<String, dynamic>>[
+        <String, dynamic>{'type': 'text', 'text': text},
+      ],
+    },
+  };
+  return 'data: ${json.encode(event)}\n\n';
+}
+
+/// HTTP adapter that returns a canned SSE byte stream and records the
+/// request body for assertion. Splits the stream across multiple
+/// `Uint8List`s so the provider's `\n\n`-boundary parser exercises the
+/// "event split across chunks" code path.
+class _CannedSseAdapter implements HttpClientAdapter {
+  _CannedSseAdapter(this._events);
+
+  final List<String> _events;
+  RequestOptions? lastRequest;
+  Map<String, dynamic>? lastRequestBody;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    lastRequest = options;
+    if (options.data is Map) {
+      lastRequestBody = Map<String, dynamic>.from(options.data as Map);
+    } else if (requestStream != null) {
+      final List<int> bytes = <int>[];
+      await for (final Uint8List part in requestStream) {
+        bytes.addAll(part);
+      }
+      lastRequestBody = json.decode(utf8.decode(bytes))
+          as Map<String, dynamic>;
+    }
+
+    final Stream<Uint8List> bodyStream = _emit(_events);
+    return ResponseBody(
+      bodyStream,
+      200,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>['text/event-stream'],
+      },
+    );
+  }
+
+  Stream<Uint8List> _emit(List<String> events) async* {
+    for (final String e in events) {
+      // Split each event in half to force the provider to glue two
+      // partial reads into a complete `\n\n`-terminated event.
+      final List<int> bytes = utf8.encode(e);
+      if (bytes.length < 4) {
+        yield Uint8List.fromList(bytes);
+        continue;
+      }
+      final int mid = bytes.length ~/ 2;
+      yield Uint8List.fromList(bytes.sublist(0, mid));
+      yield Uint8List.fromList(bytes.sublist(mid));
+    }
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// HTTP adapter that throws on every request — exercises the
+/// transport-failure branch.
+class _ThrowingAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    return Future<ResponseBody>.error(
+      DioException(
+        requestOptions: options,
+        type: DioExceptionType.connectionError,
+        message: 'connection refused',
+      ),
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }

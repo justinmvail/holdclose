@@ -131,7 +131,7 @@ automation. Each phase leaves the suite green.
   Fake returns the canned user; auth state stream emits on sign-in;
   Noop analytics swallows calls without errors.
 
-- [ ] **Task 10: ClaudeCLIProvider via HTTP shim
+- [x] **Task 10: ClaudeCLIProvider via HTTP shim
   (`lib/providers/llm_provider.dart` — extend Task 6).** Implement
   `ClaudeCLIProvider` that POSTs `{system, user}` to
   `http://localhost:8765/generate` using `dio`, consumes the SSE
