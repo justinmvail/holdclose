@@ -65,7 +65,7 @@ automation. Each phase leaves the suite green.
 
 ## Phase 2 — Provider interfaces + fakes
 
-- [ ] **Task 5: Models (`lib/models/*.dart`).** Implement freezed
+- [x] **Task 5: Models (`lib/models/*.dart`).** Implement freezed
   models per BUILD_SPEC.md §7.3 + §9.1: `Behavior` (enum-style with id,
   label, glyph, list of canonical instances), `TriageAnswers`
   (when/whatChanged/whatTried with enum-like fields), `DecoderResult`

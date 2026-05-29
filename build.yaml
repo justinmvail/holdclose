@@ -1,0 +1,11 @@
+# json_serializable defaults — we want nested freezed objects to
+# serialize via their own `toJson()` rather than as raw instance
+# references. Without explicit_to_json, `_$XToJson` emits
+# `instance.behavior` directly into the map and round-trip parsing
+# fails because the inner type isn't a Map.
+targets:
+  $default:
+    builders:
+      json_serializable:
+        options:
+          explicit_to_json: true
