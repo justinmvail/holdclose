@@ -208,7 +208,7 @@ automation. Each phase leaves the suite green.
   "Different approach" calls provider with attempt + 1; error state
   shows retry; VoiceOver section order matches §5.4.
 
-- [ ] **Task 15: Decoder service (`lib/services/decoder_service.dart`).**
+- [x] **Task 15: Decoder service (`lib/services/decoder_service.dart`).**
   The orchestrator. `DecoderService` exposes `decode(behavior,
   triage, attempt)` returning `Stream<DecoderChunk>`. Internally:
   (1) builds the user message per §7.2; (2) calls

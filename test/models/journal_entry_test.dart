@@ -36,16 +36,17 @@ void main() {
       );
 
   group('JournalOutcome', () {
-    test('has the 3 BUILD_SPEC.md §7.5 values', () {
+    test('has the 4 BUILD_SPEC.md §7.5 values', () {
       expect(
         JournalOutcome.values,
         containsAll(<JournalOutcome>[
           JournalOutcome.pending,
           JournalOutcome.positive,
           JournalOutcome.triedDifferent,
+          JournalOutcome.error,
         ]),
       );
-      expect(JournalOutcome.values, hasLength(3));
+      expect(JournalOutcome.values, hasLength(4));
     });
   });
 

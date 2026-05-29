@@ -11,11 +11,15 @@ part 'journal_entry.g.dart';
 ///
 /// Auto-logged as [pending] on result-screen mount, updated to
 /// [positive] when the caregiver taps "That helped — log it" or to
-/// [triedDifferent] when they tap "Try a different approach".
+/// [triedDifferent] when they tap "Try a different approach". The
+/// orchestrator service flips it to [error] when the LLM stream
+/// terminates with a [DecoderChunkError] so the failed call is still
+/// visible in the journal instead of vanishing.
 enum JournalOutcome {
   pending,
   positive,
   triedDifferent,
+  error,
 }
 
 /// One auto-logged entry in the journal — written every time the
