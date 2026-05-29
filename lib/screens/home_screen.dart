@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 
 import '../routing/router.dart';
 import '../theme.dart';
-import '../widgets/voice_quality_banner.dart';
 
 /// Home tab root (BUILD_SPEC.md §5.1).
 ///
@@ -56,7 +55,6 @@ class HomeScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: <Widget>[
-            const VoiceQualityBanner(),
             Expanded(
               child: Semantics(
                 button: true,

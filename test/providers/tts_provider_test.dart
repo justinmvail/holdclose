@@ -399,23 +399,36 @@ void main() {
       },
     );
 
-    test('speak with empty voiceId skips setVoice', () async {
+    test('speak with empty voiceId auto-picks the best installed voice',
+        () async {
+      // v0.5.2 polish: an empty voiceId no longer falls through to the
+      // platform default. The provider enumerates getVoices() and
+      // picks the highest-quality installed voice (Siri > premium >
+      // enhanced > default), then calls setVoice with it. This makes
+      // demo builds sound natural on stock simulators where the
+      // operator hasn't picked anything explicitly.
       final OSTTSProvider os = OSTTSProvider();
       await os.speak('plain', voiceId: '', speed: 1.0);
-      expect(
-        calls.any((MethodCall c) => c.method == 'setVoice'),
-        isFalse,
-      );
+      final MethodCall setVoice =
+          calls.firstWhere((MethodCall c) => c.method == 'setVoice');
+      // The mocked voice list contains Samantha (en-US) and Daniel
+      // (en-GB). Both are "default" quality and neither has a Siri
+      // identifier, so the auto-pick falls back to the first en-*
+      // entry — Samantha.
+      expect((setVoice.arguments as Map)['name'], 'Samantha');
+      expect((setVoice.arguments as Map)['locale'], 'en-US');
     });
 
-    test('speak with malformed voiceId (no separator) skips setVoice',
+    test('speak with malformed voiceId (no separator) also auto-picks',
         () async {
+      // Malformed voiceIds are treated the same as empty — the
+      // provider can't decode a "<name>|<locale>" pair, so it falls
+      // through to the auto-pick path.
       final OSTTSProvider os = OSTTSProvider();
       await os.speak('plain', voiceId: 'no-pipe-here', speed: 1.0);
-      expect(
-        calls.any((MethodCall c) => c.method == 'setVoice'),
-        isFalse,
-      );
+      final MethodCall setVoice =
+          calls.firstWhere((MethodCall c) => c.method == 'setVoice');
+      expect((setVoice.arguments as Map)['name'], 'Samantha');
     });
 
     test('cancel calls stop on the underlying engine', () async {

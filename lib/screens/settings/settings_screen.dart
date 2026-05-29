@@ -6,7 +6,6 @@ import '../../providers/auth_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/tts_provider.dart';
 import '../../theme.dart';
-import '../../widgets/voice_quality_banner.dart';
 
 /// Settings (BUILD_SPEC.md §5.10).
 ///
@@ -136,7 +135,6 @@ class _AudioSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         const _SectionHeader(title: 'Read scripts aloud'),
-        const VoiceQualityBanner(),
         _SectionCard(
           child: Column(
             children: <Widget>[

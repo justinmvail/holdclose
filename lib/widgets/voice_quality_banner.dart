@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -65,9 +66,21 @@ class _VoiceQualityBannerState extends ConsumerState<VoiceQualityBanner>
   }
 
   Future<void> _refresh() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final bool dismissed =
-        prefs.getBool(VoiceQualityBanner.dismissPrefKey) ?? false;
+    // Graceful: SharedPreferences + flutter_tts both call platform
+    // channels that throw MissingPluginException in widget tests
+    // (alchemist resets the binding between tests so the executable-
+    // level mock setup doesn't survive). Default to "not dismissed,
+    // not enhanced" — the loaded flag stays true so widget tests
+    // render the banner deterministically; production runs use the
+    // real platform values.
+    bool dismissed = false;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      dismissed =
+          prefs.getBool(VoiceQualityBanner.dismissPrefKey) ?? false;
+    } on MissingPluginException {
+      dismissed = false;
+    }
     final bool hasEnhanced = await _detectEnhancedVoice();
     if (!mounted) return;
     setState(() {
@@ -92,6 +105,10 @@ class _VoiceQualityBannerState extends ConsumerState<VoiceQualityBanner>
           return true;
         }
       }
+      return false;
+    } on MissingPluginException {
+      // Widget tests — no flutter_tts plugin. Treat as "no enhanced
+      // voice" so the banner renders deterministically in goldens.
       return false;
     } on Exception {
       // Bad map shape from a future flutter_tts upgrade etc. — don't
