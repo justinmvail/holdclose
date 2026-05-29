@@ -42,6 +42,8 @@ pre-staged content beyond the seed-data scaffolding.
 - **Typography**: `google_fonts` 6.2+ for Lato + Montserrat.
 - **Auth**: `google_sign_in` 6.2+ and `sign_in_with_apple` 6.1+.
 - **PDF**: `pdf` 3.11+ + `printing` 5.13+ (doctor-visit packet).
+- **URL launching**: `url_launcher` 6.3+ (decoder result → "Talk to
+  Natali" outbound link; future share-action surfaces).
 - **No new top-level deps** without updating this file. Don't add
   Bloc, Provider (lowercase, the package), MobX, or any other state
   library. Don't add hand-rolled HTTP. Don't add new font families.

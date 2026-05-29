@@ -190,7 +190,7 @@ automation. Each phase leaves the suite green.
   asserts; Back preserves prior answer; Next disabled when nothing
   selected.
 
-- [ ] **Task 14: Decoder result screen
+- [x] **Task 14: Decoder result screen
   (`lib/screens/decoder/decoder_result_screen.dart`).** Per §5.4.
   Watches `decoderResultProvider(behavior, triage, attempt)` which
   invokes the LLMProvider and yields chunks. While loading: shows

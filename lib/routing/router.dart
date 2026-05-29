@@ -93,8 +93,34 @@ GoRouter buildRouter({String initialLocation = '/'}) {
         path: '/decoder/result',
         name: CareblazersRoutes.decoderResult,
         parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) =>
-            const DecoderResultScreen(),
+        builder: (BuildContext context, GoRouterState state) {
+          // The triage screen (BUILD_SPEC.md §5.3) pushes here with a
+          // [DecoderResultArgsExtra] in `state.extra`. A deep-link or
+          // accidental direct-nav into `/decoder/result` lands without
+          // args — render a soft fallback rather than crashing the
+          // navigator stack.
+          final Object? extra = state.extra;
+          if (extra is! DecoderResultArgsExtra) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Decoder')),
+              body: const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Pick a behavior and answer the three questions to '
+                    'see the coaching script.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            );
+          }
+          return DecoderResultScreen(
+            behavior: extra.behavior,
+            triage: extra.triage,
+            initialAttempt: extra.initialAttempt,
+          );
+        },
       ),
       GoRoute(
         path: '/journal/:id',
