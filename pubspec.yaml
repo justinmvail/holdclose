@@ -13,12 +13,17 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # State + routing
-  flutter_riverpod: ^2.6.0
-  riverpod_annotation: ^2.6.0
+  # Riverpod 3.x + riverpod_generator 4.x: the pre-3 riverpod_generator
+  # chain transitively required analyzer_plugin 0.12.0, which is
+  # incompatible with the analyzer 7.x bundled by Dart 3.11. The 3.x
+  # riverpod ecosystem fixed this — see pubspec.lock for the full
+  # resolved tree.
+  flutter_riverpod: ">=3.0.0 <3.2.0"
+  riverpod_annotation: ^4.0.0
   go_router: ^14.0.0
 
   # Models
-  freezed_annotation: ^2.4.0
+  freezed_annotation: ^3.0.0
   json_annotation: ^4.9.0
 
   # Storage
@@ -63,20 +68,20 @@ dev_dependencies:
 
   # Code gen
   build_runner: ^2.4.0
-  freezed: ^2.5.0
+  freezed: ^3.0.0
   json_serializable: ^6.8.0
   drift_dev: ^2.20.0
-  # riverpod_generator (and the custom_lint / riverpod_lint pair)
-  # removed for now: the riverpod_generator chain pulls
-  # riverpod_analyzer_utils → custom_lint_core → analyzer_plugin
-  # 0.12.0, which references analyzer APIs that don't exist in the
-  # analyzer 7.x bundled by Dart 3.11. Result: build_runner fails to
-  # compile its entry script. Without riverpod_generator the project
-  # writes Riverpod providers manually (StateNotifierProvider /
-  # NotifierProvider) — slightly more verbose but functionally
-  # equivalent. freezed + drift codegen still work; their generators
-  # don't depend on analyzer_plugin. Re-add when the riverpod
-  # codegen chain ships an analyzer-7-compatible version.
+  riverpod_generator: ^4.0.0
+  # Linter pin band: Dart 3.11 ships analyzer 7.6.
+  # - custom_lint 0.8.0 uses analyzer ^7.5.0 + analyzer_plugin ^0.13.0 ✓
+  # - custom_lint 0.7.7 was retracted; 0.8.1 jumped to analyzer 8.x ✗
+  # - riverpod_lint 3.0.x..3.1.0 accept analyzer >=7.0.0 <9.0.0 ✓
+  # - riverpod_lint 3.1.1+ pinned to analyzer ^9.0.0 ✗
+  # Upper-bound the riverpod_lint constraint to avoid the analyzer-9
+  # jump silently selecting an incompatible version. Re-evaluate
+  # when Dart ships analyzer 9.x.
+  custom_lint: ^0.8.0
+  riverpod_lint: ">=3.0.0 <3.1.1"
 
 flutter:
   uses-material-design: true

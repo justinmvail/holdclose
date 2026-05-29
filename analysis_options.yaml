@@ -1,0 +1,39 @@
+# Analyzer configuration for careblazers.
+#
+# Warnings + infos ARE fatal at the test gate. Anything that should
+# NOT block ship gets explicitly silenced here, where it's visible to
+# humans, IDEs, and CI alike. The previous workaround (gate-level
+# --no-fatal-warnings) hides real bugs — missing-await on Futures and
+# deprecated API usage are warning-class — so we silence specific
+# noise here instead.
+#
+# Inherits flutter_lints (the flutter team's recommended rule set)
+# plus the custom_lint runner for riverpod_lint.
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  plugins:
+    - custom_lint
+  errors:
+    # `asset_directory_does_not_exist` fires when pubspec.yaml
+    # references assets/foo/ and the dir is empty (no files committed
+    # yet). The .gitkeep workaround makes the dir present-but-empty;
+    # the warning still fires because pubspec expects a file. We
+    # silence it so the scaffold-phase doesn't fail; an actual missing
+    # asset reference would surface as a runtime crash anyway.
+    asset_directory_does_not_exist: ignore
+
+linter:
+  rules:
+    # Lints worth opting into beyond flutter_lints defaults. The
+    # codebase is small enough that explicit-list discipline is
+    # cheap and the IDE surfacing it lets the agent fix issues
+    # before they pile up.
+    avoid_print: true
+    prefer_const_constructors: true
+    prefer_const_constructors_in_immutables: true
+    prefer_const_declarations: true
+    prefer_const_literals_to_create_immutables: true
+    unawaited_futures: true
+    require_trailing_commas: false  # noisy and stylistic; off
