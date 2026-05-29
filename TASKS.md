@@ -398,7 +398,7 @@ automation. Each phase leaves the suite green.
 
 ## Phase 8 — Demo automation + shim
 
-- [ ] **Task 32: `tools/claude_shim.py`.** Implement the local HTTP
+- [x] **Task 32: `tools/claude_shim.py`.** Implement the local HTTP
   shim per BUILD_SPEC.md §8 VERBATIM. Stdlib-only Python. Reproduce
   the §8 code without paraphrasing — that file is the contract. Make
   it executable (`chmod +x`). Smoke test: `python3 tools/claude_shim.py
