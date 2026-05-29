@@ -188,3 +188,110 @@ The model-dependent test (`inferenceProducesNonSilentAudio`) skips
 when the `.onnx` isn't reachable from the instrumented APK — same
 contract as the iOS XCTest. The hermetic tests cover the config
 parser, the phonemizer lookup, and the voice catalog.
+
+## Phase 9.6 — device acceptance matrix
+
+The bundled-voice path was sized for two latency regimes: A14+ / NNAPI
+hardware inference (< 500 ms first-token, "snappy") and CPU fallback
+on older silicon (~1–2 s first-token, "usable" not "snappy"). This
+section is where the engineer pins the device matrix and the per-device
+numbers each acceptance pass produces.
+
+### Measurement methodology
+
+Both bridges emit a `firstTokenMs` log line per `speak()` call —
+wall-clock from MethodChannel invocation to the first
+AVAudioEngine / AudioTrack write of non-silent PCM. Inspect via:
+
+- iOS: `Console.app` filtered by `TTSBridge` → `firstTokenMs=<n>` per
+  speak.
+- Android: `adb logcat -s TTSBridge` → same field.
+
+Protocol per device:
+
+1. Cold-launch the app (no ORTSession cached).
+2. Run through Home → Decoder → Triage → Result.
+3. Tap the per-line ▶ button once to warm the session. Discard.
+4. Tap ▶ five more times back-to-back. Record each `firstTokenMs`.
+5. Report **median of the five** in the results table below.
+
+Five samples filter out one-off jitter (background app churn, GC
+pauses on Android, audio-route renegotiation on iOS) without
+inflating the protocol. Cold ORT load is excluded — it's a one-time
+session-init cost, not per-utterance latency.
+
+### Acceptance matrix (targets)
+
+| Device              | Path                | Target           | Verdict label    |
+| ------------------- | ------------------- | ---------------- | ---------------- |
+| iPhone 12 (A14)     | CoreML EP → ANE     | < 500 ms         | snappy           |
+| iPhone 14 (A15)     | CoreML EP → ANE     | < 500 ms         | snappy           |
+| iPhone 17 (A19)     | CoreML EP → ANE     | < 500 ms         | snappy           |
+| iPhone 11 (A13)     | CoreML EP → CPU     | < 2 000 ms       | usable           |
+| Pixel 6 (Tensor G1) | NNAPI               | < 500 ms         | snappy           |
+| Pixel 7 (Tensor G2) | NNAPI               | < 500 ms         | snappy           |
+| Pixel 9 (Tensor G4) | NNAPI               | < 500 ms         | snappy           |
+| Pixel 4 (Snap 855)  | NNAPI → CPU         | < 2 000 ms       | usable           |
+
+A14+ and Pixel 6+ must clear the snappy bar — that's the latency story
+the pitch demo trades on. The two fallback devices (iPhone 11, Pixel 4)
+only need to clear the "usable" bar; they're documented so caregivers
+on older hardware aren't surprised. The product copy makes no latency
+SLA promise — this matrix is the internal yardstick.
+
+### Observed first-token (median of 5, ms)
+
+> Filled in during the acceptance pass on the loaner-kit devices.
+> Numbers are **not** CI-tracked — re-measure whenever ONNX Runtime
+> moves a minor version, the CoreML / NNAPI EP options change, or the
+> bundled voice swaps to a heavier model. Record the OS build and ORT
+> version alongside each pass so a regression has somewhere to start.
+
+| Device     | OS build       | ORT version | First-token (ms) | Verdict | Operator / date |
+| ---------- | -------------- | ----------- | ---------------- | ------- | --------------- |
+| iPhone 12  | _TBD_          | _TBD_       | _TBD_            | _TBD_   | _TBD_           |
+| iPhone 14  | _TBD_          | _TBD_       | _TBD_            | _TBD_   | _TBD_           |
+| iPhone 17  | _TBD_          | _TBD_       | _TBD_            | _TBD_   | _TBD_           |
+| iPhone 11  | _TBD_          | _TBD_       | _TBD_            | _TBD_   | _TBD_           |
+| Pixel 6    | _TBD_          | _TBD_       | _TBD_            | _TBD_   | _TBD_           |
+| Pixel 7    | _TBD_          | _TBD_       | _TBD_            | _TBD_   | _TBD_           |
+| Pixel 9    | _TBD_          | _TBD_       | _TBD_            | _TBD_   | _TBD_           |
+| Pixel 4    | _TBD_          | _TBD_       | _TBD_            | _TBD_   | _TBD_           |
+
+If any A14+ / Pixel 6+ row misses the < 500 ms bar, treat it as a
+regression — not a doc update. Likely suspects, in order: CoreML EP
+not actually selected (check the `executionProvider=` log line), an
+ORT minor bump that changed the default partitioning, or a phonemizer
+regression bloating the input token count.
+
+### Audio quality A/B — Amy bundled vs. OS-compact Samantha
+
+A side-by-side recording exercise to confirm the bundled voice is
+worth the ~30 MB envelope cost.
+
+Script (three lines, one decoder result's worth of "say" copy):
+
+> "It's okay. You're safe right now. Let's sit down together for a
+> moment."
+
+Recording method: on an iPhone 14, record device audio with QuickTime
++ a Lightning-to-USB capture; speak the script first via Amy (bundled
+provider), then immediately via `OSTTSProvider` with the system
+Samantha voice. Same volume, same room. Save both clips under
+`docs/audio_ab/` (not committed — pitch-day artifact only).
+
+Rating rubric, 1 (poor) → 5 (excellent). The operator records below
+after the A/B; do not pre-fill.
+
+| Trait                            | Amy bundled | OS-compact Samantha |
+| -------------------------------- | ----------- | ------------------- |
+| Warmth / naturalness             | _TBD_       | _TBD_               |
+| Prosody (cadence, sentence flow) | _TBD_       | _TBD_               |
+| Intelligibility                  | _TBD_       | _TBD_               |
+| De-escalating feel               | _TBD_       | _TBD_               |
+
+Decision rule: if Amy beats Samantha on **warmth** or **de-escalating
+feel** by ≥ 1.5 points, the bundled default stays. Intelligibility is
+table-stakes — Samantha will tie or win there and that's fine. If Amy
+loses on warmth, escalate before the pitch: the caregiver-coach voice
+is the whole point of bundling.

@@ -555,7 +555,7 @@ runs on iPhone.
   `test/providers/tts_provider_test.dart` pinning the factory
   choice per (useBundledVoice, OS-mute) combo.
 
-- [ ] **Phase 9.6: Real-device performance smoke + acceptance.**
+- [x] **Phase 9.6: Real-device performance smoke + acceptance.**
   Per-platform smoke runs documented in TTS_BUNDLED.md:
     - iPhone 12 / 14 / 17: first-token latency target <500 ms on A14+
     - Pixel 6 / 7 / 9: same target on NNAPI path
