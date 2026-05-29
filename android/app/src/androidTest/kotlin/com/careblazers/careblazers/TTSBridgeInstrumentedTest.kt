@@ -11,6 +11,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.math.sqrt
 
 // BUILD_SPEC.md Phase 9.4 acceptance: assert the bridge can load the
@@ -272,5 +276,126 @@ class TTSBridgeInstrumentedTest {
             fallbackIds.toList(),
             realIds.toList(),
         )
+    }
+
+    // MARK: Phase 10.4 — audio-quality sample regen
+
+    /// Renders the three Phase 10.4 audio-quality acceptance scripts
+    /// through the real espeak-ng JNI phonemizer + Piper Amy and writes
+    /// 16-bit PCM WAV files under
+    /// `Context.getExternalFilesDir(null)/tts_samples/<voice>/`. The
+    /// operator pulls those WAVs off the device with
+    /// `tools/regen_tts_samples.sh` (via `adb pull`) and drops them
+    /// into `docs/tts_samples/<voice>/` for the manual ear-validation
+    /// pass documented in TTS_BUNDLED.md.
+    ///
+    /// The three scripts are the same set the iOS XCTest writes (see
+    /// `RunnerTests.testRegenerateAudioQualitySamples` and
+    /// `docs/tts_samples/README.md`); the byte-for-byte WAV outputs
+    /// won't match across platforms (CoreML EP vs. NNAPI quantisation
+    /// + Apple float-conversion rounding differs from the Android JNI
+    /// pipeline) but the prosody + warmth should land the same.
+    ///
+    /// Skips when espeak-ng JNI isn't linked (fresh checkout) or the
+    /// model asset isn't reachable (same skip semantics as the other
+    /// 10.x tests).
+    @Test
+    fun regenerateAudioQualitySamples() {
+        assumeTrue(
+            "espeak-ng JNI not linked — run tools/vendor_espeak_ng.sh and rebuild",
+            EspeakNGNative.isAvailable,
+        )
+        val voiceId = "en_US-amy-medium"
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val assets = context.assets
+        val modelBytes = readAsset(assets, "$voiceId.onnx")
+        val configBytes = readAsset(assets, "$voiceId.onnx.json")
+        assumeTrue(
+            "$voiceId.onnx not reachable from APK — covered by Phase 9.6 device smoke",
+            modelBytes != null && configBytes != null,
+        )
+
+        val env = OrtEnvironment.getEnvironment()
+        val opts = OrtSession.SessionOptions().apply { setIntraOpNumThreads(1) }
+        val session = env.createSession(modelBytes!!, opts)
+        val config = VoiceConfig.parse(configBytes!!)
+
+        // Engine construction extracts espeak-ng-data and calls
+        // espeak_Initialize against it. Without that the JNI
+        // phonemizer would return empty IPA.
+        val engine = TTSEngine(context)
+        val phonemizer = EspeakNGPhonemizer(useEspeak = true)
+
+        val externalRoot = context.getExternalFilesDir(null)
+            ?: throw AssertionError("getExternalFilesDir(null) returned null — device has no shared storage")
+        val outDir = File(externalRoot, "tts_samples/$voiceId").apply {
+            mkdirs()
+        }
+
+        val scripts = listOf(
+            "decoder_worried" to
+                "I can see this is really hard. I'm right here with you.",
+            "crisis_card_welcome" to
+                "Hospital handoff card.",
+            "settings_reset_confirmation" to
+                "Seed reloaded.",
+        )
+
+        for ((slug, text) in scripts) {
+            val phonemeIds = phonemizer.phonemeIds(text, config)
+            assertTrue(
+                "espeak JNI returned only BOS/EOS for '$slug' — IPA didn't land in the phoneme map",
+                phonemeIds.size > 2,
+            )
+            val samples = engine.synthesize(phonemeIds, 1.0, session, config)
+            assertTrue(
+                "Piper returned empty PCM for '$slug'",
+                samples.isNotEmpty(),
+            )
+            val target = File(outDir, "$slug.wav")
+            writeWavFile(samples, sampleRate = 22050, file = target)
+            // Surface the path so the operator script can grep it out
+            // of the instrumented-test log when discovering where the
+            // device dropped the files.
+            println("PHASE_10_4_REGEN $slug ${target.absolutePath}")
+        }
+    }
+
+    /// Encodes float32 PCM as a 16-bit mono PCM WAV. Format mirrors
+    /// the iOS WAV writer so the operator can A/B-compare across
+    /// platforms without a transcode step.
+    private fun writeWavFile(samples: FloatArray, sampleRate: Int, file: File) {
+        val numChannels: Short = 1
+        val bitsPerSample: Short = 16
+        val bytesPerSample = bitsPerSample / 8
+        val byteRate = sampleRate * numChannels * bytesPerSample
+        val blockAlign: Short = (numChannels * bytesPerSample).toShort()
+        val dataSize = samples.size * bytesPerSample
+        val chunkSize = 36 + dataSize
+
+        FileOutputStream(file).use { out ->
+            val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+            header.put("RIFF".toByteArray(Charsets.US_ASCII))
+            header.putInt(chunkSize)
+            header.put("WAVE".toByteArray(Charsets.US_ASCII))
+            header.put("fmt ".toByteArray(Charsets.US_ASCII))
+            header.putInt(16)                 // Subchunk1Size for PCM
+            header.putShort(1.toShort())      // AudioFormat = 1 (PCM)
+            header.putShort(numChannels)
+            header.putInt(sampleRate)
+            header.putInt(byteRate)
+            header.putShort(blockAlign)
+            header.putShort(bitsPerSample)
+            header.put("data".toByteArray(Charsets.US_ASCII))
+            header.putInt(dataSize)
+            out.write(header.array())
+
+            val payload = ByteBuffer.allocate(dataSize).order(ByteOrder.LITTLE_ENDIAN)
+            for (s in samples) {
+                val clamped = s.coerceIn(-1f, 1f)
+                payload.putShort((clamped * Short.MAX_VALUE).toInt().toShort())
+            }
+            out.write(payload.array())
+        }
     }
 }

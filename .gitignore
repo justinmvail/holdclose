@@ -64,6 +64,12 @@ android/app/src/main/cpp/espeak-ng/
 assets/tts/espeak-ng-data/*
 !assets/tts/espeak-ng-data/README.md
 
+# Phase 10.4 audio-quality samples — regenerated on demand by
+# tools/regen_tts_samples.sh against a real device / simulator. The
+# WAVs are operator artifacts; only the source-of-truth README +
+# rubric stay tracked.
+docs/tts_samples/**/*.wav
+
 # Misc
 *.log
 coverage/

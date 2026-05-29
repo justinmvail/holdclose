@@ -667,7 +667,7 @@ runs on iPhone.
 
   Tests: instrumented Android test mirroring the iOS XCTest from 10.2.
 
-- [ ] **Phase 10.4: Audio-quality acceptance + sample regen.** Record
+- [x] **Phase 10.4: Audio-quality acceptance + sample regen.** Record
   3 known scripts (the decoder's "I see you're worried…" + the crisis
   card welcome line + Settings reset confirmation) through the
   bundled voice with the real phonemizer. Side-by-side WAV files in

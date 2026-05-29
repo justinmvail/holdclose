@@ -258,4 +258,153 @@ class RunnerTests: XCTestCase {
         ]
         return candidates.compactMap { $0 }.first
     }
+
+    // MARK: Phase 10.4 — audio-quality sample regen
+
+    /// Renders the three Phase 10.4 audio-quality acceptance scripts
+    /// through the real espeak-ng phonemizer + Piper Amy and writes
+    /// 16-bit PCM WAV files under `NSTemporaryDirectory()/
+    /// careblazers-tts-samples/<voice>/`. The operator pulls those
+    /// WAVs out of the simulator with `tools/regen_tts_samples.sh` and
+    /// drops them into `docs/tts_samples/<voice>/` for the manual ear-
+    /// validation pass documented in TTS_BUNDLED.md.
+    ///
+    /// The three scripts (source of truth — keep in sync with
+    /// `docs/tts_samples/README.md` and the Android mirror in
+    /// `TTSBridgeInstrumentedTest.regenerateAudioQualitySamples`):
+    ///
+    ///   1. `decoder_worried` — the canonical "I see you're worried…"
+    ///      decoder say-line. Pulled verbatim from `fakeLLMSeeds`'
+    ///      `upset` entry so the recording matches what a caregiver
+    ///      actually hears in the app.
+    ///   2. `crisis_card_welcome` — the crisis card AppBar title that
+    ///      the screen-reader path reads first.
+    ///   3. `settings_reset_confirmation` — the SnackBar shown after
+    ///      "Reload seed data" — short utterance, exercises the
+    ///      engine on a two-word phrase.
+    ///
+    /// Skips when espeak-ng isn't vendored or the bundled model isn't
+    /// reachable from the test bundle (same skip semantics as
+    /// `testInferenceProducesNonSilentAudio` /
+    /// `testEspeakPhonemizerProducesIpaBackedIdsForHelloWorld`).
+    func testRegenerateAudioQualitySamples() throws {
+        #if CAREBLAZERS_HAS_ESPEAK_NG
+        let voiceId = "en_US-amy-medium"
+        guard let modelPath = locateBundleResource(name: voiceId, ext: "onnx"),
+              let configPath = locateBundleResource(name: "\(voiceId).onnx", ext: "json") else {
+            throw XCTSkip("\(voiceId).onnx not reachable from test bundle — covered by Phase 9.6 device smoke")
+        }
+
+        let env = try ORTEnv(loggingLevel: .warning)
+        let opts = try ORTSessionOptions()
+        try opts.setIntraOpNumThreads(1)
+        let session = try ORTSession(env: env,
+                                     modelPath: modelPath,
+                                     sessionOptions: opts)
+        let configData = try Data(contentsOf: URL(fileURLWithPath: configPath))
+        let config = try VoiceConfig.parse(from: configData)
+
+        // Engine construction calls espeak_Initialize against the
+        // bundled data dir; without it the espeak phonemizer would
+        // silently fall back to character lookup.
+        let engine = TTSEngine()
+        let phonemizer = EspeakNGPhonemizer(useEspeak: true)
+
+        let outDir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("careblazers-tts-samples")
+            .appendingPathComponent(voiceId)
+        try FileManager.default.createDirectory(at: outDir,
+                                                withIntermediateDirectories: true)
+
+        let scripts: [(slug: String, text: String)] = [
+            ("decoder_worried",
+             "I can see this is really hard. I'm right here with you."),
+            ("crisis_card_welcome",
+             "Hospital handoff card."),
+            ("settings_reset_confirmation",
+             "Seed reloaded."),
+        ]
+
+        for (slug, text) in scripts {
+            let phonemeIds = phonemizer.phonemeIds(for: text, config: config)
+            XCTAssertGreaterThan(phonemeIds.count, 2,
+                                 "espeak phonemizer returned only BOS/EOS for '\(slug)' — IPA didn't land in the phoneme map")
+            let samples = try engine.synthesize(phonemeIds: phonemeIds,
+                                                speed: 1.0,
+                                                session: session,
+                                                config: config)
+            XCTAssertGreaterThan(samples.count, 0,
+                                 "Piper returned empty PCM for '\(slug)'")
+            let url = outDir.appendingPathComponent("\(slug).wav")
+            try writeWavFile(samples: samples,
+                             sampleRate: 22050,
+                             to: url)
+            // Surface the path so the operator script can grep it out
+            // of the xcodebuild log when discovering where the sim
+            // dropped the files.
+            print("PHASE_10_4_REGEN \(slug) \(url.path)")
+        }
+        #else
+        throw XCTSkip("Vendored espeak-ng not present — run tools/vendor_espeak_ng.sh and `pod install`, then re-run this test")
+        #endif
+    }
+
+    /// Encodes float32 PCM as a 16-bit mono PCM WAV. Format matches the
+    /// universally-accepted WAVE/PCM container so a caregiver / pitch
+    /// reviewer can play the file in QuickTime, VLC, or a browser
+    /// without a transcode step.
+    private func writeWavFile(samples: [Float],
+                              sampleRate: UInt32,
+                              to url: URL) throws {
+        let numChannels: UInt16 = 1
+        let bitsPerSample: UInt16 = 16
+        let bytesPerSample = Int(bitsPerSample / 8)
+        let byteRate: UInt32 = sampleRate * UInt32(numChannels) * UInt32(bytesPerSample)
+        let blockAlign: UInt16 = numChannels * UInt16(bytesPerSample)
+
+        var pcm16 = [Int16]()
+        pcm16.reserveCapacity(samples.count)
+        for s in samples {
+            let clamped = max(-1.0, min(1.0, s))
+            pcm16.append(Int16(clamped * Float(Int16.max)))
+        }
+        let dataBytes = pcm16.withUnsafeBufferPointer { buf -> Data in
+            return Data(buffer: buf)
+        }
+        let dataSize = UInt32(dataBytes.count)
+        let chunkSize = UInt32(36) + dataSize
+
+        var header = Data()
+        header.append("RIFF".data(using: .ascii)!)
+        header.append(UInt32(chunkSize).littleEndianData)
+        header.append("WAVE".data(using: .ascii)!)
+        header.append("fmt ".data(using: .ascii)!)
+        header.append(UInt32(16).littleEndianData)            // Subchunk1Size for PCM
+        header.append(UInt16(1).littleEndianData)             // AudioFormat = 1 (PCM)
+        header.append(numChannels.littleEndianData)
+        header.append(sampleRate.littleEndianData)
+        header.append(byteRate.littleEndianData)
+        header.append(blockAlign.littleEndianData)
+        header.append(bitsPerSample.littleEndianData)
+        header.append("data".data(using: .ascii)!)
+        header.append(dataSize.littleEndianData)
+
+        var out = header
+        out.append(dataBytes)
+        try out.write(to: url)
+    }
+}
+
+private extension UInt32 {
+    var littleEndianData: Data {
+        var le = self.littleEndian
+        return Data(bytes: &le, count: MemoryLayout<UInt32>.size)
+    }
+}
+
+private extension UInt16 {
+    var littleEndianData: Data {
+        var le = self.littleEndian
+        return Data(bytes: &le, count: MemoryLayout<UInt16>.size)
+    }
 }

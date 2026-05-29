@@ -686,3 +686,114 @@ When the bundled-voice catalog grows past one Piper voice (TTS_BUNDLED
 the voicecloner project, this calculus may flip — at that point the
 build time savings of a prebuilt AAR start to matter. For v1 the
 externalNativeBuild path is the right cost/benefit.
+
+## Phase 10.4 — audio-quality acceptance + sample regen
+
+Phase 10.1–10.3 wired the real espeak-ng phonemizer on both platforms;
+10.4 is where the operator confirms the resulting audio actually sounds
+like natural English. The acceptance bar is **subjective ear validation
+by the operator**, captured against three known scripts so a regression
+in phoneme output, ONNX inference, or audio-session config surfaces
+with a clear A/B reference.
+
+### The three scripts
+
+Same set on iOS and Android — `tools/regen_tts_samples.sh` writes one
+WAV per slug per platform under
+`docs/tts_samples/en_US-amy-medium/{ios,android}/`. The scripts are
+the source-of-truth `(slug, text)` pairs in
+`ios/RunnerTests/RunnerTests.swift#testRegenerateAudioQualitySamples`
+and the Android instrumented mirror; keep
+`docs/tts_samples/en_US-amy-medium/README.md` in sync when any of the
+three change.
+
+| Slug                          | Text                                                              | Why this script                                                                                  |
+| ----------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `decoder_worried`             | `I can see this is really hard. I'm right here with you.`         | Multi-sentence caregiver de-escalation — the cadence the pitch demo trades on.                   |
+| `crisis_card_welcome`         | `Hospital handoff card.`                                          | Short noun-phrase title. Stresses plosives + clear vowel attack; flags muddied consonants fast.  |
+| `settings_reset_confirmation` | `Seed reloaded.`                                                  | Two-word status confirmation. Exposes short-utterance prosody (which Piper sometimes truncates). |
+
+The mix is intentional — one long form, one title, one terse status —
+so the operator hears the engine across the cadence range the app
+actually produces without spending pitch attention on a 30-line set.
+
+### Regen procedure
+
+Pre-req: `tools/vendor_espeak_ng.sh` has run and `pod install` /
+`flutter run` has rebuilt the native side at least once on each
+platform (so `CAREBLAZERS_HAS_ESPEAK_NG=1` on iOS and
+`EspeakNGNative.isAvailable=true` on Android).
+
+```sh
+tools/regen_tts_samples.sh                       # iOS + Android
+tools/regen_tts_samples.sh ios                   # iOS only
+tools/regen_tts_samples.sh --skip-android        # iOS only (no Android device plugged in)
+IOS_SIM="iPhone 16" tools/regen_tts_samples.sh   # override sim
+```
+
+Under the hood:
+
+- **iOS**: `xcodebuild test -only-testing:RunnerTests/RunnerTests/testRegenerateAudioQualitySamples`
+  runs the XCTest which synthesises each script through `TTSEngine.synthesize`
+  and writes 16-bit-PCM WAVs into `NSTemporaryDirectory()/careblazers-tts-samples/<voice>/`.
+  Each WAV path surfaces as `PHASE_10_4_REGEN <slug> <abs-path>` in
+  the xcodebuild log; the operator script greps for those lines and
+  copies into `docs/tts_samples/<voice>/ios/`.
+- **Android**: `./gradlew :app:connectedDebugAndroidTest -P...class=...#regenerateAudioQualitySamples`
+  runs the instrumented test which writes the same WAVs into
+  `Context.getExternalFilesDir(null)/tts_samples/<voice>/` on the
+  device. The operator script pulls them via
+  `adb pull /sdcard/Android/data/com.careblazers.careblazers/files/tts_samples/<voice>/<slug>.wav`
+  into `docs/tts_samples/<voice>/android/`.
+
+The WAVs themselves are gitignored (operator artifact, regenerated on
+demand). Only `docs/tts_samples/<voice>/README.md` stays committed.
+
+### Acceptance rubric
+
+Open each WAV pair in QuickTime / VLC / a browser and rate against
+the four-trait rubric below. The bar is **subjective ear validation
+by the operator** — there's no automated phonetic-distance metric for
+v1. (The Phase 9.6 §"Audio quality A/B" section captures a different
+A/B — Amy vs. OS Samantha; this rubric is Amy-on-iOS vs. Amy-on-Android
+to confirm the espeak-ng + Piper output is consistent across both
+bridges.)
+
+| Trait                                   | iOS verdict | Android verdict |
+| --------------------------------------- | ----------- | --------------- |
+| Sounds like natural English             | _TBD_       | _TBD_           |
+| Word boundaries audible (no slurring)   | _TBD_       | _TBD_           |
+| Prosody arc matches sentence punctuation | _TBD_      | _TBD_           |
+| Warm / de-escalating feel               | _TBD_       | _TBD_           |
+
+Verdicts are `yes` / `no` per cell. The operator records the verdict
+in this table after running the regen and ear-validating; do not
+pre-fill.
+
+Decision rule:
+
+- **All four `yes` on both platforms** → Phase 10.4 acceptance passes;
+  check the box in TASKS.md and proceed to Phase 10.5.
+- **Any `no` on either platform** → re-check the suspected source
+  (in order): espeak-ng vendor commit drift (the `tools/vendor_espeak_ng.sh`
+  hash check should already have caught this), Piper voice asset
+  swap (config phoneme-id map mismatched against the espeak-ng IPA
+  set), or Phase 10.2 / 10.3 phonemizer wrapper regression (BOS/pad/EOS
+  framing wrong). The `testEspeakPhonemizerProducesIpaBackedIdsForHelloWorld`
+  XCTest + Kotlin mirror are the bisection points for the third case.
+
+### What this phase does NOT cover
+
+- **Cross-platform byte equality.** iOS CoreML / Android NNAPI ONNX
+  quantisation rounding + Apple's float-conversion path differ from
+  the Android JNI pipeline, so the WAV files are not bit-identical
+  across platforms. The acceptance is per-platform subjective
+  warmth, not a byte-level diff.
+- **Per-device latency.** That's Phase 9.6's matrix. The regen test
+  measures audio fidelity at the engine's preferred rate, not the
+  first-token clock a caregiver perceives.
+- **A11y / screen reader read-back.** The bundled voice plays through
+  AVAudioEngine / AudioTrack; VoiceOver / TalkBack read back UI copy
+  through the OS TTS path regardless of the bundled-voice toggle.
+  That contract is covered by the widget-test semantics labels, not
+  this regen.
