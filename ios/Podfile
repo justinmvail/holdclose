@@ -31,6 +31,14 @@ target 'Runner' do
   use_frameworks!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+  # BUILD_SPEC.md §1 (Phase 9.3): on-device neural TTS via ONNX Runtime.
+  # `onnxruntime-objc` bundles the Objective-C binding + the CoreML
+  # execution provider so `ORTCoreMLExecutionProvider` is callable from
+  # TTSBridge.swift via the bridging header. Pinned to 1.18.x to match
+  # what the Phase 9.1 voice model was exported against.
+  pod 'onnxruntime-objc', '~> 1.18.0'
+
   target 'RunnerTests' do
     inherit! :search_paths
   end

@@ -498,7 +498,7 @@ runs on iPhone.
   lands in 9.3/9.4. Tests in `test/providers/bundled_tts_provider_test.dart`
   use Flutter's MethodChannel mock to assert forwarding shape.
 
-- [ ] **Phase 9.3: iOS Swift bridge — ONNX Runtime + CoreML EP +
+- [x] **Phase 9.3: iOS Swift bridge — ONNX Runtime + CoreML EP +
   AVAudioEngine.** Add `onnxruntime-objc` via SPM (or CocoaPods if
   Flutter's Pods setup forces it). In `ios/Runner/TTSBridge.swift`:
   load `en_US-amy-medium.onnx` from the bundle, init an ORTSession

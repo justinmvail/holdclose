@@ -12,31 +12,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    registerBundledTtsStub(with: engineBridge.pluginRegistry)
-  }
-
-  // BUILD_SPEC.md Phase 9.2 — `careblazers/tts` MethodChannel contract.
-  // This is the stub: `speak`/`cancel` succeed immediately and
-  // `availableVoices` returns an empty list. Phase 9.3 replaces this
-  // with the ORTSession + CoreML execution provider wiring + AVAudioEngine
-  // playback.
-  private func registerBundledTtsStub(with registry: FlutterPluginRegistry) {
-    guard let registrar = registry.registrar(forPlugin: "CareblazersBundledTTS") else {
-      return
-    }
-    let channel = FlutterMethodChannel(
-      name: "careblazers/tts",
-      binaryMessenger: registrar.messenger()
-    )
-    channel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
-      switch call.method {
-      case "speak", "cancel":
-        result(nil)
-      case "availableVoices":
-        result([] as [[String: Any]])
-      default:
-        result(FlutterMethodNotImplemented)
-      }
-    }
+    // BUILD_SPEC.md Phase 9.3 — `careblazers/tts` MethodChannel handler.
+    // Hands speak/cancel/availableVoices off to TTSBridge.swift, which
+    // owns the ORTSession + AVAudioEngine.
+    TTSBridge.register(with: engineBridge.pluginRegistry)
   }
 }
