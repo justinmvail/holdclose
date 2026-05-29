@@ -25,7 +25,7 @@ automation. Each phase leaves the suite green.
   ensuring `flutter analyze` is clean against the default-generated
   `lib/main.dart`. No new code — just the scaffold.
 
-- [ ] **Task 2: Brand theme (`lib/theme.dart`).** Implement the brand
+- [x] **Task 2: Brand theme (`lib/theme.dart`).** Implement the brand
   tokens from BUILD_SPEC.md §3 as a Material 3 `ThemeData` factory.
   Exported names: `careblazersLightTheme`, `careblazersDarkTheme`,
   `careblazersColors` (a `CareblazersColors` data class holding the
