@@ -184,28 +184,33 @@ class _PageBody extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
-          // Navy block per BUILD_SPEC.md §3.1 (`primary` dominates;
-          // orange is reserved as a CTA accent). The app-icon-style
-          // orange-square-with-white-C lives on the home screen, not
-          // here — repeating it on every onboarding page made the
-          // whole flow read as orange-on-white instead of the
-          // navy-dominant brand the site uses.
-          Container(
-            width: 120,
-            height: 120,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: careblazersColors.primary,
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Text(
-              page.glyph,
-              style: textTheme.displayLarge?.copyWith(
-                color: Colors.white,
-                fontSize: 56,
+          // Page 1 ('C' glyph) renders the brand "Cb" split mark —
+          // navy left / white "C", white right / navy "b" — matching
+          // the careblazers.com logo + the AppIcon + LaunchImage on
+          // iOS. Pages 2 & 3 keep their emoji glyphs in a plain navy
+          // block since they're feature illustrations, not brand
+          // marks. Centralizing the mark here means future icon
+          // updates only need a Flutter-side change here PLUS the
+          // PNG regen for AppIcon / LaunchImage.
+          if (page.glyph == 'C')
+            const _CbBrandMark()
+          else
+            Container(
+              width: 120,
+              height: 120,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: careblazersColors.primary,
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Text(
+                page.glyph,
+                style: textTheme.displayLarge?.copyWith(
+                  color: Colors.white,
+                  fontSize: 56,
+                ),
               ),
             ),
-          ),
           const SizedBox(height: 32),
           Text(
             page.title,
@@ -275,4 +280,58 @@ class WelcomeCarouselPage {
   final String glyph;
   final String title;
   final String body;
+}
+
+/// The brand "Cb" split mark: navy left / white capital C, white
+/// right / navy lowercase b. Same design as the iOS AppIcon and
+/// LaunchImage so onboarding page 1 matches the icon the user tapped
+/// to launch the app. Sized at 120×120 to drop into the carousel's
+/// logo slot.
+///
+/// Letter glyphs use the same Montserrat 700 the type ramp + the
+/// LaunchImage master use (BUILD_SPEC.md §3.2 + §3.4).
+class _CbBrandMark extends StatelessWidget {
+  const _CbBrandMark();
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle letter = Theme.of(context).textTheme.displayLarge!.copyWith(
+          fontSize: 72,
+          fontWeight: FontWeight.w700,
+          height: 1.0,
+        );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: SizedBox(
+        width: 120,
+        height: 120,
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: ColoredBox(
+                color: careblazersColors.primary,
+                child: Center(
+                  child: Text(
+                    'C',
+                    style: letter.copyWith(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ColoredBox(
+                color: careblazersColors.background,
+                child: Center(
+                  child: Text(
+                    'b',
+                    style: letter.copyWith(color: careblazersColors.primary),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
