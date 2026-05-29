@@ -175,7 +175,7 @@ void main() {
       );
     });
 
-    testWidgets('Skip does NOT flip onboardingCompletedProvider',
+    testWidgets('Skip flips onboardingCompletedProvider',
         (WidgetTester tester) async {
       final ({ProviderContainer container, GoRouter router}) pumped =
           await _pumpCarousel(tester);
@@ -183,9 +183,12 @@ void main() {
       await tester.tap(find.byKey(WelcomeCarousel.skipButtonKey));
       await tester.pumpAndSettle();
 
-      // Skipping is "I'll come back to this" — only "Get started"
-      // signals an intentional completion, so the provider stays false.
-      expect(pumped.container.read(onboardingCompletedProvider), isFalse);
+      // Task 31's router redirect (BUILD_SPEC.md §5.11 + §5.12) treats
+      // "onboarding incomplete" as a hard gate to `/onboarding`. Skip
+      // routes to `/sign-in`, so it MUST mark onboarding done —
+      // otherwise the redirect bounces the tap straight back to the
+      // carousel and the caregiver can never reach sign-in.
+      expect(pumped.container.read(onboardingCompletedProvider), isTrue);
     });
   });
 

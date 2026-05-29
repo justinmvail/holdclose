@@ -80,6 +80,13 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
   }
 
   void _onSkipPressed() {
+    // Both Skip and "Get started" mark onboarding done so the task 31
+    // router redirect (BUILD_SPEC.md §5.11) lets `/sign-in` through —
+    // without the flip, the strict "onboarding incomplete → /onboarding"
+    // gate would bounce Skip's `context.go('/sign-in')` back to the
+    // carousel. Skip = "I've seen enough of the intro, take me to the
+    // app."
+    ref.read(onboardingCompletedProvider.notifier).complete();
     context.go('/sign-in');
   }
 

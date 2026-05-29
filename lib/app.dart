@@ -16,7 +16,9 @@ import 'theme.dart';
 class CareblazersApp extends ConsumerStatefulWidget {
   const CareblazersApp({super.key, this.router});
 
-  /// Optional injected router for tests. Defaults to `buildRouter()`.
+  /// Optional injected router for tests. Defaults to the production
+  /// `careblazersRouterProvider`, which wires the auth + onboarding
+  /// redirect (BUILD_SPEC.md §5.11 + §5.12).
   final GoRouter? router;
 
   @override
@@ -24,7 +26,8 @@ class CareblazersApp extends ConsumerStatefulWidget {
 }
 
 class _CareblazersAppState extends ConsumerState<CareblazersApp> {
-  late final GoRouter _router = widget.router ?? buildRouter();
+  late final GoRouter _router =
+      widget.router ?? ref.read(careblazersRouterProvider);
 
   @override
   Widget build(BuildContext context) {

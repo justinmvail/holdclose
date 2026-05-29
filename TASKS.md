@@ -385,7 +385,7 @@ automation. Each phase leaves the suite green.
   triggers signInWithApple; the demo-skip button is invisible
   without the define.
 
-- [ ] **Task 31: Router redirects for auth + onboarding.** Update
+- [x] **Task 31: Router redirects for auth + onboarding.** Update
   `lib/routing/router.dart` to redirect:
   - If `onboardingCompletedProvider` is false → `/onboarding`
     (welcome carousel)

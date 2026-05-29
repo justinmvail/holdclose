@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:careblazers/app.dart';
 import 'package:careblazers/models/settings.dart';
+import 'package:careblazers/providers/auth_provider.dart';
+import 'package:careblazers/providers/onboarding_provider.dart';
 import 'package:careblazers/providers/quiet_hours_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/screens/home_screen.dart';
@@ -8,6 +12,59 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
+
+/// Minimal [AuthProvider] that boots straight into [AuthStateSignedIn].
+///
+/// The font-scaler tests don't exercise auth at all, but the production
+/// router now applies the BUILD_SPEC.md §5.11 + §5.12 redirect — without
+/// a signed-in state the router bounces `/` to `/sign-in`, hiding the
+/// `HomeScreen` the tests sample `MediaQuery.textScalerOf` from.
+class _SignedInAuthStub implements AuthProvider {
+  _SignedInAuthStub();
+
+  static const User _user = User(
+    id: 'stub-app-test',
+    email: 'app-test@careblazers.app',
+    name: 'App Test Caregiver',
+  );
+
+  final StreamController<AuthState> _changes =
+      StreamController<AuthState>.broadcast();
+
+  Future<void> dispose() => _changes.close();
+
+  @override
+  Stream<AuthState> watchAuthState() async* {
+    yield const AuthState.signedIn(user: _user);
+    yield* _changes.stream;
+  }
+
+  @override
+  Future<void> signInWithApple() async {}
+
+  @override
+  Future<void> signInWithGoogle() async {}
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<void> deleteAccount() async {}
+}
+
+/// `@Riverpod` notifier override that pretends the carousel was
+/// completed in a prior session — pairs with [_SignedInAuthStub] to
+/// keep the production redirect off the font-scaler tests' back.
+class _CompletedOnboarding extends OnboardingCompleted {
+  @override
+  bool build() => true;
+}
+
+List<Override> _routerGateOverrides(_SignedInAuthStub auth) =>
+    <Override>[
+      authBackendProvider.overrideWithValue(auth),
+      onboardingCompletedProvider.overrideWith(_CompletedOnboarding.new),
+    ];
 
 /// BUILD_SPEC.md §11.3 — the app root must wrap MaterialApp's routed
 /// child in a MediaQuery whose `textScaler` reflects the persisted
@@ -28,6 +85,9 @@ Future<TextScaler> _pumpAndReadScaler(
   );
   addTearDown(storage.dispose);
 
+  final _SignedInAuthStub auth = _SignedInAuthStub();
+  addTearDown(auth.dispose);
+
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
@@ -39,14 +99,20 @@ Future<TextScaler> _pumpAndReadScaler(
         quietHoursClockProvider.overrideWithValue(
           () => DateTime(2026, 5, 29, 14, 0),
         ),
+        ..._routerGateOverrides(auth),
       ],
       child: const CareblazersApp(),
     ),
   );
-  // Drain the SettingsNotifier hydrate microtask so the persisted seed
-  // replaces the AppSettings.defaults() initial state — without this
-  // pump, every assertion would read the medium-default scaler.
-  await tester.pump();
+  // Drain the SettingsNotifier hydrate microtask AND the
+  // `careblazersRouterProvider`'s auth-stream subscription — the
+  // production redirect (BUILD_SPEC.md §5.11 + §5.12) starts the
+  // bridge in `signedOut`, so the very first redirect evaluation
+  // would bounce `/` to `/sign-in` until the override's first
+  // emission flips the bridge to `signedIn` and the listenable
+  // re-triggers the redirect. `pumpAndSettle` lets both transitions
+  // resolve before the test samples `MediaQuery.textScalerOf`.
+  await tester.pumpAndSettle();
 
   // Sample MediaQuery from inside the routed subtree (the app root
   // wraps `MaterialApp.router`'s `child` in the MediaQuery override).
