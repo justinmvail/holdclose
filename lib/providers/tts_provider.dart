@@ -6,6 +6,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/settings.dart';
+import 'bundled_tts_provider.dart';
 
 part 'tts_provider.freezed.dart';
 part 'tts_provider.g.dart';
@@ -63,24 +64,9 @@ class OSTTSProvider implements TTSProvider {
   final FlutterTts _tts;
   bool _awaitWired = false;
 
-  /// Caller-supplied flag from [AppSettings.preferSiriVoice]. When the
-  /// caller hasn't picked an explicit `voiceId`, the auto-pick prefers
-  /// a Siri voice (iOS 17+) over a generic "enhanced" or "default"
-  /// voice. Caller sets via [setPreferSiriVoice]; mutating per-speak
-  /// instead of per-speak would over-write the operator's choice every
-  /// time the Settings screen rebuilds.
-  bool _preferSiri = true;
-
   /// Cached auto-picked voice — picked lazily on the first speak() so
-  /// `getVoices` round-trips happen off the main draw path. Reset when
-  /// [setPreferSiriVoice] changes the preference.
+  /// `getVoices` round-trips happen off the main draw path.
   Map<String, String>? _autoVoice;
-
-  void setPreferSiriVoice(bool prefer) {
-    if (_preferSiri == prefer) return;
-    _preferSiri = prefer;
-    _autoVoice = null; // force re-pick on next speak
-  }
 
   @override
   Future<void> speak(
@@ -104,17 +90,14 @@ class OSTTSProvider implements TTSProvider {
     await _tts.speak(text);
   }
 
-  /// Auto-pick the best installed en-* voice, preferring Siri-family
-  /// voices (iOS 17+ ships `com.apple.voice.compact.en-US.<SiriName>`
-  /// AND the higher-quality `com.apple.ttsbundle.siri_<Name>_en-US_*`
-  /// bundles to all apps) over generic enhanced / premium, over the
-  /// platform default. Called lazily; the result is cached until
-  /// [setPreferSiriVoice] flips the preference.
+  /// Auto-pick the best installed en-* voice, preferring premium then
+  /// enhanced quality and falling back to the first en-* entry. Called
+  /// lazily; the result is cached after the first speak() to keep
+  /// subsequent utterances off the `getVoices` round-trip.
   Future<Map<String, String>?> _pickAutoVoice() async {
     if (_autoVoice != null) return _autoVoice;
     final dynamic raw = await _tts.getVoices;
     if (raw is! List) return null;
-    Map<String, String>? siri;
     Map<String, String>? enhanced;
     Map<String, String>? premium;
     Map<String, String>? anyEn;
@@ -125,26 +108,18 @@ class OSTTSProvider implements TTSProvider {
       if (name == null || locale == null) continue;
       if (!locale.toLowerCase().startsWith('en')) continue;
       final String quality = entry['quality']?.toString().toLowerCase() ?? '';
-      final String identifier =
-          entry['identifier']?.toString().toLowerCase() ?? '';
       final Map<String, String> v = <String, String>{
         'name': name,
         'locale': locale,
       };
       anyEn ??= v;
-      if (identifier.contains('siri') ||
-          identifier.contains('ttsbundle.siri')) {
-        siri ??= v;
-      }
       if (quality.contains('premium')) {
         premium ??= v;
       } else if (quality.contains('enhanced')) {
         enhanced ??= v;
       }
     }
-    final Map<String, String>? picked = _preferSiri
-        ? (siri ?? premium ?? enhanced ?? anyEn)
-        : (premium ?? enhanced ?? siri ?? anyEn);
+    final Map<String, String>? picked = premium ?? enhanced ?? anyEn;
     _autoVoice = picked;
     return picked;
   }
@@ -288,13 +263,15 @@ AppSettings ttsSettings(Ref ref) => AppSettings.defaults();
 @Riverpod(keepAlive: true)
 DateTime Function() ttsClock(Ref ref) => DateTime.now;
 
-/// Riverpod-wired TTS backend (BUILD_SPEC.md §6.3 + §11.2).
+/// Riverpod-wired TTS backend (BUILD_SPEC.md §6.3 + §11.2 + Phase 9.5).
 ///
 /// Returns [NoopTTSProvider] whenever the Settings toggle is off or
 /// the wall clock is inside the quiet-hours window (and the user
-/// hasn't flipped "Allow audio anyway"). Otherwise returns a fresh
-/// [OSTTSProvider] — the constructor is cheap and doesn't touch the
-/// platform engine until [TTSProvider.speak] runs.
+/// hasn't flipped "Allow audio anyway"). Otherwise picks between the
+/// bundled neural-TTS path ([BundledTTSProvider], default — Piper
+/// Amy running on-device via ONNX Runtime, ~30 MB) and the OS
+/// flutter_tts engine ([OSTTSProvider]) based on
+/// [AppSettings.useBundledVoice].
 @Riverpod(keepAlive: true)
 TTSProvider tts(Ref ref) {
   final AppSettings settings = ref.watch(ttsSettingsProvider);
@@ -302,7 +279,8 @@ TTSProvider tts(Ref ref) {
   if (shouldMuteTts(settings, now)) {
     return const NoopTTSProvider();
   }
-  final OSTTSProvider tts = OSTTSProvider();
-  tts.setPreferSiriVoice(settings.preferSiriVoice);
-  return tts;
+  if (settings.useBundledVoice) {
+    return BundledTTSProvider();
+  }
+  return OSTTSProvider();
 }

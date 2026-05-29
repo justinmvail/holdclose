@@ -12,7 +12,8 @@ void main() {
   });
 
   group('AppSettings.defaults (real-build defaults)', () {
-    test('audio on, normal speed, medium font, quiet hours on', () {
+    test('audio on, normal speed, medium font, quiet hours on, bundled on',
+        () {
       final AppSettings s = AppSettings.defaults();
       expect(s.readScriptsAloud, isTrue);
       expect(s.voiceId, isNull);
@@ -22,6 +23,8 @@ void main() {
       expect(s.allowAudioDuringQuietHours, isFalse);
       expect(s.darkModeAtNight, isTrue);
       expect(s.resetOnLaunchDemo, isFalse);
+      expect(s.useBundledVoice, isTrue,
+          reason: 'Phase 9.5 — bundled neural TTS is the v1 default');
     });
   });
 

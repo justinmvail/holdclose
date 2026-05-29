@@ -1,4 +1,5 @@
 import 'package:careblazers/models/settings.dart';
+import 'package:careblazers/providers/bundled_tts_provider.dart';
 import 'package:careblazers/providers/settings_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/providers/tts_provider.dart';
@@ -119,6 +120,51 @@ void main() {
     );
 
     testWidgets(
+      'bundled-voice toggle renders ON by default and persists OFF',
+      (WidgetTester tester) async {
+        final ({InMemoryStorageProvider storage, ProviderContainer container})
+            pumped = await _pumpSettings(tester);
+
+        // Copy of the BUILD_SPEC.md §11.1 + Phase 9.5 subtitle so a
+        // future rewording trips this test rather than silently
+        // shipping a different recommendation strength.
+        expect(find.text('High-quality bundled voice'), findsOneWidget);
+        expect(
+          find.textContaining('~30 MB of storage'),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(SettingsScreen.bundledVoiceToggleKey));
+        await tester.pump();
+
+        expect(
+          (await pumped.storage.getSettings()).useBundledVoice,
+          isFalse,
+          reason: 'tapping the bundled toggle should persist the opt-out',
+        );
+        expect(
+          pumped.container.read(settingsProvider).useBundledVoice,
+          isFalse,
+        );
+      },
+    );
+
+    testWidgets(
+      'voice picker shows the single "Amy (bundled)" entry (v1.1 catalog '
+      'expansion lands later)',
+      (WidgetTester tester) async {
+        await _pumpSettings(tester);
+        expect(
+          find.descendant(
+            of: find.byKey(SettingsScreen.voicePickerKey),
+            matching: find.text('Amy (bundled)'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
       'toggling Read scripts aloud OFF persists the change',
       (WidgetTester tester) async {
         final ({InMemoryStorageProvider storage, ProviderContainer container})
@@ -219,8 +265,9 @@ void main() {
 
         container.read(settingsProvider);
         await Future<void>.delayed(Duration.zero);
-        expect(container.read(ttsProvider), isA<OSTTSProvider>(),
-            reason: 'default audio=true must resolve to OS TTS');
+        expect(container.read(ttsProvider), isA<BundledTTSProvider>(),
+            reason: 'default audio=true must resolve to the bundled '
+                'neural-TTS path (Phase 9.5)');
 
         await container
             .read(settingsProvider.notifier)

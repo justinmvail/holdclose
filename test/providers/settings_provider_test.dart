@@ -1,4 +1,5 @@
 import 'package:careblazers/models/settings.dart';
+import 'package:careblazers/providers/bundled_tts_provider.dart';
 import 'package:careblazers/providers/settings_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/providers/tts_provider.dart';
@@ -160,8 +161,9 @@ void main() {
 
       // Drain hydrate so default-true is in state.
       await Future<void>.delayed(Duration.zero);
-      expect(container.read(ttsProvider), isA<OSTTSProvider>(),
-          reason: 'default-on settings should resolve to OS TTS');
+      expect(container.read(ttsProvider), isA<BundledTTSProvider>(),
+          reason: 'default-on settings should resolve to the bundled '
+              'neural-TTS path (Phase 9.5)');
 
       await container
           .read(settingsProvider.notifier)
@@ -169,6 +171,21 @@ void main() {
 
       expect(container.read(ttsProvider), isA<NoopTTSProvider>(),
           reason: 'toggling read-aloud OFF must flip TTS to the no-op impl');
+    });
+
+    test('toggling useBundledVoice OFF flips ttsProvider to OSTTSProvider',
+        () async {
+      final DateTime midday = DateTime(2026, 5, 29, 14, 0);
+      final ProviderContainer container = wiredContainer(now: midday);
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(ttsProvider), isA<BundledTTSProvider>());
+
+      await container
+          .read(settingsProvider.notifier)
+          .setUseBundledVoice(false);
+
+      expect(container.read(ttsProvider), isA<OSTTSProvider>(),
+          reason: 'opting out of bundled voice should fall back to OS TTS');
     });
 
     test('persisted readScriptsAloud=false starts with Noop after hydrate',

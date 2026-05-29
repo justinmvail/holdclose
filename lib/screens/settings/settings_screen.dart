@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/settings.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/settings_provider.dart';
-import '../../providers/tts_provider.dart';
 import '../../theme.dart';
 
 /// Settings (BUILD_SPEC.md §5.10).
@@ -25,6 +24,8 @@ class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   static const Key readAloudToggleKey = Key('settings-read-aloud-toggle');
+  static const Key bundledVoiceToggleKey =
+      Key('settings-bundled-voice-toggle');
   static const Key voicePickerKey = Key('settings-voice-picker');
   static const Key speedSliderKey = Key('settings-speed-slider');
   static const Key quietHoursToggleKey = Key('settings-quiet-hours-toggle');
@@ -150,15 +151,16 @@ class _AudioSection extends ConsumerWidget {
               ),
               const Divider(height: 1),
               SwitchListTile(
-                key: const Key('settings-prefer-siri-toggle'),
+                key: SettingsScreen.bundledVoiceToggleKey,
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Use Siri voice'),
+                title: const Text('High-quality bundled voice'),
                 subtitle: const Text(
-                  'Prefer iOS 17+ Siri voices over the compact default.',
+                  'Uses ~30 MB of storage for a natural-sounding offline '
+                  'voice (recommended).',
                 ),
-                value: settings.preferSiriVoice,
+                value: settings.useBundledVoice,
                 onChanged:
-                    audioOn ? (bool v) => notifier.setPreferSiriVoice(v) : null,
+                    audioOn ? (bool v) => notifier.setUseBundledVoice(v) : null,
               ),
               const Divider(height: 1),
               _VoicePicker(
@@ -203,75 +205,53 @@ class _AudioSection extends ConsumerWidget {
   }
 }
 
-class _VoicePicker extends ConsumerStatefulWidget {
+/// Voice picker (BUILD_SPEC.md Phase 9.5).
+///
+/// v1 ships one bundled voice — Amy, the en_US Piper voice the
+/// platform bridges play back from `assets/tts/en_US-amy-medium/`. The
+/// dropdown is a single-item placeholder until the v1.1 catalog adds
+/// Dr. Natali + the other personalities the voicecloner repo produces.
+class _VoicePicker extends StatelessWidget {
   const _VoicePicker({
     required this.settings,
     required this.notifier,
     required this.enabled,
   });
 
+  /// Encoded voice id the BundledTTSProvider's native side recognises
+  /// (see `BundledTTSProvider.availableVoices()` in
+  /// `lib/providers/bundled_tts_provider.dart`).
+  static const String _amyVoiceId = 'amy|en_US';
+
   final AppSettings settings;
   final Settings notifier;
   final bool enabled;
 
   @override
-  ConsumerState<_VoicePicker> createState() => _VoicePickerState();
-}
-
-class _VoicePickerState extends ConsumerState<_VoicePicker> {
-  late final Future<List<TTSVoice>> _voices = _load();
-
-  Future<List<TTSVoice>> _load() async {
-    final TTSProvider tts = ref.read(ttsProvider);
-    return tts.availableVoices();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: FutureBuilder<List<TTSVoice>>(
-        future: _voices,
-        builder: (BuildContext context,
-            AsyncSnapshot<List<TTSVoice>> snapshot) {
-          final List<TTSVoice> voices = snapshot.data ?? const <TTSVoice>[];
-          return Row(
-            children: <Widget>[
-              const Expanded(child: Text('Voice')),
-              DropdownButton<String?>(
-                key: SettingsScreen.voicePickerKey,
-                value: _selectedValue(voices, widget.settings.voiceId),
-                hint: const Text('System default'),
-                onChanged: widget.enabled
-                    ? (String? next) => widget.notifier.setVoiceId(next)
-                    : null,
-                items: <DropdownMenuItem<String?>>[
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('System default'),
-                  ),
-                  for (final TTSVoice v in voices)
-                    DropdownMenuItem<String?>(
-                      value: v.id,
-                      child: Text(v.displayName),
-                    ),
-                ],
+      child: Row(
+        children: <Widget>[
+          const Expanded(child: Text('Voice')),
+          DropdownButton<String>(
+            key: SettingsScreen.voicePickerKey,
+            value: _amyVoiceId,
+            onChanged: enabled
+                ? (String? next) {
+                    if (next != null) notifier.setVoiceId(next);
+                  }
+                : null,
+            items: const <DropdownMenuItem<String>>[
+              DropdownMenuItem<String>(
+                value: _amyVoiceId,
+                child: Text('Amy (bundled)'),
               ),
             ],
-          );
-        },
+          ),
+        ],
       ),
     );
-  }
-
-  /// Only return [stored] when it actually matches one of the loaded
-  /// [voices] — DropdownButton throws if `value` isn't in `items`.
-  String? _selectedValue(List<TTSVoice> voices, String? stored) {
-    if (stored == null) return null;
-    for (final TTSVoice v in voices) {
-      if (v.id == stored) return stored;
-    }
-    return null;
   }
 }
 

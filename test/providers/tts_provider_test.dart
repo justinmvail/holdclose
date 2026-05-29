@@ -1,4 +1,5 @@
 import 'package:careblazers/models/settings.dart';
+import 'package:careblazers/providers/bundled_tts_provider.dart';
 import 'package:careblazers/providers/tts_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -210,10 +211,23 @@ void main() {
     });
 
     test(
-      'returns OSTTSProvider when audio enabled and outside quiet hours',
+      'returns BundledTTSProvider when audio enabled, outside quiet hours, '
+      'and useBundledVoice=true (the real-build default)',
       () {
         final ProviderContainer container = buildContainer(
           settings: AppSettings.defaults(),
+          now: DateTime(2026, 5, 29, 14, 0),
+        );
+        expect(container.read(ttsProvider), isA<BundledTTSProvider>());
+      },
+    );
+
+    test(
+      'returns OSTTSProvider when useBundledVoice=false (caregiver opt-out)',
+      () {
+        final ProviderContainer container = buildContainer(
+          settings:
+              AppSettings.defaults().copyWith(useBundledVoice: false),
           now: DateTime(2026, 5, 29, 14, 0),
         );
         expect(container.read(ttsProvider), isA<OSTTSProvider>());
@@ -221,14 +235,14 @@ void main() {
     );
 
     test(
-      'returns OSTTSProvider during quiet hours when override is on',
+      'returns BundledTTSProvider during quiet hours when override is on',
       () {
         final ProviderContainer container = buildContainer(
           settings: AppSettings.defaults()
               .copyWith(allowAudioDuringQuietHours: true),
           now: DateTime(2026, 5, 29, 23, 30),
         );
-        expect(container.read(ttsProvider), isA<OSTTSProvider>());
+        expect(container.read(ttsProvider), isA<BundledTTSProvider>());
       },
     );
 
@@ -236,17 +250,51 @@ void main() {
       // No clock override + no settings override — exercises the
       // unparametrised defaults (AppSettings.defaults() + DateTime.now).
       // The selection contract is what we assert here, not the wall
-      // hour: read it once and ensure it's one of the two expected
+      // hour: read it once and ensure it's one of the three expected
       // types (no exceptions, no NPEs from the riverpod_generator
       // wiring).
       final ProviderContainer container = ProviderContainer();
       addTearDown(container.dispose);
       final TTSProvider impl = container.read(ttsProvider);
       expect(
-        impl is NoopTTSProvider || impl is OSTTSProvider,
+        impl is NoopTTSProvider ||
+            impl is OSTTSProvider ||
+            impl is BundledTTSProvider,
         isTrue,
         reason: 'unexpected default impl: ${impl.runtimeType}',
       );
+    });
+
+    // ---- Phase 9.5 factory-choice contract (table-driven) ---------------
+
+    test('factory chooses BundledTTSProvider when bundled=true + not muted',
+        () {
+      final ProviderContainer container = buildContainer(
+        settings: AppSettings.defaults()
+            .copyWith(useBundledVoice: true, quietHoursEnabled: false),
+        now: DateTime(2026, 5, 29, 14, 0),
+      );
+      expect(container.read(ttsProvider), isA<BundledTTSProvider>());
+    });
+
+    test('factory chooses OSTTSProvider when bundled=false + not muted', () {
+      final ProviderContainer container = buildContainer(
+        settings: AppSettings.defaults()
+            .copyWith(useBundledVoice: false, quietHoursEnabled: false),
+        now: DateTime(2026, 5, 29, 14, 0),
+      );
+      expect(container.read(ttsProvider), isA<OSTTSProvider>());
+    });
+
+    test('factory chooses NoopTTSProvider when OS-mute wins (any bundled)',
+        () {
+      // OS-mute trumps the bundled toggle: quiet hours active, no audio
+      // override, useBundledVoice=true — still mutes.
+      final ProviderContainer container = buildContainer(
+        settings: AppSettings.defaults().copyWith(useBundledVoice: true),
+        now: DateTime(2026, 5, 29, 23, 30),
+      );
+      expect(container.read(ttsProvider), isA<NoopTTSProvider>());
     });
 
     test('override hook swaps in a custom impl end-to-end', () async {
@@ -401,20 +449,17 @@ void main() {
 
     test('speak with empty voiceId auto-picks the best installed voice',
         () async {
-      // v0.5.2 polish: an empty voiceId no longer falls through to the
-      // platform default. The provider enumerates getVoices() and
-      // picks the highest-quality installed voice (Siri > premium >
-      // enhanced > default), then calls setVoice with it. This makes
-      // demo builds sound natural on stock simulators where the
-      // operator hasn't picked anything explicitly.
+      // An empty voiceId no longer falls through to the platform
+      // default. The provider enumerates getVoices() and picks the
+      // highest-quality installed voice (premium > enhanced > first
+      // en-* entry), then calls setVoice with it.
       final OSTTSProvider os = OSTTSProvider();
       await os.speak('plain', voiceId: '', speed: 1.0);
       final MethodCall setVoice =
           calls.firstWhere((MethodCall c) => c.method == 'setVoice');
       // The mocked voice list contains Samantha (en-US) and Daniel
-      // (en-GB). Both are "default" quality and neither has a Siri
-      // identifier, so the auto-pick falls back to the first en-*
-      // entry — Samantha.
+      // (en-GB), both "default" quality, so the auto-pick falls back
+      // to the first en-* entry — Samantha.
       expect((setVoice.arguments as Map)['name'], 'Samantha');
       expect((setVoice.arguments as Map)['locale'], 'en-US');
     });

@@ -531,7 +531,7 @@ runs on iPhone.
   Test: instrumented Android test asserts model load + non-silent
   audio. Document in TTS_BUNDLED.md.
 
-- [ ] **Phase 9.5: Wire `BundledTTSProvider` into the TTS factory +
+- [x] **Phase 9.5: Wire `BundledTTSProvider` into the TTS factory +
   Settings toggle + retire Siri/banner UX.** Update
   `lib/providers/tts_provider.dart`'s `tts(Ref ref)` factory: when
   `AppSettings.useBundledVoice` is true (new field, default true),
