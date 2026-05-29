@@ -1,9 +1,11 @@
-# Bundled neural TTS — iOS (Phase 9.3) + Android (Phase 9.4)
+# Bundled neural TTS
 
-> Phase 9.3 ships the iOS side of the bundled Piper voice; Phase 9.4
-> mirrors it on Android. Phase 9.7 will append the cross-platform
-> overview, failure-fallback narrative, and voice-catalog swap guide —
-> keep this doc lean for now.
+> Cross-platform reference for the bundled Piper voice. Phase 9.3
+> shipped the iOS bridge, Phase 9.4 mirrored it on Android, Phase 9.6
+> pinned the device latency matrix, and Phase 9.7 (this section, plus
+> the appended **Why bundled vs OS TTS**, **Voice catalog swap**,
+> **Simulator vs device**, and **ONNX-load failure fallback** sections
+> below) closed out the docs + the Dart-side fallback factory.
 
 ## What lands in 9.3
 
@@ -295,3 +297,158 @@ feel** by ≥ 1.5 points, the bundled default stays. Intelligibility is
 table-stakes — Samantha will tie or win there and that's fine. If Amy
 loses on warmth, escalate before the pitch: the caregiver-coach voice
 is the whole point of bundling.
+
+## Why bundled vs OS TTS
+
+The OS TTS path (`OSTTSProvider`, wrapping `flutter_tts`) is the
+zero-cost default — every iPhone ships Samantha; every supported
+Android device ships at least the Google compact voices. So why pay a
+~30 MB envelope cost for the Piper Amy ONNX model?
+
+- **Warmth.** The dossier analysis flagged caregiver de-escalation as
+  the audio contract: the synthesised line has to sound like a person
+  who is *with* the caregiver, not a transit-system announcement.
+  OS-compact voices are tuned for short imperative phrases ("Turn
+  left in 200 feet"). Piper Amy is trained on multi-sentence
+  narrative — the prosody arc lines up with Dr. Natali's scripted
+  copy. The Phase 9.6 A/B (see above) is where we re-check that the
+  warmth delta still justifies the bundle.
+- **Determinism.** OS voices change underneath us. iOS 18.1 swapped
+  the Samantha quality tier on several locales; Android OEMs ship
+  forked TTS engines that disagree on rate semantics. The bundled
+  path runs the same ONNX graph on every device, so a decoder
+  recording captured today reproduces a year from now.
+- **Offline.** The caregiver can be in a memory-care facility's
+  Wi-Fi dead zone. The bundled voice runs entirely on-device with
+  no network round-trip — same audio whether the caregiver is in a
+  basement, a 35,000-foot flight, or at home.
+- **No cloud routing.** The product copy explicitly avoids "AI"
+  framing (CLAUDE.md). Calling a cloud TTS API would mean an outbound
+  HTTPS request the caregiver's network can audit. Bundling sidesteps
+  the conversation entirely.
+
+The Settings → **Audio** screen exposes a `useBundledVoice` toggle
+(`AppSettings.useBundledVoice`, default `true`). Flipping it off
+routes through `OSTTSProvider` — useful for caregivers on storage-
+constrained devices, or for the rare locale we don't have a bundled
+voice for yet.
+
+## Voice catalog swap process
+
+Adding a new Piper voice — Spanish-language Carmen, a UK-English
+Daniel, etc. — is a four-step swap:
+
+1. **Drop the model files** under `assets/tts/<voice-id>/`. Two
+   files per voice: `<voice-id>.onnx` (the graph) and
+   `<voice-id>.onnx.json` (Piper's voice config — phoneme map, sample
+   rate, speaker id). Voice ids follow the Piper convention
+   `<lang>_<COUNTRY>-<name>-<quality>` — e.g.,
+   `es_MX-carmen-medium`, `en_GB-daniel-low`. Quality tiers (`low`,
+   `medium`, `high`) trade envelope size for prosody — start with
+   `medium` unless an A/B says otherwise.
+2. **List the asset directory** in `pubspec.yaml` under
+   `flutter.assets:`. Match the trailing-slash form already used for
+   `assets/tts/en_US-amy-medium/`. Both files in the directory are
+   shipped by the trailing-slash include — no need to enumerate
+   the `.onnx` and `.onnx.json` separately.
+3. **Register in `VoicePicker`** (Settings → Voice picker — Phase
+   9.5) so the caregiver-facing dropdown surfaces the new voice.
+   The picker reads from a static catalog list (see
+   `lib/widgets/voice_picker.dart` — the entry shape is
+   `{id, displayName, locale, gender}`) so the dropdown can render
+   without the native bridge having to enumerate.
+4. **Bridge sanity-check.** The iOS `TTSBridge.swift` and Android
+   `TTSBridge.kt` parse the `.onnx.json` for sample rate and
+   phoneme-id map; if the new voice's config follows Piper's
+   standard schema the bridge picks it up without a code change.
+   Non-standard configs (custom speaker-id ranges, extra metadata
+   fields) require a bridge-side parser update — those are caught
+   at smoke time when the new voice fails to render audio.
+
+Envelope budget: the v1 pitch ships a single 30 MB voice (Amy). The
+catalog can grow to ~3 voices (~90 MB) before the App Store / Play
+Store "thin app" download warning is worth the design conversation.
+Past ~3, switch to on-demand voice downloads — out of scope for v1
+but flagged here so the next maintainer doesn't blow through 200 MB
+of assets without a heads-up.
+
+## Simulator vs device latency gap
+
+The Phase 9.6 acceptance matrix lists devices, not simulators, for a
+reason. The CoreML execution provider on the iOS Simulator falls
+through to CPU: the simulator host's Mac CPU runs the ONNX graph,
+but the Apple Neural Engine isn't exposed to the simulator at all,
+so first-token latency comes in at 1–3 s instead of the on-device
+<500 ms target. Same story on Android emulators with NNAPI — the
+emulator's translated NNAPI calls eventually CPU-execute, and an
+emulator running on an x86 host with v8a translation pays an extra
+penalty on top.
+
+What this means in practice:
+
+- **Sim smoke test = "the pipeline is alive"**, not "the latency is
+  acceptable." A 2 s first-token in the simulator is **not** a
+  regression. The bar is "audio plays, words are intelligible."
+- **Device smoke test = "the pitch demo lands."** Always re-run on
+  the loaner-kit iPhone / Pixel before the pitch. The matrix table
+  above is where the per-device numbers get pinned.
+- **CI runs sim-only.** That's fine for "did the bridge wire up?"
+  but the < 500 ms SLA isn't CI-tracked — pinning that on a sim
+  would just bake in the simulator's CPU penalty as the bar.
+
+If you see > 5 s first-token on a real A14+ device, that's a real
+regression; check the CoreML EP `executionProvider=` log line and
+verify the EP actually engaged (CoreML EP can silently fall back to
+CPU on a partitioning mismatch — ORT minor bumps have caused this
+before).
+
+## ONNX-load failure fallback
+
+ONNX Runtime can fail to load the bundled model — rare in
+production, but real:
+
+- **iOS — missing CoreML symbol.** A long-discontinued iPhone runs
+  an OS that ORT's CoreML EP was compiled against a newer Foundation
+  symbol for. The session-init throws on the `addCoreML` call.
+- **Android — NNAPI version mismatch.** An exotic AOSP fork (OEM
+  customisations, certain Chinese-domestic distributions) ships an
+  NNAPI HAL that ORT can't bind to. `addNnapi()` succeeds, but the
+  first inference call throws.
+- **Bridge unavailable.** The native plugin failed to register —
+  e.g., a Phase 9.2 stub build is running, or the pod / AAR didn't
+  link. The `careblazers/tts` MethodChannel surfaces a
+  `MissingPluginException` on the first invocation.
+
+The Dart slice handles all three the same way:
+`BundledTTSProvider.createOrFallback()` (in
+`lib/providers/bundled_tts_provider.dart`) probes the channel by
+invoking `probe`. The native bridge returns null when the
+`ORTSession` / `OrtSession` is healthy; it throws otherwise.
+
+- **Probe succeeds** → factory returns a `BundledTTSProvider` wired
+  to the same channel. Caller is none the wiser.
+- **Probe throws `PlatformException`** → factory logs a single
+  WARN line via `dart:developer` (`name: 'careblazers.tts'`,
+  `level: 900`) carrying the platform code + message, then returns
+  an `OSTTSProvider`. The decoder result screen, library card
+  screen, and any other `TTSProvider` consumer keep working — they
+  just route through `flutter_tts` instead of the bundled voice.
+- **Probe throws `MissingPluginException`** → same fallback path,
+  same WARN line, framed as "bridge unavailable" instead of "probe
+  failed."
+
+The WARN is logged exactly once, at factory time. We do NOT
+keep retrying the bundled path on subsequent `speak()` calls —
+ONNX-load failure is a device-class problem, not a transient one,
+and re-probing every utterance would burn battery for no payoff.
+The cost is that a caregiver who flips airplane mode → reboots →
+turns it back off will see the fallback persist for the rest of
+the session; we accept that, since the OS path still works.
+
+Tests live in
+`test/providers/bundled_tts_provider_test.dart` under the
+`createOrFallback` group — they mock the channel to raise
+`PlatformException('ONNX_LOAD_FAILED', …)` and assert the factory
+hands back the injected `OSTTSProvider`, plus a single WARN-line
+capture. The success path asserts the probe verb is exactly `probe`
+and that no WARN line fires when the channel returns null.

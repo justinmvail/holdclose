@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/services.dart';
 
 import 'tts_provider.dart';
@@ -84,4 +86,55 @@ class BundledTTSProvider implements TTSProvider {
     }
     return out;
   }
+
+  /// Async factory with transparent OS fallback (BUILD_SPEC.md Phase 9.7).
+  ///
+  /// Probes the `careblazers/tts` MethodChannel by invoking `probe`.
+  /// The native bridge resolves the call once its `ORTSession` (iOS)
+  /// or `OrtSession` (Android) is healthy; it throws
+  /// [PlatformException] with code `ONNX_LOAD_FAILED` when ONNX
+  /// Runtime refuses to load `en_US-amy-medium.onnx` (rare — missing
+  /// CoreML symbol on a very old iOS, NNAPI version mismatch on an
+  /// exotic AOSP fork) and [MissingPluginException] when the bridge
+  /// hasn't registered yet (e.g., the Phase 9.2 stub build).
+  ///
+  /// On a healthy probe, returns a [BundledTTSProvider] wired to the
+  /// same channel. On failure, logs a single WARN line via [warn] and
+  /// returns the [OSTTSProvider] built by [osFallbackFactory].
+  /// Caller-facing code keeps using the [TTSProvider] contract and
+  /// never has to branch on which path resolved.
+  static Future<TTSProvider> createOrFallback({
+    MethodChannel? channel,
+    OSTTSProvider Function()? osFallbackFactory,
+    void Function(String message)? warn,
+  }) async {
+    final MethodChannel ch =
+        channel ?? const MethodChannel(bundledTtsChannelName);
+    final void Function(String) reportWarn = warn ?? _defaultTtsWarn;
+    try {
+      await ch.invokeMethod<void>('probe');
+      return BundledTTSProvider(channel: ch);
+    } on PlatformException catch (e) {
+      reportWarn(
+        'BundledTTS probe failed (${e.code}: ${e.message}); '
+        'falling back to OSTTSProvider',
+      );
+      return (osFallbackFactory ?? OSTTSProvider.new)();
+    } on MissingPluginException catch (e) {
+      reportWarn(
+        'BundledTTS bridge unavailable (${e.message}); '
+        'falling back to OSTTSProvider',
+      );
+      return (osFallbackFactory ?? OSTTSProvider.new)();
+    }
+  }
+}
+
+/// Default WARN sink for [BundledTTSProvider.createOrFallback]. One
+/// line via `dart:developer` at level 900 (WARNING) under the
+/// `careblazers.tts` logger name — matches what `flutter run` /
+/// `adb logcat` / `Console.app` filter on. Tests inject an alternate
+/// sink to capture the call without touching the real logger.
+void _defaultTtsWarn(String message) {
+  developer.log(message, name: 'careblazers.tts', level: 900);
 }

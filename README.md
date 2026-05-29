@@ -50,6 +50,18 @@ flutter test integration_test/demo_tour.dart --dart-define=DEMO_MODE=true
 Uses `FakeLLMProvider` with deterministic per-behavior responses. Clean
 state on every launch.
 
+## Audio
+
+The decoder result screen and library cards read scripts aloud via a
+bundled on-device neural voice (Piper Amy, ~30 MB, shipped under
+`assets/tts/en_US-amy-medium/`). Settings → **High-quality bundled
+voice** toggles between that path and the OS engine (`flutter_tts` —
+Samantha on iOS, Google TTS on Android). On the rare device where
+ONNX Runtime can't load the bundled model, the app transparently
+falls back to the OS voice — caregivers never see a broken play
+button. See [`docs/TTS_BUNDLED.md`](docs/TTS_BUNDLED.md) for the
+full story (catalog swap, latency matrix, failure fallback).
+
 ## Tests
 
 ```bash

@@ -567,7 +567,7 @@ runs on iPhone.
 
   No automated tests — ear validation only.
 
-- [ ] **Phase 9.7: Docs + ONNX-load failure fallback.** Write
+- [x] **Phase 9.7: Docs + ONNX-load failure fallback.** Write
   `docs/TTS_BUNDLED.md` covering: why bundled vs. OS TTS, voice
   catalog swap process (drop new `.onnx` + `.onnx.json` under
   `assets/tts/<voice-id>/`, list in pubspec.yaml, register in

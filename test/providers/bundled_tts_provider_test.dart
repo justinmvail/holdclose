@@ -153,6 +153,105 @@ void main() {
       expect(voices, isEmpty);
     });
 
+    // ---- Phase 9.7 ONNX-load failure fallback -----------------------------
+
+    group('createOrFallback', () {
+      test(
+        'returns OSTTSProvider and warns once when probe throws PlatformException',
+        () async {
+          const MethodChannel failingChannel =
+              MethodChannel('test/bundled-tts-fail');
+          TestDefaultBinaryMessengerBinding
+              .instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(failingChannel,
+                  (MethodCall call) async {
+            // Simulate the native bridge reporting an ONNX Runtime
+            // load failure on the probe round-trip.
+            throw PlatformException(
+              code: 'ONNX_LOAD_FAILED',
+              message: 'CoreML EP symbol missing',
+            );
+          });
+          addTearDown(() {
+            TestDefaultBinaryMessengerBinding
+                .instance.defaultBinaryMessenger
+                .setMockMethodCallHandler(failingChannel, null);
+          });
+
+          final List<String> warnings = <String>[];
+          final OSTTSProvider canary = OSTTSProvider();
+          final TTSProvider resolved =
+              await BundledTTSProvider.createOrFallback(
+            channel: failingChannel,
+            osFallbackFactory: () => canary,
+            warn: warnings.add,
+          );
+          expect(resolved, isA<OSTTSProvider>());
+          expect(identical(resolved, canary), isTrue,
+              reason: 'factory must hand back the injected OS fallback');
+          expect(warnings, hasLength(1),
+              reason: 'fallback must emit exactly one WARN line');
+          expect(warnings.single, contains('ONNX_LOAD_FAILED'));
+          expect(warnings.single, contains('CoreML EP symbol missing'));
+          expect(warnings.single, contains('OSTTSProvider'));
+        },
+      );
+
+      test(
+        'returns OSTTSProvider and warns once when bridge is unregistered',
+        () async {
+          // No mock handler installed → the channel surfaces a
+          // MissingPluginException, which the factory must treat the
+          // same as an ONNX_LOAD_FAILED PlatformException.
+          const MethodChannel unregistered =
+              MethodChannel('test/bundled-tts-missing');
+
+          final List<String> warnings = <String>[];
+          final TTSProvider resolved =
+              await BundledTTSProvider.createOrFallback(
+            channel: unregistered,
+            osFallbackFactory: OSTTSProvider.new,
+            warn: warnings.add,
+          );
+          expect(resolved, isA<OSTTSProvider>());
+          expect(warnings, hasLength(1));
+          expect(warnings.single, contains('bridge unavailable'));
+        },
+      );
+
+      test(
+        'returns BundledTTSProvider and does not warn when probe succeeds',
+        () async {
+          const MethodChannel okChannel =
+              MethodChannel('test/bundled-tts-ok');
+          final List<MethodCall> probeCalls = <MethodCall>[];
+          TestDefaultBinaryMessengerBinding
+              .instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(okChannel, (MethodCall call) async {
+            probeCalls.add(call);
+            return null;
+          });
+          addTearDown(() {
+            TestDefaultBinaryMessengerBinding
+                .instance.defaultBinaryMessenger
+                .setMockMethodCallHandler(okChannel, null);
+          });
+
+          final List<String> warnings = <String>[];
+          final TTSProvider resolved =
+              await BundledTTSProvider.createOrFallback(
+            channel: okChannel,
+            warn: warnings.add,
+          );
+          expect(resolved, isA<BundledTTSProvider>());
+          expect(warnings, isEmpty,
+              reason: 'happy path must not emit the WARN line');
+          expect(probeCalls.single.method, 'probe',
+              reason: 'factory probes via the careblazers/tts probe verb');
+        },
+      );
+    });
+
     test('accepts an injected MethodChannel (test seam)', () async {
       const MethodChannel custom = MethodChannel('test/bundled-tts-custom');
       final List<MethodCall> customCalls = <MethodCall>[];
