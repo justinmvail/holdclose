@@ -118,7 +118,7 @@ automation. Each phase leaves the suite green.
   (assertion via a flag flipped in a subclass); the riverpod provider
   returns Noop when toggle is off OR quiet hours are active.
 
-- [ ] **Task 9: AuthProvider + AnalyticsProvider
+- [x] **Task 9: AuthProvider + AnalyticsProvider
   (`lib/providers/auth_provider.dart`,
   `lib/providers/analytics_provider.dart`).** AuthProvider per §6.4
   with `AuthState` freezed union. `RealAuthProvider` wraps
