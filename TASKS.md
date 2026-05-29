@@ -232,7 +232,7 @@ automation. Each phase leaves the suite green.
 
 ## Phase 4 — Journal
 
-- [ ] **Task 17: Journal screen
+- [x] **Task 17: Journal screen
   (`lib/screens/journal/journal_screen.dart`).** Per §5.5. Watches
   `journalEntriesProvider` (last 30 days). Layout: week summary card
   (count + behavior breakdown), pattern flag card (only when

@@ -6,6 +6,7 @@ import 'package:careblazers/screens/library/library_card_screen.dart';
 import 'package:careblazers/screens/settings/settings_screen.dart';
 import 'package:careblazers/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,9 +14,16 @@ import 'package:go_router/go_router.dart';
 /// builders — same approach as `router_test.dart`. We skip the brand
 /// theme intentionally; its google_fonts TextStyles fire fire-and-
 /// forget Futures that flake in unit tests.
+///
+/// Wrapped in a `ProviderScope` so screens that read riverpod
+/// providers (Journal watches `journalEntriesProvider`,
+/// `patternDetectorProvider`) can resolve them — the home tests
+/// navigate into those screens via the secondary rows.
 Future<GoRouter> _pumpHome(WidgetTester tester) async {
   final GoRouter router = buildRouter();
-  await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+  await tester.pumpWidget(
+    ProviderScope(child: MaterialApp.router(routerConfig: router)),
+  );
   await tester.pumpAndSettle();
   return router;
 }

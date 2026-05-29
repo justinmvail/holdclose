@@ -6,6 +6,7 @@ import 'package:careblazers/screens/library/library_screen.dart';
 import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/tab_scaffold.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -30,7 +31,12 @@ Future<Widget> _pumpBar(
 
 Future<GoRouter> _pumpRouter(WidgetTester tester) async {
   final GoRouter router = buildRouter();
-  await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+  // ProviderScope wraps the router so the Journal branch — which now
+  // watches riverpod providers — can resolve. Without it, tapping the
+  // Journal tab tears down with "No ProviderScope found".
+  await tester.pumpWidget(
+    ProviderScope(child: MaterialApp.router(routerConfig: router)),
+  );
   await tester.pumpAndSettle();
   return router;
 }

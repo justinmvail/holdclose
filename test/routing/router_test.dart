@@ -7,21 +7,30 @@ import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/journal/journal_screen.dart';
 import 'package:careblazers/screens/library/library_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-/// Pump the router wrapped in a bare MaterialApp. We deliberately
-/// skip `careblazersLightTheme` here — its google_fonts TextStyles
-/// fire fire-and-forget Futures during construction; in unit tests
-/// without bundled font assets those Futures fail in the root zone
-/// and surface as uncaught errors. The theme contract is owned by
-/// theme_test.dart; here we only care about route registration.
+/// Pump the router wrapped in a bare MaterialApp + a ProviderScope.
+/// We deliberately skip `careblazersLightTheme` here — its google_fonts
+/// TextStyles fire fire-and-forget Futures during construction; in
+/// unit tests without bundled font assets those Futures fail in the
+/// root zone and surface as uncaught errors. The theme contract is
+/// owned by theme_test.dart; here we only care about route
+/// registration.
+///
+/// The ProviderScope is required because screens that watch riverpod
+/// providers (Journal → `journalEntriesProvider`,
+/// `patternDetectorProvider`) crash without one — these registration
+/// tests probe every route, so the scope has to cover them all.
 Future<GoRouter> pumpRouter(
   WidgetTester tester, {
   String initialLocation = '/',
 }) async {
   final GoRouter router = buildRouter(initialLocation: initialLocation);
-  await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+  await tester.pumpWidget(
+    ProviderScope(child: MaterialApp.router(routerConfig: router)),
+  );
   await tester.pumpAndSettle();
   return router;
 }
