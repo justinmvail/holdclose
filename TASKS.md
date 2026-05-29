@@ -178,7 +178,7 @@ automation. Each phase leaves the suite green.
   pushes with the free-text flag set; BackButton visible (pushed
   screen).
 
-- [ ] **Task 13: Triage screen
+- [x] **Task 13: Triage screen
   (`lib/screens/decoder/triage_screen.dart`).** Three-question
   sequential flow per §5.3. Stores answers in
   `triageProvider`. AppBar: back arrow + behavior label chip + "N of

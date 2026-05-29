@@ -86,8 +86,28 @@ GoRouter buildRouter({String initialLocation = '/'}) {
         path: '/decoder/triage',
         name: CareblazersRoutes.decoderTriage,
         parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) =>
-            const TriageScreen(),
+        builder: (BuildContext context, GoRouterState state) {
+          // The behavior picker (BUILD_SPEC.md §5.2) pushes here with a
+          // [TriageArgs] payload. A deep-link or accidental direct-nav
+          // lands without args — render a soft fallback rather than
+          // crashing the navigator stack.
+          final Object? extra = state.extra;
+          if (extra is! TriageArgs) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Triage')),
+              body: const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Pick a behavior to get started.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            );
+          }
+          return TriageScreen(args: extra);
+        },
       ),
       GoRoute(
         path: '/decoder/result',
