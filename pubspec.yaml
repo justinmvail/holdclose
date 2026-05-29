@@ -66,9 +66,17 @@ dev_dependencies:
   freezed: ^2.5.0
   json_serializable: ^6.8.0
   drift_dev: ^2.20.0
-  riverpod_generator: ^2.6.0
-  custom_lint: ^0.7.3
-  riverpod_lint: ^2.6.0
+  # riverpod_generator (and the custom_lint / riverpod_lint pair)
+  # removed for now: the riverpod_generator chain pulls
+  # riverpod_analyzer_utils → custom_lint_core → analyzer_plugin
+  # 0.12.0, which references analyzer APIs that don't exist in the
+  # analyzer 7.x bundled by Dart 3.11. Result: build_runner fails to
+  # compile its entry script. Without riverpod_generator the project
+  # writes Riverpod providers manually (StateNotifierProvider /
+  # NotifierProvider) — slightly more verbose but functionally
+  # equivalent. freezed + drift codegen still work; their generators
+  # don't depend on analyzer_plugin. Re-add when the riverpod
+  # codegen chain ships an analyzer-7-compatible version.
 
 flutter:
   uses-material-design: true
