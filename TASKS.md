@@ -154,7 +154,7 @@ automation. Each phase leaves the suite green.
 > screens without their goldens — or that drop coverage — will be
 > rolled back by the autoloop.
 
-- [ ] **Task 11: Home screen
+- [x] **Task 11: Home screen
   (`lib/screens/home_screen.dart`).** Implement Home per BUILD_SPEC.md
   §5.1. AppBar with title + gear button (pushes `/settings`). The
   giant tap target uses the `displayLarge` text style with the
