@@ -166,7 +166,7 @@ automation. Each phase leaves the suite green.
   `/decoder/behavior`; tapping the secondary rows pushes the expected
   routes; no BackButton visible (Home is a tab root).
 
-- [ ] **Task 12: Behavior picker screen
+- [x] **Task 12: Behavior picker screen
   (`lib/screens/decoder/behavior_picker_screen.dart`).** 4×2 grid of
   the 8 canonical behaviors per §5.2. Each card: glyph + 2-line
   label, `surfaceWarm` bg, rounded 16, soft shadow. Tap → push
