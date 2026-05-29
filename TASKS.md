@@ -408,7 +408,7 @@ automation. Each phase leaves the suite green.
   is fine for the smoke test). No Dart test for this — it's a host
   script.
 
-- [ ] **Task 33: Demo seed data loader
+- [x] **Task 33: Demo seed data loader
   (`lib/seed/mary_henderson.dart`, `lib/seed/sample_journal.dart`,
   `lib/services/seed_repository.dart`).** Implement Mary Henderson
   per BUILD_SPEC.md §9.1 exactly. Six sample journal entries per §9.2.
