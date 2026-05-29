@@ -54,8 +54,8 @@ void main() {
       expect(careblazersColors.primary, const Color(0xFF1F2A44));
       expect(careblazersColors.primarySoft, const Color(0xFF2A3B61));
       expect(careblazersColors.text, const Color(0xFF33373D));
-      expect(careblazersColors.cta, const Color(0xFFFF6900));
-      expect(careblazersColors.accentDeep, const Color(0xFFCC3366));
+      expect(careblazersColors.cta, const Color(0xFFC97458));
+      expect(careblazersColors.accentDeep, const Color(0xFFB05C40));
       expect(careblazersColors.surfaceWarm, const Color(0xFFF8F6F3));
       expect(careblazersColors.background, const Color(0xFFFFFFFF));
       expect(careblazersColors.link, const Color(0xFF4054B2));
@@ -78,11 +78,11 @@ void main() {
       expect(careblazersLightTheme.colorScheme.primary, careblazersColors.primary);
     });
 
-    test('colorScheme.secondary is the CTA orange (#FF6900)', () {
+    test('colorScheme.secondary is the CTA salmon (#C97458)', () {
       expect(careblazersLightTheme.colorScheme.secondary, careblazersColors.cta);
     });
 
-    test('colorScheme.tertiary is accentDeep (#CC3366)', () {
+    test('colorScheme.tertiary is accentDeep (#B05C40)', () {
       expect(careblazersLightTheme.colorScheme.tertiary, careblazersColors.accentDeep);
     });
 
