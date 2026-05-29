@@ -336,7 +336,7 @@ automation. Each phase leaves the suite green.
   multiplier flows into MediaQuery scaler; demo-mode toggle visible
   only with the define.
 
-- [ ] **Task 26: Demo mode reset-on-launch wiring.** When
+- [x] **Task 26: Demo mode reset-on-launch wiring.** When
   `DEMO_MODE=true` AND settings.resetOnLaunch is true, the app
   invokes `storageProvider.reset()` then `seedRepository.populateAll()`
   on app start (in `lib/main.dart` or `app.dart`). `seedRepository`
