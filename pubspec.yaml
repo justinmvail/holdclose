@@ -38,6 +38,12 @@ dependencies:
 
   # Audio / TTS
   flutter_tts: ^4.2.0
+  # Bundled neural TTS (Piper voice model run on-device).
+  # The Flutter community plugin's pub.dev version (1.4.x) tracks the
+  # underlying native Microsoft ONNX Runtime release (1.18.x on iOS via
+  # SPM, 1.18.x via the Android AAR). See BUILD_SPEC.md §1 — Bundled
+  # assets, and TASKS.md Phase 9 for the bridge breakdown.
+  onnxruntime: ^1.4.0
 
   # Typography
   google_fonts: ^6.2.0
@@ -96,3 +102,8 @@ flutter:
   assets:
     - assets/images/
     - assets/seed/
+    # Bundled Piper voice (Phase 9 — neural TTS). The .onnx is the
+    # 22 kHz medium-quality `amy` voice (~60 MB); the .onnx.json is
+    # the espeak phoneme + inference config consumed by the iOS /
+    # Android bridges. See BUILD_SPEC.md §1 — Bundled assets.
+    - assets/tts/en_US-amy-medium/

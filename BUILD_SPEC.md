@@ -38,7 +38,11 @@ pre-staged content beyond the seed-data scaffolding.
 - **Models**: `freezed` 2.5+ + `json_serializable` 6.8+.
 - **HTTP**: `dio` 5.7+ for the LLM shim calls.
 - **TTS**: `flutter_tts` 4.2+ (wraps iOS AVSpeechSynthesizer +
-  Android TextToSpeech).
+  Android TextToSpeech) — fallback path.
+- **Bundled neural TTS**: `onnxruntime` 1.4+ (the Flutter community
+  plugin on pub.dev; its version tracks the wrapped Microsoft ONNX
+  Runtime 1.18.x native lib). Drives the on-device Piper voice via
+  the iOS/Android bridges (TASKS.md Phase 9). Primary TTS path post-Phase 9.
 - **Typography**: `google_fonts` 6.2+ for Lato + Montserrat.
 - **Auth**: `google_sign_in` 6.2+ and `sign_in_with_apple` 6.1+.
 - **PDF**: `pdf` 3.11+ + `printing` 5.13+ (doctor-visit packet).
@@ -51,6 +55,29 @@ pre-staged content beyond the seed-data scaffolding.
 - **No new top-level deps** without updating this file. Don't add
   Bloc, Provider (lowercase, the package), MobX, or any other state
   library. Don't add hand-rolled HTTP. Don't add new font families.
+
+### Bundled assets
+
+Static binaries shipped inside the app bundle (declared under
+`flutter.assets` in `pubspec.yaml`):
+
+| Asset path | Size | Purpose |
+|---|---|---|
+| `assets/images/` | small | App logo + onboarding illustrations |
+| `assets/seed/` | small | Demo-mode seed JSON (sample voice-note placeholder) |
+| `assets/tts/en_US-amy-medium/en_US-amy-medium.onnx` | ~60 MB | Piper neural-TTS voice model (22 kHz, medium quality, en-US female "Amy"). Source: `rhasspy/piper-voices` Hugging Face mirror, tagged release `v1.0.0`. Consumed by `BundledTTSProvider` via `onnxruntime` (TASKS.md Phase 9). |
+| `assets/tts/en_US-amy-medium/en_US-amy-medium.onnx.json` | ~5 KB | Companion config: espeak-ng phoneme map + inference params (`noise_scale`, `length_scale`, `noise_w`). Read by the iOS/Android bridges at session init. |
+
+The medium-quality model is ~60 MB rather than the ~30 MB initially
+budgeted in TASKS.md Phase 9.1; the lighter envelope corresponds to
+Piper's "low" quality voice. The size delta is accepted in v1 — the
+audio-quality improvement over OS TTS is the entire point of the
+phase, and 60 MB sits well inside the iOS App Store thin-binary
+ceiling for an app bundle.
+
+Bundled-asset audit: `flutter build apk --analyze-size` produces a
+breakdown that should report ≤ 65 MB attributed to `assets/tts/`.
+The audit is a build-step concern (no Dart unit test gates it).
 
 ### Invariants
 

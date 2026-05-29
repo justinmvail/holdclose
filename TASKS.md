@@ -476,7 +476,7 @@ without caring how it was produced.
 Sized as 7 atomic iters; iOS slice ships first since the pitch demo
 runs on iPhone.
 
-- [ ] **Phase 9.1: Add `onnxruntime` dependency + bundle the `amy`
+- [x] **Phase 9.1: Add `onnxruntime` dependency + bundle the `amy`
   voice model.** Add `onnxruntime: ^1.18.0` (Flutter community
   plugin) to pubspec.yaml. Download `en_US-amy-medium.onnx` (~30 MB)
   + `en_US-amy-medium.onnx.json` from the Piper repo VOICES.md
