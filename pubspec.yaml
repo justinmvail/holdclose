@@ -39,11 +39,16 @@ dependencies:
   # Audio / TTS
   flutter_tts: ^4.2.0
   # Bundled neural TTS (Piper voice model run on-device).
-  # The Flutter community plugin's pub.dev version (1.4.x) tracks the
-  # underlying native Microsoft ONNX Runtime release (1.18.x on iOS via
-  # SPM, 1.18.x via the Android AAR). See BUILD_SPEC.md §1 — Bundled
-  # assets, and TASKS.md Phase 9 for the bridge breakdown.
-  onnxruntime: ^1.4.0
+  # ONNX Runtime is bundled NATIVELY per platform — not via the Dart
+  # community plugin. iOS pulls `onnxruntime-objc ~> 1.18.0` through
+  # ios/Podfile; Android pulls `com.microsoft.onnxruntime:
+  # onnxruntime-android` through app/build.gradle. The Dart-side
+  # `BundledTTSProvider` is a MethodChannel proxy only — no Dart
+  # ORT inference path — so the community plugin would only add
+  # transitive Pod constraints (it pins onnxruntime-objc = 1.15.1
+  # which conflicts with the bridge's ~> 1.18.0 requirement). See
+  # BUILD_SPEC.md §1 — Bundled assets, and TASKS.md Phase 9 for the
+  # bridge breakdown.
 
   # Typography
   google_fonts: ^6.2.0

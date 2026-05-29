@@ -191,7 +191,7 @@ final class TTSEngine {
         // ORTSession transparently falls back to CPU.
         let coreml = ORTCoreMLExecutionProviderOptions()
         coreml.useCPUOnly = false
-        coreml.enableOnSubgraph = true
+        coreml.enableOnSubgraphs = true
         coreml.onlyEnableForDevicesWithANE = false
         try? options.appendCoreMLExecutionProvider(with: coreml)
 
