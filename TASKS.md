@@ -220,7 +220,7 @@ automation. Each phase leaves the suite green.
   has the result attached; on error, the entry's outcome is set to
   `error`.
 
-- [ ] **Task 16: Caption fade-in widget
+- [x] **Task 16: Caption fade-in widget
   (`lib/widgets/caption_fade.dart`).** A widget that takes a String
   + a stream of partial strings, and renders the text with a
   word-by-word fade-in at ~120ms/word as new words arrive. Respects
