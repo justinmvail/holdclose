@@ -634,7 +634,7 @@ runs on iPhone.
   non-empty IPA. No audio comparison — just "the library loads and
   produces something."
 
-- [ ] **Phase 10.2: Replace `EspeakNGPhonemizer`'s fallback with the
+- [x] **Phase 10.2: Replace `EspeakNGPhonemizer`'s fallback with the
   real call.** In `ios/Runner/TTSBridge.swift`, replace the character-
   by-character loop (lines 386–403 as of commit 7500ff7) with:
     1. Initialize espeak-ng once per `TTSEngine` instance, pointed at

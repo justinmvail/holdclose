@@ -53,9 +53,76 @@ class RunnerTests: XCTestCase {
             lengthScale: 1.0,
             noiseW: 0.8
         )
+        // Default `useEspeak: false` exercises the character-by-character
+        // fallback path documented in Phase 10.1's README — the only path
+        // available on a fresh checkout that hasn't run the vendor script.
         let ids = EspeakNGPhonemizer().phonemeIds(for: "hi", config: config)
         // BOS, h, pad, i, pad, EOS
         XCTAssertEqual(ids, [1, 10, 0, 11, 0, 2])
+    }
+
+    /// Phase 10.2: the BOS/pad/EOS wrapper is shared between the espeak
+    /// and fallback paths. Drive it directly with a fixed token list so
+    /// the wrapper invariant is covered even when the espeak symbols
+    /// aren't linked.
+    func testIdsForTokensWrapsWithBosPadEos() {
+        let config = VoiceConfig(
+            phonemeIdMap: [
+                "^": [1], "$": [2], "_": [0],
+                "h": [20], "ə": [27], "l": [24], "o": [25], "ʊ": [50],
+            ],
+            noiseScale: 0.667,
+            lengthScale: 1.0,
+            noiseW: 0.8
+        )
+        let ids = EspeakNGPhonemizer.idsForTokens(
+            ["h", "ə", "l", "o", "ʊ"], config: config)
+        // BOS, h, pad, ə, pad, l, pad, o, pad, ʊ, pad, EOS
+        XCTAssertEqual(ids, [1, 20, 0, 27, 0, 24, 0, 25, 0, 50, 0, 2])
+    }
+
+    /// Phase 10.2 acceptance: with the vendored espeak-ng linked,
+    /// `EspeakNGPhonemizer(useEspeak: true).phonemeIds(for: "hello world", ...)`
+    /// must produce a non-empty ID sequence that differs from the
+    /// character-lookup fallback — proves the espeak path actually ran
+    /// instead of silently falling through. The phoneme-for-phoneme
+    /// exact-match check against Piper's Python `piper-phonemize`
+    /// reference impl is captured in `docs/tts_samples/` during Phase
+    /// 10.4 manual validation; here we only assert the wiring.
+    ///
+    /// Skips when `CAREBLAZERS_HAS_ESPEAK_NG` is 0 (no vendored sources)
+    /// or when the voice config can't be loaded from the test bundle —
+    /// same skip semantics as `testInferenceProducesNonSilentAudio`.
+    func testEspeakPhonemizerProducesIpaBackedIdsForHelloWorld() throws {
+        #if CAREBLAZERS_HAS_ESPEAK_NG
+        let voiceId = "en_US-amy-medium"
+        guard let configPath = locateBundleResource(
+            name: "\(voiceId).onnx", ext: "json") else {
+            throw XCTSkip("\(voiceId).onnx.json not reachable from test bundle — covered by Phase 9.6 device smoke")
+        }
+        let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
+        let config = try VoiceConfig.parse(from: data)
+
+        // Force an engine init so `espeak_Initialize` runs against the
+        // bundled data directory before we ask the phonemizer for IDs.
+        _ = TTSEngine()
+
+        let realIds = EspeakNGPhonemizer(useEspeak: true)
+            .phonemeIds(for: "hello world", config: config)
+        let fallbackIds = EspeakNGPhonemizer(useEspeak: false)
+            .phonemeIds(for: "hello world", config: config)
+
+        XCTAssertGreaterThan(realIds.count, 2,
+                             "espeak path returned only BOS/EOS — IPA tokens didn't land in the phoneme map")
+        XCTAssertEqual(realIds.first, config.phonemeIdMap["^"]?.first,
+                       "espeak path didn't prefix BOS")
+        XCTAssertEqual(realIds.last, config.phonemeIdMap["$"]?.first,
+                       "espeak path didn't suffix EOS")
+        XCTAssertNotEqual(realIds, fallbackIds,
+                          "espeak path matched the character-lookup fallback — espeak_TextToPhonemes never ran")
+        #else
+        throw XCTSkip("Vendored espeak-ng not present — run tools/vendor_espeak_ng.sh and `pod install`, then re-run this test")
+        #endif
     }
 
     func testEngineExposesBundledAmyVoice() {

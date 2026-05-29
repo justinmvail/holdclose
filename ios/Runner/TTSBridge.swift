@@ -93,6 +93,16 @@ final class TTSEngine {
     private var phonemizer: Phonemizer?
     private var loadedVoiceId: String?
 
+    /// True once `espeak_Initialize` has returned a positive sample
+    /// rate for this engine instance. Read by `ensureLoaded` to decide
+    /// whether the `EspeakNGPhonemizer` should call the C library or
+    /// fall back to character-by-character lookup.
+    #if CAREBLAZERS_HAS_ESPEAK_NG
+    private var espeakReady: Bool = false
+    #else
+    private let espeakReady: Bool = false
+    #endif
+
     /// Bumped on every `cancel()` so an in-flight `speak` knows to
     /// drop its pending buffer.
     private var generation: UInt64 = 0
@@ -102,7 +112,59 @@ final class TTSEngine {
         audioEngine.connect(playerNode,
                             to: audioEngine.mainMixerNode,
                             format: TTSEngine.outputFormat)
+        #if CAREBLAZERS_HAS_ESPEAK_NG
+        espeakReady = TTSEngine.initializeEspeakNG()
+        #endif
     }
+
+    deinit {
+        #if CAREBLAZERS_HAS_ESPEAK_NG
+        if espeakReady {
+            espeak_Terminate()
+        }
+        #endif
+    }
+
+    #if CAREBLAZERS_HAS_ESPEAK_NG
+    /// Resolve the bundled espeak-ng data path and call
+    /// `espeak_Initialize` once. AUDIO_OUTPUT_SYNCHRONOUS keeps the
+    /// library from spinning up its own playback thread — we only use
+    /// the text-to-phonemes API and AVAudioEngine handles the audio.
+    /// Returns true when init succeeded and the en-US voice is
+    /// selectable. The path passed to `espeak_Initialize` is the
+    /// *parent* of `espeak-ng-data/` per the upstream contract.
+    private static func initializeEspeakNG() -> Bool {
+        guard let parentPath = locateEspeakDataParent() else {
+            return false
+        }
+        let rate = parentPath.withCString { cstr -> Int32 in
+            espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, cstr, 0)
+        }
+        guard rate > 0 else { return false }
+        return espeak_SetVoiceByName("en-us") == EE_OK
+    }
+
+    /// CocoaPods drops the resource bundle at
+    /// `Runner.app/espeak-ng.bundle/`, with `espeak-ng-data/` inside.
+    /// `espeak_Initialize` wants the directory that *contains*
+    /// `espeak-ng-data` — so we return the `.bundle` path itself.
+    /// Fallback: the Flutter-asset mirror (`assets/tts/espeak-ng-data/`)
+    /// that Android 10.3 will consume, in case the Pod resource bundle
+    /// doesn't resolve in some packaging mode.
+    private static func locateEspeakDataParent() -> String? {
+        let bundle = Bundle.main
+        if let url = bundle.url(forResource: "espeak-ng", withExtension: "bundle") {
+            return url.path
+        }
+        if let assetPath = bundle.path(
+            forResource: "espeak-ng-data",
+            ofType: nil,
+            inDirectory: "Frameworks/App.framework/flutter_assets/assets/tts") {
+            return (assetPath as NSString).deletingLastPathComponent
+        }
+        return nil
+    }
+    #endif
 
     /// Piper Amy ships 22050 Hz mono. AVAudioEngine accepts
     /// float32 PCM natively — that's the model's output dtype too,
@@ -219,15 +281,13 @@ final class TTSEngine {
         self.ortEnv = env
         self.session = session
         self.voiceConfig = config
-        // Phase 9.3 follow-up: Piper's text→phoneme pipeline lives
-        // outside this codebase (espeak-ng under the hood). The
-        // built-in `EspeakNGPhonemizer` falls back to a character
-        // lookup that produces gibberish; HttpPhonemizer delegates
-        // to the `tools/claude_shim.py` /phonemize endpoint, which
-        // embeds Piper's Python `piper_phonemize` package. Falls
-        // through to the character path if the shim is unreachable.
-        // Phase 10 retires both for an on-device espeak-ng integration.
-        self.phonemizer = HttpPhonemizer()
+        // Phase 10.2: on-device espeak-ng via the vendored Pod. When
+        // `espeakReady` is true the phonemizer calls
+        // `espeak_TextToPhonemes` for real IPA; otherwise it falls
+        // back to the Phase 9.3 character lookup (documented in the
+        // class header). HttpPhonemizer is no longer wired — Phase
+        // 10.5 deletes the class.
+        self.phonemizer = EspeakNGPhonemizer(useEspeak: espeakReady)
         self.loadedVoiceId = voiceId
     }
 
@@ -391,24 +451,60 @@ protocol Phonemizer {
 }
 
 /// Wraps the espeak-ng C library. The runtime symbols are linked
-/// through `espeak-ng` (Phase 9.1 bundles the espeak-ng data files
-/// under `assets/tts/en_US-amy-medium/espeak-ng-data/`).
+/// through the vendored CocoaPod at `ios/Vendored/espeak-ng/` (see
+/// `Runner-Bridging-Header.h` for the `__has_include` guard that
+/// brings them into Swift visibility).
 ///
-/// TODO(phase-9.3-followup): the actual `espeak_TextToPhonemes` call
-/// requires the espeak-ng static library to be vendored into the
-/// Runner target. Pod published as `espeak-ng-ios` (community); the
-/// bridging-header import lands with that vendor drop. Until then
-/// this falls through to a character-by-character lookup against
-/// `phoneme_id_map`, which produces non-empty output (so the audio
-/// pipeline + tests stay alive) but is not the production voice.
+/// Phase 10.2 contract:
+///   * `TTSEngine` calls `espeak_Initialize` once at construction and
+///     hands a phonemizer with `useEspeak: true` to `ensureLoaded`.
+///   * `phonemeIds(for:config:)` runs `espeak_TextToPhonemes` over the
+///     input English, splits the IPA result into per-scalar tokens,
+///     and maps each through `config.phonemeIdMap`. BOS (`^`), pad
+///     (`_`) between phonemes, and EOS (`$`) wrap the sequence — the
+///     layout Piper's tokenizer is trained against.
+///
+/// When the vendor script hasn't run (bridging-header `__has_include`
+/// short-circuits and `CAREBLAZERS_HAS_ESPEAK_NG` Swift flag is unset),
+/// or when `useEspeak` is `false` (test default), the call falls back
+/// to a character-by-character lookup against `phoneme_id_map`. The
+/// fallback produces non-empty IDs so the audio + integration tests
+/// stay alive on a fresh checkout — but the resulting audio is
+/// gibberish. Phase 10.1's README documents this contract.
 final class EspeakNGPhonemizer: Phonemizer {
+    private let useEspeak: Bool
+
+    init(useEspeak: Bool = false) {
+        self.useEspeak = useEspeak
+    }
+
     func phonemeIds(for text: String, config: VoiceConfig) -> [Int64] {
+        let tokens = phonemize(text)
+        return EspeakNGPhonemizer.idsForTokens(tokens, config: config)
+    }
+
+    /// Resolve `text` to a phoneme-token list. Each token is a single
+    /// Unicode scalar — matches the granularity of the `phoneme_id_map`
+    /// keys (verified against `en_US-amy-medium.onnx.json`: all 154
+    /// keys are one scalar each).
+    private func phonemize(_ text: String) -> [String] {
+        #if CAREBLAZERS_HAS_ESPEAK_NG
+        if useEspeak, let ipa = espeakIPA(text), !ipa.isEmpty {
+            return ipa
+        }
+        #endif
+        return text.unicodeScalars.map { String($0) }
+    }
+
+    /// Wrap a token sequence with BOS (`^`), pad (`_`) between tokens,
+    /// and EOS (`$`) — Piper's tokenizer expectation. Exposed
+    /// `internal` so tests can supply a fixed token list and stay
+    /// hermetic (no espeak link needed).
+    static func idsForTokens(_ tokens: [String], config: VoiceConfig) -> [Int64] {
         var ids: [Int64] = []
-        // BOS token is encoded as '^' in Piper configs.
         if let bos = config.phonemeIdMap["^"] { ids.append(contentsOf: bos) }
-        for scalar in text.unicodeScalars {
-            let key = String(scalar)
-            if let mapped = config.phonemeIdMap[key] {
+        for token in tokens {
+            if let mapped = config.phonemeIdMap[token] {
                 ids.append(contentsOf: mapped)
                 if let pad = config.phonemeIdMap["_"] {
                     ids.append(contentsOf: pad)
@@ -418,6 +514,38 @@ final class EspeakNGPhonemizer: Phonemizer {
         if let eos = config.phonemeIdMap["$"] { ids.append(contentsOf: eos) }
         return ids
     }
+
+    #if CAREBLAZERS_HAS_ESPEAK_NG
+    /// Call `espeak_TextToPhonemes` over the input until the cursor
+    /// reaches the trailing NUL. espeak processes one sentence per
+    /// call and advances the cursor — looping covers multi-sentence
+    /// inputs (decoder scripts often span two or three).
+    ///
+    /// phonememode `0x02` selects IPA (Unicode) output with no
+    /// separator character; we tokenize the result by Unicode scalar
+    /// downstream. Returns nil only on the rare path where espeak
+    /// returns NULL on the first call (initialization race or an
+    /// invalid UTF-8 pointer) — callers fall through to the character
+    /// path in that case.
+    private func espeakIPA(_ text: String) -> [String]? {
+        var bytes = Array(text.utf8)
+        bytes.append(0)
+        return bytes.withUnsafeMutableBufferPointer { buf -> [String]? in
+            guard let base = buf.baseAddress else { return nil }
+            var cursor: UnsafeRawPointer? = UnsafeRawPointer(base)
+            var phonemes: [String] = []
+            while let raw = cursor, raw.load(as: UInt8.self) != 0 {
+                guard let result = espeak_TextToPhonemes(
+                    &cursor, espeakCHARS_UTF8, 0x02) else {
+                    break
+                }
+                let ipa = String(cString: result)
+                phonemes.append(contentsOf: ipa.unicodeScalars.map { String($0) })
+            }
+            return phonemes
+        }
+    }
+    #endif
 }
 
 /// Pitch-week interim: defers text-to-IPA conversion to the
