@@ -9,10 +9,11 @@
 /// parses on the final chunk.
 ///
 /// The const is the exact verbatim text — output consistency depends
-/// on every character. Phase 11.5 enumerates the 12 library card IDs
-/// the model is allowed to cite; for Phase 11.3 the marker syntax is
-/// defined and the parser is in place, but the closed-set enumeration
-/// lands later.
+/// on every character. Phase 11.5 pins the citation surface: the
+/// CITATIONS section enumerates the 12 library card IDs the model is
+/// allowed to cite (one per line, id — short topic) so the chat
+/// renderer never sees a hallucinated id and every chip resolves to a
+/// real [LibraryCard] in `lib/seed/library_cards.dart`.
 ///
 /// [ClaudeShimChatBackend] POSTs this as the `system` field of the
 /// shim request; the future `ClaudeAPIProvider` will pass it as the

@@ -769,7 +769,7 @@ Sized as 6 atomic iters.
   Tests + golden: ConversationListScreen with 0/1/many conversations;
   ChatScreen with streaming-in-flight + final state.
 
-- [ ] **Phase 11.5: Library card citations + deeplink.** When the
+- [x] **Phase 11.5: Library card citations + deeplink.** When the
   assistant cites a card via `[card:<id>]`, render an inline chip in
   the message body: "Dr. Natali on <card title>" with the brand
   salmon background, white text, 14pt. Tap → push
