@@ -783,7 +783,7 @@ Sized as 6 atomic iters.
   tapping a chip calls `context.push('/library/<id>')` (use a mock
   router).
 
-- [ ] **Phase 11.6: Acceptance + demo tour update.** Add a chat
+- [x] **Phase 11.6: Acceptance + demo tour update.** Add a chat
   walkthrough to `integration_test/demo_tour.dart`: open chat tab,
   type "what's sundowning?", verify a response streams in with at
   least one library card citation, tap the citation, verify

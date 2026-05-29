@@ -7,6 +7,27 @@ framework.
 
 This is the **v1 demo build** for a partnership pitch to Dr. Natali.
 
+## Features
+
+- **Behavior Decoder** — the wedge. Tap a behavior, answer three
+  triage questions, get a Dr. Natali–style script with 2–3 things to
+  say + an environmental tweak + a "don't say" warning. See
+  [`BUILD_SPEC.md`](BUILD_SPEC.md) §5.2–§5.4.
+- **Chat coach** — multi-turn dementia-care companion for the
+  longer-form questions the decoder doesn't fit (e.g. *"what's
+  sundowning?"*, *"she asked for her mother again — what's
+  happening?"*). Replies cite the Library cards inline as
+  tap-to-read chips, keeping the model's voice anchored to Dr. Natali's
+  vetted content. Hideable via Settings → `chatEnabled`. See
+  [`docs/CHAT_FEATURE.md`](docs/CHAT_FEATURE.md).
+- **Journal** — auto-fills every time the decoder runs. Pattern
+  detector surfaces "3+ falls this week" / "sundowning is hitting
+  hard" / similar caregiver-visible alerts.
+- **Library** — 12 topical primers in Dr. Natali's voice
+  (anosognosia, sundowning, the 5 Causes, caregiver guilt, …).
+- **Crisis card** — single-screen patient handoff for paramedics /
+  ER staff; printable, with QR.
+
 ## What's in this repo
 
 | File | Purpose |
