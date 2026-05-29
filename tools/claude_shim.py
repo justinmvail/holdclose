@@ -27,6 +27,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(msg.encode())
 
     def do_POST(self):
+        if self.path == "/phonemize":
+            return self._phonemize()
         if self.path != "/generate":
             return self._bad(404, "Not Found")
         length = int(self.headers.get("Content-Length", 0))
@@ -76,6 +78,81 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(
                 f"data: {json.dumps({'error': str(exc)})}\n\n".encode()
             )
+
+    def _phonemize(self):
+        """POST /phonemize {"text": "...", "voice": "en-us"} → 200
+        {"phonemes": ["h","ə","l","ˈ","o","ʊ",...]}
+
+        Pitch-week interim for the careblazers BundledTTSProvider on iOS
+        — Phase 9.3's Swift `EspeakNGPhonemizer` falls back to a
+        character-by-character lookup that produces gibberish audio,
+        and bundling espeak-ng on-device (the production fix) is
+        queued as Phase 10 in TASKS.md. This endpoint lets the Swift
+        side defer text-to-IPA to Piper's Python `piper_phonemize`
+        package (which embeds espeak-ng) while the demo needs to
+        sound right NOW.
+
+        Caller passes raw English text; we return the IPA phoneme
+        sequence. The app maps each phoneme through the per-voice
+        `phoneme_id_map` from `<voice>.onnx.json` to produce the
+        int64 IDs the model wants — that mapping stays on the Swift
+        side so the shim doesn't need any voice-specific knowledge.
+
+        Phonemizer is imported lazily so an operator running the shim
+        purely for the /generate endpoint isn't penalized by the
+        ~20 MB native lib load.
+        """
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        try:
+            payload = json.loads(body)
+            text = payload["text"]
+            voice = payload.get("voice", "en-us")
+            # Pause tuning — caller can override per-utterance.
+            # CRUCIAL: the `_` (pad) phoneme is VOCALIZED in Piper —
+            # repeating it makes the voice say "uhhh" between words.
+            # Real silence comes from the punctuation phonemes
+            # themselves; we extend pauses by REPEATING the `,` and
+            # `.` tokens, which the model interprets as a longer
+            # silent beat instead of a vocal filler. Defaults are
+            # 1-extra-comma (~150 ms) and 2-extra-periods (~500 ms).
+            comma_pause = int(payload.get("comma_pause", 1))
+            period_pause = int(payload.get("period_pause", 2))
+        except Exception as exc:
+            return self._bad(400, f"bad request: {exc}")
+        try:
+            from piper_phonemize import phonemize_espeak
+        except ImportError:
+            return self._bad(
+                501,
+                "piper_phonemize not installed — run `pip3 install "
+                "piper-phonemize` (the careblazers BundledTTSProvider "
+                "needs this for the iOS demo until Phase 10 lands "
+                "espeak-ng on-device)",
+            )
+        try:
+            sentences = phonemize_espeak(text, voice)
+        except Exception as exc:
+            return self._bad(500, f"phonemize failed: {exc}")
+        flat = []
+        for i, sentence in enumerate(sentences):
+            if i > 0:
+                # Inter-sentence boundary. Repeat the period token so
+                # the coach takes a real silent beat (NOT a vocalized
+                # pad) before the next thought.
+                flat.extend(["."] * period_pause)
+            for phoneme in sentence:
+                flat.append(phoneme)
+                if phoneme == ",":
+                    flat.extend([","] * comma_pause)
+                elif phoneme == ".":
+                    flat.extend(["."] * period_pause)
+        out = json.dumps({"phonemes": flat}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
 
     def log_message(self, fmt, *args):
         # quieter default logging

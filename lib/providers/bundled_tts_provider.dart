@@ -41,15 +41,24 @@ class BundledTTSProvider implements TTSProvider {
   /// callers still get the same "await-to-completion" semantics as
   /// [OSTTSProvider.speak] in production, where the native side won't
   /// resolve until the utterance finishes.
+  /// Default Piper voice bundled under `assets/tts/<id>/` — Amy
+  /// (en_US-amy-medium). Used when the caller passes an empty
+  /// `voiceId` (the common case — settings.voiceId is null until the
+  /// operator picks a non-default voice). Without this default the
+  /// native bridge looks for `.onnx` (no name prefix) and fails.
+  static const String _defaultVoiceId = 'en_US-amy-medium';
+
   @override
   Future<void> speak(
     String text, {
     required String voiceId,
     required double speed,
   }) async {
+    final String resolvedVoiceId =
+        voiceId.isEmpty ? _defaultVoiceId : voiceId;
     await _channel.invokeMethod<void>('speak', <String, dynamic>{
       'text': text,
-      'voiceId': voiceId,
+      'voiceId': resolvedVoiceId,
       'speed': speed,
     });
   }

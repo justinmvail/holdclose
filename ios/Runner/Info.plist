@@ -37,6 +37,23 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Phase 9.3 pitch-week interim: the BundledTTSProvider's
+	     HttpPhonemizer calls http://localhost:8765/phonemize on the
+	     dev shim for text→IPA conversion. iOS App Transport
+	     Security blocks plain HTTP by default; this exception
+	     allows localhost only. Retired by Phase 10 (on-device
+	     espeak-ng integration). -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

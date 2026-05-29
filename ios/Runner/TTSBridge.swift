@@ -166,17 +166,21 @@ final class TTSEngine {
     private func ensureLoaded(voiceId: String) throws {
         if loadedVoiceId == voiceId, session != nil { return }
 
-        let bundle = Bundle.main
-        let assetRoot = "assets/tts/\(voiceId)"
-        guard let modelPath = bundle.path(forResource: voiceId, ofType: "onnx",
-                                           inDirectory: assetRoot)
-            ?? bundle.path(forResource: voiceId, ofType: "onnx") else {
+        // Flutter assets land under Runner.app/Frameworks/App.framework/
+        // flutter_assets/<asset-path>. Bundle.main.path(forResource:
+        // ofType: inDirectory:) doesn't reach into nested frameworks,
+        // so we resolve via FlutterDartProject.lookupKey first — that
+        // returns the under-bundle path Flutter actually wrote.
+        let modelAssetKey = FlutterDartProject.lookupKey(
+            forAsset: "assets/tts/\(voiceId)/\(voiceId).onnx")
+        let configAssetKey = FlutterDartProject.lookupKey(
+            forAsset: "assets/tts/\(voiceId)/\(voiceId).onnx.json")
+        guard let modelPath = Bundle.main.path(forResource: modelAssetKey,
+                                                ofType: nil) else {
             throw TTSError.modelMissing(voiceId: voiceId)
         }
-        guard let configPath = bundle.path(forResource: "\(voiceId).onnx",
-                                            ofType: "json",
-                                            inDirectory: assetRoot)
-            ?? bundle.path(forResource: "\(voiceId).onnx", ofType: "json") else {
+        guard let configPath = Bundle.main.path(forResource: configAssetKey,
+                                                 ofType: nil) else {
             throw TTSError.configMissing(voiceId: voiceId)
         }
 
@@ -187,13 +191,24 @@ final class TTSEngine {
         // Engine on A14+. Simulator + older devices fall back to CPU,
         // which adds ~1–3 s of latency per utterance (documented in
         // TTS_BUNDLED.md). MLProgram + ANE-only flags follow the
-        // onnxruntime 1.18 ObjC API; any failure is non-fatal —
-        // ORTSession transparently falls back to CPU.
+        // onnxruntime 1.18 ObjC API.
+        //
+        // Simulator carve-out: CoreML on the iOS Simulator uses
+        // Apple's BNNS CPU path (no Neural Engine), and that path has
+        // a known SIGFPE bug in certain Piper convolution kernels —
+        // observable in the 2026-05-29 careblazers demo run, where the
+        // app crashes mid-inference deep inside Espresso's
+        // convolution_kernel::__launch. The crash happens reliably on
+        // the simulator and never on real hardware. Skip the CoreML
+        // EP on simulator builds; ORTSession transparently runs the
+        // graph on the default CPU EP instead.
+        #if !targetEnvironment(simulator)
         let coreml = ORTCoreMLExecutionProviderOptions()
         coreml.useCPUOnly = false
         coreml.enableOnSubgraphs = true
         coreml.onlyEnableForDevicesWithANE = false
         try? options.appendCoreMLExecutionProvider(with: coreml)
+        #endif
 
         let session = try ORTSession(env: env,
                                      modelPath: modelPath,
@@ -204,7 +219,15 @@ final class TTSEngine {
         self.ortEnv = env
         self.session = session
         self.voiceConfig = config
-        self.phonemizer = EspeakNGPhonemizer()
+        // Phase 9.3 follow-up: Piper's text→phoneme pipeline lives
+        // outside this codebase (espeak-ng under the hood). The
+        // built-in `EspeakNGPhonemizer` falls back to a character
+        // lookup that produces gibberish; HttpPhonemizer delegates
+        // to the `tools/claude_shim.py` /phonemize endpoint, which
+        // embeds Piper's Python `piper_phonemize` package. Falls
+        // through to the character path if the shim is unreachable.
+        // Phase 10 retires both for an on-device espeak-ng integration.
+        self.phonemizer = HttpPhonemizer()
         self.loadedVoiceId = voiceId
     }
 
@@ -304,10 +327,20 @@ final class TTSEngine {
         if !audioEngine.isRunning {
             try audioEngine.start()
         }
-        playerNode.play()
+        // After the first buffer completes, AVAudioPlayerNode stays
+        // in "playing" state but with no audio rendering. Calling
+        // play() on a playing node is a no-op and the new
+        // scheduleBuffer never engages. The canonical Apple pattern
+        // for sequential playbacks is stop → scheduleBuffer → play,
+        // which resets the node's internal rendering state without
+        // re-attaching the audio graph. Without this, every speak()
+        // after the first silently does nothing — surfaced on the
+        // 2026-05-29 simulator demo as "I can only play it once."
+        playerNode.stop()
         playerNode.scheduleBuffer(buffer, at: nil, options: []) {
             completion(nil)
         }
+        playerNode.play()
     }
 }
 
@@ -384,6 +417,88 @@ final class EspeakNGPhonemizer: Phonemizer {
         }
         if let eos = config.phonemeIdMap["$"] { ids.append(contentsOf: eos) }
         return ids
+    }
+}
+
+/// Pitch-week interim: defers text-to-IPA conversion to the
+/// `tools/claude_shim.py` HTTP server (which embeds Piper's Python
+/// `piper_phonemize` package, which embeds espeak-ng). Keeps the demo
+/// sounding right while Phase 10 (real on-device espeak-ng) is queued.
+///
+/// Contract: POST `http://localhost:8765/phonemize` with
+/// `{"text": "<english>", "voice": "en-us"}`. Response is
+/// `{"phonemes": ["h","ə","l",...]}` — the IPA characters that the
+/// caller (this class) then maps through `config.phonemeIdMap` to the
+/// int64 IDs the model wants. The shim has no per-voice knowledge.
+///
+/// Falls back to `EspeakNGPhonemizer` (the character-by-character
+/// path) when the shim is unreachable, so a TestFlight build without
+/// the dev shim still says SOMETHING — gibberish, but not silence.
+/// Phase 10 retires this whole class.
+final class HttpPhonemizer: Phonemizer {
+    private let endpoint: URL
+    private let fallback: Phonemizer
+    private let timeoutSeconds: TimeInterval
+
+    init(endpoint: URL = URL(string: "http://localhost:8765/phonemize")!,
+         fallback: Phonemizer = EspeakNGPhonemizer(),
+         timeoutSeconds: TimeInterval = 2.0) {
+        self.endpoint = endpoint
+        self.fallback = fallback
+        self.timeoutSeconds = timeoutSeconds
+    }
+
+    func phonemeIds(for text: String, config: VoiceConfig) -> [Int64] {
+        guard let phonemes = fetchPhonemes(text: text) else {
+            // Shim unreachable or errored — fall through so the audio
+            // path stays alive (even if it sounds wrong).
+            return fallback.phonemeIds(for: text, config: config)
+        }
+        var ids: [Int64] = []
+        if let bos = config.phonemeIdMap["^"] { ids.append(contentsOf: bos) }
+        for phoneme in phonemes {
+            if let mapped = config.phonemeIdMap[phoneme] {
+                ids.append(contentsOf: mapped)
+                if let pad = config.phonemeIdMap["_"] {
+                    ids.append(contentsOf: pad)
+                }
+            }
+        }
+        if let eos = config.phonemeIdMap["$"] { ids.append(contentsOf: eos) }
+        return ids
+    }
+
+    private func fetchPhonemes(text: String) -> [String]? {
+        var request = URLRequest(url: endpoint, timeoutInterval: timeoutSeconds)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: String] = ["text": text, "voice": "en-us"]
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else {
+            return nil
+        }
+        request.httpBody = data
+        // Synchronous HTTP via semaphore — we're already off the main
+        // thread (the speak() call comes through a background dispatch
+        // queue) so blocking here doesn't stall UI. URLSession itself
+        // dispatches the request on its own internal queue.
+        let semaphore = DispatchSemaphore(value: 0)
+        var responseData: Data?
+        var responseError: Error?
+        let task = URLSession.shared.dataTask(with: request) { d, _, e in
+            responseData = d
+            responseError = e
+            semaphore.signal()
+        }
+        task.resume()
+        _ = semaphore.wait(timeout: .now() + timeoutSeconds + 0.5)
+        if responseError != nil { return nil }
+        guard let payload = responseData,
+              let json = try? JSONSerialization.jsonObject(with: payload)
+                as? [String: Any],
+              let arr = json["phonemes"] as? [String] else {
+            return nil
+        }
+        return arr
     }
 }
 
