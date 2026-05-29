@@ -31,3 +31,24 @@ Stream<List<JournalEntry>> journalEntries(Ref ref) {
 /// the test host's local time.
 @Riverpod(keepAlive: true)
 DateTime Function() journalScreenClock(Ref ref) => DateTime.now;
+
+/// One row from the journal stream, filtered by id (BUILD_SPEC.md §5.6).
+///
+/// Resolves to null when the id isn't found — covers two cases the
+/// entry detail screen handles the same way: a deep-link to a deleted
+/// entry, and the moment after the user taps "Delete" but before
+/// `context.pop` fires. The screen reads through this rather than
+/// [journalEntriesProvider] directly so a save from the detail editor
+/// propagates back through the shared drift watch — no manual
+/// invalidation needed.
+@Riverpod(keepAlive: false)
+AsyncValue<JournalEntry?> journalEntryById(Ref ref, String id) {
+  final AsyncValue<List<JournalEntry>> async =
+      ref.watch(journalEntriesProvider);
+  return async.whenData((List<JournalEntry> entries) {
+    for (final JournalEntry e in entries) {
+      if (e.id == id) return e;
+    }
+    return null;
+  });
+}

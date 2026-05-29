@@ -1,16 +1,647 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
-/// Journal entry detail — placeholder for Task 19 (BUILD_SPEC.md §5.6).
-class JournalEntryScreen extends StatelessWidget {
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../models/behavior.dart';
+import '../../models/decoder_result.dart';
+import '../../models/journal_entry.dart';
+import '../../providers/journal_entries_provider.dart';
+import '../../providers/photo_attacher_provider.dart';
+import '../../providers/storage_provider.dart';
+import '../../providers/voice_note_recorder_provider.dart';
+import '../../theme.dart';
+
+/// Journal entry detail (BUILD_SPEC.md §5.6).
+///
+/// Reads via [journalEntryByIdProvider] so a save round-trips through
+/// the same drift watch the journal list reads from — no manual
+/// invalidate. Local form state (notes, voice path, photo path) hydrates
+/// once on first non-null emission so subsequent re-emits from the
+/// storage stream don't clobber the in-flight editor.
+class JournalEntryScreen extends ConsumerStatefulWidget {
   const JournalEntryScreen({super.key, required this.entryId});
 
   final String entryId;
 
+  static const Key kebabMenuKey = Key('journal-entry-kebab-menu');
+  static const Key deleteMenuItemKey = Key('journal-entry-delete-menu-item');
+  static const Key deleteConfirmKey = Key('journal-entry-delete-confirm');
+  static const Key deleteCancelKey = Key('journal-entry-delete-cancel');
+  static const Key notesFieldKey = Key('journal-entry-notes-field');
+  static const Key saveButtonKey = Key('journal-entry-save');
+  static const Key recordButtonKey = Key('journal-entry-record');
+  static const Key playVoiceButtonKey = Key('journal-entry-play-voice');
+  static const Key voiceChipKey = Key('journal-entry-voice-chip');
+  static const Key photoButtonKey = Key('journal-entry-photo');
+  static const Key photoThumbnailKey = Key('journal-entry-photo-thumb');
+  static const Key behaviorChipKey = Key('journal-entry-behavior-chip');
+  static const Key outcomeChipKey = Key('journal-entry-outcome-chip');
+  static const Key scriptsSectionKey = Key('journal-entry-scripts');
+  static const Key notFoundKey = Key('journal-entry-not-found');
+
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Journal entry')),
-      body: const SizedBox.shrink(),
+  ConsumerState<JournalEntryScreen> createState() =>
+      _JournalEntryScreenState();
+}
+
+class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
+  final TextEditingController _notesController = TextEditingController();
+  String? _voiceNotePath;
+  String? _photoPath;
+  bool _hydrated = false;
+  bool _recording = false;
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  void _hydrateFrom(JournalEntry entry) {
+    if (_hydrated) return;
+    _hydrated = true;
+    _notesController.text = entry.notes ?? '';
+    _voiceNotePath = entry.voiceNotePath;
+    _photoPath = entry.photoPath;
+  }
+
+  Future<void> _save(JournalEntry source) async {
+    final StorageProvider storage = ref.read(storageProvider);
+    final String trimmed = _notesController.text;
+    final JournalEntry updated = source.copyWith(
+      notes: trimmed.isEmpty ? null : trimmed,
+      voiceNotePath: _voiceNotePath,
+      photoPath: _photoPath,
+    );
+    await storage.updateJournalEntry(updated);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Saved.')),
     );
   }
+
+  Future<void> _toggleRecording() async {
+    final VoiceNoteRecorder recorder = ref.read(voiceNoteRecorderProvider);
+    if (_recording) {
+      final String? path = await recorder.stop();
+      if (!mounted) return;
+      setState(() {
+        _recording = false;
+        if (path != null) _voiceNotePath = path;
+      });
+    } else {
+      await recorder.start();
+      if (!mounted) return;
+      setState(() => _recording = true);
+    }
+  }
+
+  Future<void> _playVoice() async {
+    final String? path = _voiceNotePath;
+    if (path == null) return;
+    final VoiceNoteRecorder recorder = ref.read(voiceNoteRecorderProvider);
+    await recorder.play(path);
+  }
+
+  Future<void> _pickPhoto() async {
+    final PhotoAttacher picker = ref.read(photoAttacherProvider);
+    final String? path = await picker.pickPhoto();
+    if (!mounted) return;
+    if (path != null) {
+      setState(() => _photoPath = path);
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Delete this entry?'),
+        content: const Text(
+          "You can't undo this. The decoder script and any notes "
+          'will be removed.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: JournalEntryScreen.deleteCancelKey,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: JournalEntryScreen.deleteConfirmKey,
+            style: TextButton.styleFrom(
+              foregroundColor: careblazersColors.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final StorageProvider storage = ref.read(storageProvider);
+    await storage.deleteJournalEntry(widget.entryId);
+    if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/journal');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AsyncValue<JournalEntry?> entryAsync =
+        ref.watch(journalEntryByIdProvider(widget.entryId));
+
+    return entryAsync.when(
+      loading: () => Scaffold(
+        backgroundColor: careblazersColors.background,
+        appBar: AppBar(title: const Text('Journal entry')),
+        body: const SizedBox.shrink(),
+      ),
+      error: (Object error, StackTrace _) => Scaffold(
+        backgroundColor: careblazersColors.background,
+        appBar: AppBar(title: const Text('Journal entry')),
+        body: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Text(
+              "We couldn't load this entry.\n$error",
+              style: Theme.of(context).textTheme.bodyLarge,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+      data: (JournalEntry? entry) {
+        if (entry == null) {
+          return Scaffold(
+            backgroundColor: careblazersColors.background,
+            appBar: AppBar(title: const Text('Journal entry')),
+            body: Center(
+              key: JournalEntryScreen.notFoundKey,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  "This entry isn't here anymore.",
+                  style: Theme.of(context).textTheme.bodyLarge,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+        _hydrateFrom(entry);
+        return _buildContent(context, entry);
+      },
+    );
+  }
+
+  Widget _buildContent(BuildContext context, JournalEntry entry) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Scaffold(
+      backgroundColor: careblazersColors.background,
+      appBar: AppBar(
+        title: Text(_formatHeaderDateTime(entry.createdAt)),
+        actions: <Widget>[
+          PopupMenuButton<String>(
+            key: JournalEntryScreen.kebabMenuKey,
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'More actions',
+            onSelected: (String value) {
+              if (value == 'delete') unawaited(_confirmDelete());
+            },
+            itemBuilder: (BuildContext _) => <PopupMenuEntry<String>>[
+              PopupMenuItem<String>(
+                key: JournalEntryScreen.deleteMenuItemKey,
+                value: 'delete',
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.delete_outline,
+                      color: careblazersColors.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Delete',
+                      style: TextStyle(color: careblazersColors.error),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          children: <Widget>[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                _BehaviorChip(behavior: entry.behavior),
+                _OutcomeChip(outcome: entry.outcome),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const _SectionHeader(label: 'What you tried'),
+            const SizedBox(height: 8),
+            _ScriptsSection(result: entry.result),
+            const SizedBox(height: 24),
+            const _SectionHeader(label: 'Notes'),
+            const SizedBox(height: 8),
+            TextField(
+              key: JournalEntryScreen.notesFieldKey,
+              controller: _notesController,
+              minLines: 3,
+              maxLines: 6,
+              style: textTheme.bodyLarge?.copyWith(
+                color: careblazersColors.text,
+              ),
+              decoration: InputDecoration(
+                hintText: 'What happened? What helped?',
+                filled: true,
+                fillColor: careblazersColors.surfaceWarm,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.all(16),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const _SectionHeader(label: 'Voice note'),
+            const SizedBox(height: 8),
+            _VoiceNoteRow(
+              path: _voiceNotePath,
+              recording: _recording,
+              onToggleRecord: _toggleRecording,
+              onPlay: _playVoice,
+            ),
+            const SizedBox(height: 24),
+            const _SectionHeader(label: 'Photo'),
+            const SizedBox(height: 8),
+            _PhotoRow(path: _photoPath, onPick: _pickPhoto),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              key: JournalEntryScreen.saveButtonKey,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: careblazersColors.cta,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(56),
+              ),
+              onPressed: () => _save(entry),
+              child: Text(
+                'Save',
+                style: textTheme.labelLarge?.copyWith(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Section pieces
+// ---------------------------------------------------------------------------
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Text(
+      label,
+      style: textTheme.titleLarge?.copyWith(
+        color: careblazersColors.primary,
+      ),
+    );
+  }
+}
+
+class _BehaviorChip extends StatelessWidget {
+  const _BehaviorChip({required this.behavior});
+
+  final Behavior behavior;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Container(
+      key: JournalEntryScreen.behaviorChipKey,
+      decoration: BoxDecoration(
+        color: careblazersColors.surfaceWarm,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(behavior.glyph, style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 6),
+          Text(
+            behavior.label,
+            style: textTheme.bodyMedium?.copyWith(
+              color: careblazersColors.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OutcomeChip extends StatelessWidget {
+  const _OutcomeChip({required this.outcome});
+
+  final JournalOutcome outcome;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final ({String label, Color color, IconData icon}) shape = switch (outcome) {
+      JournalOutcome.positive => (
+          label: 'That helped',
+          color: careblazersColors.success,
+          icon: Icons.check_circle_outline,
+        ),
+      JournalOutcome.triedDifferent => (
+          label: 'Tried a different approach',
+          color: careblazersColors.primarySoft,
+          icon: Icons.swap_horiz,
+        ),
+      JournalOutcome.error => (
+          label: "Coach couldn't be reached",
+          color: careblazersColors.accentDeep,
+          icon: Icons.error_outline,
+        ),
+      JournalOutcome.pending => (
+          label: 'No outcome yet',
+          color: careblazersColors.primarySoft,
+          icon: Icons.schedule,
+        ),
+    };
+    return Container(
+      key: JournalEntryScreen.outcomeChipKey,
+      decoration: BoxDecoration(
+        color: shape.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(shape.icon, size: 16, color: shape.color),
+          const SizedBox(width: 6),
+          Text(
+            shape.label,
+            style: textTheme.bodyMedium?.copyWith(color: shape.color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Read-only quote of the decoder scripts (BUILD_SPEC.md §5.6 — "the
+/// decoder scripts (read-only quote of what was shown)"). Reproduces
+/// the §5.4 sections in compact form so the caregiver sees the same
+/// say / tweak / don't-say they tapped through, without the outcome
+/// buttons.
+class _ScriptsSection extends StatelessWidget {
+  const _ScriptsSection({required this.result});
+
+  final DecoderResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Container(
+      key: JournalEntryScreen.scriptsSectionKey,
+      decoration: BoxDecoration(
+        color: careblazersColors.surfaceWarm,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          if (result.say.isNotEmpty) ...<Widget>[
+            Text(
+              'Try saying:',
+              style: textTheme.bodyMedium?.copyWith(
+                color: careblazersColors.primarySoft,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            for (final String line in result.say)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  '"$line"',
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: careblazersColors.text,
+                  ),
+                ),
+              ),
+          ],
+          if (result.tweak.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              'In the room:',
+              style: textTheme.bodyMedium?.copyWith(
+                color: careblazersColors.primarySoft,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            for (final String line in result.tweak)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  '•  $line',
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: careblazersColors.text,
+                  ),
+                ),
+              ),
+          ],
+          if (result.dontSay.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              "Don't say:",
+              style: textTheme.bodyMedium?.copyWith(
+                color: careblazersColors.accentDeep,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            for (final String line in result.dontSay)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  '✗  $line',
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: careblazersColors.text,
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _VoiceNoteRow extends StatelessWidget {
+  const _VoiceNoteRow({
+    required this.path,
+    required this.recording,
+    required this.onToggleRecord,
+    required this.onPlay,
+  });
+
+  final String? path;
+  final bool recording;
+  final VoidCallback onToggleRecord;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Row(
+      children: <Widget>[
+        OutlinedButton.icon(
+          key: JournalEntryScreen.recordButtonKey,
+          onPressed: onToggleRecord,
+          icon: Icon(
+            recording ? Icons.stop_circle_outlined : Icons.mic_none,
+            color: recording
+                ? careblazersColors.accentDeep
+                : careblazersColors.primary,
+          ),
+          label: Text(
+            recording ? 'Stop recording' : 'Record voice note',
+            style: textTheme.labelLarge?.copyWith(
+              color: recording
+                  ? careblazersColors.accentDeep
+                  : careblazersColors.primary,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(
+              color: recording
+                  ? careblazersColors.accentDeep
+                  : careblazersColors.primary,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+        if (path != null) ...<Widget>[
+          const SizedBox(width: 12),
+          IconButton(
+            key: JournalEntryScreen.playVoiceButtonKey,
+            icon: Icon(Icons.play_arrow, color: careblazersColors.cta),
+            tooltip: 'Play voice note',
+            onPressed: onPlay,
+          ),
+          Flexible(
+            child: Padding(
+              key: JournalEntryScreen.voiceChipKey,
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                '🔊 attached',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: careblazersColors.primarySoft,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PhotoRow extends StatelessWidget {
+  const _PhotoRow({required this.path, required this.onPick});
+
+  final String? path;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        OutlinedButton.icon(
+          key: JournalEntryScreen.photoButtonKey,
+          onPressed: onPick,
+          icon: Icon(
+            Icons.photo_camera_outlined,
+            color: careblazersColors.primary,
+          ),
+          label: Text(
+            path == null ? 'Attach photo' : 'Replace photo',
+            style: textTheme.labelLarge?.copyWith(
+              color: careblazersColors.primary,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: careblazersColors.primary),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+        if (path != null) ...<Widget>[
+          const SizedBox(width: 12),
+          Container(
+            key: JournalEntryScreen.photoThumbnailKey,
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: careblazersColors.surfaceWarm,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: careblazersColors.primarySoft.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Icon(
+              Icons.image_outlined,
+              color: careblazersColors.primarySoft,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const List<String> _monthAbbrev = <String>[
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+String _formatHeaderDateTime(DateTime t) {
+  final int rawHour = t.hour % 12;
+  final int hour = rawHour == 0 ? 12 : rawHour;
+  final String minute = t.minute.toString().padLeft(2, '0');
+  final String suffix = t.hour < 12 ? 'AM' : 'PM';
+  return '${_monthAbbrev[t.month - 1]} ${t.day} · $hour:$minute $suffix';
 }

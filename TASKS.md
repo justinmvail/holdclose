@@ -253,7 +253,7 @@ automation. Each phase leaves the suite green.
   history). Tests: fixture data triggers each rule; mixed-fixture
   returns multiple alerts; below-threshold returns empty.
 
-- [ ] **Task 19: Journal entry detail screen
+- [x] **Task 19: Journal entry detail screen
   (`lib/screens/journal/journal_entry_screen.dart`).** Per §5.6.
   Reads/writes via `journalRepository`. Layout: behavior chip,
   outcome chip, the decoder scripts (read-only quote of what was
