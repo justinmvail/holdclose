@@ -13,6 +13,7 @@ import '../screens/library/library_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
 import '../screens/onboarding/welcome_carousel.dart';
 import '../screens/settings/settings_screen.dart';
+import '../widgets/tab_scaffold.dart';
 
 /// Route names for go_router. Use these instead of raw path strings
 /// when calling `context.goNamed(...)` so a rename only touches one
@@ -118,7 +119,7 @@ GoRouter buildRouter({String initialLocation = '/'}) {
           GoRouterState state,
           StatefulNavigationShell navigationShell,
         ) =>
-            _ShellScaffold(navigationShell: navigationShell),
+            TabScaffold(navigationShell: navigationShell),
         branches: <StatefulShellBranch>[
           StatefulShellBranch(
             routes: <RouteBase>[
@@ -166,52 +167,3 @@ GoRouter buildRouter({String initialLocation = '/'}) {
   );
 }
 
-/// Minimal shell scaffold for Task 3. Task 4 will replace this with
-/// the branded `TabScaffold` widget (`lib/widgets/tab_scaffold.dart`).
-class _ShellScaffold extends StatelessWidget {
-  const _ShellScaffold({required this.navigationShell});
-
-  final StatefulNavigationShell navigationShell;
-
-  static const List<String> _branchPaths = <String>[
-    '/',
-    '/journal',
-    '/library',
-    '/crisis',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: (int index) {
-          context.go(_branchPaths[index]);
-        },
-        destinations: const <NavigationDestination>[
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'Journal',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.local_library_outlined),
-            selectedIcon: Icon(Icons.local_library),
-            label: 'Library',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.warning_amber_outlined),
-            selectedIcon: Icon(Icons.warning_amber),
-            label: 'Crisis',
-          ),
-        ],
-      ),
-    );
-  }
-}

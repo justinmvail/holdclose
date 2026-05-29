@@ -63,8 +63,10 @@ dev_dependencies:
 
   # Golden tests (visual regression). Alchemist handles platform-
   # specific font rendering differences so goldens pass on both
-  # macOS and Linux CI.
-  alchemist: ^0.11.0
+  # macOS and Linux CI. 0.12+ tracks the Flutter 3.32+ Canvas API
+  # (clipRSuperellipse / drawRSuperellipse) that the 0.11.x
+  # BlockedTextCanvasAdapter doesn't implement.
+  alchemist: ^0.14.0
 
   # Code gen
   build_runner: ^2.4.0

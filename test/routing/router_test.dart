@@ -91,12 +91,12 @@ void main() {
       (WidgetTester tester) async {
         final GoRouter router = await pumpRouter(tester);
 
-        await tester.tap(find.byIcon(Icons.menu_book_outlined));
+        await tester.tap(find.byIcon(Icons.book_outlined));
         await tester.pumpAndSettle();
         expect(currentPath(router), '/journal');
         expect(find.byType(JournalScreen), findsOneWidget);
 
-        await tester.tap(find.byIcon(Icons.local_library_outlined));
+        await tester.tap(find.byIcon(Icons.library_books_outlined));
         await tester.pumpAndSettle();
         expect(currentPath(router), '/library');
         expect(find.byType(LibraryScreen), findsOneWidget);

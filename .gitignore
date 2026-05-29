@@ -52,3 +52,9 @@ tools/.venv/
 *.log
 coverage/
 .coverage
+
+# Alchemist platform goldens — uncommitted (per the alchemist
+# Recommended Setup Guide). CI goldens under goldens/ci/ stay tracked.
+test/**/goldens/**/*.*
+test/**/failures/**/*.*
+!test/**/goldens/ci/*.*

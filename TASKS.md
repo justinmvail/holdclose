@@ -48,7 +48,7 @@ automation. Each phase leaves the suite green.
   in §5 has a registered path; tab-bar tap switches via `context.go`;
   Home → `/decoder/behavior` via `context.push` leaves a back arrow.
 
-- [ ] **Task 4: TabScaffold widget (`lib/widgets/tab_scaffold.dart`).**
+- [x] **Task 4: TabScaffold widget (`lib/widgets/tab_scaffold.dart`).**
   Wraps the StatefulShellRoute children with the bottom `NavigationBar`
   carrying the four tabs in exact order `Home · Journal · Library ·
   Crisis`, using Cupertino-style icons (home, book, library_books,
