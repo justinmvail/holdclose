@@ -56,3 +56,57 @@ class AppSettingsTable extends Table {
 /// row layout intentionally mirrors the single-patient layout — both
 /// are "one user, one install" facts in v1.
 const String appSettingsSingletonId = 'singleton';
+
+/// One persisted dementia-care chat thread (TASKS.md Phase 11.2). Each
+/// row carries the full freezed [Conversation] as a JSON [payload] so
+/// new fields on the model don't require a schema bump; [createdAtMs]
+/// and [updatedAtMs] are lifted to their own columns so the
+/// most-recent-activity sort in `listConversations()` doesn't parse
+/// every row's blob.
+///
+/// Companion table [ChatMessagesTable] holds the turn-by-turn rows
+/// with an ON DELETE CASCADE FK on [id], so `deleteConversation()`
+/// leaves zero orphaned messages.
+class ChatConversationsTable extends Table {
+  @override
+  String get tableName => 'chat_conversations';
+
+  TextColumn get id => text()();
+  IntColumn get createdAtMs => integer()();
+  IntColumn get updatedAtMs => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// One turn in a chat thread (TASKS.md Phase 11.2). FK on
+/// [conversationId] references [ChatConversationsTable.id] with
+/// `ON DELETE CASCADE` — deleting the parent conversation removes
+/// every row that points at it, which is the cascade invariant the
+/// repository tests pin.
+///
+/// SQLite only honours that FK action when the per-connection
+/// `PRAGMA foreign_keys = ON` is set; [CareblazersDatabase]'s
+/// `MigrationStrategy.beforeOpen` enables it on every connection so
+/// production + tests share the same enforcement.
+///
+/// The freezed [Message] body lives in [payload] as JSON;
+/// [createdAtMs] is lifted out so `loadMessages()` can sort the
+/// thread chronologically without parsing every blob.
+class ChatMessagesTable extends Table {
+  @override
+  String get tableName => 'chat_messages';
+
+  TextColumn get id => text()();
+  TextColumn get conversationId => text().references(
+        ChatConversationsTable,
+        #id,
+        onDelete: KeyAction.cascade,
+      )();
+  IntColumn get createdAtMs => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}

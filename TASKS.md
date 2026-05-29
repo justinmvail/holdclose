@@ -722,7 +722,7 @@ Sized as 6 atomic iters.
   Message with citations preserves the list; role enum values match
   spec.
 
-- [ ] **Phase 11.2: Drift schema + ChatRepository
+- [x] **Phase 11.2: Drift schema + ChatRepository
   (`lib/db/tables.dart` + `lib/services/chat_repository.dart`).** Two
   new tables: `chat_conversations` and `chat_messages` (FK on
   conversation_id with ON DELETE CASCADE). Migration bumps the drift
