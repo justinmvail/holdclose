@@ -54,6 +54,11 @@ tools/.venv/
 # ios/Vendored/espeak-ng/README.md.
 ios/Vendored/espeak-ng/src/
 ios/Vendored/espeak-ng/Resources/
+# Android Phase 10.3 mirror of the same vendor drop — the C sources
+# under cpp/espeak-ng/ are compiled into libcareblazers_espeak_ng.so
+# via externalNativeBuild. The CMakeLists.txt, JNI .cpp, and README
+# stay committed; the vendored upstream tree does not.
+android/app/src/main/cpp/espeak-ng/
 # Mirror of the espeak-ng runtime data under Flutter assets — same
 # vendor script writes it; keep the README placeholder tracked.
 assets/tts/espeak-ng-data/*

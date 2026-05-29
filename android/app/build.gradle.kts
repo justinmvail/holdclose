@@ -31,6 +31,31 @@ android {
         // Phase 9.4 — instrumented test for TTSBridge (model load +
         // synth + RMS) runs through AndroidJUnitRunner.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Phase 10.3 — JNI bridge for espeak-ng. ONNX Runtime ships
+        // arm64-v8a + x86_64 only on Android; mirror that so the
+        // .so set lines up. armeabi-v7a + x86 are intentionally not
+        // built — the Piper model performance budget assumes 64-bit.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags += listOf("-std=c++17")
+            }
+        }
+    }
+
+    // Phase 10.3 — wire the cpp/CMakeLists.txt that compiles
+    // libcareblazers_espeak_ng.so. On a fresh checkout (no vendor
+    // script run yet) CMake still produces the .so — the file(GLOB ...)
+    // resolves to an empty source list and the JNI shim's
+    // __has_include guards short-circuit. See cpp/README.md.
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {

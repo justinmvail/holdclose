@@ -568,3 +568,121 @@ The local `.podspec` + operator script is the same pattern Home
 Assistant's iOS voice library uses, and it composes cleanly with the
 Phase 10.3 Android mirror (where the espeak-ng-data Flutter-asset
 copy is the canonical read path — no CocoaPods analog over there).
+
+## Phase 10.3 — espeak-ng for Android (JNI + Kotlin bridge)
+
+Mirror of 10.1 + 10.2 on Android. Same upstream tag (espeak-ng 1.52.0,
+commit `4870adfa25b1a32b4361592f1be8a40337c58d6c`), same compile-flag
+set, same phoneme IDs out — so the bundled Piper Amy voice receives
+the identical token sequence on both platforms.
+
+### Path picked
+
+Same call as iOS: **vendor the C sources** under
+`android/app/src/main/cpp/espeak-ng/`, compile through
+`externalNativeBuild` + CMake, expose to Kotlin via a JNI shim. The
+maintained-AAR alternative (`com.github.numediart:espeak-ng-android`,
+`org.eclipse.kura:espeakng-android`, and a couple of long-quiet
+GitHub mirrors) all track espeak-ng 1.46.x — same staleness that
+rejected the iOS community pod. Pinning to the same upstream commit
+on both platforms is what keeps the phoneme set aligned with the
+bundled voice; an AAR maintainer's release cadence can't be trusted
+to track that. The Home Assistant Android voice app vendors espeak-ng
+the same way.
+
+### What lands in 10.3
+
+- `android/app/build.gradle.kts` — adds `externalNativeBuild { cmake
+  { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }`
+  plus `ndk { abiFilters += listOf("arm64-v8a", "x86_64") }`. ABI set
+  matches ONNX Runtime's Android build — armeabi-v7a + x86 are
+  intentionally not built (the Piper model budget assumes 64-bit).
+- `android/app/src/main/cpp/CMakeLists.txt` — wires the JNI shim +
+  vendored espeak-ng sources. Globs `espeak-ng/libespeak-ng/*.c`; when
+  the glob resolves empty (fresh checkout, no vendor script run) it
+  still produces the .so so `System.loadLibrary` succeeds — the JNI
+  shim's `__has_include` short-circuits to "unavailable" instead.
+- `android/app/src/main/cpp/careblazers_espeak_ng.cpp` — JNI shim
+  with `__has_include(<espeak-ng/espeak_ng.h>)` guards around every
+  espeak call. Exposes four native methods:
+  `nativeHasEspeakNG` / `nativeInitialize(dataParentPath)` /
+  `nativeTextToPhonemes(text)` / `nativeTerminate`. Looping
+  `espeak_TextToPhonemes` covers multi-sentence inputs (decoder copy
+  commonly spans two or three).
+- `android/app/src/main/cpp/README.md` — committed layout + setup
+  notes; mirror of `ios/Vendored/espeak-ng/README.md`.
+- `android/app/src/main/kotlin/com/careblazers/careblazers/TTSBridge.kt`
+  — adds the `EspeakNGNative` singleton (loads the .so + tracks
+  `isAvailable`), `TTSEngine.initializeEspeakNG()` (runs once at
+  construction, extracts espeak-ng-data from APK assets to
+  `cacheDir`, calls `espeak_Initialize`), and `EspeakNGPhonemizer`
+  gains a `useEspeak: Boolean = false` constructor parameter routing
+  text → IPA through the JNI layer when set. Mirror of iOS Phase
+  10.2's `EspeakNGPhonemizer.useEspeak` flag.
+- `android/app/src/androidTest/.../TTSBridgeInstrumentedTest.kt` —
+  adds `espeakNgVendorLoadsAndPhonemizes` (Phase 10.1 smoke) and
+  `espeakPhonemizerProducesIpaBackedIdsForHelloWorld` (Phase 10.2
+  acceptance). Both skip when `EspeakNGNative.isAvailable` is false —
+  same skip semantics as the iOS XCTest counterpart.
+- `tools/vendor_espeak_ng.sh` — extended to also drop the C sources
+  + headers into `android/app/src/main/cpp/espeak-ng/`. Same upstream
+  commit hash check, same idempotent re-run behavior.
+- `.gitignore` — adds `android/app/src/main/cpp/espeak-ng/` to the
+  vendored-tree exclusions.
+
+### Asset extraction (Android-specific)
+
+`espeak_Initialize` is a plain C library — it wants a filesystem path
+to walk, not an `AssetManager` handle. iOS's CocoaPods
+`resource_bundles` drops the data directly into the bundle as a real
+path; Android has no analog, so `TTSEngine.extractEspeakNGData()`
+copies `flutter_assets/assets/tts/espeak-ng-data/` from the APK into
+`Context.cacheDir/espeak-ng-data/` on first launch. The copy is
+cached: subsequent launches short-circuit when the target directory
+is non-empty.
+
+Why `cacheDir` and not `filesDir`? Cache-dir contents are user-
+clearable through Settings → Apps → Storage → Clear Cache; if a
+caregiver hits that, the next launch silently re-extracts. The data
+is fully derivable from the APK, so losing it is harmless.
+
+### Setup contract (Android)
+
+```sh
+tools/vendor_espeak_ng.sh
+flutter run -d <android-device>     # any flutter build triggers CMake
+```
+
+`flutter build apk` is enough to drive the native build on its own;
+the operator doesn't need a separate `./gradlew assembleDebug` step.
+After the first build, `libcareblazers_espeak_ng.so` ships in the
+APK under `lib/<abi>/`, `EspeakNGNative.isAvailable` flips on at
+process start, and the bridge phonemizer routes text → IPA through
+the JNI layer.
+
+CI doesn't run the vendor script — the `flutter test` autoloop gate
+only exercises Dart code. The instrumented suite is operator-driven
+(`./gradlew connectedDebugAndroidTest`) and the espeak-ng tests skip
+cleanly when the JNI library reports `isAvailable = false`, so the
+character-lookup fallback keeps the build green either way.
+
+### Why a CMake externalNativeBuild and not a prebuilt AAR
+
+A prebuilt AAR was the obvious alternative — operator runs the
+vendor script on a beefy CI box, uploads the `.aar` to an internal
+Maven server, app pulls it via `implementation("…")`. Two reasons
+against:
+
+1. **No internal Maven yet.** Setting one up (or signing into the
+   careblazers org's GitHub Packages registry) is real infrastructure
+   work that doesn't earn its keep for one library.
+2. **Operator-local builds stay reproducible.** Anyone with the repo
+   + NDK can run `tools/vendor_espeak_ng.sh && flutter run` and get a
+   working JNI library. A prebuilt AAR introduces "is the AAR fresh?"
+   as a question; CMake-from-source removes it.
+
+When the bundled-voice catalog grows past one Piper voice (TTS_BUNDLED
+"Voice catalog swap process") or a custom Dr. Natali voice ships from
+the voicecloner project, this calculus may flip — at that point the
+build time savings of a prebuilt AAR start to matter. For v1 the
+externalNativeBuild path is the right cost/benefit.

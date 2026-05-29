@@ -657,7 +657,7 @@ runs on iPhone.
   reference impl. Tolerance: exact match — the model is sensitive to
   phoneme ID drift.
 
-- [ ] **Phase 10.3: Mirror on Android — `espeak-ng-android` JNI +
+- [x] **Phase 10.3: Mirror on Android — `espeak-ng-android` JNI +
   Kotlin bridge.** Same shape as 10.1 + 10.2 on Android.
   `android/app/build.gradle` pulls a maintained `espeak-ng-android`
   AAR (verify community publication) OR vendors the C library

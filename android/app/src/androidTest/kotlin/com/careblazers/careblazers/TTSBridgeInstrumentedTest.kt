@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -66,9 +67,44 @@ class TTSBridgeInstrumentedTest {
             lengthScale = 1.0,
             noiseW = 0.8,
         )
+        // Default `useEspeak = false` exercises the character-by-character
+        // fallback path documented in cpp/README.md — the only path
+        // available on a fresh checkout that hasn't run the vendor
+        // script. Mirror of iOS `testPhonemizerEmitsBosEosAndPadPerCharacter`.
         val ids = EspeakNGPhonemizer().phonemeIds("hi", config)
         // BOS, h, pad, i, pad, EOS
         assertEquals(listOf(1L, 10L, 0L, 11L, 0L, 2L), ids.toList())
+    }
+
+    /// Phase 10.3: the BOS/pad/EOS wrapper is shared between the espeak
+    /// JNI and fallback paths. Drive it directly with a fixed token
+    /// list so the wrapper invariant is covered even when the JNI
+    /// library isn't linked. Mirror of iOS `testIdsForTokensWrapsWithBosPadEos`.
+    @Test
+    fun idsForTokensWrapsWithBosPadEos() {
+        val config = VoiceConfig(
+            phonemeIdMap = mapOf(
+                "^" to longArrayOf(1L),
+                "$" to longArrayOf(2L),
+                "_" to longArrayOf(0L),
+                "h" to longArrayOf(20L),
+                "ə" to longArrayOf(27L),
+                "l" to longArrayOf(24L),
+                "o" to longArrayOf(25L),
+                "ʊ" to longArrayOf(50L),
+            ),
+            noiseScale = 0.667,
+            lengthScale = 1.0,
+            noiseW = 0.8,
+        )
+        val ids = EspeakNGPhonemizer.idsForTokens(
+            listOf("h", "ə", "l", "o", "ʊ"), config,
+        )
+        // BOS, h, pad, ə, pad, l, pad, o, pad, ʊ, pad, EOS
+        assertEquals(
+            listOf(1L, 20L, 0L, 27L, 0L, 24L, 0L, 25L, 0L, 50L, 0L, 2L),
+            ids.toList(),
+        )
     }
 
     @Test
@@ -141,5 +177,100 @@ class TTSBridgeInstrumentedTest {
             }
         }
         return null
+    }
+
+    // MARK: Phase 10.3 — espeak-ng JNI vendor smoke
+
+    /// Loads the vendored espeak-ng JNI library, drives a TTSEngine
+    /// (which calls `espeak_Initialize` against the extracted data
+    /// dir), and asserts a non-empty IPA-phoneme string comes back
+    /// from `nativeTextToPhonemes("hello world")`. Mirror of iOS
+    /// `testEspeakNgVendorLoadsAndPhonemizes`.
+    ///
+    /// Skips when `EspeakNGNative.isAvailable` is false — that's the
+    /// state before `tools/vendor_espeak_ng.sh` runs (the JNI shim's
+    /// `__has_include` short-circuits and `nativeHasEspeakNG` returns
+    /// false) or when libcareblazers_espeak_ng.so failed to load.
+    @Test
+    fun espeakNgVendorLoadsAndPhonemizes() {
+        assumeTrue(
+            "espeak-ng JNI not linked — run tools/vendor_espeak_ng.sh and rebuild",
+            EspeakNGNative.isAvailable,
+        )
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+        // Constructing the engine runs `initializeEspeakNG` which
+        // extracts the espeak-ng-data tree out of the APK assets and
+        // calls `espeak_Initialize`. If this throws or returns
+        // `espeakReady = false`, the espeak data dir wasn't reachable
+        // (assets/tts/espeak-ng-data/ wasn't populated by the vendor
+        // script before the build).
+        val engine = TTSEngine(context)
+        assertNotNull("TTSEngine construction failed", engine)
+
+        val ipa = EspeakNGNative.nativeTextToPhonemes("hello world")
+        assertNotNull("nativeTextToPhonemes returned null", ipa)
+        assertTrue(
+            "nativeTextToPhonemes returned empty IPA — espeak_Initialize never " +
+                "succeeded against the extracted data dir",
+            !ipa.isNullOrEmpty(),
+        )
+    }
+
+    /// Phase 10.3 acceptance: with the JNI bridge wired,
+    /// `EspeakNGPhonemizer(useEspeak = true).phonemeIds("hello world", cfg)`
+    /// must produce a non-empty ID sequence that differs from the
+    /// character-lookup fallback — proves the JNI path actually ran
+    /// instead of silently falling through. The phoneme-for-phoneme
+    /// exact-match check against Piper's Python reference impl is
+    /// captured in `docs/tts_samples/` during Phase 10.4 manual
+    /// validation; here we only assert the wiring.
+    ///
+    /// Skips when the JNI library isn't linked (fresh checkout) or
+    /// when the voice config asset isn't reachable from the APK
+    /// (same skip semantics as `inferenceProducesNonSilentAudio`).
+    @Test
+    fun espeakPhonemizerProducesIpaBackedIdsForHelloWorld() {
+        assumeTrue(
+            "espeak-ng JNI not linked — run tools/vendor_espeak_ng.sh and rebuild",
+            EspeakNGNative.isAvailable,
+        )
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val configBytes = readAsset(context.assets, "en_US-amy-medium.onnx.json")
+        assumeTrue(
+            "en_US-amy-medium.onnx.json not reachable from APK — covered by Phase 9.6 device smoke",
+            configBytes != null,
+        )
+        val config = VoiceConfig.parse(configBytes!!)
+
+        // Force an engine construction so `espeak_Initialize` runs
+        // against the extracted data dir before the phonemizer asks
+        // for IDs.
+        TTSEngine(context)
+
+        val realIds = EspeakNGPhonemizer(useEspeak = true)
+            .phonemeIds("hello world", config)
+        val fallbackIds = EspeakNGPhonemizer(useEspeak = false)
+            .phonemeIds("hello world", config)
+
+        assertTrue(
+            "espeak path returned only BOS/EOS — IPA tokens didn't land in the phoneme map",
+            realIds.size > 2,
+        )
+        assertEquals(
+            "espeak path didn't prefix BOS",
+            config.phonemeIdMap["^"]?.firstOrNull(),
+            realIds.firstOrNull(),
+        )
+        assertEquals(
+            "espeak path didn't suffix EOS",
+            config.phonemeIdMap["$"]?.firstOrNull(),
+            realIds.lastOrNull(),
+        )
+        assertNotEquals(
+            "espeak path matched the character-lookup fallback — nativeTextToPhonemes never ran",
+            fallbackIds.toList(),
+            realIds.toList(),
+        )
     }
 }

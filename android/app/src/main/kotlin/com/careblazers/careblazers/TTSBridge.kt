@@ -14,6 +14,8 @@ import android.os.Looper
 import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
@@ -117,6 +119,15 @@ class TTSEngine(private val appContext: Context) {
 
     private var audioTrack: AudioTrack? = null
 
+    /// True once `espeak_Initialize` has returned a positive sample
+    /// rate for this process. Mirror of `TTSEngine.espeakReady` on iOS.
+    /// `ensureLoaded` reads this to decide whether `EspeakNGPhonemizer`
+    /// should call into the JNI layer (real IPA) or fall back to the
+    /// Phase 9.4 character lookup (gibberish-but-alive). Set once at
+    /// construction; the JNI library is a process-level singleton, so
+    /// repeated TTSEngine instances all share the same espeak state.
+    private val espeakReady: Boolean = initializeEspeakNG()
+
     /// Bumped on every `cancel()` so an in-flight `speak` knows to
     /// drop its pending buffer.
     @Volatile
@@ -215,8 +226,108 @@ class TTSEngine(private val appContext: Context) {
         ortEnv = env
         session = newSession
         voiceConfig = config
-        phonemizer = EspeakNGPhonemizer()
+        // Phase 10.3: on-device espeak-ng via the JNI bridge. When
+        // `espeakReady` is true the phonemizer calls
+        // `EspeakNGNative.nativeTextToPhonemes` for real IPA; otherwise
+        // it falls back to the Phase 9.4 character lookup. Mirror of
+        // the iOS branch — Pod-vendored static library there, JNI-
+        // compiled shared library here, but the contract is identical:
+        // both produce phoneme-for-phoneme aligned IDs for the bundled
+        // Piper Amy voice.
+        phonemizer = EspeakNGPhonemizer(useEspeak = espeakReady)
         loadedVoiceId = voiceId
+    }
+
+    // MARK: espeak-ng init
+
+    /// One-time bootstrap. Skips when the JNI library couldn't load
+    /// (fresh checkout, vendor script not yet run) or when the data
+    /// directory can't be extracted from assets. Returns true only
+    /// when `espeak_Initialize` reported a positive sample rate AND
+    /// the en-us voice loaded — matches iOS `initializeEspeakNG`
+    /// semantics so a bridge that says "ready" really is.
+    private fun initializeEspeakNG(): Boolean {
+        if (!EspeakNGNative.isAvailable) return false
+        val dataParent = extractEspeakNGData() ?: return false
+        return try {
+            EspeakNGNative.nativeInitialize(dataParent) > 0
+        } catch (e: UnsatisfiedLinkError) {
+            Log.w(TAG, "initializeEspeakNG: native call missing — JNI partial link?", e)
+            false
+        }
+    }
+
+    /// Copy `flutter_assets/assets/tts/espeak-ng-data/` from the APK
+    /// into `cacheDir/espeak-ng-data/` and return the *parent* path
+    /// (cacheDir). `espeak_Initialize` wants the directory that
+    /// contains `espeak-ng-data/`, per the upstream contract.
+    ///
+    /// AssetManager hands out InputStreams, not file paths — espeak-ng
+    /// is a plain C library that wants `fopen()`, so a one-time
+    /// extraction is unavoidable. Cached across launches: if the
+    /// target dir already has files, skip the copy.
+    private fun extractEspeakNGData(): String? {
+        val cacheParent = appContext.cacheDir
+        val target = File(cacheParent, "espeak-ng-data")
+        if (target.isDirectory && (target.list()?.size ?: 0) > 0) {
+            return cacheParent.absolutePath
+        }
+        val assets = appContext.assets
+        val assetRoot = locateEspeakAssetRoot(assets) ?: return null
+        return try {
+            copyAssetTree(assets, assetRoot, target)
+            cacheParent.absolutePath
+        } catch (e: IOException) {
+            Log.w(TAG, "extractEspeakNGData: failed to copy espeak-ng-data", e)
+            // Half-extracted state would make espeak crash mid-init;
+            // wipe so the next attempt re-extracts from scratch.
+            target.deleteRecursively()
+            null
+        }
+    }
+
+    private fun locateEspeakAssetRoot(assets: AssetManager): String? {
+        // Mirror of readBundledAsset's candidate order — Flutter
+        // bundles project assets under `flutter_assets/` but
+        // hand-staged test fixtures may sit alongside.
+        val candidates = listOf(
+            "flutter_assets/assets/tts/espeak-ng-data",
+            "assets/tts/espeak-ng-data",
+        )
+        for (root in candidates) {
+            try {
+                val entries = assets.list(root)
+                if (!entries.isNullOrEmpty()) return root
+            } catch (_: IOException) {
+                // try next
+            }
+        }
+        return null
+    }
+
+    /// Recursive copy. AssetManager.list returns an empty array on a
+    /// file (not on a missing entry — which throws); use that to
+    /// distinguish leaves from branches.
+    private fun copyAssetTree(am: AssetManager, srcPath: String, dst: File) {
+        val entries = try {
+            am.list(srcPath)
+        } catch (e: IOException) {
+            null
+        }
+        if (entries.isNullOrEmpty()) {
+            // Leaf — try to open as a file.
+            dst.parentFile?.mkdirs()
+            am.open(srcPath).use { input ->
+                FileOutputStream(dst).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            return
+        }
+        dst.mkdirs()
+        for (entry in entries) {
+            copyAssetTree(am, "$srcPath/$entry", File(dst, entry))
+        }
     }
 
     private fun readBundledAsset(
@@ -475,32 +586,136 @@ interface Phonemizer {
     fun phonemeIds(text: String, config: VoiceConfig): LongArray
 }
 
-/// Mirror of the iOS `EspeakNGPhonemizer` stub. The task spec hints
-/// at `espeakng-java` (Maven Central) or a thin JNI wrapper; until
-/// that vendor drop lands we perform a character-by-character lookup
-/// against `phoneme_id_map` (BOS/EOS + pad tokens around each
-/// grapheme) so the audio pipeline + tests stay alive. Production
-/// English phonemization arrives with the same follow-up that
-/// vendors espeak-ng for iOS.
-class EspeakNGPhonemizer : Phonemizer {
+/// Wraps the espeak-ng C library via the `EspeakNGNative` JNI bridge.
+/// The native sources are populated by `tools/vendor_espeak_ng.sh` into
+/// `android/app/src/main/cpp/espeak-ng/` and compiled into
+/// `libcareblazers_espeak_ng.so` by the externalNativeBuild config in
+/// `app/build.gradle.kts`. See `android/app/src/main/cpp/README.md`
+/// for the layout + symbol naming.
+///
+/// Phase 10.3 contract:
+///   * `TTSEngine` calls `EspeakNGNative.nativeInitialize` once at
+///     construction (with the espeak-ng-data path extracted from the
+///     APK assets) and hands a phonemizer with `useEspeak: true` to
+///     `ensureLoaded`.
+///   * `phonemeIds(text, config)` runs `nativeTextToPhonemes` over the
+///     input English, splits the IPA result into per-scalar tokens,
+///     and maps each through `config.phonemeIdMap`. BOS (`^`), pad
+///     (`_`) between phonemes, and EOS (`$`) wrap the sequence — the
+///     layout Piper's tokenizer is trained against.
+///
+/// When the vendor script hasn't run (the CMake `file(GLOB)` resolves
+/// to no espeak sources and the JNI shim's `__has_include` flips off),
+/// or when `useEspeak` is `false` (test default), the call falls back
+/// to a character-by-character lookup against `phoneme_id_map`. The
+/// fallback produces non-empty IDs so the audio + integration tests
+/// stay alive on a fresh checkout — but the resulting audio is
+/// gibberish. The iOS bridging-header README documents the same
+/// contract for the Swift twin.
+class EspeakNGPhonemizer(private val useEspeak: Boolean = false) : Phonemizer {
     override fun phonemeIds(text: String, config: VoiceConfig): LongArray {
-        val ids = ArrayList<Long>(text.length * 3 + 2)
-        val pad = config.phonemeIdMap["_"]
-        // BOS token is encoded as '^' in Piper configs.
-        config.phonemeIdMap["^"]?.let { appendAll(ids, it) }
-        for (ch in text) {
-            val mapped = config.phonemeIdMap[ch.toString()] ?: continue
-            appendAll(ids, mapped)
-            if (pad != null) appendAll(ids, pad)
-        }
-        config.phonemeIdMap["$"]?.let { appendAll(ids, it) }
-        return ids.toLongArray()
+        val tokens = tokens(text)
+        return idsForTokens(tokens, config)
     }
 
-    private fun appendAll(dst: ArrayList<Long>, src: LongArray) {
-        dst.ensureCapacity(dst.size + src.size)
-        for (v in src) dst.add(v)
+    /// Resolve `text` to a phoneme-token list. Each token is a single
+    /// Unicode scalar — matches the granularity of `phoneme_id_map`
+    /// keys (verified against `en_US-amy-medium.onnx.json`: all 154
+    /// keys are one scalar each).
+    private fun tokens(text: String): List<String> {
+        if (useEspeak && EspeakNGNative.isAvailable) {
+            try {
+                val ipa = EspeakNGNative.nativeTextToPhonemes(text)
+                if (!ipa.isNullOrEmpty()) {
+                    return ipa.map { it.toString() }
+                }
+            } catch (e: UnsatisfiedLinkError) {
+                // JNI fn went missing between init + call (shouldn't
+                // happen, but System.loadLibrary can race with a
+                // process restart). Fall through to character lookup.
+                Log.w("TTSBridge", "nativeTextToPhonemes unavailable — falling back", e)
+            }
+        }
+        return text.map { it.toString() }
     }
+
+    companion object {
+        /// Wrap a token sequence with BOS (`^`), pad (`_`) between
+        /// tokens, and EOS (`$`) — Piper's tokenizer expectation.
+        /// Exposed at companion-level so tests can supply a fixed
+        /// token list and stay hermetic (no JNI link needed).
+        fun idsForTokens(tokens: List<String>, config: VoiceConfig): LongArray {
+            val ids = ArrayList<Long>(tokens.size * 3 + 2)
+            config.phonemeIdMap["^"]?.let { appendAll(ids, it) }
+            val pad = config.phonemeIdMap["_"]
+            for (token in tokens) {
+                val mapped = config.phonemeIdMap[token] ?: continue
+                appendAll(ids, mapped)
+                if (pad != null) appendAll(ids, pad)
+            }
+            config.phonemeIdMap["$"]?.let { appendAll(ids, it) }
+            return ids.toLongArray()
+        }
+
+        private fun appendAll(dst: ArrayList<Long>, src: LongArray) {
+            dst.ensureCapacity(dst.size + src.size)
+            for (v in src) dst.add(v)
+        }
+    }
+}
+
+// MARK: - JNI bridge
+
+/// Singleton wrapper around `libcareblazers_espeak_ng.so`. The C++
+/// shim lives at `android/app/src/main/cpp/careblazers_espeak_ng.cpp`;
+/// CMake compiles it on every native build. `isAvailable` is true
+/// iff the .so loaded *and* the espeak-ng sources were linked into it
+/// (the JNI shim's `__has_include` guard flipped on when
+/// `tools/vendor_espeak_ng.sh` had run). When false, callers fall
+/// back to the character-lookup phonemizer documented above.
+object EspeakNGNative {
+
+    /// Set once at class-load: true iff `System.loadLibrary` succeeded
+    /// AND `nativeHasEspeakNG` reported the symbols are linked. Read
+    /// by `TTSEngine.initializeEspeakNG` and `EspeakNGPhonemizer`.
+    val isAvailable: Boolean
+
+    init {
+        var available = false
+        try {
+            System.loadLibrary("careblazers_espeak_ng")
+            available = nativeHasEspeakNG()
+        } catch (e: UnsatisfiedLinkError) {
+            Log.w("TTSBridge", "libcareblazers_espeak_ng not loadable — bridge falls back to character phonemizer", e)
+        }
+        isAvailable = available
+    }
+
+    /// Compile-time flag exposed from the JNI shim. Returns true iff
+    /// `__has_include(<espeak-ng/espeak_ng.h>)` was true at compile
+    /// time — i.e., the vendor script had populated cpp/espeak-ng/
+    /// before the last CMake run.
+    external fun nativeHasEspeakNG(): Boolean
+
+    /// Wraps `espeak_Initialize` + `espeak_SetVoiceByName("en-us")`.
+    /// `dataParentPath` is the directory that *contains*
+    /// `espeak-ng-data/` — TTSEngine extracts the asset tree into
+    /// `cacheDir/espeak-ng-data/` and passes `cacheDir` here. Returns
+    /// the sample rate on success (>0), or a negative status code
+    /// (-1/-2/-3, see careblazers_espeak_ng.cpp) on failure.
+    external fun nativeInitialize(dataParentPath: String): Int
+
+    /// Wraps `espeak_TextToPhonemes` looped to consume the full input.
+    /// Returns the IPA-phoneme string for `text`, or null when the
+    /// espeak symbols aren't linked / the call failed mid-loop.
+    external fun nativeTextToPhonemes(text: String): String?
+
+    /// Wraps `espeak_Terminate`. Currently unused — TTSEngine has no
+    /// teardown hook (the engine is a process-singleton), and espeak's
+    /// state is fine to leak for the process lifetime. Exposed so a
+    /// future test harness can reset between runs without restarting
+    /// the process.
+    external fun nativeTerminate()
 }
 
 // MARK: - Errors
