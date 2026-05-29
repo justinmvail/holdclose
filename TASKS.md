@@ -375,7 +375,7 @@ automation. Each phase leaves the suite green.
   three pages render with locked copy; Skip routes; Get started
   flips the provider AND routes.
 
-- [ ] **Task 30: Sign-in screen + auth wiring
+- [x] **Task 30: Sign-in screen + auth wiring
   (`lib/screens/onboarding/sign_in_screen.dart`).** Per §5.12. Two
   buttons (Apple iOS-only, Google both platforms). Calls
   `authProvider.signInWithApple()` / `.signInWithGoogle()`. On
