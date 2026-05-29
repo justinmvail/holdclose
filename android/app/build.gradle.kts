@@ -28,6 +28,9 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Phase 9.4 — instrumented test for TTSBridge (model load +
+        // synth + RMS) runs through AndroidJUnitRunner.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -41,4 +44,18 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // BUILD_SPEC.md Phase 9.4 — ONNX Runtime for the bundled Piper
+    // voice (`assets/tts/en_US-amy-medium/`). The NNAPI execution
+    // provider routes inference to the device NPU/DSP; older devices
+    // fall back to CPU transparently. Mirrors the iOS
+    // `onnxruntime-objc` Pod added in Phase 9.3.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
+
+    // Phase 9.4 — instrumented test wiring for TTSBridge.
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:rules:1.5.0")
 }

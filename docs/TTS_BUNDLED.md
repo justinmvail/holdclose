@@ -1,9 +1,9 @@
-# Bundled neural TTS — iOS (Phase 9.3)
+# Bundled neural TTS — iOS (Phase 9.3) + Android (Phase 9.4)
 
-> Phase 9.3 ships the iOS side of the bundled Piper voice. Phase 9.4
-> covers Android. Phase 9.7 will append the cross-platform overview,
-> failure-fallback narrative, and voice-catalog swap guide — keep this
-> doc lean for now.
+> Phase 9.3 ships the iOS side of the bundled Piper voice; Phase 9.4
+> mirrors it on Android. Phase 9.7 will append the cross-platform
+> overview, failure-fallback narrative, and voice-catalog swap guide —
+> keep this doc lean for now.
 
 ## What lands in 9.3
 
@@ -91,3 +91,100 @@ skips when the .onnx isn't bundled into the test target — this is
 expected until Phase 9.6's device-side acceptance run. The hermetic
 tests cover the config parser, the phonemizer lookup, and the voice
 catalog.
+
+## What lands in 9.4 (Android)
+
+- `com.microsoft.onnxruntime:onnxruntime-android:1.18.0` added to
+  `android/app/build.gradle.kts`.
+- `android/app/src/main/kotlin/com/careblazers/careblazers/TTSBridge.kt`
+  — owns the `OrtSession`, AudioTrack player, voice-config parser,
+  and an espeak-ng phonemizer interface. The bridge registers the
+  `careblazers/tts` MethodChannel and handles `speak`, `cancel`,
+  `availableVoices`.
+- `android/app/src/main/kotlin/com/careblazers/careblazers/MainActivity.kt`
+  — replaces the Phase 9.2 stub with a single call to
+  `TTSBridge.register(applicationContext, flutterEngine)`.
+- `android/app/src/androidTest/kotlin/com/careblazers/careblazers/TTSBridgeInstrumentedTest.kt`
+  — hermetic config-parser + phonemizer tests plus a model-load + RMS
+  test that skips when the `.onnx` asset isn't reachable from the
+  instrumented APK.
+
+## NNAPI execution provider
+
+`TTSEngine.ensureLoaded` builds an `OrtSession.SessionOptions` with
+`addNnapi()`. On Android 8.1+ (API 27+) NNAPI routes inference to
+the device NPU / DSP; older devices and emulators fall back to CPU
+transparently. Failures in `addNnapi()` (missing native binding,
+NNAPI version mismatch) are logged and swallowed — ONNX Runtime
+keeps the session on CPU. Expect 1–3 s of first-token latency on
+the CPU fallback path; the Phase 9.6 device matrix confirms NNAPI
+clears <500 ms on a Pixel 6+.
+
+## Phonemizer status
+
+The espeak-ng wrapping is stubbed behind the `Phonemizer` interface,
+parallel to iOS. `EspeakNGPhonemizer` performs a character-by-
+character lookup against `phoneme_id_map` from the voice config
+(BOS/EOS + pad tokens around each grapheme) — same shape as the
+Swift counterpart, same tradeoffs. The real espeak-ng integration
+lands in a follow-up: vendor `libespeak-ng.so` + the
+espeak-ng-data tree via JNI (or the `espeakng-java` Maven artifact)
+and route through `espeak_TextToPhonemes`. The two bridges share
+the follow-up — when iOS gets the production phonemizer, Android
+gets the matching binding in the same iter.
+
+## Audio output
+
+Piper Amy emits float32 PCM at 22 050 Hz mono. The Android bridge
+converts to int16 (clamped to [-1.0, 1.0] then scaled to
+`Short.MAX_VALUE`) and streams to an `AudioTrack` configured for
+`USAGE_MEDIA` / `CONTENT_TYPE_SPEECH`, `MODE_STREAM`, and the
+host's `getMinBufferSize`. `cancel()` pauses + flushes + releases
+the track so a rapid-tap on the per-line ▶ button doesn't queue
+overlapping audio.
+
+## Manual smoke sequence (Android)
+
+Pre-req: a real Android device on API 27+ (emulators work but fall
+back to CPU and add latency).
+
+```
+flutter pub get
+flutter run -d <android-device-id>
+```
+
+Then in the running app:
+
+1. Land on the **Home** screen.
+2. Tap **Decode a behavior**.
+3. Pick any behavior tile (e.g., **Repeating questions**).
+4. Step through the three triage screens, tapping any answer at each.
+5. Wait for the **Result** screen to render.
+6. Tap the 🔊 PLAY button on the result.
+7. **Expectation**: hear Amy speak the first "say" line. First-token
+   latency target is < 500 ms on a Pixel 6+ via NNAPI; CPU fallback
+   is < ~2 s.
+
+If the device is silent:
+
+- Confirm the model bundled: `flutter build apk --analyze-size`
+  should show `en_US-amy-medium.onnx` in the assets envelope.
+- Confirm the AAR pulled: `./gradlew :app:dependencies` should list
+  `com.microsoft.onnxruntime:onnxruntime-android:1.18.0`.
+- Tail `flutter run` / `adb logcat -s TTSBridge`: bridge errors
+  surface as `SPEAK_FAILED` channel results with the underlying
+  OrtException string in the `message` field.
+
+## Test invocation (Android)
+
+```
+# Instrumented suite (model load + RMS):
+cd android && ./gradlew connectedDebugAndroidTest
+
+# Or via Android Studio: right-click TTSBridgeInstrumentedTest → Run.
+```
+
+The model-dependent test (`inferenceProducesNonSilentAudio`) skips
+when the `.onnx` isn't reachable from the instrumented APK — same
+contract as the iOS XCTest. The hermetic tests cover the config
+parser, the phonemizer lookup, and the voice catalog.

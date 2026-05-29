@@ -517,7 +517,7 @@ runs on iPhone.
   Test: XCTest unit asserts the bridge loads the model and inference
   produces non-silent audio (RMS > 0).
 
-- [ ] **Phase 9.4: Android Kotlin bridge — ONNX Runtime + NNAPI EP +
+- [x] **Phase 9.4: Android Kotlin bridge — ONNX Runtime + NNAPI EP +
   AudioTrack.** Mirror of 9.3. Add
   `com.microsoft.onnxruntime:onnxruntime-android:1.18.0` to
   `android/app/build.gradle`. In
