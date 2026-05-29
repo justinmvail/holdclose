@@ -11,6 +11,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
+import '../_semantics_matchers.dart';
+
 /// Records every call to [PdfExporter.crisisCard] + [PdfExporter.sharePdf]
 /// without spinning up the `printing` platform channel. The crisis card
 /// screen's print action chains the two so the test asserts both.
@@ -254,5 +256,49 @@ void main() {
         expect(find.text('Updated May 29, 2026'), findsOneWidget);
       },
     );
+  });
+
+  group('CrisisCardScreen — VoiceOver labels (BUILD_SPEC.md §11.5)', () {
+    testWidgets('print + QR AppBar actions announce their purpose',
+        (WidgetTester tester) async {
+      await _pumpCrisis(tester, demoSeed: maryHenderson());
+
+      expect(
+        hasSemanticsLabel(tester, RegExp('Print or share the handoff card')),
+        isTrue,
+      );
+      expect(
+        hasSemanticsLabel(tester, RegExp('Show the patient handoff QR code')),
+        isTrue,
+      );
+    });
+
+    testWidgets('DNR switch announces "Do Not Resuscitate"',
+        (WidgetTester tester) async {
+      await _pumpCrisis(tester, demoSeed: maryHenderson());
+
+      await tester.scrollUntilVisible(
+        find.byKey(CrisisCardScreen.directiveDnrKey),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        hasSemanticsLabel(tester, RegExp('Do Not Resuscitate')),
+        isTrue,
+      );
+    });
+
+    testWidgets('editable name field announces its edit affordance',
+        (WidgetTester tester) async {
+      await _pumpCrisis(tester, demoSeed: maryHenderson());
+
+      expect(
+        hasSemanticsLabel(
+          tester,
+          RegExp('Edit name', caseSensitive: false),
+        ),
+        isTrue,
+      );
+    });
   });
 }

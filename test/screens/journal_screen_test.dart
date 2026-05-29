@@ -15,6 +15,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
+import '_semantics_matchers.dart';
+
 /// Fixed "now" for every test — pinned at midday so "Today" rolls
 /// safely without depending on the host clock. The journal grouping is
 /// keyed off this via [journalScreenClockProvider]; the storage layer
@@ -245,6 +247,38 @@ void main() {
       expect(find.widgetWithText(AppBar, 'Journal'), findsOneWidget);
       // Journal is a tab root — never an auto back arrow.
       expect(find.byType(BackButton), findsNothing);
+    });
+
+    testWidgets('empty-state CTA announces the decoder hand-off',
+        (WidgetTester tester) async {
+      await _pumpJournal(tester);
+
+      expect(
+        hasSemanticsLabel(tester, RegExp('Open the decoder')),
+        isTrue,
+      );
+    });
+
+    testWidgets('entry tiles announce behavior and time',
+        (WidgetTester tester) async {
+      await _pumpJournal(
+        tester,
+        entries: <JournalEntry>[
+          _entry(
+            id: 'today-1',
+            behavior: _sundowning,
+            createdAt: _fixedNow.subtract(const Duration(hours: 1)),
+          ),
+        ],
+      );
+
+      expect(
+        hasSemanticsLabel(
+          tester,
+          RegExp('Sundowning.*Double-tap to open this entry'),
+        ),
+        isTrue,
+      );
     });
 
     testWidgets('week summary shows top behavior and trend subline',

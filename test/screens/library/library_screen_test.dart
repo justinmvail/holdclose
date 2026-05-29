@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
+import '../_semantics_matchers.dart';
+
 /// Fixed clock used by every test that doesn't care about the day-of-
 /// year rotation specifically — pinned to BUILD_SPEC's "currentDate"
 /// (2026-05-29) for parity with the rest of the test suite.
@@ -283,6 +285,47 @@ void main() {
         }
       },
     );
+  });
+
+  group('LibraryScreen — VoiceOver labels (BUILD_SPEC.md §11.5)', () {
+    testWidgets("today's card hero announces the card title",
+        (WidgetTester tester) async {
+      final DateTime pinned = DateTime(2026, 5, 29, 12, 0);
+      final LibraryCard expected = LibraryScreen.todaysCard(pinned);
+
+      await _pumpLibrary(tester, now: pinned);
+
+      expect(
+        hasSemanticsLabel(
+          tester,
+          RegExp(
+            "Today's card: ${RegExp.escape(expected.title)}.*Double-tap to read",
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets('every card tile announces its title',
+        (WidgetTester tester) async {
+      await _pumpLibrary(tester);
+
+      for (final String id in mostAskedBehaviorCardIds) {
+        await tester.ensureVisible(find.byKey(LibraryScreen.cardTileKey(id)));
+        await tester.pumpAndSettle();
+
+        expect(
+          hasSemanticsLabel(
+            tester,
+            RegExp(
+              '${RegExp.escape(libraryCardById(id)!.title)}.*Double-tap to read',
+            ),
+          ),
+          isTrue,
+          reason: 'tile "$id" must announce its title',
+        );
+      }
+    });
   });
 
   group('Fixed section composition', () {

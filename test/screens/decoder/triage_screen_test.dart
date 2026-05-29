@@ -11,6 +11,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import '../_semantics_matchers.dart';
+
 const Behavior _sundowning =
     Behavior(id: 'sundowning', label: 'Sundowning', glyph: '🌅');
 
@@ -347,6 +349,68 @@ void main() {
         expect(Behavior.byId(args.behavior.id), isNull);
       },
     );
+  });
+
+  group('TriageScreen — VoiceOver labels (BUILD_SPEC.md §11.5)', () {
+    testWidgets('Back button announces context-aware label',
+        (WidgetTester tester) async {
+      await _pumpTriage(tester);
+
+      expect(
+        hasSemanticsLabel(tester, RegExp('Leave triage')),
+        isTrue,
+        reason: 'Q1 Back must announce "Leave triage"',
+      );
+
+      // Advance Q1 → Q2 and confirm the back label re-frames.
+      await tester.tap(find.byKey(TriageScreen.optionKey(0, 0)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(TriageScreen.nextButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(
+        hasSemanticsLabel(tester, RegExp('Back to previous question')),
+        isTrue,
+        reason: 'Q2 Back must announce "Back to previous question"',
+      );
+    });
+
+    testWidgets('Next button announces "Next question" mid-flow and '
+        '"Get the script" on the final question',
+        (WidgetTester tester) async {
+      await _pumpTriage(tester);
+
+      expect(
+        hasSemanticsLabel(tester, RegExp('Next question')),
+        isTrue,
+      );
+
+      // Advance to Q3 (final).
+      await tester.tap(find.byKey(TriageScreen.optionKey(0, 0)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(TriageScreen.nextButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(TriageScreen.optionKey(1, 0)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(TriageScreen.nextButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(
+        hasSemanticsLabel(tester, RegExp('Get the script')),
+        isTrue,
+        reason: 'Q3 Next must speak "Get the script" to signal it submits',
+      );
+    });
+
+    testWidgets('pill options announce their visible label',
+        (WidgetTester tester) async {
+      await _pumpTriage(tester);
+
+      expect(
+        hasSemanticsLabel(tester, 'Morning'),
+        isTrue,
+      );
+    });
   });
 
   group('Triage notifier', () {

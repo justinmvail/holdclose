@@ -18,6 +18,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
+import '../_semantics_matchers.dart';
+
 /// Spying TTS provider so tests can assert what the AppBar 🔊 and the
 /// per-line ▶ buttons actually handed off without spinning up a
 /// flutter_tts platform channel.
@@ -461,6 +463,38 @@ void main() {
       expect(find.byKey(DecoderResultScreen.retryKey), findsNothing);
       expect(find.text('Try saying:'), findsOneWidget);
       expect(callCount, 2);
+    });
+  });
+
+  group('DecoderResultScreen — VoiceOver labels (BUILD_SPEC.md §11.5)', () {
+    testWidgets('every interactive widget announces an explicit label',
+        (WidgetTester tester) async {
+      final _ScriptedLLM llm = _ScriptedLLM(<DecoderChunk>[
+        DecoderChunk.done(result: _stamped()),
+      ]);
+      await _pumpScreen(tester, llm: llm);
+      await tester.pumpAndSettle();
+
+      expect(
+        hasSemanticsLabel(tester, RegExp('Read the full script aloud')),
+        isTrue,
+      );
+      expect(
+        hasSemanticsLabel(tester, RegExp('Play this script line aloud')),
+        isTrue,
+      );
+      expect(
+        hasSemanticsLabel(tester, RegExp('That helped')),
+        isTrue,
+      );
+      expect(
+        hasSemanticsLabel(tester, RegExp('Try a different approach')),
+        isTrue,
+      );
+      expect(
+        hasSemanticsLabel(tester, RegExp('Talk to Natali')),
+        isTrue,
+      );
     });
   });
 

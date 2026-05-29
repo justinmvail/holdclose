@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import '../_semantics_matchers.dart';
+
 /// Pump a minimal router that wraps [BehaviorPickerScreen] and captures
 /// the `state.extra` payload pushed to `/decoder/triage`. We don't use
 /// the production router here because the goal is to assert what the
@@ -206,6 +208,41 @@ void main() {
         expect(find.text('test-triage'), findsOneWidget);
       },
     );
+  });
+
+  group('BehaviorPickerScreen — VoiceOver labels (BUILD_SPEC.md §11.5)', () {
+    testWidgets(
+      'every behavior card announces "Behavior: <label>. Double-tap to select."',
+      (WidgetTester tester) async {
+        await _pumpPicker(tester);
+
+        for (final Behavior b in Behavior.canonical) {
+          expect(
+            hasSemanticsLabel(
+              tester,
+              RegExp(
+                'Behavior: ${RegExp.escape(b.label)}.*Double-tap to select',
+              ),
+            ),
+            isTrue,
+            reason: '${b.id} card must speak its behavior label',
+          );
+        }
+      },
+    );
+
+    testWidgets('free-text pill announces the describe-yourself path',
+        (WidgetTester tester) async {
+      await _pumpPicker(tester);
+
+      expect(
+        hasSemanticsLabel(
+          tester,
+          RegExp('Something else.*describe the behavior'),
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('TriageArgs equality', () {

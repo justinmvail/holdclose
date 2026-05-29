@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import '_semantics_matchers.dart';
+
 /// Pump the real router so `context.push(...)` lands on real route
 /// builders — same approach as `router_test.dart`. We skip the brand
 /// theme intentionally; its google_fonts TextStyles fire fire-and-
@@ -152,6 +154,32 @@ void main() {
         find.byType(LibraryCardScreen),
       );
       expect(pushed.cardId, 'respond_to_emotion');
+    });
+  });
+
+  group('HomeScreen — VoiceOver labels (BUILD_SPEC.md §11.5)', () {
+    testWidgets('every interactive target has an explicit Semantics label',
+        (WidgetTester tester) async {
+      await _pumpHome(tester);
+
+      expect(
+        hasSemanticsLabel(tester, RegExp("What's happening right now")),
+        isTrue,
+        reason: 'primary tap target lost its Semantics label',
+      );
+      expect(
+        hasSemanticsLabel(tester, RegExp('Open Settings')),
+        isTrue,
+        reason: 'settings gear must announce its purpose',
+      );
+      expect(
+        hasSemanticsLabel(tester, RegExp('Quick reassurance')),
+        isTrue,
+      );
+      expect(
+        hasSemanticsLabel(tester, RegExp('Doctor visit prep')),
+        isTrue,
+      );
     });
   });
 }

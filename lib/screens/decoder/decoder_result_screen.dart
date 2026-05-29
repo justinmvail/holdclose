@@ -145,13 +145,18 @@ class _DecoderResultScreenState
       appBar: AppBar(
         title: const Text('Decoder'),
         actions: <Widget>[
-          IconButton(
-            key: DecoderResultScreen.playAllKey,
-            icon: const Icon(Icons.volume_up_outlined),
-            tooltip: 'Read all sections aloud',
-            onPressed: canPlayAll
-                ? () => _playAll(progress.requireValue.partial!)
-                : null,
+          Semantics(
+            button: true,
+            enabled: canPlayAll,
+            label: 'Read the full script aloud.',
+            child: IconButton(
+              key: DecoderResultScreen.playAllKey,
+              icon: const Icon(Icons.volume_up_outlined),
+              tooltip: 'Read all sections aloud',
+              onPressed: canPlayAll
+                  ? () => _playAll(progress.requireValue.partial!)
+                  : null,
+            ),
           ),
         ],
       ),
@@ -280,18 +285,22 @@ class _DecoderResultScreenState
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          ElevatedButton(
-            key: DecoderResultScreen.retryKey,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: careblazersColors.cta,
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(56),
-            ),
-            onPressed: () =>
-                ref.invalidate(decoderResultProvider(_args)),
-            child: Text(
-              'Try again',
-              style: textTheme.labelLarge?.copyWith(color: Colors.white),
+          Semantics(
+            button: true,
+            label: 'Try again. Re-request the coach.',
+            child: ElevatedButton(
+              key: DecoderResultScreen.retryKey,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: careblazersColors.cta,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(56),
+              ),
+              onPressed: () =>
+                  ref.invalidate(decoderResultProvider(_args)),
+              child: Text(
+                'Try again',
+                style: textTheme.labelLarge?.copyWith(color: Colors.white),
+              ),
             ),
           ),
         ],
@@ -738,49 +747,62 @@ class _OutcomeButtons extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        ElevatedButton(
-          key: DecoderResultScreen.thatHelpedKey,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: careblazersColors.cta,
-            foregroundColor: Colors.white,
-            disabledBackgroundColor:
-                careblazersColors.cta.withValues(alpha: 0.4),
-            minimumSize: const Size.fromHeight(56),
-          ),
-          onPressed: onThatHelped,
-          child: Text(
-            '✓  That helped — log it',
-            style: textTheme.labelLarge?.copyWith(color: Colors.white),
-          ),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton(
-          key: DecoderResultScreen.differentApproachKey,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: careblazersColors.primary,
-            side: BorderSide(color: careblazersColors.primary, width: 1.5),
-            minimumSize: const Size.fromHeight(56),
-          ),
-          onPressed: onDifferentApproach,
-          child: Text(
-            '→  Try a different approach',
-            style: textTheme.labelLarge?.copyWith(
-              color: careblazersColors.primary,
+        Semantics(
+          button: true,
+          enabled: onThatHelped != null,
+          label: 'That helped. Log this in the journal.',
+          child: ElevatedButton(
+            key: DecoderResultScreen.thatHelpedKey,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: careblazersColors.cta,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor:
+                  careblazersColors.cta.withValues(alpha: 0.4),
+              minimumSize: const Size.fromHeight(56),
+            ),
+            onPressed: onThatHelped,
+            child: Text(
+              '✓  That helped — log it',
+              style: textTheme.labelLarge?.copyWith(color: Colors.white),
             ),
           ),
         ),
         const SizedBox(height: 12),
-        TextButton(
-          key: DecoderResultScreen.talkToNataliKey,
-          style: TextButton.styleFrom(
-            foregroundColor: careblazersColors.link,
-            minimumSize: const Size.fromHeight(48),
+        Semantics(
+          button: true,
+          label: 'Try a different approach. Re-run the coach.',
+          child: OutlinedButton(
+            key: DecoderResultScreen.differentApproachKey,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: careblazersColors.primary,
+              side: BorderSide(color: careblazersColors.primary, width: 1.5),
+              minimumSize: const Size.fromHeight(56),
+            ),
+            onPressed: onDifferentApproach,
+            child: Text(
+              '→  Try a different approach',
+              style: textTheme.labelLarge?.copyWith(
+                color: careblazersColors.primary,
+              ),
+            ),
           ),
-          onPressed: onTalkToNatali,
-          child: Text(
-            '💬  I need to talk to Natali',
-            style: textTheme.labelLarge?.copyWith(
-              color: careblazersColors.link,
+        ),
+        const SizedBox(height: 12),
+        Semantics(
+          button: true,
+          label: 'Talk to Natali. Opens the Care Collective in your browser.',
+          child: TextButton(
+            key: DecoderResultScreen.talkToNataliKey,
+            style: TextButton.styleFrom(
+              foregroundColor: careblazersColors.link,
+              minimumSize: const Size.fromHeight(48),
+            ),
+            onPressed: onTalkToNatali,
+            child: Text(
+              '💬  I need to talk to Natali',
+              style: textTheme.labelLarge?.copyWith(
+                color: careblazersColors.link,
+              ),
             ),
           ),
         ),

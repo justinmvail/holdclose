@@ -40,11 +40,15 @@ class HomeScreen extends StatelessWidget {
         // the route stack ever ends up with a parent.
         automaticallyImplyLeading: false,
         actions: <Widget>[
-          IconButton(
-            key: settingsGearKey,
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-            onPressed: () => context.push('/settings'),
+          Semantics(
+            button: true,
+            label: 'Open Settings.',
+            child: IconButton(
+              key: settingsGearKey,
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Settings',
+              onPressed: () => context.push('/settings'),
+            ),
           ),
         ],
       ),
@@ -137,28 +141,32 @@ class _SecondaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    return Material(
-      color: careblazersColors.surfaceWarm,
-      child: InkWell(
-        key: rowKey,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  label,
-                  style: textTheme.titleLarge?.copyWith(
-                    color: careblazersColors.primary,
+    return Semantics(
+      button: true,
+      label: '$label. Double-tap to open.',
+      child: Material(
+        color: careblazersColors.surfaceWarm,
+        child: InkWell(
+          key: rowKey,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    label,
+                    style: textTheme.titleLarge?.copyWith(
+                      color: careblazersColors.primary,
+                    ),
                   ),
                 ),
-              ),
-              Icon(
-                Icons.arrow_forward,
-                color: careblazersColors.primarySoft,
-              ),
-            ],
+                Icon(
+                  Icons.arrow_forward,
+                  color: careblazersColors.primarySoft,
+                ),
+              ],
+            ),
           ),
         ),
       ),

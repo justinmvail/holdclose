@@ -130,20 +130,24 @@ class _EmptyState extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          ElevatedButton(
-            key: JournalScreen.emptyCtaKey,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: careblazersColors.cta,
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(56),
-            ),
-            onPressed: () => context.push('/decoder/behavior'),
-            child: Text(
-              'Open the decoder',
-              style: Theme.of(context)
-                  .textTheme
-                  .labelLarge
-                  ?.copyWith(color: Colors.white),
+          Semantics(
+            button: true,
+            label: 'Open the decoder. Start logging your first moment.',
+            child: ElevatedButton(
+              key: JournalScreen.emptyCtaKey,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: careblazersColors.cta,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(56),
+              ),
+              onPressed: () => context.push('/decoder/behavior'),
+              child: Text(
+                'Open the decoder',
+                style: Theme.of(context)
+                    .textTheme
+                    .labelLarge
+                    ?.copyWith(color: Colors.white),
+              ),
             ),
           ),
         ],

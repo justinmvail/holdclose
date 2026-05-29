@@ -180,17 +180,27 @@ class _CrisisCardScreenState extends ConsumerState<CrisisCardScreen> {
         title: const Text('Hospital handoff card'),
         automaticallyImplyLeading: false,
         actions: <Widget>[
-          IconButton(
-            key: CrisisCardScreen.printButtonKey,
-            icon: const Icon(Icons.print_outlined),
-            tooltip: 'Print / share as PDF',
-            onPressed: _patient == null ? null : _print,
+          Semantics(
+            button: true,
+            enabled: _patient != null,
+            label: 'Print or share the handoff card as a PDF.',
+            child: IconButton(
+              key: CrisisCardScreen.printButtonKey,
+              icon: const Icon(Icons.print_outlined),
+              tooltip: 'Print / share as PDF',
+              onPressed: _patient == null ? null : _print,
+            ),
           ),
-          IconButton(
-            key: CrisisCardScreen.qrButtonKey,
-            icon: const Icon(Icons.qr_code),
-            tooltip: 'Show patient QR code',
-            onPressed: _patient == null ? null : _showQr,
+          Semantics(
+            button: true,
+            enabled: _patient != null,
+            label: 'Show the patient handoff QR code.',
+            child: IconButton(
+              key: CrisisCardScreen.qrButtonKey,
+              icon: const Icon(Icons.qr_code),
+              tooltip: 'Show patient QR code',
+              onPressed: _patient == null ? null : _showQr,
+            ),
           ),
         ],
       ),
@@ -414,14 +424,18 @@ class _CardView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Switch(
-                    key: CrisisCardScreen.directiveDnrKey,
-                    value: patient.advanceDirective.dnr,
-                    activeThumbColor: careblazersColors.cta,
-                    onChanged: (bool v) => onChanged(
-                      patient.copyWith(
-                        advanceDirective:
-                            patient.advanceDirective.copyWith(dnr: v),
+                  Semantics(
+                    toggled: patient.advanceDirective.dnr,
+                    label: 'Do Not Resuscitate directive.',
+                    child: Switch(
+                      key: CrisisCardScreen.directiveDnrKey,
+                      value: patient.advanceDirective.dnr,
+                      activeThumbColor: careblazersColors.cta,
+                      onChanged: (bool v) => onChanged(
+                        patient.copyWith(
+                          advanceDirective:
+                              patient.advanceDirective.copyWith(dnr: v),
+                        ),
                       ),
                     ),
                   ),
@@ -598,34 +612,40 @@ class _EditableTextState extends State<_EditableText> {
                     onTapOutside: (PointerDownEvent _) => _commit(),
                     onSubmitted: (String _) => _commit(),
                   )
-                : InkWell(
-                    key: widget.fieldKey,
-                    onTap: _enterEdit,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              widget.value.isEmpty
-                                  ? 'Tap to add'
-                                  : widget.value,
-                              style: textTheme.bodyLarge?.copyWith(
-                                color: widget.value.isEmpty
-                                    ? careblazersColors.primarySoft
-                                    : careblazersColors.text,
+                : Semantics(
+                    button: true,
+                    label: hasLabel
+                        ? 'Edit ${widget.label.toLowerCase()}.'
+                        : 'Edit entry.',
+                    child: InkWell(
+                      key: widget.fieldKey,
+                      onTap: _enterEdit,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                widget.value.isEmpty
+                                    ? 'Tap to add'
+                                    : widget.value,
+                                style: textTheme.bodyLarge?.copyWith(
+                                  color: widget.value.isEmpty
+                                      ? careblazersColors.primarySoft
+                                      : careblazersColors.text,
+                                ),
                               ),
                             ),
-                          ),
-                          Icon(
-                            Icons.edit_outlined,
-                            size: 18,
-                            color: careblazersColors.primarySoft,
-                          ),
-                        ],
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 18,
+                              color: careblazersColors.primarySoft,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -731,35 +751,43 @@ class _StringBulletList extends StatelessWidget {
                   },
                 ),
               ),
-              IconButton(
-                key: removeKey(keyPrefix, i),
-                icon: Icon(
-                  Icons.close,
-                  size: 18,
-                  color: careblazersColors.primarySoft,
+              Semantics(
+                button: true,
+                label: 'Remove this entry.',
+                child: IconButton(
+                  key: removeKey(keyPrefix, i),
+                  icon: Icon(
+                    Icons.close,
+                    size: 18,
+                    color: careblazersColors.primarySoft,
+                  ),
+                  tooltip: 'Remove',
+                  onPressed: () {
+                    final List<String> next = List<String>.from(items)
+                      ..removeAt(i);
+                    onChanged(next);
+                  },
                 ),
-                tooltip: 'Remove',
-                onPressed: () {
-                  final List<String> next = List<String>.from(items)
-                    ..removeAt(i);
-                  onChanged(next);
-                },
               ),
             ],
           ),
         Padding(
           padding: const EdgeInsets.only(top: 4, left: 16),
-          child: TextButton.icon(
-            key: addKey(keyPrefix),
-            icon: const Icon(Icons.add, size: 18),
-            label: Text(addLabel),
-            style: TextButton.styleFrom(
-              foregroundColor: careblazersColors.primary,
+          child: Semantics(
+            button: true,
+            label: '$addLabel.',
+            child: TextButton.icon(
+              key: addKey(keyPrefix),
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(addLabel),
+              style: TextButton.styleFrom(
+                foregroundColor: careblazersColors.primary,
+              ),
+              onPressed: () {
+                final List<String> next = List<String>.from(items)..add('');
+                onChanged(next);
+              },
             ),
-            onPressed: () {
-              final List<String> next = List<String>.from(items)..add('');
-              onChanged(next);
-            },
           ),
         ),
       ],
@@ -836,18 +864,22 @@ class _MedicationList extends StatelessWidget {
                       onChanged(next);
                     },
                   ),
-                  TextButton.icon(
-                    key: removeKey(i),
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text('Remove'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: careblazersColors.primarySoft,
+                  Semantics(
+                    button: true,
+                    label: 'Remove this medication.',
+                    child: TextButton.icon(
+                      key: removeKey(i),
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Remove'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: careblazersColors.primarySoft,
+                      ),
+                      onPressed: () {
+                        final List<Medication> next =
+                            List<Medication>.from(medications)..removeAt(i);
+                        onChanged(next);
+                      },
                     ),
-                    onPressed: () {
-                      final List<Medication> next =
-                          List<Medication>.from(medications)..removeAt(i);
-                      onChanged(next);
-                    },
                   ),
                 ],
               ),
@@ -855,18 +887,22 @@ class _MedicationList extends StatelessWidget {
           ),
         Padding(
           padding: const EdgeInsets.only(left: 16),
-          child: TextButton.icon(
-            key: addKey,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add medication'),
-            style: TextButton.styleFrom(
-              foregroundColor: careblazersColors.primary,
+          child: Semantics(
+            button: true,
+            label: 'Add medication.',
+            child: TextButton.icon(
+              key: addKey,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add medication'),
+              style: TextButton.styleFrom(
+                foregroundColor: careblazersColors.primary,
+              ),
+              onPressed: () {
+                final List<Medication> next = List<Medication>.from(medications)
+                  ..add(const Medication(name: '', dose: '', schedule: ''));
+                onChanged(next);
+              },
             ),
-            onPressed: () {
-              final List<Medication> next = List<Medication>.from(medications)
-                ..add(const Medication(name: '', dose: '', schedule: ''));
-              onChanged(next);
-            },
           ),
         ),
       ],

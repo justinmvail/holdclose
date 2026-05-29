@@ -355,7 +355,7 @@ automation. Each phase leaves the suite green.
   Tests: at 11pm local, quiet hours active; at noon, inactive; dark
   mode after 6pm flips theme.
 
-- [ ] **Task 28: Font size scaler + VoiceOver labels.** Wire the
+- [x] **Task 28: Font size scaler + VoiceOver labels.** Wire the
   `settings.fontMultiplier` to a `MediaQuery` `textScaler` override
   at the app root. Add `Semantics` ancestors with explicit labels to
   every interactive widget in: HomeScreen, BehaviorPickerScreen,

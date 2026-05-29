@@ -114,10 +114,16 @@ class _TriageScreenState extends ConsumerState<TriageScreen> {
     return Scaffold(
       backgroundColor: careblazersColors.background,
       appBar: AppBar(
-        leading: BackButton(
-          key: TriageScreen.backButtonKey,
-          onPressed: _goBack,
-          color: careblazersColors.primary,
+        leading: Semantics(
+          button: true,
+          label: _questionIndex == 0
+              ? 'Back. Leave triage.'
+              : 'Back to previous question.',
+          child: BackButton(
+            key: TriageScreen.backButtonKey,
+            onPressed: _goBack,
+            color: careblazersColors.primary,
+          ),
         ),
         title: _BehaviorChip(label: _behaviorLabel),
         centerTitle: true,
@@ -159,21 +165,28 @@ class _TriageScreenState extends ConsumerState<TriageScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              ElevatedButton(
-                key: TriageScreen.nextButtonKey,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: careblazersColors.cta,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor:
-                      careblazersColors.cta.withValues(alpha: 0.35),
-                  disabledForegroundColor:
-                      Colors.white.withValues(alpha: 0.7),
-                  minimumSize: const Size.fromHeight(56),
-                ),
-                onPressed: nextEnabled ? () => _goNext(answers) : null,
-                child: Text(
-                  'Next →',
-                  style: textTheme.labelLarge?.copyWith(color: Colors.white),
+              Semantics(
+                button: true,
+                enabled: nextEnabled,
+                label: _questionIndex == TriageScreen.totalQuestions - 1
+                    ? 'Next. Get the script.'
+                    : 'Next question.',
+                child: ElevatedButton(
+                  key: TriageScreen.nextButtonKey,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: careblazersColors.cta,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor:
+                        careblazersColors.cta.withValues(alpha: 0.35),
+                    disabledForegroundColor:
+                        Colors.white.withValues(alpha: 0.7),
+                    minimumSize: const Size.fromHeight(56),
+                  ),
+                  onPressed: nextEnabled ? () => _goNext(answers) : null,
+                  child: Text(
+                    'Next →',
+                    style: textTheme.labelLarge?.copyWith(color: Colors.white),
+                  ),
                 ),
               ),
             ],
