@@ -44,6 +44,10 @@ pre-staged content beyond the seed-data scaffolding.
 - **PDF**: `pdf` 3.11+ + `printing` 5.13+ (doctor-visit packet).
 - **URL launching**: `url_launcher` 6.3+ (decoder result → "Talk to
   Natali" outbound link; future share-action surfaces).
+- **Share sheet**: `share_plus` 10+ (library card detail → AppBar share
+  action per §5.8; future "share this script" surfaces). Wrapped
+  behind the `Sharer` interface so widget tests can recording-override
+  it the same way `LinkLauncher` is.
 - **No new top-level deps** without updating this file. Don't add
   Bloc, Provider (lowercase, the package), MobX, or any other state
   library. Don't add hand-rolled HTTP. Don't add new font families.

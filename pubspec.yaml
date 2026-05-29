@@ -57,6 +57,9 @@ dependencies:
   # External URLs (decoder result "Talk to Natali" outbound link)
   url_launcher: ^6.3.0
 
+  # Share sheet (library card detail share action — BUILD_SPEC.md §5.8)
+  share_plus: ^10.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

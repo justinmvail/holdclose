@@ -297,7 +297,7 @@ automation. Each phase leaves the suite green.
   Tests: today's card is deterministic by date; all cards in the
   fixed sections are linked; tap routes to detail with id.
 
-- [ ] **Task 23: Library card detail
+- [x] **Task 23: Library card detail
   (`lib/screens/library/library_card_screen.dart`).** Per §5.8. Reads
   card by id from seeds. AppBar: title + share action (uses
   `Share.share()` from `share_plus` — add to pubspec if missing; check
