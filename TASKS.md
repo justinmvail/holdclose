@@ -95,7 +95,7 @@ automation. Each phase leaves the suite green.
   behavior emits at least 3 partial chunks then a done; the done
   carries a valid DecoderResult.
 
-- [ ] **Task 7: StorageProvider + drift database
+- [x] **Task 7: StorageProvider + drift database
   (`lib/providers/storage_provider.dart`, `lib/db/database.dart`,
   `lib/db/tables.dart`).** Abstract per BUILD_SPEC.md §6.2.
   `DriftStorageProvider`: Drift tables for `journal_entries`,
