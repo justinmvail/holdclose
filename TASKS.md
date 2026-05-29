@@ -487,7 +487,7 @@ runs on iPhone.
   model under bundled assets. No tests this iter (asset bundling
   is a build-step affair).
 
-- [ ] **Phase 9.2: Dart-side `BundledTTSProvider` skeleton +
+- [x] **Phase 9.2: Dart-side `BundledTTSProvider` skeleton +
   platform channel contract.** Implement `BundledTTSProvider` in
   `lib/providers/bundled_tts_provider.dart` conforming to
   `TTSProvider`. Bridge to a new `careblazers/tts` MethodChannel
