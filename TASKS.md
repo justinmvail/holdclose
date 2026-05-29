@@ -278,7 +278,7 @@ automation. Each phase leaves the suite green.
 
 ## Phase 5 — Library + Crisis card
 
-- [ ] **Task 21: Library card seeds
+- [x] **Task 21: Library card seeds
   (`lib/seed/library_cards.dart`).** Twelve cards per BUILD_SPEC.md
   §9.4 — each with id, title, hook (1 sentence), body (placeholder
   paragraph of 50–80 words, marked `// TODO(natali): refine`).
