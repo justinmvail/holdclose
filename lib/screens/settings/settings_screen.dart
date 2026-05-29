@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/tts_provider.dart';
 import '../../theme.dart';
+import '../../widgets/voice_quality_banner.dart';
 
 /// Settings (BUILD_SPEC.md §5.10).
 ///
@@ -135,6 +136,7 @@ class _AudioSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         const _SectionHeader(title: 'Read scripts aloud'),
+        const VoiceQualityBanner(),
         _SectionCard(
           child: Column(
             children: <Widget>[
@@ -147,6 +149,18 @@ class _AudioSection extends ConsumerWidget {
                 ),
                 value: audioOn,
                 onChanged: (bool v) => notifier.setReadScriptsAloud(v),
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                key: const Key('settings-prefer-siri-toggle'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Use Siri voice'),
+                subtitle: const Text(
+                  'Prefer iOS 17+ Siri voices over the compact default.',
+                ),
+                value: settings.preferSiriVoice,
+                onChanged:
+                    audioOn ? (bool v) => notifier.setPreferSiriVoice(v) : null,
               ),
               const Divider(height: 1),
               _VoicePicker(

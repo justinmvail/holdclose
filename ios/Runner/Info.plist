@@ -24,6 +24,17 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<!-- Voice quality banner deep-links to Settings → Accessibility →
+		     Spoken Content. canLaunchUrl on iOS only returns true when
+		     the scheme is declared here; without these entries the
+		     fallback chain ends up at the public `app-settings:` URL,
+		     which lands on the app's own settings page instead of
+		     Accessibility. -->
+		<string>App-Prefs</string>
+		<string>prefs</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

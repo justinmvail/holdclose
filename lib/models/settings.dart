@@ -45,6 +45,7 @@ abstract class AppSettings with _$AppSettings {
     required bool allowAudioDuringQuietHours,
     required bool darkModeAtNight,
     required bool resetOnLaunchDemo,
+    @Default(true) bool preferSiriVoice,
   }) = _AppSettings;
 
   factory AppSettings.fromJson(Map<String, dynamic> json) =>

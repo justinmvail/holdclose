@@ -184,12 +184,18 @@ class _PageBody extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
+          // Navy block per BUILD_SPEC.md §3.1 (`primary` dominates;
+          // orange is reserved as a CTA accent). The app-icon-style
+          // orange-square-with-white-C lives on the home screen, not
+          // here — repeating it on every onboarding page made the
+          // whole flow read as orange-on-white instead of the
+          // navy-dominant brand the site uses.
           Container(
             width: 120,
             height: 120,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: careblazersColors.cta,
+              color: careblazersColors.primary,
               borderRadius: BorderRadius.circular(28),
             ),
             child: Text(
@@ -240,8 +246,11 @@ class _DotIndicator extends StatelessWidget {
             height: 8,
             margin: const EdgeInsets.symmetric(horizontal: 4),
             decoration: BoxDecoration(
+              // Navy active dot, dimmed navy for inactive. Orange is
+              // reserved for the CTA button below — using it here
+              // doubled the orange surface area on the carousel.
               color: i == active
-                  ? careblazersColors.cta
+                  ? careblazersColors.primary
                   : careblazersColors.primarySoft.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(4),
             ),

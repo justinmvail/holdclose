@@ -69,6 +69,13 @@ class Settings extends _$Settings {
   Future<void> setVoiceId(String? value) =>
       _update(state.copyWith(voiceId: value));
 
+  /// Toggle "Use Siri voice" — when on, [OSTTSProvider.setPreferSiriVoice]
+  /// prefers an iOS 17+ Siri voice over generic enhanced/premium on
+  /// auto-pick. The voice picker dropdown still wins when the user
+  /// has explicitly selected a voice.
+  Future<void> setPreferSiriVoice(bool value) =>
+      _update(state.copyWith(preferSiriVoice: value));
+
   /// Persist the speech-rate multiplier (BUILD_SPEC.md §11.1 —
   /// 0.7×/1.0×/1.3× presets). The TTS provider clamps out-of-range
   /// values; this setter does not.
