@@ -243,7 +243,7 @@ automation. Each phase leaves the suite green.
   with zero entries; entries grouped correctly by date; pattern
   alert displays when service returns one.
 
-- [ ] **Task 18: Pattern detector service
+- [x] **Task 18: Pattern detector service
   (`lib/services/pattern_detector.dart`).** Implements the rules from
   §7.6 against the journal store. Returns `List<PatternAlert>` with
   `kind`, `text`, `severity`. Three rules in v1: 3+ falls in 7 days
