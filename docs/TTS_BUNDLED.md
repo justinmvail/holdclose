@@ -452,3 +452,119 @@ Tests live in
 hands back the injected `OSTTSProvider`, plus a single WARN-line
 capture. The success path asserts the probe verb is exactly `probe`
 and that no WARN line fires when the channel returns null.
+
+## Phase 10.1 — espeak-ng vendor for iOS (path picked)
+
+Phase 9.3's `EspeakNGPhonemizer` stub maps characters one-for-one
+against `phoneme_id_map`, which produces *non-empty* IDs the model
+will accept but the wrong phonetic interpretation — audibly gibberish
+on the 2026-05-29 simulator demo. The `HttpPhonemizer` pitch-week
+workaround delegates to `tools/claude_shim.py`'s `/phonemize`
+endpoint, which is fine for the demo but doesn't ship to TestFlight.
+Phase 10's arc replaces both with on-device espeak-ng. This section
+records the **path-picking iter** (10.1); 10.2 wires the actual
+`espeak_TextToPhonemes` call.
+
+### The two evaluated paths
+
+**CocoaPod path** — `pod 'espeak-ng-ios'`. Inspecting the public
+CocoaPods registry surfaces one community pod by that name; its
+latest published spec tracks espeak-ng **1.46.x** (last update 2021).
+The 1.52-line phoneme tables that the bundled Piper Amy voice was
+trained against are not in that drop, and there's no arm64-simulator
+slice. Maintainer activity has been quiet for ≥ 18 months. **Rejected.**
+
+**Vendor path** — pull espeak-ng C sources at a pinned commit and
+build them as a Pods-vendored static library. The Home Assistant
+iOS voice library (the reference cited in TASKS.md) uses this exact
+shape: a local `.podspec` with `source_files` + `compiler_flags`
++ `resource_bundles` for the `espeak-ng-data` directory. **Picked.**
+
+### Pinned version
+
+- Tag: **1.52.0**
+- Commit: `4870adfa25b1a32b4361592f1be8a40337c58d6c`
+- Upstream: https://github.com/espeak-ng/espeak-ng
+
+The Piper Amy voice config's IPA token set aligns with espeak-ng 1.52
+(verified against `en_US-amy-medium.onnx.json`'s `phoneme_id_map`),
+so pinning to 1.52.0 lines up directly with the bundled model's
+training assumption. Bumping past 1.52 requires re-validating the
+phoneme set — a Phase-10.4 acceptance concern.
+
+### What lands in 10.1
+
+- `ios/Vendored/espeak-ng/espeak-ng.podspec` — local pod declaration
+  with vendored source globs, public umbrella headers, compiler
+  flags (`USE_ASYNC=0`, `HAVE_PCAUDIOLIB_AUDIO_H=0`, version macro),
+  and `resource_bundles` wiring `Resources/espeak-ng-data/` into
+  `espeak-ng.bundle` inside the Runner app.
+- `ios/Podfile` — adds `pod 'espeak-ng', :path => 'Vendored/espeak-ng'`
+  alongside `onnxruntime-objc`.
+- `ios/Runner/Runner-Bridging-Header.h` — adds a `__has_include`-
+  guarded import of `<espeak-ng/espeak_ng.h>` + `<espeak-ng/speak_lib.h>`.
+  The guard sets `CAREBLAZERS_HAS_ESPEAK_NG` to 1 when the headers
+  resolve and 0 otherwise — fresh checkouts that haven't run the
+  vendor script keep building, with the existing character-lookup
+  fallback handling the phonemizer path.
+- `tools/vendor_espeak_ng.sh` — operator-runnable shell script that
+  shallow-clones espeak-ng at the pinned tag, verifies the commit
+  hash, copies `src/libespeak-ng/` + `src/include/` into the Pod
+  layout, and writes the runtime data into both
+  `ios/Vendored/espeak-ng/Resources/espeak-ng-data/` (iOS Pod
+  resource bundle) and `assets/tts/espeak-ng-data/` (Flutter-asset
+  mirror that Android Phase 10.3 will consume).
+- `pubspec.yaml` — adds `assets/tts/espeak-ng-data/` to
+  `flutter.assets`.
+- `ios/RunnerTests/RunnerTests.swift` — adds
+  `testEspeakNgVendorLoadsAndPhonemizes`: initializes espeak-ng,
+  calls `espeak_TextToPhonemes("hello world")`, asserts the IPA
+  output is non-empty. Skips when `CAREBLAZERS_HAS_ESPEAK_NG == 0`
+  (pre-vendor) or when `espeak-ng-data` isn't reachable from the
+  test bundle.
+- `.gitignore` — excludes `ios/Vendored/espeak-ng/src/`,
+  `ios/Vendored/espeak-ng/Resources/`, and the
+  `assets/tts/espeak-ng-data/` payload (the README placeholder is
+  kept so the asset directory exists in fresh checkouts).
+- `BUILD_SPEC.md §1` bundled-assets table — extended with the new
+  `assets/tts/espeak-ng-data/` row.
+
+### Setup contract
+
+On a fresh checkout, the operator runs once:
+
+```sh
+tools/vendor_espeak_ng.sh
+cd ios && pod install
+```
+
+After that, `flutter run -d <ios-device>` builds with the vendored
+static library linked, the bridging-header `__has_include` flips
+on, and Phase 10.2's `espeak_TextToPhonemes` call is live.
+
+CI doesn't run the vendor script — the `flutter test` autoloop gate
+only exercises Dart code, and the iOS smoke runs are operator-driven.
+The XCTest covering the espeak load skips cleanly in CI; the
+character-lookup fallback keeps the build green either way.
+
+### Why a local pod, not a git submodule
+
+A git submodule was the obvious alternative — it would commit the
+upstream reference into the repo. Two reasons against it:
+
+1. **`pod install` doesn't natively understand submodules.** It would
+   either need a `prepare_command` to populate the tree, or the
+   operator has to remember to `git submodule update --init` before
+   `pod install`. Same number of steps as the explicit script, with
+   more state to leak between operators.
+2. **The vendor script can verify the commit hash** (`git rev-parse
+   HEAD` against the pinned SHA), so a retagged or force-pushed
+   upstream surfaces as a script-side ERROR rather than a silent
+   build of unexpected sources. Submodules carry the SHA but the
+   verification only fires at `git submodule update` time — easy to
+   miss.
+
+The local `.podspec` + operator script is the same pattern Home
+Assistant's iOS voice library uses, and it composes cleanly with the
+Phase 10.3 Android mirror (where the espeak-ng-data Flutter-asset
+copy is the canonical read path — no CocoaPods analog over there).

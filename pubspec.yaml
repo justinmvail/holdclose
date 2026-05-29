@@ -112,3 +112,10 @@ flutter:
     # the espeak phoneme + inference config consumed by the iOS /
     # Android bridges. See BUILD_SPEC.md §1 — Bundled assets.
     - assets/tts/en_US-amy-medium/
+    # espeak-ng runtime data (Phase 10.1 — text-to-phoneme). Language
+    # rules, phoneme tables, voicedata that `espeak_Initialize`
+    # consults at session start. Mirrored from
+    # `ios/Vendored/espeak-ng/Resources/espeak-ng-data/` by
+    # `tools/vendor_espeak_ng.sh`; Android (Phase 10.3) consumes it
+    # from this Flutter-asset path via AssetManager.
+    - assets/tts/espeak-ng-data/

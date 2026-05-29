@@ -48,6 +48,17 @@ GoogleService-Info.plist
 tools/__pycache__/
 tools/.venv/
 
+# Vendored espeak-ng — populated by tools/vendor_espeak_ng.sh from
+# upstream espeak-ng 1.52.0. The podspec + README are committed; the
+# ~20 MB of C sources and ~5 MB of runtime data are not. See
+# ios/Vendored/espeak-ng/README.md.
+ios/Vendored/espeak-ng/src/
+ios/Vendored/espeak-ng/Resources/
+# Mirror of the espeak-ng runtime data under Flutter assets — same
+# vendor script writes it; keep the README placeholder tracked.
+assets/tts/espeak-ng-data/*
+!assets/tts/espeak-ng-data/README.md
+
 # Misc
 *.log
 coverage/

@@ -116,4 +116,79 @@ class RunnerTests: XCTestCase {
         ]
         return candidates.compactMap { $0 }.first
     }
+
+    // MARK: Phase 10.1 — espeak-ng vendor smoke
+
+    /// Loads the vendored espeak-ng library, calls
+    /// `espeak_TextToPhonemes("hello world")`, and asserts a non-empty
+    /// IPA-phoneme string comes back. Smoke-tests the vendor drop —
+    /// proves the library links, the data dir resolves, and the
+    /// upstream API responds to a trivial call. The phoneme→ID mapping
+    /// + tokenizer wiring is Phase 10.2's concern; this test only
+    /// covers "the library loads and produces something."
+    ///
+    /// Skips when `CAREBLAZERS_HAS_ESPEAK_NG` is 0 — that's the state
+    /// before `tools/vendor_espeak_ng.sh` runs. Once the vendor script
+    /// drops the sources and `pod install` links the library, the
+    /// `__has_include` in Runner-Bridging-Header.h flips the flag and
+    /// this test starts running for real.
+    func testEspeakNgVendorLoadsAndPhonemizes() throws {
+        #if CAREBLAZERS_HAS_ESPEAK_NG
+        // Resolve the bundled espeak-ng-data path. CocoaPods drops
+        // it under espeak-ng.bundle/espeak-ng-data/ in the Runner
+        // app; the test bundle inherits the same path via the host
+        // app reference.
+        let dataPath = locateEspeakDataDirectory()
+        guard let dataPathCStr = dataPath?.cString(using: .utf8) else {
+            throw XCTSkip("espeak-ng-data not reachable from test bundle — vendor script not yet run, or resource bundle not linked into RunnerTests")
+        }
+
+        // espeak_Initialize signature: (output mode, buflength, path, options).
+        // AUDIO_OUTPUT_SYNCHRONOUS=2; we discard audio in this test.
+        let rate = espeak_Initialize(AUDIO_OUTPUT_SYNCHRONOUS, 0, dataPathCStr, 0)
+        XCTAssertGreaterThan(rate, 0,
+                             "espeak_Initialize returned non-positive sample rate — data path malformed or library mis-linked")
+        defer { espeak_Terminate() }
+
+        // espeak_SetVoiceByName accepts "en-us" out of the box once
+        // the data dir is reachable.
+        let voiceResult = espeak_SetVoiceByName("en-us")
+        XCTAssertEqual(voiceResult, EE_OK,
+                       "espeak_SetVoiceByName failed for en-us — voicedata missing under espeak-ng-data/voices/")
+
+        // espeak_TextToPhonemes consumes a `const void **` pointer to
+        // the text and advances it. We pass IPA (phonememode=0x02)
+        // with a separator of 0 (no separator), output as a single
+        // string of Unicode IPA characters.
+        var text = "hello world".cString(using: .utf8)!
+        let phonemes: UnsafePointer<CChar>? = text.withUnsafeMutableBufferPointer { buf -> UnsafePointer<CChar>? in
+            var textPtr: UnsafeRawPointer? = UnsafeRawPointer(buf.baseAddress)
+            return espeak_TextToPhonemes(&textPtr, espeakCHARS_UTF8, 0x02)
+        }
+        XCTAssertNotNil(phonemes, "espeak_TextToPhonemes returned NULL")
+        let ipa = phonemes.flatMap { String(cString: $0) } ?? ""
+        XCTAssertFalse(ipa.isEmpty,
+                       "espeak_TextToPhonemes returned an empty string for 'hello world'")
+        #else
+        throw XCTSkip("Vendored espeak-ng not present — run tools/vendor_espeak_ng.sh and `pod install`, then re-run this test")
+        #endif
+    }
+
+    /// Locate the espeak-ng-data directory. CocoaPods `resource_bundles`
+    /// drops it under `Bundle.main.url(forResource: "espeak-ng",
+    /// withExtension: "bundle")/espeak-ng-data/`. Fallback candidates
+    /// cover the Flutter-asset mirror path and a flat test-bundle
+    /// layout for hermetic runs.
+    private func locateEspeakDataDirectory() -> String? {
+        let mainBundle = Bundle.main
+        let candidates: [String?] = [
+            mainBundle.url(forResource: "espeak-ng", withExtension: "bundle")?
+                .appendingPathComponent("espeak-ng-data").path,
+            mainBundle.path(forResource: "espeak-ng-data", ofType: nil,
+                            inDirectory: "Frameworks/App.framework/flutter_assets/assets/tts"),
+            mainBundle.path(forResource: "espeak-ng-data", ofType: nil),
+            Bundle(for: type(of: self)).path(forResource: "espeak-ng-data", ofType: nil),
+        ]
+        return candidates.compactMap { $0 }.first
+    }
 }

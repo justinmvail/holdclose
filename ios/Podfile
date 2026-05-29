@@ -39,6 +39,15 @@ target 'Runner' do
   # what the Phase 9.1 voice model was exported against.
   pod 'onnxruntime-objc', '~> 1.18.0'
 
+  # BUILD_SPEC.md §1 (Phase 10.1): text-to-phoneme via espeak-ng 1.52.0,
+  # vendored as a local pod under ios/Vendored/espeak-ng/. The sources
+  # land via `tools/vendor_espeak_ng.sh` (operator-runnable on fresh
+  # checkouts) — the podspec is committed so `pod install` resolves
+  # the dependency reference cleanly even when the sources aren't yet
+  # vendored. See ios/Vendored/espeak-ng/README.md for the rationale
+  # vs. the upstream community `espeak-ng-ios` pod (1.46.x, stale).
+  pod 'espeak-ng', :path => 'Vendored/espeak-ng'
+
   target 'RunnerTests' do
     inherit! :search_paths
   end

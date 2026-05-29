@@ -67,6 +67,7 @@ Static binaries shipped inside the app bundle (declared under
 | `assets/seed/` | small | Demo-mode seed JSON (sample voice-note placeholder) |
 | `assets/tts/en_US-amy-medium/en_US-amy-medium.onnx` | ~60 MB | Piper neural-TTS voice model (22 kHz, medium quality, en-US female "Amy"). Source: `rhasspy/piper-voices` Hugging Face mirror, tagged release `v1.0.0`. Consumed by `BundledTTSProvider` via `onnxruntime` (TASKS.md Phase 9). |
 | `assets/tts/en_US-amy-medium/en_US-amy-medium.onnx.json` | ~5 KB | Companion config: espeak-ng phoneme map + inference params (`noise_scale`, `length_scale`, `noise_w`). Read by the iOS/Android bridges at session init. |
+| `assets/tts/espeak-ng-data/` | ~5 MB | espeak-ng 1.52.0 runtime data (language rules, phoneme tables, voicedata). Pinned to upstream commit `4870adfa25b1a32b4361592f1be8a40337c58d6c`. Populated by `tools/vendor_espeak_ng.sh` (operator-runnable, not committed); see TASKS.md Phase 10.1 and `docs/TTS_BUNDLED.md`. iOS reads from the CocoaPods-bundled mirror at `ios/Vendored/espeak-ng/Resources/espeak-ng-data/`; Android reads from this Flutter-asset path directly (Phase 10.3). |
 
 The medium-quality model is ~60 MB rather than the ~30 MB initially
 budgeted in TASKS.md Phase 9.1; the lighter envelope corresponds to

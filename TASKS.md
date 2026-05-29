@@ -612,7 +612,7 @@ Why this is the right long-term answer (vs. switching engines):
 Sized as ~5 atomic iters; iOS slice ships first since the pitch demo
 runs on iPhone.
 
-- [ ] **Phase 10.1: Vendor espeak-ng for iOS.** Two paths to evaluate
+- [x] **Phase 10.1: Vendor espeak-ng for iOS.** Two paths to evaluate
   in this iter — pick the one with a maintained pod:
     - **CocoaPod path**: `pod 'espeak-ng-ios'` (community, verify
       it tracks espeak-ng 1.52.x) added to ios/Podfile alongside
