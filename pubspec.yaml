@@ -35,6 +35,12 @@ dependencies:
 
   # Network
   dio: ^5.7.0
+  # HMAC-SHA256 for client-minted forum JWTs (BUILD_SPEC.md §13 +
+  # TASKS.md Phase 13.9). Already pulled in transitively by drift +
+  # http; promoted to a direct dep here because
+  # `lib/providers/forum_jwt_provider.dart` imports it directly to
+  # sign the shared-secret JWT.
+  crypto: ^3.0.0
 
   # Audio / TTS
   flutter_tts: ^4.2.0

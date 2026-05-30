@@ -1105,7 +1105,7 @@ the API contract.
 
 ### Flutter integration
 
-- [ ] **Phase 13.9: Forum API client + auth wiring
+- [x] **Phase 13.9: Forum API client + auth wiring
   (`lib/services/forum_api_client.dart` +
   `lib/providers/forum_jwt_provider.dart`).** Dio-based client
   pointed at the Cloudflare Worker URL (configurable via

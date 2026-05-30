@@ -36,7 +36,12 @@ pre-staged content beyond the seed-data scaffolding.
 - **Local persistence**: `drift` 2.20+ (SQLite). `flutter_secure_storage`
   for auth tokens only.
 - **Models**: `freezed` 2.5+ + `json_serializable` 6.8+.
-- **HTTP**: `dio` 5.7+ for the LLM shim calls.
+- **HTTP**: `dio` 5.7+ for the LLM shim calls and the forum API client
+  (Phase 13.9).
+- **Crypto**: `crypto` 3+ — promoted from transitive to a direct
+  dependency in Phase 13.9 so `lib/providers/forum_jwt_provider.dart`
+  can mint HS256 JWTs against the shared secret without pulling a
+  fourth-party JWT library. Used only for `Hmac(sha256, ...)`.
 - **TTS**: `flutter_tts` 4.2+ (wraps iOS AVSpeechSynthesizer +
   Android TextToSpeech) — fallback path.
 - **Bundled neural TTS**: `onnxruntime` 1.4+ (the Flutter community
