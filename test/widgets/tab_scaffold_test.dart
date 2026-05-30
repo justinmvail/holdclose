@@ -47,10 +47,23 @@ String _currentPath(GoRouter router) =>
 
 void main() {
   group('TabScaffoldBar — destinations', () {
-    test('declares six tabs in BUILD_SPEC.md §4.1 + Phase 12.8 order', () {
+    test('declares seven tabs in BUILD_SPEC.md §4.1 + Phase 12.8/13.10 order',
+        () {
+      // Branch order is the shell-branch declaration order; the bar
+      // re-orders Community in front of Crisis via visibleBranches but
+      // the destination array still follows the underlying branch
+      // indices so a deep-link from a notification tap still resolves.
       expect(
         TabScaffoldBar.destinations.map((TabScaffoldDestination d) => d.label),
-        <String>['Home', 'Journal', 'Meds', 'Visits', 'Library', 'Crisis'],
+        <String>[
+          'Home',
+          'Journal',
+          'Meds',
+          'Visits',
+          'Library',
+          'Crisis',
+          'Community',
+        ],
       );
     });
 
@@ -74,11 +87,17 @@ void main() {
       expect(TabScaffoldBar.destinations[5].icon, Icons.warning_amber_outlined);
       expect(TabScaffoldBar.destinations[5].selectedIcon, Icons.warning_amber);
     });
+
+    test('Community uses forum_outlined / forum (Phase 13.10)', () {
+      expect(TabScaffoldBar.destinations[6].icon, Icons.forum_outlined);
+      expect(TabScaffoldBar.destinations[6].selectedIcon, Icons.forum);
+    });
   });
 
   group('TabScaffold — branch paths', () {
     test(
-        'branch paths line up with BUILD_SPEC.md §4.1 + Phase 12.8 tab order',
+        'branch paths line up with BUILD_SPEC.md §4.1 + Phase 12.8/13.10 tab '
+        'order',
         () {
       expect(
         TabScaffold.tabBranchPaths,
@@ -88,49 +107,54 @@ void main() {
           '/medications',
           '/appointments',
           '/library',
-          '/crisis'
+          '/crisis',
+          '/community',
         ],
       );
     });
 
     test('visibleBranchIndicesFor collapses Meds + Visits when useTrackers OFF',
         () {
+      // Phase 13.10: Community sits between Library and Crisis in the
+      // visible order regardless of which tracker tabs collapse.
       final AppSettings off =
           AppSettings.defaults().copyWith(useTrackers: false);
       expect(TabScaffold.visibleBranchIndicesFor(off),
-          <int>[0, 1, 4, 5]);
+          <int>[0, 1, 4, 6, 5]);
     });
 
     test('per-feature toggles drop matching tabs', () {
       final AppSettings noMeds =
           AppSettings.defaults().copyWith(medicationsEnabled: false);
       expect(TabScaffold.visibleBranchIndicesFor(noMeds),
-          <int>[0, 1, 3, 4, 5]);
+          <int>[0, 1, 3, 4, 6, 5]);
 
       final AppSettings noAppts =
           AppSettings.defaults().copyWith(appointmentsEnabled: false);
       expect(TabScaffold.visibleBranchIndicesFor(noAppts),
-          <int>[0, 1, 2, 4, 5]);
+          <int>[0, 1, 2, 4, 6, 5]);
     });
 
-    test('defaults expose every tab', () {
+    test('defaults expose every tab with Community between Library and Crisis',
+        () {
       expect(TabScaffold.visibleBranchIndicesFor(AppSettings.defaults()),
-          <int>[0, 1, 2, 3, 4, 5]);
+          <int>[0, 1, 2, 3, 4, 6, 5]);
     });
   });
 
   group('TabScaffoldBar — standalone widget', () {
-    testWidgets('renders all six NavigationDestinations by default',
+    testWidgets('renders all seven NavigationDestinations by default',
         (WidgetTester tester) async {
       await _pumpBar(tester, currentIndex: 0);
 
       expect(find.byType(NavigationBar), findsOneWidget);
-      expect(find.byType(NavigationDestination), findsNWidgets(6));
+      expect(find.byType(NavigationDestination), findsNWidgets(7));
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Journal'), findsOneWidget);
       expect(find.text('Meds'), findsOneWidget);
       expect(find.text('Visits'), findsOneWidget);
       expect(find.text('Library'), findsOneWidget);
+      expect(find.text('Community'), findsOneWidget);
       expect(find.text('Crisis'), findsOneWidget);
     });
 
@@ -150,10 +174,14 @@ void main() {
       expect(find.byType(NavigationDestination), findsNWidgets(4));
       expect(find.text('Meds'), findsNothing);
       expect(find.text('Visits'), findsNothing);
+      expect(find.text('Community'), findsNothing);
     });
 
     testWidgets('forwards taps to onDestinationSelected',
         (WidgetTester tester) async {
+      // Default visibleBranches put Community (visual slot 5) between
+      // Library (4) and Crisis (visual slot 6) — the bar callback
+      // reports the *visual* slot index, not the underlying branch.
       int? tapped;
       await _pumpBar(
         tester,
@@ -162,6 +190,9 @@ void main() {
       );
 
       await tester.tap(find.byIcon(Icons.warning_amber_outlined));
+      expect(tapped, 6);
+
+      await tester.tap(find.byIcon(Icons.forum_outlined));
       expect(tapped, 5);
 
       await tester.tap(find.byIcon(Icons.book_outlined));

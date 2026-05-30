@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../screens/chat/chat_screen.dart';
 import '../screens/chat/conversation_list_screen.dart';
+import '../screens/community/community_feed_screen.dart';
 import '../screens/crisis/crisis_card_screen.dart';
 import '../screens/decoder/behavior_picker_screen.dart';
 import '../screens/decoder/decoder_result_screen.dart';
@@ -57,6 +58,7 @@ class CareblazersRoutes {
   static const String appointmentDetail = 'appointment-detail';
   static const String appointmentForm = 'appointment-form';
   static const String appointmentEdit = 'appointment-edit';
+  static const String community = 'community';
 }
 
 /// Build a fresh GoRouter wired with every BUILD_SPEC.md §5 route.
@@ -323,6 +325,20 @@ GoRouter buildRouter({
                 name: CareblazersRoutes.crisis,
                 builder: (BuildContext context, GoRouterState state) =>
                     const CrisisCardScreen(),
+              ),
+            ],
+          ),
+          // Community lives in its own branch (Phase 13.10). Appended
+          // after Crisis to preserve every pre-existing branch index;
+          // the tab bar maps it between Library and Crisis at render
+          // time via [TabScaffoldBar.visibleBranches].
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(
+                path: '/community',
+                name: CareblazersRoutes.community,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const CommunityFeedScreen(),
               ),
             ],
           ),

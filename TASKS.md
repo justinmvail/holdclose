@@ -1120,7 +1120,7 @@ the API contract.
   pin the request shapes + assert auth header presence on
   protected endpoints.
 
-- [ ] **Phase 13.10: Community tab + feed screen
+- [x] **Phase 13.10: Community tab + feed screen
   (`lib/screens/community/community_feed_screen.dart` + tab bar
   update).** New tab in the bottom bar — "Community" with
   `Icons.forum_outlined`. Feed screen shows a sort selector

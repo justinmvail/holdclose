@@ -1,0 +1,673 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../../models/forum.dart';
+import '../../providers/community_feed_provider.dart';
+import '../../services/forum_api_client.dart';
+import '../../theme.dart';
+
+part 'community_feed_screen.g.dart';
+
+/// Wall clock the community feed uses when rendering relative timestamps
+/// ("5m ago", "2h ago"). Overridable so widget + golden tests can pin a
+/// fixed reference time and the rendered strings stay deterministic
+/// regardless of the host clock.
+@Riverpod(keepAlive: true)
+DateTime Function() communityFeedClock(Ref ref) => DateTime.now;
+
+/// Pixels-from-bottom that trigger the next-page fetch. 240 — roughly
+/// two tile heights — keeps the next page in flight before the
+/// caregiver's thumb reaches the spinner footer.
+const double _loadMoreTriggerPx = 240;
+
+/// Community feed at `/community` (BUILD_SPEC.md §13 / Phase 13.10).
+///
+/// Layout:
+///   * AppBar: title "Community".
+///   * Sort selector (Hot / New / Top) as a segmented chip row.
+///   * Pull-to-refresh list of post cards. Each card carries title,
+///     a derived author display name + initial-letter avatar, relative
+///     time, a 3-line body preview, and the vote + comment counts.
+///   * Empty state: "Be the first to post." with a soft illustration.
+///   * Loading state: a soft skeleton so a slow first fetch doesn't
+///     flash the empty-state copy.
+///
+/// The screen never mints or mutates posts itself — Phase 13.12 will
+/// own the compose surface. Tapping a tile pushes to the post detail
+/// screen Phase 13.11 will own; for now it's a stable callback the
+/// router rewires when that screen lands.
+class CommunityFeedScreen extends ConsumerStatefulWidget {
+  const CommunityFeedScreen({super.key});
+
+  static const Key sortHotKey = Key('community-feed-sort-hot');
+  static const Key sortNewKey = Key('community-feed-sort-new');
+  static const Key sortTopKey = Key('community-feed-sort-top');
+  static const Key listKey = Key('community-feed-list');
+  static const Key emptyStateKey = Key('community-feed-empty');
+  static const Key loadingKey = Key('community-feed-loading');
+  static const Key errorKey = Key('community-feed-error');
+  static const Key loadMoreSpinnerKey = Key('community-feed-load-more-spinner');
+
+  static Key postTileKey(String postId) => Key('community-feed-tile-$postId');
+
+  @override
+  ConsumerState<CommunityFeedScreen> createState() =>
+      _CommunityFeedScreenState();
+}
+
+class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_maybeLoadMore);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_maybeLoadMore);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _maybeLoadMore() {
+    if (!_scrollController.hasClients) return;
+    final double offset = _scrollController.position.pixels;
+    final double max = _scrollController.position.maxScrollExtent;
+    if (max - offset > _loadMoreTriggerPx) return;
+    // Defer to a post-frame callback so we don't fire setState/state
+    // changes while Flutter is already in the middle of a layout pass.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(ref.read(communityFeedProvider.notifier).loadMore());
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final CommunityFeedState feed = ref.watch(communityFeedProvider);
+    final DateTime now = ref.watch(communityFeedClockProvider)();
+
+    return Scaffold(
+      backgroundColor: careblazersColors.background,
+      appBar: AppBar(
+        title: const Text('Community'),
+        automaticallyImplyLeading: false,
+      ),
+      body: SafeArea(
+        child: Column(
+          children: <Widget>[
+            _SortSelector(
+              sort: feed.sort,
+              onSelected: (ForumPostSort next) =>
+                  ref.read(communityFeedProvider.notifier).setSort(next),
+            ),
+            Expanded(
+              child: _Body(
+                feed: feed,
+                now: now,
+                scrollController: _scrollController,
+                onRefresh: () =>
+                    ref.read(communityFeedProvider.notifier).refresh(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SortSelector extends StatelessWidget {
+  const _SortSelector({required this.sort, required this.onSelected});
+
+  final ForumPostSort sort;
+  final ValueChanged<ForumPostSort> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Row(
+        children: <Widget>[
+          _SortChip(
+            chipKey: CommunityFeedScreen.sortHotKey,
+            label: 'Hot',
+            selected: sort == ForumPostSort.hot,
+            onTap: () => onSelected(ForumPostSort.hot),
+          ),
+          const SizedBox(width: 8),
+          _SortChip(
+            chipKey: CommunityFeedScreen.sortNewKey,
+            label: 'New',
+            selected: sort == ForumPostSort.newest,
+            onTap: () => onSelected(ForumPostSort.newest),
+          ),
+          const SizedBox(width: 8),
+          _SortChip(
+            chipKey: CommunityFeedScreen.sortTopKey,
+            label: 'Top',
+            selected: sort == ForumPostSort.top,
+            onTap: () => onSelected(ForumPostSort.top),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SortChip extends StatelessWidget {
+  const _SortChip({
+    required this.chipKey,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Key chipKey;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label sort. Double-tap to '
+          '${selected ? 'reload this view' : 'switch the feed to $label'}.',
+      child: Material(
+        color: selected
+            ? careblazersColors.primary
+            : careblazersColors.surfaceWarm,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          key: chipKey,
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+            child: Text(
+              label,
+              style: textTheme.labelLarge?.copyWith(
+                color: selected
+                    ? careblazersColors.background
+                    : careblazersColors.primarySoft,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Body extends StatelessWidget {
+  const _Body({
+    required this.feed,
+    required this.now,
+    required this.scrollController,
+    required this.onRefresh,
+  });
+
+  final CommunityFeedState feed;
+  final DateTime now;
+  final ScrollController scrollController;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    // Initial load — show a soft placeholder rather than the empty
+    // state. A blank list under a slow first fetch would otherwise
+    // flash "Be the first to post" before the real posts arrive.
+    if (feed.isLoading && feed.posts.isEmpty) {
+      return const _LoadingPlaceholder();
+    }
+    if (feed.posts.isEmpty && feed.error != null) {
+      return _ErrorView(
+        message: feed.error.toString(),
+        onRetry: onRefresh,
+      );
+    }
+    if (feed.posts.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        color: careblazersColors.cta,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const <Widget>[
+            SizedBox(height: 120),
+            _EmptyState(),
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      color: careblazersColors.cta,
+      child: ListView.separated(
+        key: CommunityFeedScreen.listKey,
+        controller: scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        itemCount: feed.posts.length + 1,
+        separatorBuilder: (BuildContext _, int __) =>
+            const SizedBox(height: 12),
+        itemBuilder: (BuildContext context, int index) {
+          if (index == feed.posts.length) {
+            return _Footer(feed: feed);
+          }
+          return _PostCard(post: feed.posts[index], now: now);
+        },
+      ),
+    );
+  }
+}
+
+class _LoadingPlaceholder extends StatelessWidget {
+  const _LoadingPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      key: CommunityFeedScreen.loadingKey,
+      child: SizedBox(
+        height: 32,
+        width: 32,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.5,
+          color: careblazersColors.primarySoft,
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Padding(
+      key: CommunityFeedScreen.emptyStateKey,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Icon(
+            Icons.forum_outlined,
+            size: 56,
+            color: careblazersColors.primarySoft,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Be the first to post.',
+            style: textTheme.headlineMedium?.copyWith(
+              color: careblazersColors.primary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "When you're stuck on something, chances are another Careblazer "
+            'has been there too. Share a moment and the community shows up.',
+            style: textTheme.bodyLarge?.copyWith(
+              color: careblazersColors.text,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Footer extends StatelessWidget {
+  const _Footer({required this.feed});
+
+  final CommunityFeedState feed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (feed.isLoadingMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            key: CommunityFeedScreen.loadMoreSpinnerKey,
+            height: 22,
+            width: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: careblazersColors.primarySoft,
+            ),
+          ),
+        ),
+      );
+    }
+    if (feed.error != null) {
+      final TextTheme textTheme = Theme.of(context).textTheme;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          "Couldn't load more right now. Pull to refresh.",
+          style: textTheme.bodyMedium?.copyWith(
+            color: careblazersColors.accentDeep,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    return const SizedBox(height: 8);
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Padding(
+      key: CommunityFeedScreen.errorKey,
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              Icons.cloud_off_outlined,
+              size: 48,
+              color: careblazersColors.primarySoft,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "We couldn't load the community feed.",
+              style: textTheme.bodyLarge?.copyWith(
+                color: careblazersColors.text,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              message,
+              style: textTheme.bodyMedium?.copyWith(
+                color: careblazersColors.primarySoft,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: careblazersColors.cta,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: onRetry,
+              child: Text(
+                'Try again',
+                style: textTheme.labelLarge?.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PostCard extends StatelessWidget {
+  const _PostCard({required this.post, required this.now});
+
+  final ForumPost post;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final String displayName = displayNameForAuthor(post.authorId);
+    final String time = relativeTime(post.createdAt, now);
+
+    return Semantics(
+      button: true,
+      label: '${post.title}. Posted by $displayName, $time. '
+          '${post.voteCount} votes, ${post.commentCount} comments. '
+          'Double-tap to open.',
+      child: Material(
+        color: careblazersColors.surfaceWarm,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          key: CommunityFeedScreen.postTileKey(post.id),
+          borderRadius: BorderRadius.circular(16),
+          // Phase 13.11 will land the post detail route — leave the tap
+          // as a no-op for now so the card still reads as interactive
+          // (the ripple + Semantics announce the affordance) without
+          // routing to a screen that doesn't exist yet.
+          onTap: () {},
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _AuthorRow(
+                  displayName: displayName,
+                  time: time,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  post.title,
+                  style: textTheme.titleLarge?.copyWith(
+                    color: careblazersColors.primary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (post.body.trim().isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 6),
+                  Text(
+                    post.body,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: careblazersColors.text,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                _CountsRow(
+                  voteCount: post.voteCount,
+                  commentCount: post.commentCount,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthorRow extends StatelessWidget {
+  const _AuthorRow({required this.displayName, required this.time});
+
+  final String displayName;
+  final String time;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Row(
+      children: <Widget>[
+        _Avatar(displayName: displayName),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                displayName,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: careblazersColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                time,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: careblazersColors.primarySoft,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.displayName});
+
+  final String displayName;
+
+  @override
+  Widget build(BuildContext context) {
+    final String initial = displayName.isEmpty
+        ? '?'
+        : displayName.substring(0, 1).toUpperCase();
+    return Container(
+      width: 36,
+      height: 36,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: careblazersColors.primary,
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        initial,
+        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: careblazersColors.background,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+    );
+  }
+}
+
+class _CountsRow extends StatelessWidget {
+  const _CountsRow({required this.voteCount, required this.commentCount});
+
+  final int voteCount;
+  final int commentCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Row(
+      children: <Widget>[
+        Icon(
+          Icons.arrow_upward,
+          size: 18,
+          color: careblazersColors.primarySoft,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '$voteCount',
+          style: textTheme.bodyMedium?.copyWith(
+            color: careblazersColors.primarySoft,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 20),
+        Icon(
+          Icons.mode_comment_outlined,
+          size: 18,
+          color: careblazersColors.primarySoft,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '$commentCount',
+          style: textTheme.bodyMedium?.copyWith(
+            color: careblazersColors.primarySoft,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Derive a stable, non-PII display name from the author's profile id.
+///
+/// Phase 13.10 lands before the feed wire carries a denormalized
+/// `display_name` per post; until then the screen renders a
+/// `Caregiver_<first 6 chars of profile id>` placeholder so each author
+/// still reads as a distinct human in the list. Matches the
+/// `Caregiver_xxxxxx` shape the bootstrap endpoint mints for fresh
+/// profiles (BUILD_SPEC.md §13 / Phase 13.4) so a future swap to the
+/// wire value won't visually shift authors that already match.
+@visibleForTesting
+String displayNameForAuthor(String authorId) {
+  if (authorId.isEmpty) return 'Caregiver';
+  // Strip a "profile-" prefix if one shows up so the rendered suffix
+  // is actually distinguishing entropy rather than a shared header.
+  String rest = authorId;
+  for (final String prefix in <String>['profile-', 'user-', 'careblazer-']) {
+    if (rest.startsWith(prefix)) {
+      rest = rest.substring(prefix.length);
+      break;
+    }
+  }
+  final String suffix =
+      rest.length >= 6 ? rest.substring(0, 6) : rest;
+  return 'Caregiver_$suffix';
+}
+
+/// "5m ago / 2h ago / 3d ago" relative-time formatter, anchored on [now].
+///
+/// Caps at "30d ago" — after a month, falls back to a short
+/// "MMM d" date string so the post age stays legible without a year
+/// suffix (the feed only surfaces recent activity in practice; older
+/// archives are a Phase 13.11+ concern). Future timestamps (clock
+/// skew between phone + Worker) render as "just now" rather than a
+/// negative duration so the screen never emits broken copy.
+@visibleForTesting
+String relativeTime(DateTime when, DateTime now) {
+  final Duration delta = now.difference(when);
+  if (delta.inSeconds < 60) return 'just now';
+  if (delta.inMinutes < 60) return '${delta.inMinutes}m ago';
+  if (delta.inHours < 24) return '${delta.inHours}h ago';
+  if (delta.inDays < 30) return '${delta.inDays}d ago';
+  const List<String> months = <String>[
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${months[when.month - 1]} ${when.day}';
+}

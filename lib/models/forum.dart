@@ -80,6 +80,12 @@ abstract class ForumPublicProfile with _$ForumPublicProfile {
 /// is included on the wire so a moderation hide rendered into the feed
 /// surfaces as a stub rather than vanishing — Phase 13.10 collapses
 /// hidden rows visually.
+///
+/// [commentCount] is a denormalized post-row counter the feed renders
+/// alongside [voteCount] in the per-post card (Phase 13.10). Defaults
+/// to 0 so existing fixtures + the pre-Phase-13.10 wire shape still
+/// parse cleanly — a Worker that doesn't yet emit the field collapses
+/// to "no comments yet" rather than failing decode.
 @freezed
 abstract class ForumPost with _$ForumPost {
   const factory ForumPost({
@@ -92,6 +98,7 @@ abstract class ForumPost with _$ForumPost {
     @JsonKey(name: 'vote_count') required int voteCount,
     required bool hidden,
     @JsonKey(name: 'crisis_flagged') @Default(false) bool crisisFlagged,
+    @JsonKey(name: 'comment_count') @Default(0) int commentCount,
   }) = _ForumPost;
 
   factory ForumPost.fromJson(Map<String, dynamic> json) =>

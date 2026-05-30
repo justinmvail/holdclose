@@ -6,9 +6,9 @@ import '../models/settings.dart';
 import '../providers/settings_provider.dart';
 import '../theme.dart';
 
-/// Bottom-tab shell for the six root branches:
-/// `Home · Journal · Medications · Appointments · Library · Crisis`
-/// (BUILD_SPEC.md §4.1 + Phase 12.8 additions).
+/// Bottom-tab shell for the seven root branches:
+/// `Home · Journal · Medications · Appointments · Library · Crisis ·
+/// Community` (BUILD_SPEC.md §4.1 + Phase 12.8 + Phase 13.10 additions).
 ///
 /// Medications + Appointments only render in the tab bar when the
 /// matching [AppSettings] toggles are on — `useTrackers` master AND
@@ -20,7 +20,10 @@ import '../theme.dart';
 /// always Medications regardless of whether it's surfaced in the bar.
 /// The shell-to-bar mapping is computed at render time so a
 /// `useTrackers` flip toggles the bar without re-keying any branch's
-/// navigator stack.
+/// navigator stack. Phase 13.10's Community branch is appended at
+/// index 6 (after Crisis) to preserve every pre-existing branch
+/// index; the visible-order mapping slots it between Library and
+/// Crisis in the bar.
 class TabScaffold extends ConsumerWidget {
   const TabScaffold({super.key, required this.navigationShell});
 
@@ -39,12 +42,19 @@ class TabScaffold extends ConsumerWidget {
     '/appointments',
     '/library',
     '/crisis',
+    '/community',
   ];
 
   /// Compute the visible branch indices for the current
   /// [AppSettings]. Medications + Appointments collapse off the bar
   /// when [AppSettings.useTrackers] is OFF or the per-feature toggle
   /// is OFF — same precedence the Settings UI advertises.
+  ///
+  /// Community (branch 6) is rendered between Library and Crisis so
+  /// the rightmost slot stays Crisis (the audience cue: "the bell on
+  /// the right is the panic button"). The branch itself stays at
+  /// index 6 in [tabBranchPaths] to avoid re-numbering every prior
+  /// tab — the visible order is decoupled from the shell order.
   static List<int> visibleBranchIndicesFor(AppSettings settings) {
     return <int>[
       0, // Home
@@ -52,6 +62,7 @@ class TabScaffold extends ConsumerWidget {
       if (settings.useTrackers && settings.medicationsEnabled) 2,
       if (settings.useTrackers && settings.appointmentsEnabled) 3,
       4, // Library
+      6, // Community
       5, // Crisis
     ];
   }
@@ -91,7 +102,7 @@ class TabScaffoldBar extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.onDestinationSelected,
-    this.visibleBranches = const <int>[0, 1, 2, 3, 4, 5],
+    this.visibleBranches = const <int>[0, 1, 2, 3, 4, 6, 5],
   });
 
   final int currentIndex;
@@ -134,6 +145,11 @@ class TabScaffoldBar extends StatelessWidget {
       label: 'Crisis',
       icon: Icons.warning_amber_outlined,
       selectedIcon: Icons.warning_amber,
+    ),
+    TabScaffoldDestination(
+      label: 'Community',
+      icon: Icons.forum_outlined,
+      selectedIcon: Icons.forum,
     ),
   ];
 
