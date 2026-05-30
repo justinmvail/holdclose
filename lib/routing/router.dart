@@ -17,6 +17,8 @@ import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
 import '../screens/library/library_card_screen.dart';
 import '../screens/library/library_screen.dart';
+import '../screens/medication/medication_form_screen.dart';
+import '../screens/medication/medication_list_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
 import '../screens/onboarding/welcome_carousel.dart';
 import '../screens/settings/settings_screen.dart';
@@ -44,6 +46,8 @@ class CareblazersRoutes {
   static const String libraryCard = 'library-card';
   static const String chatList = 'chat-list';
   static const String chatThread = 'chat-thread';
+  static const String medicationList = 'medication-list';
+  static const String medicationForm = 'medication-form';
 }
 
 /// Build a fresh GoRouter wired with every BUILD_SPEC.md §5 route.
@@ -192,6 +196,22 @@ GoRouter buildRouter({
         builder: (BuildContext context, GoRouterState state) => ChatScreen(
           conversationId: state.pathParameters['id'] ?? '',
         ),
+      ),
+      GoRoute(
+        path: '/medications',
+        name: CareblazersRoutes.medicationList,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const MedicationListScreen(),
+        routes: <RouteBase>[
+          GoRoute(
+            path: 'new',
+            name: CareblazersRoutes.medicationForm,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                const MedicationFormScreen(),
+          ),
+        ],
       ),
 
       // Tab shell — Home / Journal / Library / Crisis. Each branch is

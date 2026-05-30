@@ -838,7 +838,7 @@ Sized as 8 atomic iters across two related sub-areas: medications
   upcoming). Tests cover the schedule-expansion logic for each
   FrequencyKind variant.
 
-- [ ] **Phase 12.3: Medication list screen + add-med form
+- [x] **Phase 12.3: Medication list screen + add-med form
   (`lib/screens/medication/medication_list_screen.dart` +
   `lib/screens/medication/medication_form_screen.dart`).** List
   screen at `/medications`: each medication card shows name, dosage,
