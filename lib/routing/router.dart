@@ -6,6 +6,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/onboarding_provider.dart';
+import '../screens/chat/chat_screen.dart';
+import '../screens/chat/conversation_list_screen.dart';
 import '../screens/crisis/crisis_card_screen.dart';
 import '../screens/decoder/behavior_picker_screen.dart';
 import '../screens/decoder/decoder_result_screen.dart';
@@ -40,6 +42,8 @@ class CareblazersRoutes {
   static const String decoderResult = 'decoder-result';
   static const String journalEntry = 'journal-entry';
   static const String libraryCard = 'library-card';
+  static const String chatList = 'chat-list';
+  static const String chatThread = 'chat-thread';
 }
 
 /// Build a fresh GoRouter wired with every BUILD_SPEC.md §5 route.
@@ -173,6 +177,21 @@ GoRouter buildRouter({
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             LibraryCardScreen(cardId: state.pathParameters['id'] ?? ''),
+      ),
+      GoRoute(
+        path: '/chat',
+        name: CareblazersRoutes.chatList,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const ConversationListScreen(),
+      ),
+      GoRoute(
+        path: '/chat/:id',
+        name: CareblazersRoutes.chatThread,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) => ChatScreen(
+          conversationId: state.pathParameters['id'] ?? '',
+        ),
       ),
 
       // Tab shell — Home / Journal / Library / Crisis. Each branch is

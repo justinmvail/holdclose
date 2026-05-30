@@ -748,7 +748,7 @@ Sized as 6 atomic iters.
   done), assert the Message is built incrementally; citation parsing
   handles 0, 1, and multiple `[card:<id>]` markers.
 
-- [ ] **Phase 11.4: Chat screen UI (`lib/screens/chat/chat_screen.dart`
+- [x] **Phase 11.4: Chat screen UI (`lib/screens/chat/chat_screen.dart`
   + `lib/screens/chat/conversation_list_screen.dart`).** Two screens:
     - `ConversationListScreen` at `/chat`: list of past conversations
       (title = first user message's first 60 chars, or a +Quick Chat
