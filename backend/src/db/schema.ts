@@ -44,6 +44,9 @@ export const posts = sqliteTable(
     updatedAt: timestampColumn('updated_at').notNull(),
     voteCount: integer('vote_count').notNull().default(0),
     hidden: integer({ mode: 'boolean' }).notNull().default(false),
+    crisisFlagged: integer('crisis_flagged', { mode: 'boolean' })
+      .notNull()
+      .default(false),
   },
   (t) => [
     index('posts_author_id_idx').on(t.authorId),
@@ -70,6 +73,9 @@ export const comments = sqliteTable(
     voteCount: integer('vote_count').notNull().default(0),
     depth: integer().notNull().default(0),
     hidden: integer({ mode: 'boolean' }).notNull().default(false),
+    crisisFlagged: integer('crisis_flagged', { mode: 'boolean' })
+      .notNull()
+      .default(false),
   },
   (t) => [
     index('comments_post_id_idx').on(t.postId),

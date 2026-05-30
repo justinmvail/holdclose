@@ -4,6 +4,7 @@ import { auth, type AuthBindings, type AuthVariables } from './middleware/auth';
 import { commentsRouter } from './routes/comments';
 import { postsRouter } from './routes/posts';
 import { profilesRouter } from './routes/profiles';
+import { reportsRouter } from './routes/reports';
 import { votesRouter } from './routes/votes';
 
 export type Bindings = AuthBindings & {
@@ -30,6 +31,7 @@ api.route('/posts', postsRouter());
 api.use('*', auth());
 
 api.route('/profiles', profilesRouter());
+api.route('/reports', reportsRouter());
 api.route('/votes', votesRouter());
 
 app.route('/api/v1', api);

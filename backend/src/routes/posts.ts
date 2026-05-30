@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 
 import { posts, profiles, type Post, type Profile } from '../db/schema';
 import { auth, type AuthBindings, type AuthVariables } from '../middleware/auth';
+import { detectCrisisContent } from '../middleware/crisisFlag';
 
 export type PostsBindings = AuthBindings & {
   FORUM_DB: D1Database;
@@ -57,6 +58,7 @@ function postResponse(p: Post) {
     updated_at: p.updatedAt.toISOString(),
     vote_count: p.voteCount,
     hidden: p.hidden,
+    crisis_flagged: p.crisisFlagged,
   };
 }
 
@@ -243,15 +245,22 @@ export const postsRouter = () => {
       return c.json({ error: 'invalid_body_text' }, 400);
     }
 
-    // TODO(Phase 13.8): crisis-keyword auto-flag hook runs here —
-    // a match still persists the row but tags `crisis_flagged` and
-    // surfaces `crisis_resources` on the response.
+    const detection = detectCrisisContent(title, body);
 
     const [created] = await db
       .insert(posts)
-      .values({ authorId: profile.id, title, body })
+      .values({
+        authorId: profile.id,
+        title,
+        body,
+        crisisFlagged: detection.flagged,
+      })
       .returning();
-    return c.json(postResponse(created), 201);
+    const payload: Record<string, unknown> = postResponse(created);
+    if (detection.flagged) {
+      payload.crisis_resources = detection.resources;
+    }
+    return c.json(payload, 201);
   });
 
   router.patch('/:id', auth(), async (c) => {

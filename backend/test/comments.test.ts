@@ -650,6 +650,61 @@ describe('POST /api/v1/posts/:post_id/comments', () => {
     expect(await res.json()).toEqual({ error: 'invalid_parent' });
   });
 
+  it('flags a comment whose body contains a crisis keyword (Phase 13.8)', async () => {
+    const author = await makeProfile('cb-cmts-crisis');
+    const post = await seedPost({ authorId: author.id });
+    const res = await authedFetch(
+      `/api/v1/posts/${post.id}/comments`,
+      {
+        method: 'POST',
+        sub: 'cb-cmts-crisis',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          body: 'honestly some nights I want to end it all',
+        }),
+      },
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      id: string;
+      crisis_flagged: boolean;
+      crisis_resources?: {
+        crisis_card_url: string;
+        hotlines: unknown[];
+      };
+    };
+    expect(body.crisis_flagged).toBe(true);
+    expect(body.crisis_resources).toBeDefined();
+    expect(body.crisis_resources!.crisis_card_url).toBe('/crisis');
+
+    const db = drizzle(env.FORUM_DB);
+    const [row] = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.id, body.id));
+    expect(row.crisisFlagged).toBe(true);
+  });
+
+  it('a benign comment is unflagged and carries no crisis_resources', async () => {
+    const author = await makeProfile('cb-cmts-benign');
+    const post = await seedPost({ authorId: author.id });
+    const res = await authedFetch(
+      `/api/v1/posts/${post.id}/comments`,
+      {
+        method: 'POST',
+        sub: 'cb-cmts-benign',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          body: 'we tried scheduled bathroom trips and it really helped',
+        }),
+      },
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.crisis_flagged).toBe(false);
+    expect(body.crisis_resources).toBeUndefined();
+  });
+
   it('treats parent_comment_id=null as a root comment', async () => {
     const author = await makeProfile('cb-cmts-null-parent');
     const post = await seedPost({ authorId: author.id });

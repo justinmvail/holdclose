@@ -12,6 +12,7 @@ import {
   type Profile,
 } from '../db/schema';
 import { auth, type AuthBindings, type AuthVariables } from '../middleware/auth';
+import { detectCrisisContent } from '../middleware/crisisFlag';
 
 export type CommentsBindings = AuthBindings & {
   FORUM_DB: D1Database;
@@ -55,6 +56,8 @@ function commentResponse(c: Comment) {
   if (c.hidden) {
     // Reddit-style placeholder: preserve tree shape (id, parent,
     // depth) but strip everything that could leak author or text.
+    // Also strip crisis_flagged so a moderated row doesn't broadcast
+    // its triage state to readers.
     return {
       id: c.id,
       post_id: c.postId,
@@ -77,6 +80,7 @@ function commentResponse(c: Comment) {
     vote_count: c.voteCount,
     depth: c.depth,
     hidden: false,
+    crisis_flagged: c.crisisFlagged,
   };
 }
 
@@ -188,7 +192,7 @@ export const commentsRouter = () => {
       );
     }
 
-    // TODO(Phase 13.8): crisis-keyword auto-flag hook runs here.
+    const detection = detectCrisisContent(body);
 
     const [created] = await db
       .insert(comments)
@@ -198,9 +202,14 @@ export const commentsRouter = () => {
         parentCommentId: parentId,
         body,
         depth,
+        crisisFlagged: detection.flagged,
       })
       .returning();
-    return c.json(commentResponse(created), 201);
+    const payload: Record<string, unknown> = commentResponse(created);
+    if (detection.flagged) {
+      payload.crisis_resources = detection.resources;
+    }
+    return c.json(payload, 201);
   });
 
   router.delete('/comments/:id', auth(), async (c) => {

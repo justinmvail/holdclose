@@ -515,12 +515,50 @@ describe('POST /api/v1/posts', () => {
       body: 'every afternoon, like clockwork',
       vote_count: 0,
       hidden: false,
+      crisis_flagged: false,
     });
     expect(typeof body.id).toBe('string');
+    expect(body.crisis_resources).toBeUndefined();
 
     const db = drizzle(env.FORUM_DB);
     const rows = await db.select().from(posts);
     expect(rows).toHaveLength(1);
+    expect(rows[0].crisisFlagged).toBe(false);
+  });
+
+  it('flags a post whose body contains a crisis keyword (Phase 13.8)', async () => {
+    await makeProfile('cb-create-crisis');
+    const res = await authedFetch('/api/v1/posts', {
+      method: 'POST',
+      sub: 'cb-create-crisis',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'I am exhausted',
+        body: 'some days I want to kill myself just to get a break',
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      id: string;
+      crisis_flagged: boolean;
+      crisis_resources?: {
+        crisis_card_url: string;
+        hotlines: Array<{ number: string }>;
+      };
+    };
+    expect(body.crisis_flagged).toBe(true);
+    expect(body.crisis_resources).toBeDefined();
+    expect(body.crisis_resources!.crisis_card_url).toBe('/crisis');
+    expect(body.crisis_resources!.hotlines.length).toBeGreaterThan(0);
+    // Persisted alongside the row so the moderation queue can sort
+    // by triage signal later.
+    const db = drizzle(env.FORUM_DB);
+    const [row] = await db.select().from(posts).where(eq(posts.id, body.id));
+    expect(row.crisisFlagged).toBe(true);
+    expect(row.hidden).toBe(false);
+    // The author's text is preserved verbatim — the banner is a
+    // resource pointer, not a censor.
+    expect(row.body).toContain('kill myself');
   });
 });
 

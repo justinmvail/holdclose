@@ -1081,7 +1081,7 @@ the API contract.
   withdrawal), vote count stays accurate under interleaved
   concurrent test calls.
 
-- [ ] **Phase 13.8: Reports + crisis-keyword auto-flag
+- [x] **Phase 13.8: Reports + crisis-keyword auto-flag
   (`backend/src/routes/reports.ts` +
   `backend/src/middleware/crisisFlag.ts`).** Two surfaces:
     - **Reports**: `POST /api/v1/reports` `{target_kind, target_id,
