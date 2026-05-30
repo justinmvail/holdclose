@@ -5,6 +5,7 @@ declare module 'cloudflare:test' {
   interface ProvidedEnv {
     FORUM_DB: D1Database;
     FORUM_MEDIA: R2Bucket;
+    FORUM_JWT_SECRET: string;
     TEST_MIGRATIONS: import('cloudflare:test').D1Migration[];
   }
 }

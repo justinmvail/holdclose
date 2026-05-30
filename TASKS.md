@@ -995,7 +995,7 @@ the API contract.
   deeper). Tests: schema round-trip in miniflare D1; insert at
   depth 6 → reject at depth 7.
 
-- [ ] **Phase 13.3: Hono API skeleton + JWT auth middleware
+- [x] **Phase 13.3: Hono API skeleton + JWT auth middleware
   (`backend/src/middleware/auth.ts`).** Hono routes mounted under
   `/api/v1`. Auth middleware verifies a JWT signed with a shared
   secret (stored in Cloudflare Worker secrets via `wrangler secret

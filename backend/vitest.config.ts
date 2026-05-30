@@ -17,7 +17,10 @@ export default defineWorkersConfig(async () => {
           wrangler: { configPath: './wrangler.toml' },
           miniflare: {
             compatibilityFlags: ['nodejs_compat'],
-            bindings: { TEST_MIGRATIONS: migrations },
+            bindings: {
+              TEST_MIGRATIONS: migrations,
+              FORUM_JWT_SECRET: 'test-forum-jwt-secret',
+            },
           },
         },
       },
