@@ -9,7 +9,10 @@ import '../providers/onboarding_provider.dart';
 import '../screens/chat/chat_screen.dart';
 import '../screens/chat/conversation_list_screen.dart';
 import '../models/forum.dart';
+import '../screens/community/admin_reports_screen.dart';
 import '../screens/community/community_feed_screen.dart';
+import '../screens/community/community_guidelines_screen.dart';
+import '../screens/community/post_compose_screen.dart';
 import '../screens/community/post_detail_screen.dart';
 import '../screens/crisis/crisis_card_screen.dart';
 import '../screens/decoder/behavior_picker_screen.dart';
@@ -62,6 +65,9 @@ class CareblazersRoutes {
   static const String appointmentEdit = 'appointment-edit';
   static const String community = 'community';
   static const String communityPostDetail = 'community-post-detail';
+  static const String communityCompose = 'community-compose';
+  static const String communityGuidelines = 'community-guidelines';
+  static const String communityAdminReports = 'community-admin-reports';
 }
 
 /// Build a fresh GoRouter wired with every BUILD_SPEC.md §5 route.
@@ -188,6 +194,27 @@ GoRouter buildRouter({
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             JournalEntryScreen(entryId: state.pathParameters['id'] ?? ''),
+      ),
+      GoRoute(
+        path: '/community/compose',
+        name: CareblazersRoutes.communityCompose,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const PostComposeScreen(),
+      ),
+      GoRoute(
+        path: '/community/guidelines',
+        name: CareblazersRoutes.communityGuidelines,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const CommunityGuidelinesScreen(),
+      ),
+      GoRoute(
+        path: '/community/admin/reports',
+        name: CareblazersRoutes.communityAdminReports,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const AdminReportsScreen(),
       ),
       GoRoute(
         path: '/community/:postId',

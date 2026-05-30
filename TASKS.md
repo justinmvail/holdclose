@@ -1145,7 +1145,7 @@ the API contract.
   3-level deep thread, 6-level deep (max depth — reply button
   hidden), hidden comments render as placeholder.
 
-- [ ] **Phase 13.12: Create post + community guidelines + admin
+- [x] **Phase 13.12: Create post + community guidelines + admin
   moderation
   (`lib/screens/community/post_compose_screen.dart` +
   `lib/screens/community/community_guidelines_screen.dart` +

@@ -8,6 +8,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/forum.dart';
 import '../../providers/community_feed_provider.dart';
+import '../../providers/my_forum_profile_provider.dart';
 import '../../routing/router.dart' show CareblazersRoutes;
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
@@ -53,6 +54,8 @@ class CommunityFeedScreen extends ConsumerStatefulWidget {
   static const Key loadingKey = Key('community-feed-loading');
   static const Key errorKey = Key('community-feed-error');
   static const Key loadMoreSpinnerKey = Key('community-feed-load-more-spinner');
+  static const Key composeFabKey = Key('community-feed-compose-fab');
+  static const Key adminActionKey = Key('community-feed-admin-action');
 
   static Key postTileKey(String postId) => Key('community-feed-tile-$postId');
 
@@ -95,11 +98,31 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
     final CommunityFeedState feed = ref.watch(communityFeedProvider);
     final DateTime now = ref.watch(communityFeedClockProvider)();
 
+    final bool isAdmin = ref.watch(isForumAdminProvider);
     return Scaffold(
       backgroundColor: careblazersColors.background,
       appBar: AppBar(
         title: const Text('Community'),
         automaticallyImplyLeading: false,
+        actions: <Widget>[
+          if (isAdmin)
+            IconButton(
+              key: CommunityFeedScreen.adminActionKey,
+              tooltip: 'Moderation queue',
+              icon: const Icon(Icons.shield_outlined),
+              onPressed: () => context
+                  .pushNamed(CareblazersRoutes.communityAdminReports),
+            ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        key: CommunityFeedScreen.composeFabKey,
+        backgroundColor: careblazersColors.cta,
+        foregroundColor: Colors.white,
+        onPressed: () =>
+            context.pushNamed(CareblazersRoutes.communityCompose),
+        icon: const Icon(Icons.edit_outlined),
+        label: const Text('New post'),
       ),
       body: SafeArea(
         child: Column(
