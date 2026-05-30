@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import { auth, type AuthBindings, type AuthVariables } from './middleware/auth';
+import { commentsRouter } from './routes/comments';
 import { postsRouter } from './routes/posts';
 import { profilesRouter } from './routes/profiles';
 
@@ -18,9 +19,11 @@ app.get('/health', (c) => c.json({ status: 'ok' }));
 
 const api = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Posts router mounts BEFORE the global auth middleware so the GET
-// list + GET :id remain read-anonymous per BUILD_SPEC §13. The
-// router applies route-level auth() to POST/PATCH/DELETE itself.
+// Posts + comments routers mount BEFORE the global auth middleware
+// so the GET list + detail + thread reads remain read-anonymous per
+// BUILD_SPEC §13. Each router applies route-level auth() to its
+// write endpoints itself.
+api.route('/', commentsRouter());
 api.route('/posts', postsRouter());
 
 api.use('*', auth());

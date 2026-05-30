@@ -1049,7 +1049,7 @@ the API contract.
   Tests for each endpoint + sort-order assertions + pagination
   correctness.
 
-- [ ] **Phase 13.6: Comments endpoints + nested rendering
+- [x] **Phase 13.6: Comments endpoints + nested rendering
   (`backend/src/routes/comments.ts`).** Three endpoints:
     - `GET /api/v1/posts/:post_id/comments?sort=top|new` — returns
       a flat list with `depth` field populated; client builds the
