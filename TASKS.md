@@ -912,70 +912,280 @@ Sized as 8 atomic iters across two related sub-areas: medications
 
 ---
 
-## Phase 13 — Care Collective integration (peer support via Dr. Natali's existing community)
+## Phase 13 — Caregiver forum (Cloudflare Workers + D1 + R2)
 
-The "social platform" feature in its lowest-risk form: rather than
-building a peer-support network from scratch — which would require
-identity, moderation, abuse handling, crisis-detection, and ongoing
-trust-and-safety operations careblazers isn't set up to run — we
-**integrate** with the **Care Collective** community Dr. Natali
-already operates on careblazers.com. The website surfaces it
-prominently ("Join the Care Collective" CTA on the homepage), it has
-existing moderation + revenue + brand fit, and the integration is
-the strongest possible pitch to her: "we plug your existing
-community directly into the app, with single sign-on, and drive your
-member growth."
+Single-board Reddit-style forum for caregivers — own backend, no
+embed/wrapper. Threaded comments (Reddit-style nesting, capped at 6
+levels). Native UI inside careblazers. Cloudflare hosting chosen for
+cost-of-scale and zero-egress: estimated ~$5-15/month at 5-20K MAU,
+the cheapest managed option available. Replaces the previous
+Care-Collective-WebView Phase 13 — we own the data, the moderation,
+and the UX.
 
-Strategy: in-app browser to start (fastest to ship, zero backend
-work), with a Phase 13.x follow-up for a native feed UI once the
-Care Collective surfaces an API. Single sign-on via OAuth using the
-careblazers.com auth — Phase 9 of the original arc already wired the
-infrastructure (`AuthProvider`), Phase 13 wires the Care Collective
-OAuth provider as a third sign-in option alongside Google + Apple.
+Stack:
+  - **Cloudflare Workers** (compute, TypeScript)
+  - **Cloudflare D1** (SQLite-at-edge, the database — hands-off for
+    years; sharding path documented for future)
+  - **Cloudflare R2** (object storage for avatars + post images;
+    zero egress fees)
+  - **Hono** (web framework — adapter-portable to AWS Lambda /
+    Vercel Edge / Bun / Deno later if we ever leave Cloudflare)
+  - **Drizzle ORM** (schema-portable between D1 / Postgres / MySQL;
+    same code runs against future Neon migration with one
+    connection-string change)
+  - **`backend/`** directory in the repo holds the Worker code;
+    Flutter side talks to it via Dio + JWTs minted off the existing
+    careblazers Apple/Google sign-in. No separate auth system.
 
-Sized as 4 atomic iters; Phase 13.1 is mostly a research + spec
-iter that confirms what Care Collective's authentication looks like
-in 2026.
+Safety + moderation baked in from v1 (not optional for App Store
+review with UGC):
+  - **Report** affordance on every post + comment → admin queue
+  - **Crisis-keyword auto-flag**: posts mentioning self-harm,
+    suicidality, or specific abuse terms surface a banner linking
+    to the existing Crisis card (BUILD_SPEC.md §5.9 — already
+    shipped Phase 11.5+)
+  - **Solo-admin v1** — operator is the only mod role; community
+    guidelines acceptance on first post.
 
-- [ ] **Phase 13.1: Care Collective integration design.** Manually
-  inspect careblazers.com to determine: (a) is there a public
-  Care Collective auth endpoint we can OAuth against? (b) is the
-  community accessible via a stable URL pattern we can route a
-  WebView at? (c) is there a JSON API for posts/comments (would
-  enable a native feed)? Write `docs/CARE_COLLECTIVE_INTEGRATION.md`
-  covering the answers, the chosen integration model (WebView vs
-  native feed), the auth flow, and the per-iter breakdown for the
-  remaining Phase 13 work. Acceptance: the doc names the specific
-  Care Collective endpoint(s) we'll target. If the Care Collective
-  doesn't expose either a WebView-friendly URL or an API, the doc
-  documents that and flips Phase 13 to "blocked pending partnership
-  discussion with Dr. Natali" — at which point Phase 11 + 12 are the
-  full feature set for v1.
+Sized as 13 atomic iters: backend (8) → Flutter integration (4) →
+ops/watchdog (1). Backend ships first since the Flutter side needs
+the API contract.
 
-- [ ] **Phase 13.2: Community tab — WebView + nav bar
-  (`lib/screens/community/community_screen.dart`).** New tab in the
-  bottom bar (icon: `Icons.people_outline`, label: "Community"),
-  pointed at the Care Collective URL identified in 13.1. WebView
-  via `webview_flutter` (new pubspec dep). In-app top bar shows
-  the current page title + a "Back to careblazers" button that
-  pops to the app's home tab. Tests: WebView smoke (does the page
-  load), back button behavior, navigation guards (don't let the
-  WebView drag the user to arbitrary off-Care-Collective URLs).
+### Backend (Cloudflare Workers + D1 + R2)
 
-- [ ] **Phase 13.3: SSO via Care Collective auth.** Add a third
-  sign-in button on the sign-in screen: "Continue with Care
-  Collective." Triggers an OAuth flow against the Care Collective
-  endpoint identified in 13.1. On success, the resulting session
-  cookie / token is stored in the WebView's cookie jar so the
-  community tab opens already signed in — no double sign-in.
-  Update `AuthProvider` to record the OAuth source ("careCollective")
-  alongside "google" and "apple" so the Settings → Account section
-  shows the right disconnect path.
+- [ ] **Phase 13.1: Cloudflare project scaffold + wrangler config
+  (`backend/`).** Create `backend/` with `package.json`, `tsconfig.json`,
+  `wrangler.toml`, `vitest.config.ts`. Initialize:
+    - Workers project with TypeScript
+    - `wrangler.toml` declaring one D1 database binding
+      (`FORUM_DB`), one R2 bucket binding (`FORUM_MEDIA`)
+    - Vitest with `@cloudflare/vitest-pool-workers` for Worker-side
+      tests using miniflare's D1/R2 emulators
+    - Hono installed; minimal `src/index.ts` that returns
+      `{"status":"ok"}` on `GET /health`
+    - A README in `backend/` covering local dev (`wrangler dev`),
+      test run (`npm test`), and deploy (`wrangler deploy`)
 
-- [ ] **Phase 13.4: Deep links + tour + docs.** Care Collective
-  notification deep links: when Dr. Natali's team sends an email or
-  push about a new post, the link opens the careblazers app directly
-  to the relevant Community tab section (universal links / Android
-  app links). Add a community walkthrough to the demo tour. Update
-  README + the pitch-deck talking points doc with the integration
-  story.
+  No real endpoints yet — just the bones. Tests: a smoke test
+  asserting `GET /health` returns 200. This iter establishes the
+  whole Worker testing pipeline so subsequent iters slot in cleanly.
+
+- [ ] **Phase 13.2: Drizzle schema + migrations
+  (`backend/src/db/schema.ts` + `backend/drizzle/`).** Five tables
+  per the spec:
+    - `profiles` (id UUID, display_name TEXT, avatar_url TEXT,
+      joined_at, role TEXT default 'user', careblazers_user_id TEXT
+      UNIQUE — the foreign key to the existing auth identity)
+    - `posts` (id UUID, author_id FK → profiles, title TEXT, body
+      TEXT, created_at, updated_at, vote_count INTEGER default 0,
+      hidden BOOLEAN default false)
+    - `comments` (id UUID, post_id FK → posts, author_id FK →
+      profiles, parent_comment_id FK → comments NULL, body TEXT,
+      created_at, vote_count INTEGER, depth INTEGER, hidden BOOL)
+    - `votes` (id UUID, voter_id FK → profiles, target_kind TEXT
+      'post' or 'comment', target_id UUID, value INTEGER ±1,
+      created_at, UNIQUE (voter_id, target_kind, target_id))
+    - `reports` (id UUID, target_kind TEXT, target_id UUID,
+      reporter_id FK → profiles, reason TEXT, status TEXT
+      'pending'/'reviewed'/'actioned', created_at, resolved_at NULL)
+
+  Generate the first migration via `drizzle-kit generate`. The
+  `depth` column is a denormalization — populated on insert from
+  `parent.depth + 1`, capped at 6 (return 400 on attempt to nest
+  deeper). Tests: schema round-trip in miniflare D1; insert at
+  depth 6 → reject at depth 7.
+
+- [ ] **Phase 13.3: Hono API skeleton + JWT auth middleware
+  (`backend/src/middleware/auth.ts`).** Hono routes mounted under
+  `/api/v1`. Auth middleware verifies a JWT signed with a shared
+  secret (stored in Cloudflare Worker secrets via `wrangler secret
+  put FORUM_JWT_SECRET`). Token claims: `{sub: careblazers_user_id,
+  iat, exp}`. Flutter side mints the JWT after sign-in using the
+  same secret — Phase 13.9 wires that.
+
+  Middleware behavior:
+    - No token → 401
+    - Invalid signature → 401
+    - Expired → 401 with `Token-Expired: true` response header
+    - Valid → set `c.get('userId')` for downstream handlers
+
+  Public routes (no auth): `/health`, `/api/v1/posts` (GET list
+  is read-anonymous). Everything else requires auth.
+
+  Tests: middleware accepts/rejects per case; unauthenticated
+  reads of `/posts` work; unauthenticated writes return 401.
+
+- [ ] **Phase 13.4: Profile bootstrap + endpoints
+  (`backend/src/routes/profiles.ts`).** Four endpoints:
+    - `POST /api/v1/profiles/bootstrap` — called once per careblazers
+      user after first sign-in. Creates a profile row keyed on
+      careblazers_user_id. Default display_name is
+      `Caregiver_<6-char hash>` so users start anonymous.
+    - `GET /api/v1/profiles/me` — return current user's profile.
+    - `PATCH /api/v1/profiles/me` — update display_name (3-30 chars,
+      letters/digits/underscores, profanity-screened against a
+      basic wordlist) and/or avatar_url. avatar_url must be an R2
+      URL (validated via prefix match on the project's R2 origin).
+    - `GET /api/v1/profiles/:id` — public profile (display_name,
+      avatar_url, joined_at, post/comment counts).
+
+  Tests cover each endpoint's happy path + the auth/validation
+  rejections.
+
+- [ ] **Phase 13.5: Posts endpoints + feed sorting
+  (`backend/src/routes/posts.ts`).** Five endpoints:
+    - `GET /api/v1/posts?sort=hot|new|top&before=<post-id>&limit=25`
+      — paginated feed. `hot` uses Reddit's classic ranking
+      formula (vote_count + time-decay), `new` is created_at DESC,
+      `top` is vote_count DESC. Cap limit at 50.
+    - `GET /api/v1/posts/:id` — single post with metadata.
+    - `POST /api/v1/posts` — create post (title 1-200 chars, body
+      1-10000 chars). Auto-flag check from 13.8 runs here.
+    - `PATCH /api/v1/posts/:id` — author-only edit (body only,
+      not title; updated_at bumped).
+    - `DELETE /api/v1/posts/:id` — author or admin soft-delete
+      (sets hidden=true).
+
+  Tests for each endpoint + sort-order assertions + pagination
+  correctness.
+
+- [ ] **Phase 13.6: Comments endpoints + nested rendering
+  (`backend/src/routes/comments.ts`).** Three endpoints:
+    - `GET /api/v1/posts/:post_id/comments?sort=top|new` — returns
+      a flat list with `depth` field populated; client builds the
+      tree by following `parent_comment_id`. Includes hidden
+      comments as `{hidden: true, body: null}` so the tree
+      structure remains intact (Reddit pattern).
+    - `POST /api/v1/posts/:post_id/comments` — body 1-5000 chars +
+      optional `parent_comment_id`. Server computes `depth` from
+      the parent (or 0 if root) and rejects depth > 6 with a
+      clear error message.
+    - `DELETE /api/v1/comments/:id` — author or admin soft-delete.
+
+  Tests cover nested tree integrity, depth enforcement, hidden
+  comment rendering.
+
+- [ ] **Phase 13.7: Voting endpoints + atomic counter updates
+  (`backend/src/routes/votes.ts`).** One endpoint:
+    - `POST /api/v1/votes` `{target_kind, target_id, value: +1|-1|0}`
+      — value=0 removes an existing vote. Upserts the votes row,
+      updates the target's vote_count atomically via a D1
+      transaction. Returns the new vote_count.
+
+  D1 doesn't have row-level locking like Postgres, but its
+  transaction model + the UNIQUE constraint on
+  (voter_id, target_kind, target_id) gives us atomicity: a
+  conflict resolves to UPDATE OR DELETE without race window.
+
+  Tests: vote ±1, switch ±1 (single net change), zero (vote
+  withdrawal), vote count stays accurate under interleaved
+  concurrent test calls.
+
+- [ ] **Phase 13.8: Reports + crisis-keyword auto-flag
+  (`backend/src/routes/reports.ts` +
+  `backend/src/middleware/crisisFlag.ts`).** Two surfaces:
+    - **Reports**: `POST /api/v1/reports` `{target_kind, target_id,
+      reason}`, `GET /api/v1/reports?status=pending` (admin only),
+      `PATCH /api/v1/reports/:id` (admin only — mark reviewed
+      with action: 'no_action' / 'hide_target' / 'ban_user').
+    - **Crisis-keyword middleware** runs on every `POST /posts` and
+      `POST /comments` BEFORE persistence. Keyword list lives in
+      `backend/src/data/crisis-keywords.ts` — a vetted set covering
+      suicidality ("kill myself", "end it all"), self-harm
+      ("cutting", "overdose"), and severe abuse ("hitting them",
+      "they hit me"). Matched content gets persisted normally BUT
+      the response includes
+      `{crisis_resources: {crisis_card_url: '/crisis', hotlines:
+      [...]}}` which the Flutter client renders as a banner above
+      the post/comment confirmation. A `crisis_flagged` boolean is
+      stored on the row for later analysis.
+
+  Tests: report CRUD; admin gate; crisis match returns banner data;
+  non-match passes through normally.
+
+### Flutter integration
+
+- [ ] **Phase 13.9: Forum API client + auth wiring
+  (`lib/services/forum_api_client.dart` +
+  `lib/providers/forum_jwt_provider.dart`).** Dio-based client
+  pointed at the Cloudflare Worker URL (configurable via
+  `--dart-define=FORUM_API_URL=https://forum-api.workers.dev`).
+  JWT generation happens client-side using the shared secret
+  (stored in flutter_secure_storage so it doesn't ship in the
+  bundle text; loaded from a build-time define). Token refreshes
+  before expiry.
+
+  Freezed DTOs match the Worker's response shapes 1:1
+  (Profile, Post, Comment, Vote, Report). Tests use mocktail to
+  pin the request shapes + assert auth header presence on
+  protected endpoints.
+
+- [ ] **Phase 13.10: Community tab + feed screen
+  (`lib/screens/community/community_feed_screen.dart` + tab bar
+  update).** New tab in the bottom bar — "Community" with
+  `Icons.forum_outlined`. Feed screen shows a sort selector
+  (Hot / New / Top), infinite-scroll list of post cards (title,
+  author display name + avatar, time, body preview to 3 lines,
+  vote count, comment count). Pull-to-refresh. Empty state: "Be
+  the first to post."
+
+  Reuses the existing CaptionFade for new-post animations.
+  Tests + golden for empty + populated states.
+
+- [ ] **Phase 13.11: Post detail + comment thread UI
+  (`lib/screens/community/post_detail_screen.dart` +
+  `lib/widgets/community/comment_thread.dart`).** Detail screen
+  shows the post body + scrollable nested-comments tree. Comments
+  use a recursive widget that renders 24px left-indent per depth
+  level (matches Reddit visual). Each comment has vote arrows
+  (salmon up / navy down), reply button, report button (long-press
+  menu). Replying inlines the input below the parent — no modal.
+
+  Tests + goldens for: 0 comments, single root-level comment,
+  3-level deep thread, 6-level deep (max depth — reply button
+  hidden), hidden comments render as placeholder.
+
+- [ ] **Phase 13.12: Create post + community guidelines + admin
+  moderation
+  (`lib/screens/community/post_compose_screen.dart` +
+  `lib/screens/community/community_guidelines_screen.dart` +
+  `lib/screens/community/admin_reports_screen.dart`).** Three
+  screens:
+    - **Post compose**: title + body fields, character counters,
+      "Read community guidelines" link (gated: first post must
+      acknowledge guidelines, stored via SharedPreferences).
+    - **Community guidelines**: locked content in
+      `lib/seed/community_guidelines.dart` covering tone, scope
+      (caregiving topics), no medical advice, crisis resources
+      pointer. Operator can update via spec change.
+    - **Admin reports** (gated to operator role): list of pending
+      reports with quick-actions (no action / hide / ban). Hidden
+      tab when current user isn't admin.
+
+  Tests for the gating logic + tour additions covering: create a
+  post, view feed, vote, report a comment, admin reviews report.
+
+### Ops
+
+- [ ] **Phase 13.13: Weekly metrics watchdog Worker
+  (`backend/src/watchdog/index.ts` + scheduled cron trigger).**
+  Cloudflare scheduled Worker (`crons = ["0 13 * * 1"]` — Mondays
+  at 1pm UTC) that:
+    1. Queries D1 for current size, total rows, posts/comments
+       last 30d, monthly active authors
+    2. Reads Workers Analytics for request count + p95 latency
+    3. Reads R2 for storage size + GET/PUT volume
+    4. Compares against thresholds (yellow flags at 50%+ of
+       limits, red flags at 75%+):
+       - D1 size > 4 GB (yellow) / 7 GB (red)
+       - D1 writes/day > 50K / 500K
+       - DB p95 query > 50ms / 200ms
+       - Monthly active authors > 50K / 500K
+       - R2 storage > 100 GB / 500 GB
+    5. If any yellow/red flag: sends a Resend email
+       (`RESEND_API_KEY` Worker secret) to the operator. If all
+       green: silent.
+
+  Tests use mocked D1/R2/Analytics clients + assert the email
+  sends with the right severity. Document the threshold schema
+  in `backend/README.md` so future tuning is obvious.
