@@ -182,3 +182,53 @@ class DoseLogsTable extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
+
+/// One healthcare provider the caregiver coordinates with (TASKS.md
+/// Phase 12.5).
+///
+/// The structured counterpart to the free-text crisis-card contacts
+/// in [PatientsTable] — this row carries the id every
+/// [AppointmentsTable] row FKs onto. The full freezed `Provider` model
+/// lives in [payload] as JSON; [name] is lifted to its own column so
+/// the appointment + provider screens (Phase 12.6 / 12.7) can sort
+/// alphabetically without parsing every blob.
+class ProvidersTable extends Table {
+  @override
+  String get tableName => 'providers';
+
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// One scheduled (or past) visit with a [ProvidersTable] row (TASKS.md
+/// Phase 12.5). FK on [providerId] references [ProvidersTable.id] with
+/// `ON DELETE CASCADE` — wiping a provider wipes its appointments in
+/// the same statement, so the repository never leaves orphans behind.
+///
+/// SQLite only honours that FK action when the per-connection
+/// `PRAGMA foreign_keys = ON` is set; [CareblazersDatabase]'s
+/// `MigrationStrategy.beforeOpen` enables it on every connection.
+///
+/// [startsAtMs] is lifted out of the freezed `Appointment` payload so
+/// the list screen (Phase 12.6) can group + order by date without
+/// parsing every blob.
+class AppointmentsTable extends Table {
+  @override
+  String get tableName => 'appointments';
+
+  TextColumn get id => text()();
+  TextColumn get providerId => text().references(
+        ProvidersTable,
+        #id,
+        onDelete: KeyAction.cascade,
+      )();
+  IntColumn get startsAtMs => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}

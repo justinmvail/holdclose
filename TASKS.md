@@ -861,7 +861,7 @@ Sized as 8 atomic iters across two related sub-areas: medications
 
 ### Appointments
 
-- [ ] **Phase 12.5: Appointment models + drift schema.** Two new
+- [x] **Phase 12.5: Appointment models + drift schema.** Two new
   models:
     - `Provider`: id, name, role (doctor/neurologist/social worker/
       other enum), phone, address, notes
