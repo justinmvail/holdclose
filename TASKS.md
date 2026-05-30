@@ -1015,7 +1015,7 @@ the API contract.
   Tests: middleware accepts/rejects per case; unauthenticated
   reads of `/posts` work; unauthenticated writes return 401.
 
-- [ ] **Phase 13.4: Profile bootstrap + endpoints
+- [x] **Phase 13.4: Profile bootstrap + endpoints
   (`backend/src/routes/profiles.ts`).** Four endpoints:
     - `POST /api/v1/profiles/bootstrap` — called once per careblazers
       user after first sign-in. Creates a profile row keyed on

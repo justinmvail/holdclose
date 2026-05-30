@@ -18,6 +18,13 @@ main = "src/index.ts"
 compatibility_date = "2026-05-30"
 compatibility_flags = ["nodejs_compat"]
 
+[vars]
+# Public origin of the R2 bucket fronting avatar / post-image uploads.
+# Profile avatar_url updates must start with this prefix so the API
+# can't be used to point at arbitrary off-platform images. Overridden
+# per environment via `wrangler deploy --var R2_PUBLIC_URL:...`.
+R2_PUBLIC_URL = "https://media.careblazers.local"
+
 [[d1_databases]]
 binding = "FORUM_DB"
 database_name = "careblazers-forum"

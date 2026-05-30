@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
 
 import { auth, type AuthBindings, type AuthVariables } from './middleware/auth';
+import { profilesRouter } from './routes/profiles';
 
 export type Bindings = AuthBindings & {
   FORUM_DB: D1Database;
   FORUM_MEDIA: R2Bucket;
+  R2_PUBLIC_URL: string;
 };
 
 export type Variables = AuthVariables;
@@ -21,6 +23,8 @@ const api = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 api.get('/posts', (c) => c.json({ posts: [] }));
 
 api.use('*', auth());
+
+api.route('/profiles', profilesRouter());
 
 app.route('/api/v1', api);
 

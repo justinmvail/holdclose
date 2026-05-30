@@ -6,6 +6,7 @@ declare module 'cloudflare:test' {
     FORUM_DB: D1Database;
     FORUM_MEDIA: R2Bucket;
     FORUM_JWT_SECRET: string;
+    R2_PUBLIC_URL: string;
     TEST_MIGRATIONS: import('cloudflare:test').D1Migration[];
   }
 }
