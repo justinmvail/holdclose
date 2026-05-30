@@ -114,6 +114,33 @@ void main() {
       expect(stored.resetOnLaunchDemo, isTrue);
     });
 
+    test('Phase 12.8 tracker setters persist through storage', () async {
+      final ({ProviderContainer container, InMemoryStorageProvider storage})
+          built = _build();
+      await Future<void>.delayed(Duration.zero);
+      final Settings n = built.container.read(settingsProvider.notifier);
+
+      // Defaults match BUILD_SPEC.md Phase 12.8 — every tracker on.
+      expect(built.container.read(settingsProvider).useTrackers, isTrue);
+      expect(built.container.read(settingsProvider).medicationsEnabled,
+          isTrue);
+      expect(built.container.read(settingsProvider).appointmentsEnabled,
+          isTrue);
+      expect(built.container.read(settingsProvider).notificationsEnabled,
+          isTrue);
+
+      await n.setUseTrackers(false);
+      await n.setMedicationsEnabled(false);
+      await n.setAppointmentsEnabled(false);
+      await n.setNotificationsEnabled(false);
+
+      final AppSettings stored = await built.storage.getSettings();
+      expect(stored.useTrackers, isFalse);
+      expect(stored.medicationsEnabled, isFalse);
+      expect(stored.appointmentsEnabled, isFalse);
+      expect(stored.notificationsEnabled, isFalse);
+    });
+
     test('setVoiceId(null) clears the persisted voice override', () async {
       final ({ProviderContainer container, InMemoryStorageProvider storage})
           built = _build(

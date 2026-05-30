@@ -1,11 +1,14 @@
 import 'dart:typed_data';
 
+import 'package:careblazers/models/appointment.dart';
 import 'package:careblazers/models/behavior.dart';
 import 'package:careblazers/models/decoder_result.dart';
 import 'package:careblazers/models/journal_entry.dart';
+import 'package:careblazers/models/medication.dart';
 import 'package:careblazers/models/patient.dart';
 import 'package:careblazers/models/triage.dart';
 import 'package:careblazers/services/pdf_exporter.dart';
+import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_test/flutter_test.dart';
 
 /// Pinned anchor for every fixture in this file. Midday so subtracting
@@ -293,6 +296,162 @@ void main() {
       final String text = _extractText(bytes);
       expect(text, contains('Tried a different approach.'));
       expect(text, contains("Couldn't reach the coach."));
+    });
+  });
+
+  group('PdfExporter.exportRange — Phase 12.8 meds + appts sections', () {
+    test('with medications renders the Active medications table', () async {
+      const PdfExporter exporter = PdfExporter(compress: false);
+      final Uint8List bytes = await exporter.exportRange(
+        entries: const <JournalEntry>[],
+        patient: _maryHenderson(),
+        range: DateRange(
+          start: _now.subtract(const Duration(days: 30)),
+          end: _now,
+        ),
+        medications: <MedicationWithSchedules>[
+          MedicationWithSchedules(
+            medication: const Medication(
+              id: 'med-1',
+              name: 'Donepezil',
+              dosage: '10 mg',
+              route: MedicationRoute.oral,
+            ),
+            schedules: <DoseSchedule>[
+              DoseSchedule(
+                id: 's',
+                medicationId: 'med-1',
+                frequencyKind: FrequencyKind.daily,
+                timesOfDay: const <TimeOfDay>[
+                  TimeOfDay(hour: 8, minute: 0),
+                ],
+                daysOfWeek: const <int>{},
+                startsOn: DateTime(2026, 5, 1),
+              ),
+            ],
+          ),
+        ],
+      );
+      final String text = _extractText(bytes);
+      expect(text, contains('Active medications'));
+      expect(text, contains('Donepezil'));
+      expect(text, contains('10 mg'));
+      expect(text, contains('daily'));
+    });
+
+    test('with upcoming appointments renders the Upcoming visits table',
+        () async {
+      // Pin clock so "upcoming" filtering is deterministic.
+      final PdfExporter exporter = PdfExporter(
+        compress: false,
+        clock: () => DateTime(2026, 5, 29, 12),
+      );
+      final Uint8List bytes = await exporter.exportRange(
+        entries: const <JournalEntry>[],
+        patient: _maryHenderson(),
+        range: DateRange(
+          start: DateTime(2026, 5, 1),
+          end: DateTime(2026, 7, 1),
+        ),
+        appointments: <AppointmentWithProvider>[
+          AppointmentWithProvider(
+            appointment: Appointment(
+              id: 'appt-1',
+              providerId: 'prov-1',
+              startsAt: DateTime(2026, 6, 5, 10, 0),
+              durationMinutes: 45,
+              location: 'Marin Neurology Clinic',
+              agenda: const <String>['Med review'],
+              status: AppointmentStatus.upcoming,
+            ),
+            provider: const Provider(
+              id: 'prov-1',
+              name: 'Dr. Patel',
+              role: ProviderRole.neurologist,
+              phone: '555-0100',
+              address: '1 Med Way',
+            ),
+          ),
+        ],
+      );
+      final String text = _extractText(bytes);
+      expect(text, contains('Upcoming appointments'));
+      expect(text, contains('Dr. Patel'));
+      expect(text, contains('Neurologist'));
+      expect(text, contains('Marin Neurology Clinic'));
+      expect(text, contains('45 min'));
+    });
+
+    test('past + cancelled appointments are filtered out of upcoming table',
+        () async {
+      final PdfExporter exporter = PdfExporter(
+        compress: false,
+        clock: () => DateTime(2026, 5, 29, 12),
+      );
+      final Uint8List bytes = await exporter.exportRange(
+        entries: const <JournalEntry>[],
+        patient: _maryHenderson(),
+        range: DateRange(
+          start: DateTime(2026, 1, 1),
+          end: DateTime(2026, 12, 31),
+        ),
+        appointments: <AppointmentWithProvider>[
+          AppointmentWithProvider(
+            appointment: Appointment(
+              id: 'appt-cancel',
+              providerId: 'prov-1',
+              startsAt: DateTime(2026, 6, 5, 10, 0),
+              durationMinutes: 30,
+              location: '',
+              agenda: const <String>[],
+              status: AppointmentStatus.canceled,
+            ),
+            provider: const Provider(
+              id: 'prov-1',
+              name: 'Dr. Patel',
+              role: ProviderRole.doctor,
+              phone: '',
+              address: '',
+            ),
+          ),
+          AppointmentWithProvider(
+            appointment: Appointment(
+              id: 'appt-past',
+              providerId: 'prov-1',
+              startsAt: DateTime(2026, 4, 1, 10, 0),
+              durationMinutes: 30,
+              location: '',
+              agenda: const <String>[],
+              status: AppointmentStatus.upcoming,
+            ),
+            provider: const Provider(
+              id: 'prov-1',
+              name: 'Dr. Stone',
+              role: ProviderRole.doctor,
+              phone: '',
+              address: '',
+            ),
+          ),
+        ],
+      );
+      final String text = _extractText(bytes);
+      // Neither cancelled nor past-upcoming should render the section.
+      expect(text, isNot(contains('Upcoming appointments')));
+    });
+
+    test('empty medications + appointments omits both sections', () async {
+      const PdfExporter exporter = PdfExporter(compress: false);
+      final Uint8List bytes = await exporter.exportRange(
+        entries: const <JournalEntry>[],
+        patient: _maryHenderson(),
+        range: DateRange(
+          start: _now.subtract(const Duration(days: 30)),
+          end: _now,
+        ),
+      );
+      final String text = _extractText(bytes);
+      expect(text, isNot(contains('Active medications')));
+      expect(text, isNot(contains('Upcoming appointments')));
     });
   });
 

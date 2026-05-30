@@ -206,68 +206,13 @@ GoRouter buildRouter({
           conversationId: state.pathParameters['id'] ?? '',
         ),
       ),
-      GoRoute(
-        path: '/medications',
-        name: CareblazersRoutes.medicationList,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) =>
-            const MedicationListScreen(),
-        routes: <RouteBase>[
-          GoRoute(
-            path: 'new',
-            name: CareblazersRoutes.medicationForm,
-            parentNavigatorKey: rootNavigatorKey,
-            builder: (BuildContext context, GoRouterState state) =>
-                const MedicationFormScreen(),
-          ),
-          GoRoute(
-            path: 'today',
-            name: CareblazersRoutes.medicationDoseLog,
-            parentNavigatorKey: rootNavigatorKey,
-            builder: (BuildContext context, GoRouterState state) =>
-                const DoseLogScreen(),
-          ),
-        ],
-      ),
-      GoRoute(
-        path: '/appointments',
-        name: CareblazersRoutes.appointmentList,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) =>
-            const AppointmentListScreen(),
-        routes: <RouteBase>[
-          GoRoute(
-            path: 'new',
-            name: CareblazersRoutes.appointmentForm,
-            parentNavigatorKey: rootNavigatorKey,
-            builder: (BuildContext context, GoRouterState state) =>
-                const AppointmentFormScreen(),
-          ),
-          GoRoute(
-            path: ':id',
-            name: CareblazersRoutes.appointmentDetail,
-            parentNavigatorKey: rootNavigatorKey,
-            builder: (BuildContext context, GoRouterState state) =>
-                AppointmentDetailScreen(
-              appointmentId: state.pathParameters['id'] ?? '',
-            ),
-            routes: <RouteBase>[
-              GoRoute(
-                path: 'edit',
-                name: CareblazersRoutes.appointmentEdit,
-                parentNavigatorKey: rootNavigatorKey,
-                builder: (BuildContext context, GoRouterState state) =>
-                    AppointmentFormScreen(
-                  appointmentId: state.pathParameters['id'],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-
-      // Tab shell — Home / Journal / Library / Crisis. Each branch is
-      // a separate Navigator so back-stacks survive tab switches.
+      // Tab shell — Home / Journal / Medications / Appointments /
+      // Library / Crisis (BUILD_SPEC.md §4.1 + Phase 12.8 additions).
+      // Each branch is a separate Navigator so back-stacks survive
+      // tab switches. The medication + appointment branches stay
+      // registered even when the matching Settings toggle hides them
+      // from the tab bar — a notification-tap deep link still needs
+      // to land on the right branch (BUILD_SPEC.md Phase 12.8 wiring).
       StatefulShellRoute.indexedStack(
         builder: (
           BuildContext context,
@@ -293,6 +238,71 @@ GoRouter buildRouter({
                 name: CareblazersRoutes.journal,
                 builder: (BuildContext context, GoRouterState state) =>
                     const JournalScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(
+                path: '/medications',
+                name: CareblazersRoutes.medicationList,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const MedicationListScreen(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: 'new',
+                    name: CareblazersRoutes.medicationForm,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const MedicationFormScreen(),
+                  ),
+                  GoRoute(
+                    path: 'today',
+                    name: CareblazersRoutes.medicationDoseLog,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const DoseLogScreen(),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(
+                path: '/appointments',
+                name: CareblazersRoutes.appointmentList,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const AppointmentListScreen(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: 'new',
+                    name: CareblazersRoutes.appointmentForm,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const AppointmentFormScreen(),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    name: CareblazersRoutes.appointmentDetail,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        AppointmentDetailScreen(
+                      appointmentId: state.pathParameters['id'] ?? '',
+                    ),
+                    routes: <RouteBase>[
+                      GoRoute(
+                        path: 'edit',
+                        name: CareblazersRoutes.appointmentEdit,
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (BuildContext context, GoRouterState state) =>
+                            AppointmentFormScreen(
+                          appointmentId: state.pathParameters['id'],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),

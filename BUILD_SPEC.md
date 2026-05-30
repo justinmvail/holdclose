@@ -52,6 +52,12 @@ pre-staged content beyond the seed-data scaffolding.
   action per §5.8; future "share this script" surfaces). Wrapped
   behind the `Sharer` interface so widget tests can recording-override
   it the same way `LinkLauncher` is.
+- **Local notifications**: `flutter_local_notifications` 18+ +
+  `timezone` 0.10+ (Phase 12.8 — per-dose + per-appointment
+  reminders). Wrapped behind the `NotificationsProvider` interface so
+  the medication + appointment screens depend on a single seam rather
+  than the plugin API; widget + service tests override with a
+  recording `NoopNotificationsProvider`.
 - **No new top-level deps** without updating this file. Don't add
   Bloc, Provider (lowercase, the package), MobX, or any other state
   library. Don't add hand-rolled HTTP. Don't add new font families.

@@ -61,6 +61,13 @@ Future<void> _scrollTo(WidgetTester tester, Finder target) async {
   await tester.pump();
 }
 
+/// Snapshot the value of the SwitchListTile at [key]. Keeps the
+/// Phase 12.8 tracker assertions concise — three of them flip the
+/// same switch and re-read.
+bool _switchValue(WidgetTester tester, Key key) {
+  return tester.widget<SwitchListTile>(find.byKey(key)).value;
+}
+
 void main() {
   group('SettingsScreen — BUILD_SPEC.md §5.10', () {
     testWidgets('renders AppBar title and the top sections',
@@ -72,7 +79,40 @@ void main() {
       // on the 2000-tall test surface without scrolling.
       expect(find.text('Font size'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
+      // Phase 12.8 — Trackers section appears below Appearance.
+      expect(find.text('Trackers'), findsOneWidget);
     });
+
+    testWidgets(
+      'Phase 12.8 — master useTrackers toggle persists and gates per-feature',
+      (WidgetTester tester) async {
+        final built = await _pumpSettings(tester);
+
+        // All four switches start ON.
+        expect(_switchValue(tester, SettingsScreen.useTrackersToggleKey),
+            isTrue);
+        expect(_switchValue(tester, SettingsScreen.medicationsToggleKey),
+            isTrue);
+        expect(_switchValue(tester, SettingsScreen.appointmentsToggleKey),
+            isTrue);
+        expect(_switchValue(tester, SettingsScreen.notificationsToggleKey),
+            isTrue);
+
+        // Flip the master OFF — per-feature SwitchListTiles must
+        // become non-interactive (onChanged null disables them).
+        await tester.tap(find.byKey(SettingsScreen.useTrackersToggleKey));
+        await tester.pumpAndSettle();
+
+        final SwitchListTile medsTile = tester.widget<SwitchListTile>(
+            find.byKey(SettingsScreen.medicationsToggleKey));
+        expect(medsTile.onChanged, isNull,
+            reason: 'master OFF disables Medications per-feature toggle');
+
+        // The flip persisted through storage.
+        final AppSettings stored = await built.storage.getSettings();
+        expect(stored.useTrackers, isFalse);
+      },
+    );
 
     testWidgets(
       'demo-mode section hidden when DEMO_MODE define is unset',

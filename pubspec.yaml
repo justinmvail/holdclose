@@ -71,6 +71,15 @@ dependencies:
   # Share sheet (library card detail share action — BUILD_SPEC.md §5.8)
   share_plus: ^10.0.0
 
+  # Local notifications (Phase 12.8 — per-dose + per-appointment
+  # reminders). The plugin schedules iOS/Android local notifications
+  # through OS APIs (UNUserNotificationCenter / AlarmManager). We use
+  # the timezone-aware `zonedSchedule` API so reminders fire at the
+  # caregiver's wall-clock time across DST transitions; `timezone` is
+  # the required companion dependency the plugin's docs call for.
+  flutter_local_notifications: ^18.0.0
+  timezone: ^0.10.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

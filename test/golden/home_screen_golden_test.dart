@@ -1,9 +1,11 @@
 import 'package:alchemist/alchemist.dart';
+import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 /// CI-only golden of [HomeScreen] in its default state — Home tab
 /// root, no decoder push in flight. Wrapped in the real router so the
@@ -24,7 +26,17 @@ void main() {
         children: <Widget>[
           GoldenTestScenario(
             name: 'default (Home tab root)',
+            // TabScaffold (Phase 12.8) watches settingsProvider to
+            // pick which tabs to show — settingsProvider hydrates
+            // off storageProvider, which would otherwise reach for
+            // the on-device sqlite file. The in-memory override
+            // keeps the golden hermetic.
             child: ProviderScope(
+              overrides: <Override>[
+                storageBackendProvider.overrideWithValue(
+                  InMemoryStorageProvider(),
+                ),
+              ],
               child: SizedBox(
                 width: 390,
                 height: 780,

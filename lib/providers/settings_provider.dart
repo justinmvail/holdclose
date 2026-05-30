@@ -107,6 +107,32 @@ class Settings extends _$Settings {
   Future<void> setResetOnLaunchDemo(bool value) =>
       _update(state.copyWith(resetOnLaunchDemo: value));
 
+  /// Master "Use trackers" switch (BUILD_SPEC.md Phase 12.8). When
+  /// flipped off, the Medications + Appointments tabs disappear and
+  /// no reminders are scheduled. Per-feature toggles below stay at
+  /// their current value so flipping the master back on restores the
+  /// caregiver's prior per-feature choice without a reset.
+  Future<void> setUseTrackers(bool value) =>
+      _update(state.copyWith(useTrackers: value));
+
+  /// Per-feature toggle for the Medications tab + reminders (Phase
+  /// 12.8). The Tab bar consults both this and [useTrackers]; the
+  /// stricter wins.
+  Future<void> setMedicationsEnabled(bool value) =>
+      _update(state.copyWith(medicationsEnabled: value));
+
+  /// Per-feature toggle for the Appointments tab + reminders (Phase
+  /// 12.8). Same precedence rule as [setMedicationsEnabled].
+  Future<void> setAppointmentsEnabled(bool value) =>
+      _update(state.copyWith(appointmentsEnabled: value));
+
+  /// Master toggle for whether the app schedules local notifications
+  /// (Phase 12.8). Distinct from the OS-level permission grant — even
+  /// with this on, the platform plugin will silently no-op if the
+  /// caregiver denied notifications at the OS level.
+  Future<void> setNotificationsEnabled(bool value) =>
+      _update(state.copyWith(notificationsEnabled: value));
+
   Future<void> _update(AppSettings next) async {
     _userTouched = true;
     state = next;

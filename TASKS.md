@@ -890,7 +890,7 @@ Sized as 8 atomic iters across two related sub-areas: medications
 
 ### Wiring
 
-- [ ] **Phase 12.8: Notifications, Settings, tab bar, tour, PDF
+- [x] **Phase 12.8: Notifications, Settings, tab bar, tour, PDF
   pickup.**
     - Wire `flutter_local_notifications` (new pubspec dep) to
       schedule per-dose + per-appointment reminders. Dose reminders

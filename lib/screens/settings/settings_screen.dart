@@ -43,6 +43,15 @@ class SettingsScreen extends ConsumerWidget {
       Key('settings-delete-account-confirm');
   static const Key methodologyButtonKey = Key('settings-methodology');
   static const Key brandCreditKey = Key('settings-brand-credit');
+  static const Key useTrackersToggleKey =
+      Key('settings-use-trackers-toggle');
+  static const Key medicationsToggleKey =
+      Key('settings-medications-toggle');
+  static const Key appointmentsToggleKey =
+      Key('settings-appointments-toggle');
+  static const Key notificationsToggleKey =
+      Key('settings-notifications-toggle');
+  static const Key trackersSectionKey = Key('settings-trackers-section');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -61,6 +70,8 @@ class SettingsScreen extends ConsumerWidget {
             _FontSizeSection(settings: settings, notifier: notifier),
             const SizedBox(height: 24),
             _AppearanceSection(settings: settings, notifier: notifier),
+            const SizedBox(height: 24),
+            _TrackersSection(settings: settings, notifier: notifier),
             if (demoModeEnabled) ...<Widget>[
               const SizedBox(height: 24),
               _DemoSection(settings: settings, notifier: notifier),
@@ -403,6 +414,102 @@ class _AppearanceSection extends StatelessWidget {
             ),
             value: settings.darkModeAtNight,
             onChanged: (bool v) => notifier.setDarkModeAtNight(v),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Trackers (BUILD_SPEC.md Phase 12.8) — master + per-feature toggles
+// ---------------------------------------------------------------------------
+
+/// Settings card for the medication + appointment trackers
+/// (BUILD_SPEC.md Phase 12.8).
+///
+/// Three controls stacked:
+///   - Master "Use trackers" switch — hides both tab-bar entries and
+///     suppresses notification scheduling when off.
+///   - Per-feature toggles for Medications and Appointments — only
+///     interactive when the master is on (greys out otherwise so a
+///     caregiver who turned everything off doesn't have to flip three
+///     switches back on to restore).
+///   - "Send reminders" — orthogonal to the tracker visibility; lets a
+///     caregiver keep the tracker UIs but suppress the OS pings.
+///
+/// The notifier setters persist immediately via the storage provider
+/// (same pattern as the audio + appearance sections).
+class _TrackersSection extends StatelessWidget {
+  const _TrackersSection({required this.settings, required this.notifier});
+
+  final AppSettings settings;
+  final Settings notifier;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool master = settings.useTrackers;
+    return Column(
+      key: SettingsScreen.trackersSectionKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const _SectionHeader(title: 'Trackers'),
+        _SectionCard(
+          child: Column(
+            children: <Widget>[
+              SwitchListTile(
+                key: SettingsScreen.useTrackersToggleKey,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Use trackers'),
+                subtitle: const Text(
+                  'Show the medications + appointments tabs and schedule '
+                  'reminders. Turn off to keep the app lean.',
+                ),
+                value: master,
+                onChanged: (bool v) => notifier.setUseTrackers(v),
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                key: SettingsScreen.medicationsToggleKey,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Medications'),
+                subtitle: const Text(
+                  'Track meds + dose schedules; remind at the dose time.',
+                ),
+                value: settings.medicationsEnabled,
+                onChanged: master
+                    ? (bool v) => notifier.setMedicationsEnabled(v)
+                    : null,
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                key: SettingsScreen.appointmentsToggleKey,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Appointments'),
+                subtitle: const Text(
+                  "Track upcoming visits; remind 24 hours + 1 hour before.",
+                ),
+                value: settings.appointmentsEnabled,
+                onChanged: master
+                    ? (bool v) => notifier.setAppointmentsEnabled(v)
+                    : null,
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                key: SettingsScreen.notificationsToggleKey,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Send reminders'),
+                subtitle: const Text(
+                  "When off, the app stops scheduling new reminders. "
+                  "Already-pending ones are cleared next time you edit "
+                  'a medication or appointment.',
+                ),
+                value: settings.notificationsEnabled,
+                onChanged: master
+                    ? (bool v) => notifier.setNotificationsEnabled(v)
+                    : null,
+              ),
+            ],
           ),
         ),
       ],

@@ -1,37 +1,75 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../models/settings.dart';
+import '../providers/settings_provider.dart';
 import '../theme.dart';
 
-/// Bottom-tab shell for the four root branches:
-/// `Home · Journal · Library · Crisis` (BUILD_SPEC.md §4.1 order).
+/// Bottom-tab shell for the six root branches:
+/// `Home · Journal · Medications · Appointments · Library · Crisis`
+/// (BUILD_SPEC.md §4.1 + Phase 12.8 additions).
 ///
-/// Wraps a [StatefulNavigationShell] so each tab keeps its own back
-/// stack across switches. Tab branch indices map 1-to-1 to
-/// [tabBranchPaths]; the router and tests share this list so a
-/// reorder lands in one place.
-class TabScaffold extends StatelessWidget {
+/// Medications + Appointments only render in the tab bar when the
+/// matching [AppSettings] toggles are on — `useTrackers` master AND
+/// the per-feature toggle. When hidden, the underlying go_router
+/// branches still exist (a deep-link from a notification tap still
+/// works), but they don't surface as tap targets in the bar.
+///
+/// Branch indices are STABLE across visibility changes — branch 2 is
+/// always Medications regardless of whether it's surfaced in the bar.
+/// The shell-to-bar mapping is computed at render time so a
+/// `useTrackers` flip toggles the bar without re-keying any branch's
+/// navigator stack.
+class TabScaffold extends ConsumerWidget {
   const TabScaffold({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
-  /// Branch paths in tab-bar order. Index `i` is the path that the
-  /// tab at position `i` switches to.
+  /// Branch paths in shell-branch order. Index `i` is the path the
+  /// router restores when the bar switches to that branch. The
+  /// medication + appointment branches sit between the journal and
+  /// library so the lean-app (trackers-off) layout collapses to the
+  /// same Home/Journal/Library/Crisis shape as the pre-Phase-12.8
+  /// build without re-indexing the journal-tap tests.
   static const List<String> tabBranchPaths = <String>[
     '/',
     '/journal',
+    '/medications',
+    '/appointments',
     '/library',
     '/crisis',
   ];
 
+  /// Compute the visible branch indices for the current
+  /// [AppSettings]. Medications + Appointments collapse off the bar
+  /// when [AppSettings.useTrackers] is OFF or the per-feature toggle
+  /// is OFF — same precedence the Settings UI advertises.
+  static List<int> visibleBranchIndicesFor(AppSettings settings) {
+    return <int>[
+      0, // Home
+      1, // Journal
+      if (settings.useTrackers && settings.medicationsEnabled) 2,
+      if (settings.useTrackers && settings.appointmentsEnabled) 3,
+      4, // Library
+      5, // Crisis
+    ];
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppSettings settings = ref.watch(settingsProvider);
+    final List<int> visibleBranches = visibleBranchIndicesFor(settings);
+    final int activeBarSlot =
+        visibleBranches.indexOf(navigationShell.currentIndex);
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: TabScaffoldBar(
-        currentIndex: navigationShell.currentIndex,
-        onDestinationSelected: (int index) {
-          context.go(tabBranchPaths[index]);
+        currentIndex: activeBarSlot < 0 ? 0 : activeBarSlot,
+        visibleBranches: visibleBranches,
+        onDestinationSelected: (int barIndex) {
+          final int branchIndex = visibleBranches[barIndex];
+          context.go(tabBranchPaths[branchIndex]);
         },
       ),
     );
@@ -43,20 +81,28 @@ class TabScaffold extends StatelessWidget {
 /// Extracted from the shell so widget + golden tests can render the
 /// bar without spinning up a full router — the shell-bound variant
 /// would otherwise require a live `StatefulNavigationShell`.
+///
+/// [visibleBranches] is the subset of [TabScaffoldBar.destinations]
+/// (by branch index) the bar should paint, in left-to-right order.
+/// Defaults to "all of them" so legacy tests + the default golden
+/// keep passing without per-call wiring.
 class TabScaffoldBar extends StatelessWidget {
   const TabScaffoldBar({
     super.key,
     required this.currentIndex,
     required this.onDestinationSelected,
+    this.visibleBranches = const <int>[0, 1, 2, 3, 4, 5],
   });
 
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
+  final List<int> visibleBranches;
 
-  /// Tab destinations in BUILD_SPEC.md §4.1 order. Cupertino-style
-  /// Material icon set: outlined glyphs for inactive, filled for
-  /// active. Crisis uses `warning_amber` (not the red exclamation)
-  /// to stay calm in tone — the audience is already stressed.
+  /// Tab destinations indexed by shell-branch index. The Cupertino-
+  /// style outlined glyphs read as calm on the day the audience is
+  /// running on three hours of sleep; warning_amber on Crisis
+  /// (BUILD_SPEC.md §4.1 — not the alarmist red bell) for the same
+  /// reason.
   static const List<TabScaffoldDestination> destinations =
       <TabScaffoldDestination>[
     TabScaffoldDestination(
@@ -68,6 +114,16 @@ class TabScaffoldBar extends StatelessWidget {
       label: 'Journal',
       icon: Icons.book_outlined,
       selectedIcon: Icons.book,
+    ),
+    TabScaffoldDestination(
+      label: 'Meds',
+      icon: Icons.medication_outlined,
+      selectedIcon: Icons.medication,
+    ),
+    TabScaffoldDestination(
+      label: 'Visits',
+      icon: Icons.event_outlined,
+      selectedIcon: Icons.event,
     ),
     TabScaffoldDestination(
       label: 'Library',
@@ -103,7 +159,7 @@ class TabScaffoldBar extends StatelessWidget {
             color: selected
                 ? careblazersColors.primary
                 : careblazersColors.primarySoft,
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
           );
         }),
@@ -111,12 +167,13 @@ class TabScaffoldBar extends StatelessWidget {
       child: NavigationBar(
         selectedIndex: currentIndex,
         onDestinationSelected: onDestinationSelected,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: <NavigationDestination>[
-          for (final TabScaffoldDestination dest in destinations)
+          for (final int branchIndex in visibleBranches)
             NavigationDestination(
-              icon: Icon(dest.icon),
-              selectedIcon: Icon(dest.selectedIcon),
-              label: dest.label,
+              icon: Icon(destinations[branchIndex].icon),
+              selectedIcon: Icon(destinations[branchIndex].selectedIcon),
+              label: destinations[branchIndex].label,
             ),
         ],
       ),

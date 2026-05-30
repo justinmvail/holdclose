@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/medication.dart';
+import '../../providers/notifications_provider.dart';
 import '../../services/medication_repository.dart';
+import '../../services/notification_scheduler.dart';
 import '../../theme.dart';
 import 'medication_list_screen.dart';
 
@@ -119,9 +121,29 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
       startsOn: DateTime(now.year, now.month, now.day),
     );
 
+    // BUILD_SPEC.md Phase 12.8 — capture refs BEFORE any await so a
+    // widget-unmount mid-submit doesn't trigger "ref read after
+    // dispose" assertions. The scheduler is keepAlive: true so the
+    // container holds the instance.
+    final NotificationsProvider notifications =
+        ref.read(notificationsProvider);
+    final NotificationScheduler scheduler =
+        ref.read(notificationSchedulerProvider);
+
     await repo.upsertMedication(medication);
     await repo.upsertSchedule(defaultSchedule);
     ref.invalidate(medicationListProvider);
+
+    // Permission ask on first med add, then schedule dose reminders.
+    // Re-asking is idempotent on both platforms, but we only prompt
+    // when the cached state is still notDetermined so the caregiver
+    // isn't re-pestered.
+    final NotificationPermission current =
+        await notifications.currentPermission();
+    if (current == NotificationPermission.notDetermined) {
+      await notifications.requestPermission();
+    }
+    await scheduler.rescheduleForMedication(medicationId);
 
     if (!mounted) return;
     if (context.canPop()) {

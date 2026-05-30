@@ -6,6 +6,8 @@ import 'package:careblazers/providers/settings_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/providers/tts_provider.dart';
 import 'package:careblazers/routing/router.dart';
+import 'package:careblazers/screens/appointment/appointment_form_screen.dart';
+import 'package:careblazers/screens/appointment/appointment_list_screen.dart';
 import 'package:careblazers/screens/crisis/crisis_card_screen.dart';
 import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
 import 'package:careblazers/screens/decoder/decoder_result_screen.dart';
@@ -14,12 +16,17 @@ import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/journal/journal_screen.dart';
 import 'package:careblazers/screens/library/library_card_screen.dart';
 import 'package:careblazers/screens/library/library_screen.dart';
+import 'package:careblazers/screens/medication/dose_log_screen.dart';
+import 'package:careblazers/screens/medication/medication_form_screen.dart';
+import 'package:careblazers/screens/medication/medication_list_screen.dart';
 import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
 import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
 import 'package:careblazers/screens/settings/settings_screen.dart';
 import 'package:careblazers/seed/chat_system_prompt.dart';
+import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/chat_repository.dart';
 import 'package:careblazers/services/chat_service.dart';
+import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/services/seed_repository.dart';
 import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/message_body.dart';
@@ -80,6 +87,16 @@ void main() {
       // entries (BUILD_SPEC.md §9.1 + §9.2).
       await SeedRepository(storage: storage).populateAll();
 
+      // BUILD_SPEC.md Phase 12.8 — the meds + appts steps reach the
+      // matching screens, so wire each tab's repository to an
+      // in-memory drift backend. Tour does not pre-seed; the add
+      // steps below populate the tables themselves.
+      final CareblazersDatabase trackerDb =
+          CareblazersDatabase(NativeDatabase.memory());
+      addTearDown(trackerDb.close);
+      final MedicationRepository medRepo = MedicationRepository(trackerDb);
+      final AppointmentRepository apptRepo = AppointmentRepository(trackerDb);
+
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[
           storageBackendProvider.overrideWithValue(storage),
@@ -90,6 +107,8 @@ void main() {
           // can flip the muting state without per-screen plumbing.
           ttsSettingsProvider
               .overrideWith((Ref ref) => ref.watch(settingsProvider)),
+          medicationRepositoryBackendProvider.overrideWithValue(medRepo),
+          appointmentRepositoryBackendProvider.overrideWithValue(apptRepo),
         ],
       );
       addTearDown(container.dispose);
@@ -309,6 +328,83 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(CrisisCardScreen.cardKey), findsOneWidget);
       expect(find.text('Mary Henderson'), findsAtLeastNWidgets(1));
+
+      // ====================================================================
+      // STEP 17b — Medications (Phase 12.8): switch to Meds tab, hit the
+      // empty-state CTA, add a med, verify it lands on the list.
+      // ====================================================================
+      await _tapTab(tester, 'Meds');
+      expect(find.byKey(MedicationListScreen.emptyStateKey), findsOneWidget);
+      await tester.tap(find.byKey(MedicationListScreen.emptyCtaKey));
+      await tester.pumpAndSettle();
+
+      // Fill the medication form.
+      await tester.enterText(
+          find.byKey(MedicationFormScreen.nameFieldKey), 'Donepezil');
+      await tester.enterText(
+          find.byKey(MedicationFormScreen.dosageFieldKey), '10 mg');
+      await tester.ensureVisible(find.byKey(MedicationFormScreen.submitButtonKey));
+      await tester.tap(find.byKey(MedicationFormScreen.submitButtonKey));
+      await tester.pumpAndSettle();
+
+      // Back on the list — assert the new med renders.
+      expect(find.byKey(MedicationListScreen.listKey), findsOneWidget);
+      expect(find.text('Donepezil'), findsOneWidget);
+      expect(find.text('10 mg'), findsOneWidget);
+
+      // ====================================================================
+      // STEP 17c — Dose log (Phase 12.8): visit /medications/today and
+      // verify the dose row renders.
+      // ====================================================================
+      container.read(careblazersRouterProvider).go('/medications/today');
+      await tester.pumpAndSettle();
+      expect(find.byType(DoseLogScreen), findsOneWidget);
+      // Pop back to the list so the next tab tap lands on a fresh
+      // branch root.
+      if (find.byType(BackButton).evaluate().isNotEmpty) {
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+      }
+
+      // ====================================================================
+      // STEP 17d — Appointments (Phase 12.8): switch to Visits tab, add
+      // an appointment, verify list rendering.
+      // ====================================================================
+      await _tapTab(tester, 'Visits');
+      // Empty state CTA → form.
+      final Finder apptEmptyCta =
+          find.byKey(AppointmentListScreen.emptyCtaKey);
+      if (apptEmptyCta.evaluate().isNotEmpty) {
+        await tester.tap(apptEmptyCta);
+      } else {
+        await tester.tap(find.byKey(AppointmentListScreen.fabKey));
+      }
+      await tester.pumpAndSettle();
+
+      // The form requires a provider — use the inline "add new" path.
+      await tester
+          .tap(find.byKey(AppointmentFormScreen.addProviderToggleKey));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(AppointmentFormScreen.newProviderNameFieldKey),
+          'Dr. Patel');
+      await tester.enterText(
+          find.byKey(AppointmentFormScreen.newProviderPhoneFieldKey),
+          '(415) 555-0199');
+      await tester.enterText(
+          find.byKey(AppointmentFormScreen.newProviderAddressFieldKey),
+          '1 Med Way');
+      await tester.tap(find.byKey(AppointmentFormScreen.newProviderSaveButtonKey));
+      await tester.pumpAndSettle();
+
+      await tester
+          .ensureVisible(find.byKey(AppointmentFormScreen.submitButtonKey));
+      await tester.tap(find.byKey(AppointmentFormScreen.submitButtonKey));
+      await tester.pumpAndSettle();
+
+      // Back on the list — the row renders.
+      expect(find.byType(AppointmentListScreen), findsOneWidget);
+      expect(find.text('Dr. Patel'), findsAtLeastNWidgets(1));
 
       // ====================================================================
       // STEP 18 — Settings (via gear from Home): toggle "Read scripts

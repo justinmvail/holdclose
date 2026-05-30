@@ -85,16 +85,18 @@ void main() {
 
   group('careblazersRouter — tab shell', () {
     testWidgets(
-      'opens on Home (§5.1) by default with the four-tab NavigationBar',
+      'opens on Home (§5.1) by default with the six-tab NavigationBar',
       (WidgetTester tester) async {
         final GoRouter router = await pumpRouter(tester);
 
         expect(currentPath(router), '/');
         expect(find.byType(HomeScreen), findsOneWidget);
         expect(find.byType(NavigationBar), findsOneWidget);
-        // Tab labels appear in the exact §4.1 order.
+        // Tab labels appear in the exact §4.1 + Phase 12.8 order.
         expect(find.text('Home'), findsOneWidget);
         expect(find.text('Journal'), findsOneWidget);
+        expect(find.text('Meds'), findsOneWidget);
+        expect(find.text('Visits'), findsOneWidget);
         expect(find.text('Library'), findsOneWidget);
         expect(find.text('Crisis'), findsOneWidget);
       },

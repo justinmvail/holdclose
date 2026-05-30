@@ -4,6 +4,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 import 'app.dart';
 import 'models/settings.dart';
+import 'providers/local_notifications_provider.dart';
+import 'providers/notifications_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/storage_provider.dart';
 import 'providers/tts_provider.dart';
@@ -21,6 +23,12 @@ Future<void> main() async {
       ttsSettingsProvider.overrideWith(
         (Ref ref) => ref.watch(settingsProvider),
       ),
+      // BUILD_SPEC.md Phase 12.8 — drop the platform-bound notifier in
+      // for real builds. Widget tests + integration tour leave the
+      // default `NoopNotificationsProvider` so they don't transitively
+      // pull `flutter_local_notifications` into the test harness.
+      notificationsBackendProvider
+          .overrideWithValue(LocalNotificationsProvider()),
     ],
   );
 

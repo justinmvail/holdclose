@@ -9,7 +9,9 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/appointment.dart';
+import '../../providers/notifications_provider.dart';
 import '../../services/appointment_repository.dart';
+import '../../services/notification_scheduler.dart';
 import '../../services/provider_repository.dart';
 import '../../theme.dart';
 import 'appointment_detail_screen.dart';
@@ -385,11 +387,29 @@ class _AppointmentFormScreenState
       notes: notes.isEmpty ? null : notes,
     );
 
+    // BUILD_SPEC.md Phase 12.8 — capture the notifications + scheduler
+    // refs BEFORE any await so a widget-unmount mid-submit doesn't
+    // trigger "ref read after dispose" assertions. The scheduler is
+    // keepAlive: true so the container holds the instance.
+    final NotificationsProvider notifications =
+        ref.read(notificationsProvider);
+    final NotificationScheduler scheduler =
+        ref.read(notificationSchedulerProvider);
+
     await repo.upsertAppointment(appt);
     ref.invalidate(appointmentListProvider);
     if (widget.appointmentId != null) {
       ref.invalidate(appointmentDetailProvider(widget.appointmentId!));
     }
+
+    // Permission ask on first appointment add (idempotent across
+    // re-runs) + schedule 24h + 1h reminders.
+    final NotificationPermission current =
+        await notifications.currentPermission();
+    if (current == NotificationPermission.notDetermined) {
+      await notifications.requestPermission();
+    }
+    await scheduler.rescheduleForAppointment(id);
 
     if (!mounted) return;
     if (context.canPop()) {

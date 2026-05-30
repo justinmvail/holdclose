@@ -13,7 +13,9 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../models/appointment.dart';
 import '../models/journal_entry.dart';
+import '../models/medication.dart';
 import '../models/patient.dart';
 
 part 'pdf_exporter.g.dart';
@@ -73,11 +75,23 @@ class PdfExporter {
   /// Generate the doctor-visit packet for [entries] filtered to [range].
   /// [caregiverName] is rendered on the cover (falls back to the
   /// patient's primary caregiver name when omitted).
+  ///
+  /// BUILD_SPEC.md Phase 12.8 — when [medications] or [appointments]
+  /// is provided, the packet appends "Active medications" and
+  /// "Upcoming appointments" sections respectively. Both lists are
+  /// optional so the journal export path can call this without the
+  /// tracker tables loaded (the lean-app mode); the crisis card path
+  /// still relies on the [Patient.medications] free-text list per
+  /// BUILD_SPEC.md §9.1.
   Future<Uint8List> exportRange({
     required List<JournalEntry> entries,
     required Patient patient,
     required DateRange range,
     String? caregiverName,
+    List<MedicationWithSchedules> medications =
+        const <MedicationWithSchedules>[],
+    List<AppointmentWithProvider> appointments =
+        const <AppointmentWithProvider>[],
   }) async {
     final pw.Document doc = pw.Document(compress: compress);
     final List<JournalEntry> windowed = entries
@@ -88,6 +102,14 @@ class PdfExporter {
     final List<_BehaviorTally> tallies = _tally(windowed);
     final String caregiver =
         caregiverName ?? patient.primaryCaregiver.name;
+    final DateTime now = clock();
+    final List<AppointmentWithProvider> upcoming = appointments
+        .where((AppointmentWithProvider a) =>
+            a.appointment.status == AppointmentStatus.upcoming &&
+            !a.appointment.startsAt.isBefore(now))
+        .toList()
+      ..sort((AppointmentWithProvider a, AppointmentWithProvider b) =>
+          a.appointment.startsAt.compareTo(b.appointment.startsAt));
 
     doc.addPage(
       pw.MultiPage(
@@ -102,6 +124,18 @@ class PdfExporter {
           ),
           pw.SizedBox(height: 24),
           _summaryTable(tallies),
+          if (medications.isNotEmpty) ...<pw.Widget>[
+            pw.SizedBox(height: 24),
+            _medicationsHeading(medications.length),
+            pw.SizedBox(height: 8),
+            _medicationsTable(medications),
+          ],
+          if (upcoming.isNotEmpty) ...<pw.Widget>[
+            pw.SizedBox(height: 24),
+            _appointmentsHeading(upcoming.length),
+            pw.SizedBox(height: 8),
+            _appointmentsTable(upcoming),
+          ],
           pw.SizedBox(height: 24),
           _entriesHeading(windowed.length),
           pw.SizedBox(height: 8),
@@ -289,6 +323,98 @@ class PdfExporter {
         fontSize: 16,
         fontWeight: pw.FontWeight.bold,
       ),
+    );
+  }
+
+  // ──────────────────── medications (Phase 12.8) ────────────────────
+
+  pw.Widget _medicationsHeading(int count) {
+    return pw.Text(
+      'Active medications ($count)',
+      style: pw.TextStyle(
+        color: _navy,
+        fontSize: 16,
+        fontWeight: pw.FontWeight.bold,
+      ),
+    );
+  }
+
+  pw.Widget _medicationsTable(List<MedicationWithSchedules> meds) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: _rule, width: 0.5),
+      columnWidths: const <int, pw.TableColumnWidth>{
+        0: pw.FlexColumnWidth(3),
+        1: pw.FlexColumnWidth(2),
+        2: pw.FlexColumnWidth(4),
+        3: pw.FlexColumnWidth(2),
+      },
+      children: <pw.TableRow>[
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: _surfaceWarm),
+          children: <pw.Widget>[
+            _summaryCell('Medication', bold: true),
+            _summaryCell('Dosage', bold: true),
+            _summaryCell('Schedule', bold: true),
+            _summaryCell('Route', bold: true),
+          ],
+        ),
+        for (final MedicationWithSchedules row in meds)
+          pw.TableRow(
+            children: <pw.Widget>[
+              _summaryCell(row.medication.name),
+              _summaryCell(row.medication.dosage),
+              _summaryCell(_summariseSchedules(row.schedules)),
+              _summaryCell(_routeLabel(row.medication.route)),
+            ],
+          ),
+      ],
+    );
+  }
+
+  // ──────────────────── appointments (Phase 12.8) ────────────────────
+
+  pw.Widget _appointmentsHeading(int count) {
+    return pw.Text(
+      'Upcoming appointments ($count)',
+      style: pw.TextStyle(
+        color: _navy,
+        fontSize: 16,
+        fontWeight: pw.FontWeight.bold,
+      ),
+    );
+  }
+
+  pw.Widget _appointmentsTable(List<AppointmentWithProvider> appts) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: _rule, width: 0.5),
+      columnWidths: const <int, pw.TableColumnWidth>{
+        0: pw.FlexColumnWidth(3),
+        1: pw.FlexColumnWidth(3),
+        2: pw.FlexColumnWidth(3),
+        3: pw.FlexColumnWidth(2),
+      },
+      children: <pw.TableRow>[
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: _surfaceWarm),
+          children: <pw.Widget>[
+            _summaryCell('When', bold: true),
+            _summaryCell('Provider', bold: true),
+            _summaryCell('Location', bold: true),
+            _summaryCell('Duration', bold: true),
+          ],
+        ),
+        for (final AppointmentWithProvider row in appts)
+          pw.TableRow(
+            children: <pw.Widget>[
+              _summaryCell(_formatDateTime(row.appointment.startsAt)),
+              _summaryCell(_providerLine(row.provider)),
+              _summaryCell(row.appointment.location.isEmpty
+                  ? '(not set)'
+                  : row.appointment.location),
+              _summaryCell('${row.appointment.durationMinutes} min'),
+            ],
+          ),
+      ],
     );
   }
 
@@ -612,6 +738,43 @@ class _BehaviorTally {
   final int count;
 }
 
+/// One row in the "Active medications" PDF section (BUILD_SPEC.md Phase
+/// 12.8).
+///
+/// Pairs the [Medication] with its `[DoseSchedule]` list so the exporter
+/// can render a human-readable schedule summary ("8:00 AM, 8:00 PM
+/// daily") without re-querying drift mid-render.
+@immutable
+class MedicationWithSchedules {
+  const MedicationWithSchedules({
+    required this.medication,
+    required this.schedules,
+  });
+
+  final Medication medication;
+  final List<DoseSchedule> schedules;
+}
+
+/// One row in the "Upcoming appointments" PDF section (BUILD_SPEC.md
+/// Phase 12.8).
+///
+/// Pairs the [Appointment] with its [Provider] (when known) so the
+/// exporter can render "Dr. Patel, Neurologist — Jun 4 2026, 10:00 AM"
+/// without joining tables at render time. The provider is nullable for
+/// the rare case where a provider was deleted but its appointment row
+/// survived (DB FK should cascade, but defending here keeps the render
+/// path total).
+@immutable
+class AppointmentWithProvider {
+  const AppointmentWithProvider({
+    required this.appointment,
+    required this.provider,
+  });
+
+  final Appointment appointment;
+  final Provider? provider;
+}
+
 // Brand tokens duplicated as `PdfColor` values rather than imported from
 // `lib/theme.dart` — the Flutter `Color` type isn't usable inside the
 // `pdf` package's `widgets.dart` painter. The hex values match
@@ -642,6 +805,79 @@ const List<String> _months = <String>[
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
+
+/// Render `8:00 AM, 8:00 PM daily` / `Mon 9:00 AM weekly` / `As needed`
+/// for the PDF medications table (BUILD_SPEC.md Phase 12.8).
+///
+/// Top-level so the test suite can exercise it directly without
+/// instantiating the exporter — the freezed [DoseSchedule] shape is
+/// the only input. Multiple schedules join with " · " so a
+/// "10 mg AM + 5 mg noon" pair renders one line.
+String _summariseSchedules(List<DoseSchedule> schedules) {
+  if (schedules.isEmpty) return '(no schedule)';
+  return schedules.map(_summariseOne).join(' · ');
+}
+
+String _summariseOne(DoseSchedule s) {
+  switch (s.frequencyKind) {
+    case FrequencyKind.asNeeded:
+      return 'As needed';
+    case FrequencyKind.daily:
+      return '${_renderTimes(s)} daily';
+    case FrequencyKind.twiceDaily:
+      return '${_renderTimes(s)} twice daily';
+    case FrequencyKind.weekly:
+      final List<int> days = s.daysOfWeek.toList()..sort();
+      const List<String> weekdayNames = <String>[
+        'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
+      ];
+      final String label = days
+          .map((int d) {
+            final int idx = (d - 1) < 0 ? 0 : (d - 1 > 6 ? 6 : d - 1);
+            return weekdayNames[idx];
+          })
+          .join('/');
+      return '$label ${_renderTimes(s)} weekly';
+  }
+}
+
+String _renderTimes(DoseSchedule s) {
+  if (s.timesOfDay.isEmpty) return '(no time)';
+  return s.timesOfDay.map((t) {
+    final int rawHour = t.hour % 12;
+    final int hour = rawHour == 0 ? 12 : rawHour;
+    final String minute = t.minute.toString().padLeft(2, '0');
+    final String suffix = t.hour < 12 ? 'AM' : 'PM';
+    return '$hour:$minute $suffix';
+  }).join(', ');
+}
+
+String _routeLabel(MedicationRoute route) {
+  switch (route) {
+    case MedicationRoute.oral:
+      return 'Oral';
+    case MedicationRoute.topical:
+      return 'Topical';
+    case MedicationRoute.injection:
+      return 'Injection';
+    case MedicationRoute.other:
+      return 'Other';
+  }
+}
+
+String _providerLine(Provider? p) {
+  if (p == null) return 'Provider on file';
+  switch (p.role) {
+    case ProviderRole.doctor:
+      return '${p.name} (Doctor)';
+    case ProviderRole.neurologist:
+      return '${p.name} (Neurologist)';
+    case ProviderRole.socialWorker:
+      return '${p.name} (Social worker)';
+    case ProviderRole.other:
+      return p.name;
+  }
+}
 
 /// Riverpod-wired singleton (BUILD_SPEC.md §15). The journal + crisis
 /// screens read `ref.watch(pdfExporterProvider)` and call into a single

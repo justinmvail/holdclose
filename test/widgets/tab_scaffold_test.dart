@@ -1,3 +1,4 @@
+import 'package:careblazers/models/settings.dart';
 import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/crisis/crisis_card_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
@@ -46,10 +47,10 @@ String _currentPath(GoRouter router) =>
 
 void main() {
   group('TabScaffoldBar — destinations', () {
-    test('declares four tabs in BUILD_SPEC.md §4.1 order', () {
+    test('declares six tabs in BUILD_SPEC.md §4.1 + Phase 12.8 order', () {
       expect(
         TabScaffoldBar.destinations.map((TabScaffoldDestination d) => d.label),
-        <String>['Home', 'Journal', 'Library', 'Crisis'],
+        <String>['Home', 'Journal', 'Meds', 'Visits', 'Library', 'Crisis'],
       );
     });
 
@@ -58,36 +59,97 @@ void main() {
       expect(TabScaffoldBar.destinations[0].selectedIcon, Icons.home);
       expect(TabScaffoldBar.destinations[1].icon, Icons.book_outlined);
       expect(TabScaffoldBar.destinations[1].selectedIcon, Icons.book);
-      expect(TabScaffoldBar.destinations[2].icon, Icons.library_books_outlined);
-      expect(TabScaffoldBar.destinations[2].selectedIcon, Icons.library_books);
+      expect(TabScaffoldBar.destinations[4].icon, Icons.library_books_outlined);
+      expect(TabScaffoldBar.destinations[4].selectedIcon, Icons.library_books);
+    });
+
+    test('Meds + Visits use the medication + event glyphs (Phase 12.8)', () {
+      expect(TabScaffoldBar.destinations[2].icon, Icons.medication_outlined);
+      expect(TabScaffoldBar.destinations[2].selectedIcon, Icons.medication);
+      expect(TabScaffoldBar.destinations[3].icon, Icons.event_outlined);
+      expect(TabScaffoldBar.destinations[3].selectedIcon, Icons.event);
     });
 
     test('Crisis uses warning_amber (calm, not the alarmist red bell)', () {
-      expect(TabScaffoldBar.destinations[3].icon, Icons.warning_amber_outlined);
-      expect(TabScaffoldBar.destinations[3].selectedIcon, Icons.warning_amber);
+      expect(TabScaffoldBar.destinations[5].icon, Icons.warning_amber_outlined);
+      expect(TabScaffoldBar.destinations[5].selectedIcon, Icons.warning_amber);
     });
   });
 
   group('TabScaffold — branch paths', () {
-    test('branch paths line up with BUILD_SPEC.md §4.1 tab order', () {
+    test(
+        'branch paths line up with BUILD_SPEC.md §4.1 + Phase 12.8 tab order',
+        () {
       expect(
         TabScaffold.tabBranchPaths,
-        <String>['/', '/journal', '/library', '/crisis'],
+        <String>[
+          '/',
+          '/journal',
+          '/medications',
+          '/appointments',
+          '/library',
+          '/crisis'
+        ],
       );
+    });
+
+    test('visibleBranchIndicesFor collapses Meds + Visits when useTrackers OFF',
+        () {
+      final AppSettings off =
+          AppSettings.defaults().copyWith(useTrackers: false);
+      expect(TabScaffold.visibleBranchIndicesFor(off),
+          <int>[0, 1, 4, 5]);
+    });
+
+    test('per-feature toggles drop matching tabs', () {
+      final AppSettings noMeds =
+          AppSettings.defaults().copyWith(medicationsEnabled: false);
+      expect(TabScaffold.visibleBranchIndicesFor(noMeds),
+          <int>[0, 1, 3, 4, 5]);
+
+      final AppSettings noAppts =
+          AppSettings.defaults().copyWith(appointmentsEnabled: false);
+      expect(TabScaffold.visibleBranchIndicesFor(noAppts),
+          <int>[0, 1, 2, 4, 5]);
+    });
+
+    test('defaults expose every tab', () {
+      expect(TabScaffold.visibleBranchIndicesFor(AppSettings.defaults()),
+          <int>[0, 1, 2, 3, 4, 5]);
     });
   });
 
   group('TabScaffoldBar — standalone widget', () {
-    testWidgets('renders all four NavigationDestinations',
+    testWidgets('renders all six NavigationDestinations by default',
         (WidgetTester tester) async {
       await _pumpBar(tester, currentIndex: 0);
 
       expect(find.byType(NavigationBar), findsOneWidget);
-      expect(find.byType(NavigationDestination), findsNWidgets(4));
+      expect(find.byType(NavigationDestination), findsNWidgets(6));
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Journal'), findsOneWidget);
+      expect(find.text('Meds'), findsOneWidget);
+      expect(find.text('Visits'), findsOneWidget);
       expect(find.text('Library'), findsOneWidget);
       expect(find.text('Crisis'), findsOneWidget);
+    });
+
+    testWidgets('visibleBranches subset narrows the bar to chosen tabs only',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: const SizedBox.shrink(),
+          bottomNavigationBar: TabScaffoldBar(
+            currentIndex: 0,
+            visibleBranches: const <int>[0, 1, 4, 5],
+            onDestinationSelected: (_) {},
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationDestination), findsNWidgets(4));
+      expect(find.text('Meds'), findsNothing);
+      expect(find.text('Visits'), findsNothing);
     });
 
     testWidgets('forwards taps to onDestinationSelected',
@@ -100,7 +162,7 @@ void main() {
       );
 
       await tester.tap(find.byIcon(Icons.warning_amber_outlined));
-      expect(tapped, 3);
+      expect(tapped, 5);
 
       await tester.tap(find.byIcon(Icons.book_outlined));
       expect(tapped, 1);
