@@ -37,7 +37,7 @@ Patient _preexistingPatient() => Patient(
       age: 70,
       diagnosis: 'unspecified',
       diagnosedAt: DateTime.utc(2023, 1, 1),
-      medications: const <Medication>[],
+      medications: const <CrisisMedication>[],
       allergies: const <String>[],
       calms: const <String>[],
       escalates: const <String>[],

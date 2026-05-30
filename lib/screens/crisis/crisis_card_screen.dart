@@ -311,9 +311,9 @@ class _CardView extends StatelessWidget {
             const SizedBox(height: 16),
             const _SectionLabel(label: '💊 Medications'),
             const SizedBox(height: 4),
-            _MedicationList(
+            _CrisisMedicationList(
               medications: patient.medications,
-              onChanged: (List<Medication> meds) =>
+              onChanged: (List<CrisisMedication> meds) =>
                   onChanged(patient.copyWith(medications: meds)),
             ),
             const SizedBox(height: 16),
@@ -799,14 +799,14 @@ class _StringBulletList extends StatelessWidget {
 // Editable medication list
 // ---------------------------------------------------------------------------
 
-class _MedicationList extends StatelessWidget {
-  const _MedicationList({
+class _CrisisMedicationList extends StatelessWidget {
+  const _CrisisMedicationList({
     required this.medications,
     required this.onChanged,
   });
 
-  final List<Medication> medications;
-  final ValueChanged<List<Medication>> onChanged;
+  final List<CrisisMedication> medications;
+  final ValueChanged<List<CrisisMedication>> onChanged;
 
   static Key nameKey(int index) => Key('crisis-med-name-$index');
   static Key doseKey(int index) => Key('crisis-med-dose-$index');
@@ -836,8 +836,8 @@ class _MedicationList extends StatelessWidget {
                     label: 'Name',
                     value: medications[i].name,
                     onSubmitted: (String v) {
-                      final List<Medication> next =
-                          List<Medication>.from(medications);
+                      final List<CrisisMedication> next =
+                          List<CrisisMedication>.from(medications);
                       next[i] = next[i].copyWith(name: v.trim());
                       onChanged(next);
                     },
@@ -847,8 +847,8 @@ class _MedicationList extends StatelessWidget {
                     label: 'Dose',
                     value: medications[i].dose,
                     onSubmitted: (String v) {
-                      final List<Medication> next =
-                          List<Medication>.from(medications);
+                      final List<CrisisMedication> next =
+                          List<CrisisMedication>.from(medications);
                       next[i] = next[i].copyWith(dose: v.trim());
                       onChanged(next);
                     },
@@ -858,8 +858,8 @@ class _MedicationList extends StatelessWidget {
                     label: 'Schedule',
                     value: medications[i].schedule,
                     onSubmitted: (String v) {
-                      final List<Medication> next =
-                          List<Medication>.from(medications);
+                      final List<CrisisMedication> next =
+                          List<CrisisMedication>.from(medications);
                       next[i] = next[i].copyWith(schedule: v.trim());
                       onChanged(next);
                     },
@@ -875,8 +875,8 @@ class _MedicationList extends StatelessWidget {
                         foregroundColor: careblazersColors.primarySoft,
                       ),
                       onPressed: () {
-                        final List<Medication> next =
-                            List<Medication>.from(medications)..removeAt(i);
+                        final List<CrisisMedication> next =
+                            List<CrisisMedication>.from(medications)..removeAt(i);
                         onChanged(next);
                       },
                     ),
@@ -898,8 +898,8 @@ class _MedicationList extends StatelessWidget {
                 foregroundColor: careblazersColors.primary,
               ),
               onPressed: () {
-                final List<Medication> next = List<Medication>.from(medications)
-                  ..add(const Medication(name: '', dose: '', schedule: ''));
+                final List<CrisisMedication> next = List<CrisisMedication>.from(medications)
+                  ..add(const CrisisMedication(name: '', dose: '', schedule: ''));
                 onChanged(next);
               },
             ),

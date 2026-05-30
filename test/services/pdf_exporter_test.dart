@@ -57,12 +57,12 @@ Patient _maryHenderson() => Patient(
       age: 78,
       diagnosis: "Alzheimer's disease, stage 5 (moderately severe)",
       diagnosedAt: DateTime.utc(2022, 4, 15),
-      medications: const <Medication>[
-        Medication(
+      medications: const <CrisisMedication>[
+        CrisisMedication(
             name: 'Donepezil', dose: '10 mg', schedule: 'every morning'),
-        Medication(
+        CrisisMedication(
             name: 'Memantine', dose: '10 mg', schedule: 'every evening'),
-        Medication(
+        CrisisMedication(
             name: 'Sertraline', dose: '50 mg', schedule: 'every morning'),
       ],
       allergies: const <String>['Penicillin'],
@@ -324,7 +324,7 @@ void main() {
       expect(text, contains('Apr 15, 2022'));
 
       // Every medication (name + dose + schedule).
-      for (final Medication m in mary.medications) {
+      for (final CrisisMedication m in mary.medications) {
         expect(text, contains(m.name));
         expect(text, contains(m.dose));
         expect(text, contains(m.schedule));

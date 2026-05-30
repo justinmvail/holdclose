@@ -6,11 +6,13 @@ import 'tables.dart';
 part 'database.g.dart';
 
 /// Drift-managed SQLite database (BUILD_SPEC.md §6.2 + TASKS.md
-/// Phase 11.2). Holds five tables: `journal_entries` (auto-logged
-/// decoder runs), `patients` (the loved one — one row per install),
-/// `app_settings` (single-row preferences blob), and the chat pair
-/// `chat_conversations` + `chat_messages` (Phase 11 dementia-care
-/// chatbot history, FK-linked with `ON DELETE CASCADE`).
+/// Phase 11.2 + Phase 12.1). Holds eight tables: `journal_entries`
+/// (auto-logged decoder runs), `patients` (the loved one — one row per
+/// install), `app_settings` (single-row preferences blob), the chat
+/// pair `chat_conversations` + `chat_messages` (Phase 11 dementia-care
+/// chatbot history), and the medication-tracker trio `medications` +
+/// `dose_schedules` + `dose_logs` (Phase 12.1) — all FK-linked with
+/// `ON DELETE CASCADE`.
 ///
 /// Construct with [CareblazersDatabase.open] in production — it lazily
 /// opens a SQLite file under the platform's app-documents directory via
@@ -23,6 +25,9 @@ part 'database.g.dart';
     AppSettingsTable,
     ChatConversationsTable,
     ChatMessagesTable,
+    MedicationsTable,
+    DoseSchedulesTable,
+    DoseLogsTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
@@ -36,20 +41,24 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       );
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
-  /// Migration handler. Two responsibilities:
+  /// Migration handler. Three responsibilities:
   ///
   /// - On upgrade from v1 → v2, create the two chat tables. Existing
   ///   v1 installs (journal + patient + settings already populated)
   ///   keep their data; the chatbot just lights up with an empty
   ///   history.
+  /// - On upgrade from v2 → v3, create the three medication-tracker
+  ///   tables (Phase 12.1). Existing chat + journal data is untouched;
+  ///   the medication list lights up empty.
   /// - On every open — fresh or upgraded — set
   ///   `PRAGMA foreign_keys = ON`. SQLite ships with FK enforcement
   ///   off by default; without this pragma the `ON DELETE CASCADE` on
-  ///   [ChatMessagesTable] is a no-op and orphan messages survive a
-  ///   conversation delete. The pragma is connection-scoped, so it
-  ///   has to be set in `beforeOpen`, not `onCreate`.
+  ///   [ChatMessagesTable] / [DoseSchedulesTable] / [DoseLogsTable] is
+  ///   a no-op and orphan rows survive a parent delete. The pragma is
+  ///   connection-scoped, so it has to be set in `beforeOpen`, not
+  ///   `onCreate`.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
@@ -60,6 +69,11 @@ class CareblazersDatabase extends _$CareblazersDatabase {
             await m.createTable(chatConversationsTable);
             await m.createTable(chatMessagesTable);
           }
+          if (from < 3) {
+            await m.createTable(medicationsTable);
+            await m.createTable(doseSchedulesTable);
+            await m.createTable(doseLogsTable);
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -68,13 +82,16 @@ class CareblazersDatabase extends _$CareblazersDatabase {
 
   /// Truncate every table — backs `StorageProvider.reset()` for the
   /// demo-mode "Reset on launch" toggle (BUILD_SPEC.md §6.2 + §9.3).
-  /// Chat messages are deleted before chat conversations so the wipe
-  /// is FK-safe even on connections where the pragma somehow didn't
+  /// Child tables are deleted before their parents so the wipe is
+  /// FK-safe even on connections where the pragma somehow didn't
   /// stick.
   Future<void> wipeAll() async {
     await transaction(() async {
       await delete(chatMessagesTable).go();
       await delete(chatConversationsTable).go();
+      await delete(doseLogsTable).go();
+      await delete(doseSchedulesTable).go();
+      await delete(medicationsTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();

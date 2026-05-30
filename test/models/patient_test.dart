@@ -8,13 +8,13 @@ void main() {
         age: 78,
         diagnosis: "Alzheimer's disease, stage 5 (moderately severe)",
         diagnosedAt: DateTime.utc(2022, 4, 15),
-        medications: const <Medication>[
-          Medication(
+        medications: const <CrisisMedication>[
+          CrisisMedication(
             name: 'Donepezil',
             dose: '10 mg',
             schedule: 'every morning',
           ),
-          Medication(
+          CrisisMedication(
             name: 'Memantine',
             dose: '10 mg',
             schedule: 'every evening',
@@ -42,14 +42,14 @@ void main() {
         ),
       );
 
-  group('Medication JSON round-trip', () {
+  group('CrisisMedication JSON round-trip', () {
     test('round-trips', () {
-      const Medication m = Medication(
+      const CrisisMedication m = CrisisMedication(
         name: 'Sertraline',
         dose: '50 mg',
         schedule: 'every morning',
       );
-      expect(Medication.fromJson(m.toJson()), equals(m));
+      expect(CrisisMedication.fromJson(m.toJson()), equals(m));
     });
   });
 

@@ -3,18 +3,20 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'patient.freezed.dart';
 part 'patient.g.dart';
 
-/// One scheduled medication entry on the crisis card
-/// (BUILD_SPEC.md §5.9 + §9.1).
+/// One free-text medication entry on the crisis card
+/// (BUILD_SPEC.md §5.9 + §9.1). A snapshot for paramedic / ER handoff —
+/// distinct from the structured tracker [Medication] (Phase 12.1) in
+/// `lib/models/medication.dart`, which carries id + schedule + dose log.
 @freezed
-abstract class Medication with _$Medication {
-  const factory Medication({
+abstract class CrisisMedication with _$CrisisMedication {
+  const factory CrisisMedication({
     required String name,
     required String dose,
     required String schedule,
-  }) = _Medication;
+  }) = _CrisisMedication;
 
-  factory Medication.fromJson(Map<String, dynamic> json) =>
-      _$MedicationFromJson(json);
+  factory CrisisMedication.fromJson(Map<String, dynamic> json) =>
+      _$CrisisMedicationFromJson(json);
 }
 
 /// A named contact with a phone number (primary caregiver, POA, etc.)
@@ -53,7 +55,7 @@ abstract class Patient with _$Patient {
     required int age,
     required String diagnosis,
     required DateTime diagnosedAt,
-    required List<Medication> medications,
+    required List<CrisisMedication> medications,
     required List<String> allergies,
     required List<String> calms,
     required List<String> escalates,

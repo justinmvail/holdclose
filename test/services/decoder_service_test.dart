@@ -240,7 +240,7 @@ void main() {
           age: 78,
           diagnosis: "Alzheimer's, stage 5",
           diagnosedAt: DateTime.utc(2022, 4, 15),
-          medications: const <Medication>[],
+          medications: const <CrisisMedication>[],
           allergies: const <String>['Penicillin'],
           calms: const <String>[],
           escalates: const <String>[],

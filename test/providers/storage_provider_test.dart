@@ -55,8 +55,8 @@ void main() {
         age: 78,
         diagnosis: "Alzheimer's disease, stage 5 (moderately severe)",
         diagnosedAt: DateTime.utc(2022, 4, 15),
-        medications: const <Medication>[
-          Medication(
+        medications: const <CrisisMedication>[
+          CrisisMedication(
               name: 'Donepezil', dose: '10 mg', schedule: 'every morning'),
         ],
         allergies: const <String>['Penicillin'],

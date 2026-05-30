@@ -811,7 +811,7 @@ Sized as 8 atomic iters across two related sub-areas: medications
 
 ### Medications
 
-- [ ] **Phase 12.1: Medication models + drift schema
+- [x] **Phase 12.1: Medication models + drift schema
   (`lib/models/medication.dart` + `lib/db/tables.dart`).** Three
   freezed models + tables:
     - `Medication`: id, name, dosage (free text e.g. "10 mg"),

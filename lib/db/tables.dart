@@ -110,3 +110,75 @@ class ChatMessagesTable extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
+
+/// One tracked medication (TASKS.md Phase 12.1).
+///
+/// The structured counterpart to the free-text crisis-card meds in
+/// [PatientsTable] — this row carries the id every [DoseSchedulesTable]
+/// and [DoseLogsTable] row FKs onto. The full freezed `Medication`
+/// model lives in [payload] as JSON; [name] is lifted to its own
+/// column so the medication-list screen (Phase 12.3) can sort
+/// alphabetically without parsing every blob.
+class MedicationsTable extends Table {
+  @override
+  String get tableName => 'medications';
+
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// One dosing schedule for a [MedicationsTable] row (TASKS.md Phase
+/// 12.1). FK on [medicationId] references [MedicationsTable.id] with
+/// `ON DELETE CASCADE` — wiping a medication wipes its schedules in
+/// the same statement, so the repository never leaves orphans behind.
+///
+/// SQLite only honours that FK action when the per-connection
+/// `PRAGMA foreign_keys = ON` is set; [CareblazersDatabase]'s
+/// `MigrationStrategy.beforeOpen` enables it on every connection.
+///
+/// The freezed `DoseSchedule` (frequencyKind + timesOfDay + daysOfWeek
+/// + startsOn / endsOn) lives in [payload] as JSON.
+class DoseSchedulesTable extends Table {
+  @override
+  String get tableName => 'dose_schedules';
+
+  TextColumn get id => text()();
+  TextColumn get medicationId => text().references(
+        MedicationsTable,
+        #id,
+        onDelete: KeyAction.cascade,
+      )();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// One logged dose event (TASKS.md Phase 12.1). FK on [medicationId]
+/// references [MedicationsTable.id] with `ON DELETE CASCADE` — same
+/// pragma-dependent cascade as [DoseSchedulesTable].
+///
+/// [scheduledForMs] is lifted out of the freezed `DoseLog` payload so
+/// the "today's doses" view (Phase 12.4) and the adherence-rate
+/// computation (Phase 12.2) can filter + order on the scheduled time
+/// without parsing every row.
+class DoseLogsTable extends Table {
+  @override
+  String get tableName => 'dose_logs';
+
+  TextColumn get id => text()();
+  TextColumn get medicationId => text().references(
+        MedicationsTable,
+        #id,
+        onDelete: KeyAction.cascade,
+      )();
+  IntColumn get scheduledForMs => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}

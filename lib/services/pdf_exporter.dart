@@ -437,7 +437,7 @@ class PdfExporter {
             style: pw.TextStyle(color: _bodyText, fontSize: 11),
           )
         else
-          for (final Medication m in patient.medications)
+          for (final CrisisMedication m in patient.medications)
             pw.Padding(
               padding: const pw.EdgeInsets.only(bottom: 2),
               child: pw.Text(

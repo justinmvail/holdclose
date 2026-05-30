@@ -18,18 +18,18 @@ Patient maryHenderson() => Patient(
       age: 78,
       diagnosis: "Alzheimer's disease, stage 5 (moderately severe)",
       diagnosedAt: DateTime.utc(2022, 4, 15),
-      medications: const <Medication>[
-        Medication(
+      medications: const <CrisisMedication>[
+        CrisisMedication(
           name: 'Donepezil',
           dose: '10 mg',
           schedule: 'every morning',
         ),
-        Medication(
+        CrisisMedication(
           name: 'Memantine',
           dose: '10 mg',
           schedule: 'every evening',
         ),
-        Medication(
+        CrisisMedication(
           name: 'Sertraline',
           dose: '50 mg',
           schedule: 'every morning',

@@ -14,22 +14,22 @@ void main() {
     });
 
     test('carries the three §9.1 medications in spec order', () {
-      final List<Medication> meds = maryHenderson().medications;
+      final List<CrisisMedication> meds = maryHenderson().medications;
       expect(meds, hasLength(3));
       expect(
         meds,
-        containsAllInOrder(const <Medication>[
-          Medication(
+        containsAllInOrder(const <CrisisMedication>[
+          CrisisMedication(
             name: 'Donepezil',
             dose: '10 mg',
             schedule: 'every morning',
           ),
-          Medication(
+          CrisisMedication(
             name: 'Memantine',
             dose: '10 mg',
             schedule: 'every evening',
           ),
-          Medication(
+          CrisisMedication(
             name: 'Sertraline',
             dose: '50 mg',
             schedule: 'every morning',
