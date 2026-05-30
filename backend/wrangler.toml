@@ -22,6 +22,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "FORUM_DB"
 database_name = "careblazers-forum"
 database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "drizzle"
 
 [[r2_buckets]]
 binding = "FORUM_MEDIA"

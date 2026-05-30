@@ -970,7 +970,7 @@ the API contract.
   asserting `GET /health` returns 200. This iter establishes the
   whole Worker testing pipeline so subsequent iters slot in cleanly.
 
-- [ ] **Phase 13.2: Drizzle schema + migrations
+- [x] **Phase 13.2: Drizzle schema + migrations
   (`backend/src/db/schema.ts` + `backend/drizzle/`).** Five tables
   per the spec:
     - `profiles` (id UUID, display_name TEXT, avatar_url TEXT,
