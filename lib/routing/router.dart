@@ -17,6 +17,7 @@ import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
 import '../screens/library/library_card_screen.dart';
 import '../screens/library/library_screen.dart';
+import '../screens/medication/dose_log_screen.dart';
 import '../screens/medication/medication_form_screen.dart';
 import '../screens/medication/medication_list_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
@@ -48,6 +49,7 @@ class CareblazersRoutes {
   static const String chatThread = 'chat-thread';
   static const String medicationList = 'medication-list';
   static const String medicationForm = 'medication-form';
+  static const String medicationDoseLog = 'medication-dose-log';
 }
 
 /// Build a fresh GoRouter wired with every BUILD_SPEC.md §5 route.
@@ -210,6 +212,13 @@ GoRouter buildRouter({
             parentNavigatorKey: rootNavigatorKey,
             builder: (BuildContext context, GoRouterState state) =>
                 const MedicationFormScreen(),
+          ),
+          GoRoute(
+            path: 'today',
+            name: CareblazersRoutes.medicationDoseLog,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                const DoseLogScreen(),
           ),
         ],
       ),

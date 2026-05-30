@@ -850,7 +850,7 @@ Sized as 8 atomic iters across two related sub-areas: medications
   validation (name required); add-med flow round-trips through the
   repository.
 
-- [ ] **Phase 12.4: Dose logging UI
+- [x] **Phase 12.4: Dose logging UI
   (`lib/screens/medication/dose_log_screen.dart`).** "Today's doses"
   screen at `/medications/today`: chronological list of every dose
   scheduled today, with a checkbox + "Mark taken" CTA per row. Tap
