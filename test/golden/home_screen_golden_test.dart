@@ -1,7 +1,12 @@
 import 'package:alchemist/alchemist.dart';
+import 'package:careblazers/db/database.dart';
+import 'package:careblazers/models/chat.dart';
+import 'package:careblazers/providers/home_conversation_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/routing/router.dart';
+import 'package:careblazers/services/chat_repository.dart';
 import 'package:careblazers/theme.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,6 +41,21 @@ void main() {
                 storageBackendProvider.overrideWithValue(
                   InMemoryStorageProvider(),
                 ),
+                // Home tab resolves the chat conversation off this
+                // provider; stub it so the golden never blocks on
+                // drift.
+                homeConversationProvider.overrideWith((_) async =>
+                    Conversation(
+                      id: 'golden-conv',
+                      title: 'Today',
+                      createdAt: DateTime.utc(2026, 5, 30, 12),
+                      updatedAt: DateTime.utc(2026, 5, 30, 12),
+                    )),
+                chatRepositoryProvider.overrideWith((Ref _) {
+                  final CareblazersDatabase db =
+                      CareblazersDatabase(NativeDatabase.memory());
+                  return ChatRepository(db);
+                }),
               ],
               child: SizedBox(
                 width: 390,

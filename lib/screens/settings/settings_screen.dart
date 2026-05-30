@@ -52,6 +52,8 @@ class SettingsScreen extends ConsumerWidget {
   static const Key notificationsToggleKey =
       Key('settings-notifications-toggle');
   static const Key trackersSectionKey = Key('settings-trackers-section');
+  static const Key useDemoForumToggleKey =
+      Key('settings-use-demo-forum-toggle');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -508,6 +510,20 @@ class _TrackersSection extends StatelessWidget {
                 onChanged: master
                     ? (bool v) => notifier.setNotificationsEnabled(v)
                     : null,
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                key: SettingsScreen.useDemoForumToggleKey,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Use demo community'),
+                subtitle: const Text(
+                  'When on, the Community tab serves seed posts from an '
+                  'on-device fake instead of the live backend. Useful '
+                  'before the backend is deployed; flip off once your '
+                  'team is using the real forum.',
+                ),
+                value: settings.useDemoForum,
+                onChanged: (bool v) => notifier.setUseDemoForum(v),
               ),
             ],
           ),

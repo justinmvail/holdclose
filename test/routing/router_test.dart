@@ -1,13 +1,13 @@
 import 'dart:async';
 
+import 'package:careblazers/models/chat.dart';
 import 'package:careblazers/providers/auth_provider.dart';
+import 'package:careblazers/providers/home_conversation_provider.dart';
 import 'package:careblazers/providers/onboarding_provider.dart';
 import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/crisis/crisis_card_screen.dart';
 import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/journal/journal_screen.dart';
-import 'package:careblazers/screens/library/library_screen.dart';
 import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
 import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
 import 'package:flutter/material.dart';
@@ -33,8 +33,25 @@ Future<GoRouter> pumpRouter(
   String initialLocation = '/',
 }) async {
   final GoRouter router = buildRouter(initialLocation: initialLocation);
+  final DateTime now = DateTime.utc(2026, 5, 30, 12);
   await tester.pumpWidget(
-    ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    ProviderScope(
+      overrides: <Override>[
+        // HomeScreen builds via homeConversationProvider; route-only
+        // tests don't stand up a drift database, so we hand the home
+        // tab a synthetic conversation that lets it render the chat
+        // scaffold without hitting storage.
+        homeConversationProvider.overrideWith(
+          (_) async => Conversation(
+            id: 'route-test-conv',
+            title: 'Today',
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ),
   );
   await tester.pumpAndSettle();
   return router;
@@ -54,8 +71,7 @@ void main() {
       '§5.4 Decoder result': '/decoder/result',
       '§5.5 Journal': '/journal',
       '§5.6 Journal entry detail': '/journal/sample-id',
-      '§5.7 Library': '/library',
-      '§5.8 Library card detail': '/library/anosognosia',
+      'Journal wizard': '/journal/new',
       '§5.9 Crisis card': '/crisis',
       '§5.10 Settings': '/settings',
       '§5.11 Welcome carousel': '/onboarding',
@@ -85,20 +101,20 @@ void main() {
 
   group('careblazersRouter — tab shell', () {
     testWidgets(
-      'opens on Home (§5.1) by default with the six-tab NavigationBar',
+      'opens on Home (§5.1) by default with the five-tab NavigationBar',
       (WidgetTester tester) async {
         final GoRouter router = await pumpRouter(tester);
 
         expect(currentPath(router), '/');
         expect(find.byType(HomeScreen), findsOneWidget);
         expect(find.byType(NavigationBar), findsOneWidget);
-        // Tab labels appear in the exact §4.1 + Phase 12.8 order.
+        // Tab labels appear in the home-refactor order (no Crisis).
         expect(find.text('Home'), findsOneWidget);
         expect(find.text('Journal'), findsOneWidget);
         expect(find.text('Meds'), findsOneWidget);
         expect(find.text('Visits'), findsOneWidget);
-        expect(find.text('Library'), findsOneWidget);
-        expect(find.text('Crisis'), findsOneWidget);
+        expect(find.text('Community'), findsOneWidget);
+        expect(find.text('Crisis'), findsNothing);
       },
     );
 
@@ -112,19 +128,8 @@ void main() {
         expect(currentPath(router), '/journal');
         expect(find.byType(JournalScreen), findsOneWidget);
 
-        await tester.tap(find.byIcon(Icons.library_books_outlined));
-        await tester.pumpAndSettle();
-        expect(currentPath(router), '/library');
-        expect(find.byType(LibraryScreen), findsOneWidget);
-
-        await tester.tap(find.byIcon(Icons.warning_amber_outlined));
-        await tester.pumpAndSettle();
-        expect(currentPath(router), '/crisis');
-        expect(find.byType(CrisisCardScreen), findsOneWidget);
-
         // Selected icon is `home` (filled variant) once we land back
-        // on the Home branch; we tap the outlined Journal icon first
-        // to leave Home, then return via the now-outlined Home icon.
+        // on the Home branch; tap the outlined Home icon to return.
         await tester.tap(find.byIcon(Icons.home_outlined));
         await tester.pumpAndSettle();
         expect(currentPath(router), '/');
@@ -481,9 +486,20 @@ Future<ProviderContainer> _pumpWiredRouter(
   WidgetTester tester, {
   required _RedirectSpyAuth auth,
 }) async {
+  final DateTime now = DateTime.utc(2026, 5, 30, 12);
   final ProviderContainer container = ProviderContainer(
     overrides: <Override>[
       authBackendProvider.overrideWithValue(auth),
+      // Home tab depends on this; the wired router test never sets up
+      // a drift store, so swap a synthetic conversation in.
+      homeConversationProvider.overrideWith(
+        (_) async => Conversation(
+          id: 'wired-conv',
+          title: 'Today',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ),
     ],
   );
   addTearDown(container.dispose);

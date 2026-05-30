@@ -1,5 +1,8 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# Vendored espeak-ng pod (Phase 10) requires iOS 16.0+ per its
+# podspec; onnxruntime-objc ~> 1.18.0 (Phase 9, bundled TTS) lifts the
+# floor for the same reason. Without the explicit platform line
+# CocoaPods defaults to 13.0 and refuses to resolve.
+platform :ios, '16.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'

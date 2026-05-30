@@ -30,18 +30,15 @@ class TabScaffold extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   /// Branch paths in shell-branch order. Index `i` is the path the
-  /// router restores when the bar switches to that branch. The
-  /// medication + appointment branches sit between the journal and
-  /// library so the lean-app (trackers-off) layout collapses to the
-  /// same Home/Journal/Library/Crisis shape as the pre-Phase-12.8
-  /// build without re-indexing the journal-tap tests.
+  /// router restores when the bar switches to that branch. Library +
+  /// Crisis were removed in the home-refactor; Crisis lives behind
+  /// the Medications AppBar action and `/crisis` is now a top-level
+  /// route (not a shell branch).
   static const List<String> tabBranchPaths = <String>[
     '/',
     '/journal',
     '/medications',
     '/appointments',
-    '/library',
-    '/crisis',
     '/community',
   ];
 
@@ -49,21 +46,13 @@ class TabScaffold extends ConsumerWidget {
   /// [AppSettings]. Medications + Appointments collapse off the bar
   /// when [AppSettings.useTrackers] is OFF or the per-feature toggle
   /// is OFF — same precedence the Settings UI advertises.
-  ///
-  /// Community (branch 6) is rendered between Library and Crisis so
-  /// the rightmost slot stays Crisis (the audience cue: "the bell on
-  /// the right is the panic button"). The branch itself stays at
-  /// index 6 in [tabBranchPaths] to avoid re-numbering every prior
-  /// tab — the visible order is decoupled from the shell order.
   static List<int> visibleBranchIndicesFor(AppSettings settings) {
     return <int>[
       0, // Home
       1, // Journal
       if (settings.useTrackers && settings.medicationsEnabled) 2,
       if (settings.useTrackers && settings.appointmentsEnabled) 3,
-      4, // Library
-      6, // Community
-      5, // Crisis
+      4, // Community
     ];
   }
 
@@ -102,7 +91,7 @@ class TabScaffoldBar extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.onDestinationSelected,
-    this.visibleBranches = const <int>[0, 1, 2, 3, 4, 6, 5],
+    this.visibleBranches = const <int>[0, 1, 2, 3, 4],
   });
 
   final int currentIndex;
@@ -135,16 +124,6 @@ class TabScaffoldBar extends StatelessWidget {
       label: 'Visits',
       icon: Icons.event_outlined,
       selectedIcon: Icons.event,
-    ),
-    TabScaffoldDestination(
-      label: 'Library',
-      icon: Icons.library_books_outlined,
-      selectedIcon: Icons.library_books,
-    ),
-    TabScaffoldDestination(
-      label: 'Crisis',
-      icon: Icons.warning_amber_outlined,
-      selectedIcon: Icons.warning_amber,
     ),
     TabScaffoldDestination(
       label: 'Community',

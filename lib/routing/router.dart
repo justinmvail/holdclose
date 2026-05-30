@@ -21,8 +21,7 @@ import '../screens/decoder/triage_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
-import '../screens/library/library_card_screen.dart';
-import '../screens/library/library_screen.dart';
+import '../screens/journal/journal_wizard_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
 import '../screens/appointment/appointment_list_screen.dart';
@@ -44,7 +43,6 @@ class CareblazersRoutes {
 
   static const String home = 'home';
   static const String journal = 'journal';
-  static const String library = 'library';
   static const String crisis = 'crisis';
   static const String onboarding = 'onboarding';
   static const String signIn = 'sign-in';
@@ -53,7 +51,7 @@ class CareblazersRoutes {
   static const String decoderTriage = 'decoder-triage';
   static const String decoderResult = 'decoder-result';
   static const String journalEntry = 'journal-entry';
-  static const String libraryCard = 'library-card';
+  static const String journalNew = 'journal-new';
   static const String chatList = 'chat-list';
   static const String chatThread = 'chat-thread';
   static const String medicationList = 'medication-list';
@@ -189,6 +187,17 @@ GoRouter buildRouter({
         },
       ),
       GoRoute(
+        path: '/journal/new',
+        name: CareblazersRoutes.journalNew,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) {
+          final Object? extra = state.extra;
+          return JournalWizardScreen(
+            args: extra is JournalWizardArgs ? extra : null,
+          );
+        },
+      ),
+      GoRoute(
         path: '/journal/:id',
         name: CareblazersRoutes.journalEntry,
         parentNavigatorKey: rootNavigatorKey,
@@ -233,13 +242,6 @@ GoRouter buildRouter({
         },
       ),
       GoRoute(
-        path: '/library/:id',
-        name: CareblazersRoutes.libraryCard,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) =>
-            LibraryCardScreen(cardId: state.pathParameters['id'] ?? ''),
-      ),
-      GoRoute(
         path: '/chat',
         name: CareblazersRoutes.chatList,
         parentNavigatorKey: rootNavigatorKey,
@@ -254,8 +256,24 @@ GoRouter buildRouter({
           conversationId: state.pathParameters['id'] ?? '',
         ),
       ),
+      // Crisis card (BUILD_SPEC.md §5.9). Pushed onto the root
+      // navigator from the Medications screen's AppBar action — it
+      // used to be a bottom-tab in the original spec but the
+      // home-refactor moved it under Meds since it's a medical-context
+      // resource. Keeping the route at the top level means deep links
+      // from notifications still resolve.
+      GoRoute(
+        path: '/crisis',
+        name: CareblazersRoutes.crisis,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const CrisisCardScreen(),
+      ),
       // Tab shell — Home / Journal / Medications / Appointments /
-      // Library / Crisis (BUILD_SPEC.md §4.1 + Phase 12.8 additions).
+      // Community (BUILD_SPEC.md §4.1 + Phase 12.8 + home-refactor).
+      // Library + Crisis were removed from the tab bar in the home-
+      // refactor; the Crisis card lives behind the Medications AppBar
+      // action.
       // Each branch is a separate Navigator so back-stacks survive
       // tab switches. The medication + appointment branches stay
       // registered even when the matching Settings toggle hides them
@@ -354,30 +372,12 @@ GoRouter buildRouter({
               ),
             ],
           ),
-          StatefulShellBranch(
-            routes: <RouteBase>[
-              GoRoute(
-                path: '/library',
-                name: CareblazersRoutes.library,
-                builder: (BuildContext context, GoRouterState state) =>
-                    const LibraryScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: <RouteBase>[
-              GoRoute(
-                path: '/crisis',
-                name: CareblazersRoutes.crisis,
-                builder: (BuildContext context, GoRouterState state) =>
-                    const CrisisCardScreen(),
-              ),
-            ],
-          ),
-          // Community lives in its own branch (Phase 13.10). Appended
-          // after Crisis to preserve every pre-existing branch index;
-          // the tab bar maps it between Library and Crisis at render
-          // time via [TabScaffoldBar.visibleBranches].
+          // Crisis lives outside the tab shell now (home-refactor
+          // follow-up). It's still reachable as a top-level route
+          // (`/crisis`) registered above the StatefulShellRoute, but
+          // the Medications screen exposes the tap target instead of
+          // the bottom bar.
+          // Community lives in its own branch (Phase 13.10).
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(

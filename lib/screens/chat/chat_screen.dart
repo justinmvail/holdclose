@@ -34,9 +34,24 @@ import 'conversation_list_screen.dart';
 /// thread — the source of truth on disk gets a fresh copy on every
 /// delta, but the screen never re-queries between deltas.
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key, required this.conversationId});
+  const ChatScreen({
+    super.key,
+    required this.conversationId,
+    this.appBarOverride,
+    this.composerPrefix,
+  });
 
   final String conversationId;
+
+  /// AppBar to render in place of the default "Coach chat" bar. Used by
+  /// the Home tab to surface tab-root chrome (Today title, settings
+  /// gear, history button) without re-rolling the whole chat surface.
+  final PreferredSizeWidget? appBarOverride;
+
+  /// Optional widget rendered immediately above the input composer.
+  /// Used by the Home tab to surface the "Log a journal entry" quick
+  /// action without dragging that chip rail into every chat surface.
+  final Widget? composerPrefix;
 
   static const Key inputFieldKey = Key('chat-screen-input');
   static const Key sendButtonKey = Key('chat-screen-send');
@@ -187,9 +202,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text('Coach chat'),
-      ),
+      appBar: widget.appBarOverride ??
+          AppBar(
+            title: const Text('Coach chat'),
+          ),
       body: SafeArea(
         child: Column(
           children: <Widget>[
@@ -214,6 +230,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       },
                     ),
             ),
+            if (widget.composerPrefix != null) widget.composerPrefix!,
             _Composer(
               controller: _input,
               sending: _sending,

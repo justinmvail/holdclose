@@ -69,6 +69,13 @@ abstract class AppSettings with _$AppSettings {
     /// "permission ask on first add" flow has a target to flip on
     /// when the OS grant lands.
     @Default(true) bool notificationsEnabled,
+
+    /// Whether the community forum surfaces should hit a deterministic
+    /// in-memory fake instead of the Cloudflare Workers backend
+    /// (home-refactor follow-up). Default true so a TestFlight build
+    /// without a deployed Worker still demos cleanly; operator flips
+    /// off in Settings once the real backend is wired.
+    @Default(true) bool useDemoForum,
   }) = _AppSettings;
 
   factory AppSettings.fromJson(Map<String, dynamic> json) =>

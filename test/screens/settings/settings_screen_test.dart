@@ -25,7 +25,7 @@ Future<({InMemoryStorageProvider storage, ProviderContainer container})>
   WidgetTester tester, {
   AppSettings? seeded,
 }) async {
-  await tester.binding.setSurfaceSize(const Size(420, 2000));
+  await tester.binding.setSurfaceSize(const Size(420, 2600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final InMemoryStorageProvider storage = InMemoryStorageProvider();
   if (seeded != null) {

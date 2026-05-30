@@ -3,6 +3,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/forum.dart';
 import '../providers/forum_jwt_provider.dart';
+import '../providers/settings_provider.dart';
+import 'fake_forum_api_client.dart';
 
 part 'forum_api_client.g.dart';
 
@@ -548,11 +550,19 @@ class ForumApiClient {
 }
 
 /// Riverpod-wired forum client (BUILD_SPEC.md §13 / Phase 13.9).
-/// `keepAlive: true` because the underlying [ForumJwtMinter] caches
-/// the minted JWT — re-creating the client per consumer would discard
-/// that cache and re-sign on every screen mount.
+///
+/// Watches [settingsProvider.useDemoForum] so the Settings → "Use
+/// demo forum" flip flows through every community surface without a
+/// hot restart. `keepAlive: true` because the underlying [ForumJwtMinter]
+/// caches the minted JWT and the demo client owns its in-memory state
+/// — re-creating either per consumer would discard those caches on
+/// every screen mount.
 @Riverpod(keepAlive: true)
 ForumApiClient forumApiClient(Ref ref) {
+  final bool useDemo = ref.watch(settingsProvider).useDemoForum;
+  if (useDemo) {
+    return FakeForumApiClient();
+  }
   final ForumJwtMinter minter = ref.watch(forumJwtMinterProvider);
   return ForumApiClient(tokenLoader: minter.currentToken);
 }

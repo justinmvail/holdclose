@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/chat.dart';
+import 'package:careblazers/models/journal_entry.dart';
 import 'package:careblazers/providers/llm_provider.dart' show claudeShimEndpoint;
 import 'package:careblazers/seed/chat_system_prompt.dart';
 import 'package:careblazers/services/chat_repository.dart';
@@ -264,59 +265,71 @@ void main() {
       expect(emitted.last.citations, isEmpty);
     });
 
-    test('citation parsing: one [card:<id>] marker is captured', () async {
+    test('journal-action: marker stripped + executor invoked', () async {
       final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
         const ChatDeltaText(
-            'Sundowning is the late-afternoon shift. [card:sundowning_basics]'),
+            "Logged that one for you.\n"
+            '[action:log_journal occurred_at="just now" '
+            'situation="Mom asked for her mother" '
+            'attempts="I told her she went to the store"]'),
+      ]);
+      JournalEntry? captured;
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: backend,
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        journalExecutor: ({
+          required DateTime occurredAt,
+          required String situation,
+          required String attempts,
+        }) async {
+          captured = JournalEntry.wizard(
+            id: 'test-entry-1',
+            createdAt: occurredAt,
+            occurredAt: occurredAt,
+            situationText: situation,
+            attemptsText: attempts,
+          );
+          return captured;
+        },
+      );
+
+      final List<Message> emitted = await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'log it')
+          .toList();
+      expect(emitted.last.body, 'Logged that one for you.');
+      expect(emitted.last.citations, <String>['journal:test-entry-1']);
+      expect(captured, isNotNull);
+      expect(captured!.situationText, 'Mom asked for her mother');
+      expect(captured!.attemptsText, 'I told her she went to the store');
+    });
+
+    test('journal-action: no executor wired → marker stripped, no citation',
+        () async {
+      final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+        const ChatDeltaText(
+            'Acknowledged.\n[action:log_journal situation="x" attempts="y"]'),
       ]);
       final ChatService svc = ChatService(
         repository: repo,
         backend: backend,
         idFactory: _idFactory(),
         clock: _fixedClock,
+        // No journalExecutor — marker is stripped but no entry written.
       );
 
       final List<Message> emitted = await svc
-          .sendMessage(conversationId: 'convo-1', userText: 'sundown?')
+          .sendMessage(conversationId: 'convo-1', userText: 'nothing')
           .toList();
-      expect(emitted.last.citations, <String>['sundowning_basics']);
+      expect(emitted.last.body, 'Acknowledged.');
+      expect(emitted.last.citations, isEmpty);
     });
 
-    test(
-      'citation parsing: multiple distinct markers preserved in order, '
-      'duplicates dropped',
-      () async {
-        final _ScriptedChatBackend backend = _ScriptedChatBackend(
-            <ChatDelta>[
-              const ChatDeltaText(
-                  "Here's the framework. [card:five_causes] "
-                  'For evening shifts see [card:sundowning_basics]. '
-                  'For accusations [card:accusations_basics] '
-                  'and once more [card:five_causes].'),
-            ]);
-        final ChatService svc = ChatService(
-          repository: repo,
-          backend: backend,
-          idFactory: _idFactory(),
-          clock: _fixedClock,
-        );
-
-        final List<Message> emitted = await svc
-            .sendMessage(conversationId: 'convo-1', userText: 'multi')
-            .toList();
-        expect(
-            emitted.last.citations,
-            <String>[
-              'five_causes',
-              'sundowning_basics',
-              'accusations_basics',
-            ]);
-      },
-    );
-
-    test('citations also persist on the final repo row', () async {
+    test('plain prose with no action tag passes through unchanged',
+        () async {
       final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
-        const ChatDeltaText('A [card:one] and a [card:two]'),
+        const ChatDeltaText("That sounds like a hard moment."),
       ]);
       final ChatService svc = ChatService(
         repository: repo,
@@ -329,8 +342,8 @@ void main() {
           .toList();
 
       final List<Message> stored = await repo.loadMessages('convo-1');
-      expect(stored.last.role, MessageRole.assistant);
-      expect(stored.last.citations, <String>['one', 'two']);
+      expect(stored.last.body, 'That sounds like a hard moment.');
+      expect(stored.last.citations, isEmpty);
     });
 
     // ---- Error path ------------------------------------------------------
@@ -386,27 +399,25 @@ void main() {
 
     // ---- Static helpers --------------------------------------------------
 
-    test('ChatService.parseCitations: handles empty input', () {
-      expect(ChatService.parseCitations(''), isEmpty);
+    test('ChatService.stripActionMarkers: passes through plain prose', () {
+      expect(ChatService.stripActionMarkers('plain reply'), 'plain reply');
     });
 
-    test(
-      'ChatService.parseCitations: ignores malformed markers',
-      () {
-        // Empty id, wrong prefix, missing close bracket — none should
-        // surface as citations.
-        expect(
-            ChatService.parseCitations(
-                'see [card:] also [other:foo] and [card:partial'),
-            isEmpty);
-      },
-    );
+    test('ChatService.stripActionMarkers: strips an action tag at the end',
+        () {
+      final String stripped = ChatService.stripActionMarkers(
+        'I logged that moment for you.\n'
+        '[action:log_journal occurred_at="just now" situation="X" attempts="Y"]',
+      );
+      expect(stripped, 'I logged that moment for you.');
+    });
 
-    test('ChatService.parseCitations: accepts hyphen + digit ids', () {
-      expect(
-          ChatService.parseCitations(
-              'one [card:topic-1] two [card:topic_2] three [card:topic3]'),
-          <String>['topic-1', 'topic_2', 'topic3']);
+    test('ChatService.stripActionMarkers: tolerates a stray marker mid-text',
+        () {
+      final String stripped = ChatService.stripActionMarkers(
+        'Before [action:log_journal situation="hi" attempts="ok"] after.',
+      );
+      expect(stripped, 'Before  after.');
     });
   });
 

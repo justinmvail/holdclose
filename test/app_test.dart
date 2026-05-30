@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:careblazers/app.dart';
+import 'package:careblazers/models/chat.dart';
 import 'package:careblazers/models/settings.dart';
 import 'package:careblazers/providers/auth_provider.dart';
+import 'package:careblazers/providers/home_conversation_provider.dart';
 import 'package:careblazers/providers/onboarding_provider.dart';
 import 'package:careblazers/providers/quiet_hours_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
@@ -60,11 +62,23 @@ class _CompletedOnboarding extends OnboardingCompleted {
   bool build() => true;
 }
 
-List<Override> _routerGateOverrides(_SignedInAuthStub auth) =>
-    <Override>[
-      authBackendProvider.overrideWithValue(auth),
-      onboardingCompletedProvider.overrideWith(_CompletedOnboarding.new),
-    ];
+List<Override> _routerGateOverrides(_SignedInAuthStub auth) {
+  final DateTime now = DateTime.utc(2026, 5, 30, 12);
+  return <Override>[
+    authBackendProvider.overrideWithValue(auth),
+    onboardingCompletedProvider.overrideWith(_CompletedOnboarding.new),
+    // Home tab resolves to a synthetic conversation so the chat-shaped
+    // home renders without a drift database in the test harness.
+    homeConversationProvider.overrideWith(
+      (_) async => Conversation(
+        id: 'app-test-conv',
+        title: 'Today',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ),
+  ];
+}
 
 /// BUILD_SPEC.md §11.3 — the app root must wrap MaterialApp's routed
 /// child in a MediaQuery whose `textScaler` reflects the persisted

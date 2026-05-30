@@ -133,6 +133,14 @@ class Settings extends _$Settings {
   Future<void> setNotificationsEnabled(bool value) =>
       _update(state.copyWith(notificationsEnabled: value));
 
+  /// Whether to serve the community surface from the in-memory fake
+  /// instead of the deployed Cloudflare Worker (home-refactor). Flips
+  /// the [forumApiClientProvider] selection live; existing feed reads
+  /// keep their data but the next refresh reloads against the new
+  /// client.
+  Future<void> setUseDemoForum(bool value) =>
+      _update(state.copyWith(useDemoForum: value));
+
   Future<void> _update(AppSettings next) async {
     _userTouched = true;
     state = next;

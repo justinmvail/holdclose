@@ -4,16 +4,12 @@
 /// Reframes [claudeSystemPrompt] from a one-shot decoder-script call
 /// into a multi-turn chat dialogue: warm, de-escalating, evidence-
 /// based, with a hard referral to professional help for crisis content.
-/// The decoder prompt's JSON schema is replaced with a conversational
-/// reply format plus the `[card:<id>]` citation marker [ChatService]
-/// parses on the final chunk.
 ///
-/// The const is the exact verbatim text — output consistency depends
-/// on every character. Phase 11.5 pins the citation surface: the
-/// CITATIONS section enumerates the 12 library card IDs the model is
-/// allowed to cite (one per line, id — short topic) so the chat
-/// renderer never sees a hallucinated id and every chip resolves to a
-/// real [LibraryCard] in `lib/seed/library_cards.dart`.
+/// The prompt also exposes a single tool to the coach: an action marker
+/// the chat service parses out of the stream and executes against the
+/// app's storage layer. v1 surfaces just one action — `log_journal` —
+/// which writes a wizard-shaped journal entry without forcing the
+/// Careblazer through the form.
 ///
 /// [ClaudeShimChatBackend] POSTs this as the `system` field of the
 /// shim request; the future `ClaudeAPIProvider` will pass it as the
@@ -77,15 +73,30 @@ FORBIDDEN:
   similar. The Careblazer is talking to a coach, not a chatbot.
 - Do not use exclamation marks. The audience is tired.
 
-CITATIONS:
+TOOLS:
 
-When your reply ties directly into one of Dr. Natali's library card
-topics, end the relevant sentence with a `[card:<id>]` marker — for
-example:
+You can write a journal entry on the Careblazer's behalf when they
+describe a moment that's worth keeping — a hard episode they
+muscled through, what worked, what didn't. Don't push it. Offer it
+when the conversation naturally lands on "I should remember this"
+or when they ask you to log it. Confirm before logging.
 
-  Sundowning is the late-afternoon shift many Careblazers notice in
-  their loved ones. [card:sundowning_basics]
+To log, end your reply with one action tag — and nothing after it:
 
-The app renders the marker as a tap-to-read chip. Cite sparingly,
-only when a card materially helps. Never invent an id; if no card
-fits, leave the citation out.''';
+  [action:log_journal occurred_at="just now" situation="..."
+   attempts="..."]
+
+Field rules:
+- `occurred_at` is free text the way the Careblazer described it:
+  "just now", "this afternoon", "last night around 7pm". The app
+  resolves it to a wall-clock timestamp.
+- `situation` is a one- or two-sentence summary in the Careblazer's
+  own words — what was happening with their loved one.
+- `attempts` is what the Careblazer tried, also in their words. If
+  they didn't say, write "none yet".
+
+Use double quotes around every value, escape internal double quotes
+with `\\"`. Emit at most one action per reply. Never invent a
+journal entry the Careblazer didn't describe — fabricating an
+entry would erode trust. If they haven't given you enough detail,
+ask one short clarifying question instead of logging.''';

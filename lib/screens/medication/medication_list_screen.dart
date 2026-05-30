@@ -107,6 +107,7 @@ class MedicationListScreen extends ConsumerWidget {
   static const Key emptyStateKey = Key('medication-list-empty');
   static const Key emptyCtaKey = Key('medication-list-empty-cta');
   static const Key fabKey = Key('medication-list-fab');
+  static const Key crisisActionKey = Key('medication-list-crisis-action');
 
   /// Stable per-tile key derived from the medication id. Tests tap by
   /// id rather than by visible name so a copy edit doesn't break them.
@@ -132,6 +133,14 @@ class MedicationListScreen extends ConsumerWidget {
       backgroundColor: careblazersColors.background,
       appBar: AppBar(
         title: const Text('Medications'),
+        actions: <Widget>[
+          IconButton(
+            key: MedicationListScreen.crisisActionKey,
+            tooltip: 'Crisis card',
+            icon: const Icon(Icons.warning_amber_outlined),
+            onPressed: () => GoRouter.of(context).push('/crisis'),
+          ),
+        ],
       ),
       body: SafeArea(
         child: async.when(

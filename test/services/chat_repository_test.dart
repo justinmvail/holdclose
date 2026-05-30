@@ -82,9 +82,8 @@ void main() {
           id: 'msg-2',
           conversationId: 'convo-roundtrip',
           role: MessageRole.assistant,
-          body: "It's the late-afternoon shift many caregivers notice. "
-              '[card:sundowning_basics]',
-          citations: const <String>['sundowning_basics'],
+          body: "It's the late-afternoon shift many caregivers notice.",
+          citations: const <String>['journal:entry-1'],
           createdAt: base.add(const Duration(seconds: 2)),
           streamingDone: true,
         ),
@@ -101,9 +100,8 @@ void main() {
           id: 'msg-4',
           conversationId: 'convo-roundtrip',
           role: MessageRole.assistant,
-          body: 'Try dimming the lights an hour earlier. '
-              '[card:respond_to_emotion]',
-          citations: const <String>['respond_to_emotion'],
+          body: 'Try dimming the lights an hour earlier.',
+          citations: const <String>['journal:entry-2'],
           createdAt: base.add(const Duration(seconds: 4)),
           streamingDone: true,
         ),
@@ -129,8 +127,8 @@ void main() {
       expect(loaded, equals(authored));
       // Roles + citations round-tripped.
       expect(loaded[1].role, MessageRole.assistant);
-      expect(loaded[1].citations, <String>['sundowning_basics']);
-      expect(loaded[3].citations, <String>['respond_to_emotion']);
+      expect(loaded[1].citations, <String>['journal:entry-1']);
+      expect(loaded[3].citations, <String>['journal:entry-2']);
       expect(loaded.where((Message m) => m.role == MessageRole.user).length,
           3);
     });

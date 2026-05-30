@@ -7,7 +7,9 @@ import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/chat.dart';
+import '../models/journal_entry.dart';
 import '../providers/llm_provider.dart' show claudeShimEndpoint;
+import '../providers/storage_provider.dart';
 import '../seed/chat_system_prompt.dart';
 import 'chat_repository.dart';
 
@@ -278,12 +280,44 @@ String _defaultChatIdFactory() {
   return 'chat-$ms-$rand';
 }
 
-/// Pattern for `[card:<id>]` citation markers in a finished assistant
-/// reply. The id charset matches the library-card slugs in
-/// `lib/seed/library_cards.dart` (TASKS.md Phase 23) — lowercase
-/// letters, digits, and underscores. A hyphen is allowed too so future
-/// slugs can adopt the convention without breaking the parser.
-final RegExp _citationPattern = RegExp(r'\[card:([a-zA-Z0-9_-]+)\]');
+/// Pattern for `[action:<name> key="value" …]` tool-call markers in a
+/// finished assistant reply. v1 surfaces a single action — `log_journal`
+/// — but the parser is generic so a second action only needs an
+/// executor wired in [ChatService].
+///
+/// `body` group: the action name (e.g. `log_journal`).
+/// `args` group: the raw "key=value …" tail to feed [_parseActionArgs].
+final RegExp _actionPattern = RegExp(
+  r'\[action:([a-z_]+)\s+([^\]]+)\]',
+);
+
+/// Action name the v1 coach can emit to write a wizard-shape journal
+/// entry on the caregiver's behalf (chat-harness path,
+/// `lib/seed/chat_system_prompt.dart` TOOLS section).
+const String _journalActionName = 'log_journal';
+
+/// Citation prefix the chat surface uses to render an "entry saved"
+/// chip in the assistant bubble. Mirrors the existing chip-renderer
+/// path so the journal-action surface reuses the [Message.citations]
+/// field without a new schema column.
+const String journalCitationPrefix = 'journal:';
+
+/// Action-execution result the orchestrator stamps into the assistant
+/// message's [Message.citations] list. Carries the resolved journal
+/// entry id so the chip renderer can deep-link into the entry.
+class _ActionResult {
+  const _ActionResult({required this.citation});
+  final String citation;
+}
+
+/// Closure that lands a wizard-shape journal entry. Production wires
+/// this to the riverpod [storageProvider] via [chatServiceProvider];
+/// tests pass a stub closure that captures the call args.
+typedef JournalActionExecutor = Future<JournalEntry?> Function({
+  required DateTime occurredAt,
+  required String situation,
+  required String attempts,
+});
 
 /// Multi-turn dementia-care chat orchestrator (TASKS.md Phase 11.3).
 ///
@@ -314,6 +348,7 @@ class ChatService {
   ChatService({
     required this.repository,
     required this.backend,
+    this.journalExecutor,
     ChatIdFactory? idFactory,
     DateTime Function()? clock,
   })  : idFactory = idFactory ?? _defaultChatIdFactory,
@@ -321,6 +356,13 @@ class ChatService {
 
   final ChatRepository repository;
   final ChatLLMBackend backend;
+
+  /// Executor wired into the chat-harness `[action:log_journal …]`
+  /// path. Null when the build wants a chat-only experience (e.g. the
+  /// onboarding tour) — in that case action markers are stripped from
+  /// the displayed text but the journal entry is NOT written.
+  final JournalActionExecutor? journalExecutor;
+
   final ChatIdFactory idFactory;
   final DateTime Function() clock;
 
@@ -384,8 +426,8 @@ class ChatService {
               ? '[chat error: $message]'
               : '$buffer\n\n[chat error: $message]';
           assistant = assistant.copyWith(
-            body: trailer,
-            citations: parseCitations(trailer),
+            body: stripActionMarkers(trailer),
+            citations: const <String>[],
             streamingDone: true,
           );
           await repository.appendMessage(assistant);
@@ -396,28 +438,124 @@ class ChatService {
 
     if (errored) return;
 
-    final String finalBody = buffer.toString();
+    final String rawBody = buffer.toString();
+    final List<_ActionResult> actionResults = await _executeActions(rawBody);
+    final String cleanBody = stripActionMarkers(rawBody);
+
     assistant = assistant.copyWith(
-      body: finalBody,
-      citations: parseCitations(finalBody),
+      body: cleanBody,
+      citations: actionResults
+          .map((_ActionResult r) => r.citation)
+          .toList(growable: false),
       streamingDone: true,
     );
     await repository.appendMessage(assistant);
     yield assistant;
   }
 
-  /// Extract `[card:<id>]` markers from [body] into a deduplicated,
-  /// first-seen-order list of library card ids (TASKS.md Phase 11.3 +
-  /// 11.5). Public + static so the Phase 11.5 chip renderer can share
-  /// the same parser instead of re-rolling the regex.
-  static List<String> parseCitations(String body) {
-    final Set<String> seen = <String>{};
-    final List<String> result = <String>[];
-    for (final RegExpMatch match in _citationPattern.allMatches(body)) {
-      final String id = match.group(1)!;
-      if (seen.add(id)) result.add(id);
+  /// Run every recognised `[action:…]` marker the assistant emitted in
+  /// [body] against the wired executors. Unrecognised actions are
+  /// silently dropped (the marker still gets stripped from the
+  /// displayed body via [stripActionMarkers]) — better to lose a tool
+  /// call than to fail the whole turn.
+  Future<List<_ActionResult>> _executeActions(String body) async {
+    final List<_ActionResult> results = <_ActionResult>[];
+    for (final RegExpMatch m in _actionPattern.allMatches(body)) {
+      final String name = m.group(1)!;
+      final String rawArgs = m.group(2)!;
+      final Map<String, String> args = _parseActionArgs(rawArgs);
+      if (name == _journalActionName && journalExecutor != null) {
+        final DateTime when = _resolveOccurredAt(
+          args['occurred_at'],
+          clock(),
+        );
+        final String situation = args['situation']?.trim() ?? '';
+        final String attempts = args['attempts']?.trim() ?? '';
+        if (situation.isEmpty) continue;
+        try {
+          final JournalEntry? entry = await journalExecutor!(
+            occurredAt: when,
+            situation: situation,
+            attempts: attempts.isEmpty ? 'none yet' : attempts,
+          );
+          if (entry != null) {
+            results.add(_ActionResult(
+              citation: '$journalCitationPrefix${entry.id}',
+            ));
+          }
+        } catch (_) {
+          // Executor failure swallowed deliberately: the assistant's
+          // prose already lives in the bubble; surfacing a "tool
+          // failed" footer would derail the conversation. The action
+          // marker is still stripped below.
+        }
+      }
     }
-    return result;
+    return results;
+  }
+
+  /// Strip every recognised `[action:…]` marker from [body] so the
+  /// rendered bubble doesn't show the raw tool tag. Idempotent and
+  /// safe to call on bodies with zero markers — used by the chat
+  /// surface tests to assert clean rendering without standing up an
+  /// executor.
+  static String stripActionMarkers(String body) {
+    final String stripped = body.replaceAll(_actionPattern, '');
+    // Collapse the trailing whitespace + double-newlines the model
+    // sometimes leaves when the action is on its own line at the end.
+    return stripped.trimRight();
+  }
+
+  /// Parse `key="value" key2="value with \" escape"` into a map. Bare
+  /// (unquoted) values are tolerated too — the prompt asks for quotes
+  /// but a stray model output shouldn't drop the action.
+  static Map<String, String> _parseActionArgs(String raw) {
+    final Map<String, String> out = <String, String>{};
+    final RegExp pair = RegExp(
+      r'([a-z_]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|(\S+))',
+    );
+    for (final RegExpMatch m in pair.allMatches(raw)) {
+      final String key = m.group(1)!;
+      final String value = m.group(2) ?? m.group(3) ?? '';
+      out[key] = value
+          .replaceAll(r'\"', '"')
+          .replaceAll(r'\n', '\n')
+          .replaceAll(r'\\', r'\');
+    }
+    return out;
+  }
+
+  /// Resolve the free-text `occurred_at` (e.g. `"just now"`,
+  /// `"yesterday afternoon"`, `"last night around 9"`) into a wall-
+  /// clock [DateTime] relative to [now]. v1 covers the high-frequency
+  /// phrases the coach is told to use; anything unrecognised collapses
+  /// to [now].
+  static DateTime _resolveOccurredAt(String? raw, DateTime now) {
+    final String text = (raw ?? '').trim().toLowerCase();
+    if (text.isEmpty || text.contains('just now') || text == 'now') {
+      return now;
+    }
+    if (text.contains('yesterday')) {
+      // Default to mid-day yesterday — the prompt is told to use the
+      // caregiver's own phrasing, and that's a closer-than-anything
+      // fallback when no time-of-day is given.
+      final DateTime y = now.subtract(const Duration(days: 1));
+      return DateTime(y.year, y.month, y.day, 14);
+    }
+    if (text.contains('last night') || text.contains('overnight')) {
+      final DateTime y = now.subtract(const Duration(days: 1));
+      return DateTime(y.year, y.month, y.day, 21);
+    }
+    if (text.contains('this morning') || text.contains('earlier today')) {
+      return DateTime(now.year, now.month, now.day, 9);
+    }
+    if (text.contains('this afternoon')) {
+      return DateTime(now.year, now.month, now.day, 15);
+    }
+    if (text.contains('this evening') || text.contains('tonight')) {
+      return DateTime(now.year, now.month, now.day, 19);
+    }
+    return now;
   }
 }
 
@@ -433,8 +571,31 @@ ChatLLMBackend chatLLMBackend(Ref ref) => const ClaudeShimChatBackend();
 /// and get one instance shared across the app — the backend and
 /// repository are themselves singletons, so the wrapper is cheap to
 /// keep alive.
+///
+/// The `journalExecutor` closure runs the `[action:log_journal …]`
+/// tool call through [StorageProvider.insertJournalEntry]. Holding
+/// the [Ref] inside the closure (vs. baking the storage instance into
+/// the service constructor) lets a Settings override of [storageProvider]
+/// flow through without rebuilding the chat service.
 @Riverpod(keepAlive: true)
 ChatService chatService(Ref ref) => ChatService(
       repository: ref.watch(chatRepositoryProvider),
       backend: ref.watch(chatLLMBackendProvider),
+      journalExecutor: ({
+        required DateTime occurredAt,
+        required String situation,
+        required String attempts,
+      }) async {
+        final DateTime now = DateTime.now();
+        final JournalEntry entry = JournalEntry.wizard(
+          id: 'journal-${now.millisecondsSinceEpoch}-'
+              '${math.Random().nextInt(1 << 32)}',
+          createdAt: now,
+          occurredAt: occurredAt,
+          situationText: situation,
+          attemptsText: attempts,
+        );
+        await ref.read(storageProvider).insertJournalEntry(entry);
+        return entry;
+      },
     );
