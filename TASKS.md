@@ -828,7 +828,7 @@ Sized as 8 atomic iters across two related sub-areas: medications
   removes its schedule + logs. Tests: round-trip each model; cascade-
   delete invariants; FrequencyKind serialization.
 
-- [ ] **Phase 12.2: MedicationRepository
+- [x] **Phase 12.2: MedicationRepository
   (`lib/services/medication_repository.dart`).** CRUD over the three
   tables + computed helpers: `upcomingDoses(within: Duration)`,
   `dosesByDay(date)`, `adherenceRate(forMedication, window)`. The
