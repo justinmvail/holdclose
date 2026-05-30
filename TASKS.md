@@ -1065,7 +1065,7 @@ the API contract.
   Tests cover nested tree integrity, depth enforcement, hidden
   comment rendering.
 
-- [ ] **Phase 13.7: Voting endpoints + atomic counter updates
+- [x] **Phase 13.7: Voting endpoints + atomic counter updates
   (`backend/src/routes/votes.ts`).** One endpoint:
     - `POST /api/v1/votes` `{target_kind, target_id, value: +1|-1|0}`
       — value=0 removes an existing vote. Upserts the votes row,
