@@ -107,3 +107,72 @@ npm run deploy       # wrangler deploy
 Migrations (Phase 13.2 onward) run via `wrangler d1 migrations apply
 FORUM_DB --remote` after `drizzle-kit generate` produces new SQL
 under `drizzle/`.
+
+## Watchdog (Phase 13.13)
+
+A scheduled Worker (`src/watchdog/index.ts`) runs every Monday at
+13:00 UTC (cron `0 13 * * 1`, declared under `[triggers]` in
+`wrangler.toml`). It samples forum metrics from three sources:
+
+- **D1 binding** — `gatherDbMetrics()` queries `posts`, `comments`,
+  `profiles` for total rows, 30-day post/comment volume, and the
+  monthly-active-authors count (distinct profile ids that posted or
+  commented in the trailing 30 days).
+- **Cloudflare GraphQL Analytics API** — `CloudflareAnalyticsClient`
+  fetches Worker request count + p95 wall-time, D1 database size,
+  D1 write volume + p95 query latency, R2 storage size, and R2 GET
+  / PUT counts over the trailing 7 days.
+- **Resend** — `ResendMailer` posts an email to the operator if any
+  metric is at or above its yellow / red threshold. If every metric
+  is green the run is silent.
+
+### Watchdog thresholds
+
+Single source of truth: `THRESHOLDS` in `src/watchdog/index.ts`.
+Keep this table in sync if you tune values.
+
+| Metric | Yellow (≥ 50% of cap) | Red (≥ 75% of cap) |
+|---|---|---|
+| `d1SizeBytes` (D1 database size) | 4 GB | 7 GB |
+| `d1WritesPerDay` (avg writes/day over 7d) | 50,000 | 500,000 |
+| `d1P95QueryMs` (D1 p95 query latency) | 50 ms | 200 ms |
+| `monthlyActiveAuthors` (distinct posters+commenters, 30d) | 50,000 | 500,000 |
+| `r2StorageBytes` (R2 object store size) | 100 GB | 500 GB |
+
+Worker request count and worker p95 latency are sampled and included
+in the email body for context but are **not** threshold-checked —
+they're informational signals for capacity planning.
+
+A red flag promotes the email subject to `[Careblazers] RED: …`;
+otherwise it ships as `[Careblazers] YELLOW: …`. Red takes
+precedence over yellow when both severities fire in the same run.
+
+### Watchdog setup
+
+Set the following Worker secrets before the first scheduled run:
+
+```bash
+wrangler secret put CLOUDFLARE_API_TOKEN   # needs "Account Analytics: Read"
+wrangler secret put RESEND_API_KEY
+```
+
+Non-secret values live in `wrangler.toml` `[vars]` (override at
+deploy time):
+
+- `CLOUDFLARE_ACCOUNT_ID` — your CF account tag
+- `CLOUDFLARE_D1_DATABASE_ID` — the D1 UUID (same as `database_id`)
+- `CLOUDFLARE_R2_BUCKET_NAME` — defaults to `careblazers-forum-media`
+- `RESEND_FROM_EMAIL` — verified Resend sender
+- `RESEND_TO_EMAIL` — operator inbox
+
+To dry-run the scheduled handler against the local miniflare D1:
+
+```bash
+wrangler dev --test-scheduled
+curl 'http://127.0.0.1:8787/__scheduled?cron=0+13+*+*+1'
+```
+
+Tests (`test/watchdog.test.ts`) exercise the threshold table, the
+email body, the D1 query, the orchestrator (with mocked analytics +
+mailer), and the Cloudflare + Resend HTTP clients (with a fake
+`fetch`).

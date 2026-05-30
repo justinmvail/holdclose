@@ -1167,7 +1167,7 @@ the API contract.
 
 ### Ops
 
-- [ ] **Phase 13.13: Weekly metrics watchdog Worker
+- [x] **Phase 13.13: Weekly metrics watchdog Worker
   (`backend/src/watchdog/index.ts` + scheduled cron trigger).**
   Cloudflare scheduled Worker (`crons = ["0 13 * * 1"]` — Mondays
   at 1pm UTC) that:

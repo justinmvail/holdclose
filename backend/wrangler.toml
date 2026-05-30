@@ -18,12 +18,26 @@ main = "src/index.ts"
 compatibility_date = "2026-05-30"
 compatibility_flags = ["nodejs_compat"]
 
+# Phase 13.13: weekly metrics watchdog. Mondays at 13:00 UTC
+# (~6am Pacific) keeps the email out of the operator's weekend.
+[triggers]
+crons = ["0 13 * * 1"]
+
 [vars]
 # Public origin of the R2 bucket fronting avatar / post-image uploads.
 # Profile avatar_url updates must start with this prefix so the API
 # can't be used to point at arbitrary off-platform images. Overridden
 # per environment via `wrangler deploy --var R2_PUBLIC_URL:...`.
 R2_PUBLIC_URL = "https://media.careblazers.local"
+
+# Watchdog wiring (Phase 13.13). Non-secret values live here; secrets
+# (CLOUDFLARE_API_TOKEN, RESEND_API_KEY) are set via `wrangler secret
+# put`. See backend/README.md → "Watchdog setup".
+RESEND_FROM_EMAIL = "watchdog@careblazers.local"
+RESEND_TO_EMAIL = "ops@careblazers.local"
+CLOUDFLARE_ACCOUNT_ID = ""
+CLOUDFLARE_D1_DATABASE_ID = ""
+CLOUDFLARE_R2_BUCKET_NAME = "careblazers-forum-media"
 
 [[d1_databases]]
 binding = "FORUM_DB"

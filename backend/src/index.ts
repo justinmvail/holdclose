@@ -6,6 +6,7 @@ import { postsRouter } from './routes/posts';
 import { profilesRouter } from './routes/profiles';
 import { reportsRouter } from './routes/reports';
 import { votesRouter } from './routes/votes';
+import { handleScheduled, type WatchdogEnv } from './watchdog';
 
 export type Bindings = AuthBindings & {
   FORUM_DB: D1Database;
@@ -36,4 +37,16 @@ api.route('/votes', votesRouter());
 
 app.route('/api/v1', api);
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(
+    _controller: ScheduledController,
+    env: Bindings & WatchdogEnv,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    // The watchdog can take a few seconds (GraphQL + Resend round
+    // trips); waitUntil keeps the scheduled invocation alive past
+    // the synchronous return so Workers doesn't kill it mid-flight.
+    ctx.waitUntil(handleScheduled(env));
+  },
+};
