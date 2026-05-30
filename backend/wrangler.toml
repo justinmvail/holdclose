@@ -1,0 +1,28 @@
+# Cloudflare Workers config for the Careblazers caregiver forum.
+#
+# - `FORUM_DB` is the D1 database holding profiles / posts / comments / votes / reports.
+# - `FORUM_MEDIA` is the R2 bucket holding avatars + post image attachments.
+#
+# Before the first `wrangler dev` or `wrangler deploy`:
+#   1. Create the D1 database:  `wrangler d1 create careblazers-forum`
+#      and paste the returned UUID into `database_id` below.
+#   2. Create the R2 bucket:    `wrangler r2 bucket create careblazers-forum-media`
+#   3. Set the JWT secret:      `wrangler secret put FORUM_JWT_SECRET`
+#      (Phase 13.3 — auth middleware).
+#
+# Local dev (`wrangler dev`) and `vitest` use miniflare's in-process D1/R2
+# emulators, so steps 1–3 are only required for remote (`wrangler deploy`).
+
+name = "careblazers-forum"
+main = "src/index.ts"
+compatibility_date = "2026-05-30"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "FORUM_DB"
+database_name = "careblazers-forum"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[r2_buckets]]
+binding = "FORUM_MEDIA"
+bucket_name = "careblazers-forum-media"

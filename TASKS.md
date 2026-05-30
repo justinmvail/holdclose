@@ -953,7 +953,7 @@ the API contract.
 
 ### Backend (Cloudflare Workers + D1 + R2)
 
-- [ ] **Phase 13.1: Cloudflare project scaffold + wrangler config
+- [x] **Phase 13.1: Cloudflare project scaffold + wrangler config
   (`backend/`).** Create `backend/` with `package.json`, `tsconfig.json`,
   `wrangler.toml`, `vitest.config.ts`. Initialize:
     - Workers project with TypeScript
