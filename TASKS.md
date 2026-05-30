@@ -882,7 +882,7 @@ Sized as 8 atomic iters across two related sub-areas: medications
   provider button (tel: URL), get directions button (maps: URL).
   Tests cover both screens with each appointment status.
 
-- [ ] **Phase 12.7: Add/edit appointment form +
+- [x] **Phase 12.7: Add/edit appointment form +
   ProviderRepository.** Form covers all Appointment fields +
   inline "add new provider" (so the caregiver doesn't have to set
   up providers separately). ProviderRepository CRUD. Tests for

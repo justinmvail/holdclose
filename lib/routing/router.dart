@@ -18,6 +18,7 @@ import '../screens/journal/journal_screen.dart';
 import '../screens/library/library_card_screen.dart';
 import '../screens/library/library_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
+import '../screens/appointment/appointment_form_screen.dart';
 import '../screens/appointment/appointment_list_screen.dart';
 import '../screens/medication/dose_log_screen.dart';
 import '../screens/medication/medication_form_screen.dart';
@@ -54,6 +55,8 @@ class CareblazersRoutes {
   static const String medicationDoseLog = 'medication-dose-log';
   static const String appointmentList = 'appointment-list';
   static const String appointmentDetail = 'appointment-detail';
+  static const String appointmentForm = 'appointment-form';
+  static const String appointmentEdit = 'appointment-edit';
 }
 
 /// Build a fresh GoRouter wired with every BUILD_SPEC.md §5 route.
@@ -234,6 +237,13 @@ GoRouter buildRouter({
             const AppointmentListScreen(),
         routes: <RouteBase>[
           GoRoute(
+            path: 'new',
+            name: CareblazersRoutes.appointmentForm,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                const AppointmentFormScreen(),
+          ),
+          GoRoute(
             path: ':id',
             name: CareblazersRoutes.appointmentDetail,
             parentNavigatorKey: rootNavigatorKey,
@@ -241,6 +251,17 @@ GoRouter buildRouter({
                 AppointmentDetailScreen(
               appointmentId: state.pathParameters['id'] ?? '',
             ),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'edit',
+                name: CareblazersRoutes.appointmentEdit,
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (BuildContext context, GoRouterState state) =>
+                    AppointmentFormScreen(
+                  appointmentId: state.pathParameters['id'],
+                ),
+              ),
+            ],
           ),
         ],
       ),
