@@ -8,7 +8,9 @@ import '../providers/auth_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../screens/chat/chat_screen.dart';
 import '../screens/chat/conversation_list_screen.dart';
+import '../models/forum.dart';
 import '../screens/community/community_feed_screen.dart';
+import '../screens/community/post_detail_screen.dart';
 import '../screens/crisis/crisis_card_screen.dart';
 import '../screens/decoder/behavior_picker_screen.dart';
 import '../screens/decoder/decoder_result_screen.dart';
@@ -59,6 +61,7 @@ class CareblazersRoutes {
   static const String appointmentForm = 'appointment-form';
   static const String appointmentEdit = 'appointment-edit';
   static const String community = 'community';
+  static const String communityPostDetail = 'community-post-detail';
 }
 
 /// Build a fresh GoRouter wired with every BUILD_SPEC.md §5 route.
@@ -185,6 +188,22 @@ GoRouter buildRouter({
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             JournalEntryScreen(entryId: state.pathParameters['id'] ?? ''),
+      ),
+      GoRoute(
+        path: '/community/:postId',
+        name: CareblazersRoutes.communityPostDetail,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) {
+          // Feed tiles push here with the already-fetched [ForumPost]
+          // as `extra` so the header renders immediately instead of
+          // blanking while the post fetch lands. A deep-link with no
+          // extra falls through to a fetch-by-id path.
+          final Object? extra = state.extra;
+          return PostDetailScreen(
+            postId: state.pathParameters['postId'] ?? '',
+            initialPost: extra is ForumPost ? extra : null,
+          );
+        },
       ),
       GoRoute(
         path: '/library/:id',

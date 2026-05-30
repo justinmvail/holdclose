@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/forum.dart';
 import '../../providers/community_feed_provider.dart';
+import '../../routing/router.dart' show CareblazersRoutes;
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
 
@@ -452,11 +454,14 @@ class _PostCard extends StatelessWidget {
         child: InkWell(
           key: CommunityFeedScreen.postTileKey(post.id),
           borderRadius: BorderRadius.circular(16),
-          // Phase 13.11 will land the post detail route — leave the tap
-          // as a no-op for now so the card still reads as interactive
-          // (the ripple + Semantics announce the affordance) without
-          // routing to a screen that doesn't exist yet.
-          onTap: () {},
+          // Hand the already-fetched [ForumPost] along as `extra` so
+          // the detail header renders immediately instead of blanking
+          // while the per-post fetch lands (Phase 13.11).
+          onTap: () => context.goNamed(
+            CareblazersRoutes.communityPostDetail,
+            pathParameters: <String, String>{'postId': post.id},
+            extra: post,
+          ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             child: Column(
@@ -623,7 +628,10 @@ class _CountsRow extends StatelessWidget {
 /// `Caregiver_xxxxxx` shape the bootstrap endpoint mints for fresh
 /// profiles (BUILD_SPEC.md §13 / Phase 13.4) so a future swap to the
 /// wire value won't visually shift authors that already match.
-@visibleForTesting
+///
+/// Exported (not `@visibleForTesting`) so the post-detail screen
+/// (Phase 13.11) can reuse the same derivation — both surfaces must
+/// agree on what each author is called.
 String displayNameForAuthor(String authorId) {
   if (authorId.isEmpty) return 'Caregiver';
   // Strip a "profile-" prefix if one shows up so the rendered suffix
@@ -648,7 +656,9 @@ String displayNameForAuthor(String authorId) {
 /// archives are a Phase 13.11+ concern). Future timestamps (clock
 /// skew between phone + Worker) render as "just now" rather than a
 /// negative duration so the screen never emits broken copy.
-@visibleForTesting
+///
+/// Shared with the post-detail screen (Phase 13.11) so a post tile
+/// and its detail header both read "5m ago" at the same moment.
 String relativeTime(DateTime when, DateTime now) {
   final Duration delta = now.difference(when);
   if (delta.inSeconds < 60) return 'just now';

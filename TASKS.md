@@ -1132,7 +1132,7 @@ the API contract.
   Reuses the existing CaptionFade for new-post animations.
   Tests + golden for empty + populated states.
 
-- [ ] **Phase 13.11: Post detail + comment thread UI
+- [x] **Phase 13.11: Post detail + comment thread UI
   (`lib/screens/community/post_detail_screen.dart` +
   `lib/widgets/community/comment_thread.dart`).** Detail screen
   shows the post body + scrollable nested-comments tree. Comments
