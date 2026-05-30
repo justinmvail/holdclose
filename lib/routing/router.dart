@@ -17,6 +17,8 @@ import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
 import '../screens/library/library_card_screen.dart';
 import '../screens/library/library_screen.dart';
+import '../screens/appointment/appointment_detail_screen.dart';
+import '../screens/appointment/appointment_list_screen.dart';
 import '../screens/medication/dose_log_screen.dart';
 import '../screens/medication/medication_form_screen.dart';
 import '../screens/medication/medication_list_screen.dart';
@@ -50,6 +52,8 @@ class CareblazersRoutes {
   static const String medicationList = 'medication-list';
   static const String medicationForm = 'medication-form';
   static const String medicationDoseLog = 'medication-dose-log';
+  static const String appointmentList = 'appointment-list';
+  static const String appointmentDetail = 'appointment-detail';
 }
 
 /// Build a fresh GoRouter wired with every BUILD_SPEC.md §5 route.
@@ -219,6 +223,24 @@ GoRouter buildRouter({
             parentNavigatorKey: rootNavigatorKey,
             builder: (BuildContext context, GoRouterState state) =>
                 const DoseLogScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/appointments',
+        name: CareblazersRoutes.appointmentList,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const AppointmentListScreen(),
+        routes: <RouteBase>[
+          GoRoute(
+            path: ':id',
+            name: CareblazersRoutes.appointmentDetail,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                AppointmentDetailScreen(
+              appointmentId: state.pathParameters['id'] ?? '',
+            ),
           ),
         ],
       ),

@@ -872,7 +872,7 @@ Sized as 8 atomic iters across two related sub-areas: medications
 
   Migration + CASCADE behavior + tests mirror 12.1.
 
-- [ ] **Phase 12.6: Appointment list + detail screens
+- [x] **Phase 12.6: Appointment list + detail screens
   (`lib/screens/appointment/appointment_list_screen.dart` +
   `lib/screens/appointment/appointment_detail_screen.dart`).** List
   at `/appointments`: grouped by "Upcoming" + "Past." Each card:

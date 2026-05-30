@@ -71,8 +71,11 @@ abstract class Provider with _$Provider {
 /// visit all live here. [agenda] is the bullet list the caregiver
 /// preps before the visit and crosses off in the waiting room (Phase
 /// 12.6 renders each as a checkbox); empty list is fine for an as-yet-
-/// unplanned visit. [notes] is the post-appointment debrief and stays
-/// null until the caregiver fills it in.
+/// unplanned visit. [completedAgendaIndices] is the parallel set of
+/// agenda positions the caregiver has ticked off — persisted alongside
+/// the agenda itself so the cross-off state survives an app relaunch
+/// mid-visit. [notes] is the post-appointment debrief and stays null
+/// until the caregiver fills it in.
 ///
 /// FK on [providerId] cascades on delete — wiping a provider wipes its
 /// appointment history alongside it.
@@ -86,6 +89,7 @@ abstract class Appointment with _$Appointment {
     required String location,
     required List<String> agenda,
     required AppointmentStatus status,
+    @Default(<int>{}) Set<int> completedAgendaIndices,
     String? notes,
   }) = _Appointment;
 
