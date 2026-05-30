@@ -1032,7 +1032,7 @@ the API contract.
   Tests cover each endpoint's happy path + the auth/validation
   rejections.
 
-- [ ] **Phase 13.5: Posts endpoints + feed sorting
+- [x] **Phase 13.5: Posts endpoints + feed sorting
   (`backend/src/routes/posts.ts`).** Five endpoints:
     - `GET /api/v1/posts?sort=hot|new|top&before=<post-id>&limit=25`
       — paginated feed. `hot` uses Reddit's classic ranking
