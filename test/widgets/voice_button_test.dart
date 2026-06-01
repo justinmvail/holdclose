@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:careblazers/providers/voice_capture_provider.dart';
+import 'package:careblazers/services/voice_intake.dart';
 import 'package:careblazers/widgets/voice_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,15 @@ class _ProgrammableVoiceCapture implements VoiceCapture {
     if (completer != null) return completer!.future;
     return Future<String?>.value(result);
   }
+}
+
+/// A [VoiceCapture] that always reports the mic permission as denied.
+class _DeniedVoiceCapture implements VoiceCapture {
+  const _DeniedVoiceCapture();
+
+  @override
+  Future<String?> capture() async =>
+      throw const VoiceCapturePermissionDeniedException();
 }
 
 Future<void> _pump(
@@ -73,6 +83,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(captured, isEmpty);
+  });
+
+  testWidgets(
+      'a permission-denied capture surfaces the snackbar and does not '
+      'forward', (WidgetTester tester) async {
+    final List<String> captured = <String>[];
+    await _pump(
+      tester,
+      capture: const _DeniedVoiceCapture(),
+      onTranscript: captured.add,
+    );
+
+    await tester.tap(find.byType(VoiceButton));
+    await tester.pump(); // run the capture future + rebuild
+    await tester.pump(); // animate the snackbar in
+
+    expect(find.text(voiceCapturePermissionDeniedMessage), findsOneWidget);
+    expect(captured, isEmpty);
+    // Settles back to the idle mic — the button is usable again.
+    expect(find.byIcon(Icons.mic_none), findsOneWidget);
   });
 
   testWidgets('shows a progress ring and disables while capturing',

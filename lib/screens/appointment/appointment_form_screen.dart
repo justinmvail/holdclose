@@ -100,10 +100,20 @@ Future<List<Provider>> appointmentFormProviders(Ref ref) async {
 /// index still makes sense (any index pointing past the new agenda
 /// length is dropped — a removed item can't stay checked).
 class AppointmentFormScreen extends ConsumerStatefulWidget {
-  const AppointmentFormScreen({super.key, this.appointmentId});
+  const AppointmentFormScreen({
+    super.key,
+    this.appointmentId,
+    this.initialNotes,
+  });
 
   /// Non-null on the edit path; null on the add path.
   final String? appointmentId;
+
+  /// A spoken phrase captured from the Home Add sheet's voice button
+  /// (Phase 14.14), pre-filled into the visit-notes textarea on the add
+  /// path. Ignored on the edit path — a saved appointment's own notes
+  /// hydrate the field instead.
+  final String? initialNotes;
 
   bool get isEdit => appointmentId != null;
 
@@ -181,6 +191,14 @@ class _AppointmentFormScreenState
     final DateTime nextHour = DateTime(now.year, now.month, now.day, now.hour)
         .add(const Duration(hours: 1));
     _startsAt = nextHour.add(const Duration(days: 7));
+
+    // Voice intake (Phase 14.14): seed the notes textarea on the add
+    // path. The edit path lets _hydrateFromAppointment overwrite this
+    // with the saved appointment's own notes.
+    if (!widget.isEdit) {
+      final String seed = widget.initialNotes?.trim() ?? '';
+      if (seed.isNotEmpty) _notes.text = seed;
+    }
   }
 
   @override

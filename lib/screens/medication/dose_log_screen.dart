@@ -82,12 +82,21 @@ DoseStatus markTakenStatusFor(DateTime scheduledFor, DateTime now) {
 /// rows in one shot — the most common caregiver pattern is "I gave
 /// every morning med at once". The button is hidden when no
 /// before-noon doses are pending so the UI never invites a no-op tap.
-class DoseLogScreen extends ConsumerWidget {
-  const DoseLogScreen({super.key});
+class DoseLogScreen extends ConsumerStatefulWidget {
+  const DoseLogScreen({super.key, this.initialNote});
+
+  /// A spoken phrase captured from the Home Add sheet's voice button
+  /// (Phase 14.14). When non-null the screen surfaces a pre-filled
+  /// dose-note field at the top; the note rides along into the
+  /// [DoseLog.notes] of whatever dose the caregiver marks next. Null
+  /// (the default, and every non-voice entry point) hides the field and
+  /// logs notes-free, exactly as before.
+  final String? initialNote;
 
   static const Key listKey = Key('dose-log-list');
   static const Key emptyStateKey = Key('dose-log-empty');
   static const Key bulkMorningButtonKey = Key('dose-log-bulk-morning');
+  static const Key noteFieldKey = Key('dose-log-note-field');
 
   /// Stable per-row key derived from the (medicationId, scheduledFor)
   /// pair — schedule id alone collides when one med carries multiple
@@ -108,7 +117,35 @@ class DoseLogScreen extends ConsumerWidget {
       Key('dose-log-status-${status.name}');
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DoseLogScreen> createState() => _DoseLogScreenState();
+}
+
+class _DoseLogScreenState extends ConsumerState<DoseLogScreen> {
+  TextEditingController? _noteController;
+
+  bool get _hasNote => widget.initialNote != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_hasNote) {
+      _noteController = TextEditingController(text: widget.initialNote);
+    }
+  }
+
+  @override
+  void dispose() {
+    _noteController?.dispose();
+    super.dispose();
+  }
+
+  /// The current note text, or null when no note field is showing. Read
+  /// lazily at action time so edits the caregiver makes after the list
+  /// renders still ride along with the dose they log.
+  String? _currentNote() => _noteController?.text;
+
+  @override
+  Widget build(BuildContext context) {
     final AsyncValue<List<ScheduledDose>> async =
         ref.watch(dosesTodayProvider);
 
@@ -122,10 +159,58 @@ class DoseLogScreen extends ConsumerWidget {
           loading: () => const SizedBox.shrink(),
           error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
           data: (List<ScheduledDose> doses) {
-            if (doses.isEmpty) return const _EmptyState();
-            return _PopulatedList(doses: doses);
+            final Widget content = doses.isEmpty
+                ? const _EmptyState()
+                : _PopulatedList(doses: doses, noteResolver: _currentNote);
+            if (!_hasNote) return content;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _VoiceNoteField(controller: _noteController!),
+                Expanded(child: content),
+              ],
+            );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// The pre-filled dose-note field shown when the screen is reached via
+/// the Home Add sheet's voice button (Phase 14.14). The note attaches to
+/// whichever dose the caregiver marks next.
+class _VoiceNoteField extends StatelessWidget {
+  const _VoiceNoteField({required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Note for this dose',
+            style: textTheme.bodyMedium?.copyWith(
+              color: careblazersColors.primarySoft,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            key: DoseLogScreen.noteFieldKey,
+            controller: controller,
+            minLines: 1,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              hintText: 'Saved with the next dose you mark.',
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -170,9 +255,13 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _PopulatedList extends ConsumerWidget {
-  const _PopulatedList({required this.doses});
+  const _PopulatedList({required this.doses, this.noteResolver});
 
   final List<ScheduledDose> doses;
+
+  /// Resolves the current dose-note text at action time (Phase 14.14),
+  /// or null when no note field is showing.
+  final ValueGetter<String?>? noteResolver;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -190,12 +279,16 @@ class _PopulatedList extends ConsumerWidget {
         if (showBulk && index == 0) {
           return _BulkMorningButton(
             pendingCount: beforeNoonPending.length,
-            onPressed: () =>
-                _markMorningTaken(context, ref, beforeNoonPending),
+            onPressed: () => _markMorningTaken(
+              context,
+              ref,
+              beforeNoonPending,
+              note: noteResolver?.call(),
+            ),
           );
         }
         final int doseIndex = showBulk ? index - 1 : index;
-        return _DoseRow(dose: doses[doseIndex]);
+        return _DoseRow(dose: doses[doseIndex], noteResolver: noteResolver);
       },
     );
   }
@@ -214,12 +307,14 @@ bool _isPendingForBulk(ScheduledDose dose) {
 Future<void> _markMorningTaken(
   BuildContext context,
   WidgetRef ref,
-  List<ScheduledDose> pending,
-) async {
+  List<ScheduledDose> pending, {
+  String? note,
+}) async {
   final MedicationRepository repo =
       ref.read(medicationRepositoryBackendProvider);
   final DateTime now = ref.read(doseLogClockProvider)();
   final DoseLogIdFactory mint = ref.read(doseLogIdFactoryProvider);
+  final String? notes = _cleanNote(note);
 
   for (final ScheduledDose dose in pending) {
     final DoseStatus status =
@@ -230,6 +325,7 @@ Future<void> _markMorningTaken(
       scheduledFor: dose.scheduledFor,
       takenAt: now,
       status: status,
+      notes: notes,
     );
     await repo.upsertDoseLog(log);
   }
@@ -280,9 +376,12 @@ class _BulkMorningButton extends StatelessWidget {
 }
 
 class _DoseRow extends ConsumerWidget {
-  const _DoseRow({required this.dose});
+  const _DoseRow({required this.dose, this.noteResolver});
 
   final ScheduledDose dose;
+
+  /// Resolves the current dose-note text at tap time (Phase 14.14).
+  final ValueGetter<String?>? noteResolver;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -302,8 +401,9 @@ class _DoseRow extends ConsumerWidget {
             key: DoseLogScreen.rowKey(med.id, dose.scheduledFor),
             borderRadius: BorderRadius.circular(16),
             onTap: logged
-                ? () => _openStatusSheet(context, ref, dose)
-                : () => _markTaken(ref, dose),
+                ? () => _openStatusSheet(context, ref, dose,
+                    note: noteResolver?.call())
+                : () => _markTaken(ref, dose, note: noteResolver?.call()),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
               child: Row(
@@ -357,7 +457,8 @@ class _DoseRow extends ConsumerWidget {
                   const SizedBox(width: 12),
                   if (!logged)
                     _MarkTakenButton(
-                      onPressed: () => _markTaken(ref, dose),
+                      onPressed: () =>
+                          _markTaken(ref, dose, note: noteResolver?.call()),
                       buttonKey: DoseLogScreen.markTakenButtonKey(
                           med.id, dose.scheduledFor),
                     )
@@ -373,7 +474,19 @@ class _DoseRow extends ConsumerWidget {
   }
 }
 
-Future<void> _markTaken(WidgetRef ref, ScheduledDose dose) async {
+/// Normalize a raw note-field value to what [DoseLog.notes] should hold:
+/// the trimmed text, or null when blank / absent. Keeps a notes-free log
+/// exactly notes-free (the default for every non-voice entry point).
+String? _cleanNote(String? note) {
+  final String trimmed = note?.trim() ?? '';
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+Future<void> _markTaken(
+  WidgetRef ref,
+  ScheduledDose dose, {
+  String? note,
+}) async {
   final MedicationRepository repo =
       ref.read(medicationRepositoryBackendProvider);
   final DateTime now = ref.read(doseLogClockProvider)();
@@ -385,6 +498,7 @@ Future<void> _markTaken(WidgetRef ref, ScheduledDose dose) async {
     scheduledFor: dose.scheduledFor,
     takenAt: now,
     status: status,
+    notes: _cleanNote(note),
   );
   await repo.upsertDoseLog(log);
   ref.invalidate(dosesTodayProvider);
@@ -393,20 +507,25 @@ Future<void> _markTaken(WidgetRef ref, ScheduledDose dose) async {
 Future<void> _setStatus(
   WidgetRef ref,
   ScheduledDose dose,
-  DoseStatus status,
-) async {
+  DoseStatus status, {
+  String? note,
+}) async {
   final MedicationRepository repo =
       ref.read(medicationRepositoryBackendProvider);
   final DateTime now = ref.read(doseLogClockProvider)();
   final DoseLogIdFactory mint = ref.read(doseLogIdFactoryProvider);
   final DateTime? takenAt =
       (status == DoseStatus.taken || status == DoseStatus.late) ? now : null;
+  // Preserve any note already on the row; only overwrite when the voice
+  // note field carried fresh text.
+  final String? notes = _cleanNote(note) ?? dose.log?.notes;
   final DoseLog log = DoseLog(
     id: dose.log?.id ?? mint(),
     medicationId: dose.medication.id,
     scheduledFor: dose.scheduledFor,
     takenAt: takenAt,
     status: status,
+    notes: notes,
   );
   await repo.upsertDoseLog(log);
   ref.invalidate(dosesTodayProvider);
@@ -415,15 +534,16 @@ Future<void> _setStatus(
 Future<void> _openStatusSheet(
   BuildContext context,
   WidgetRef ref,
-  ScheduledDose dose,
-) async {
+  ScheduledDose dose, {
+  String? note,
+}) async {
   final DoseStatus? next = await showModalBottomSheet<DoseStatus>(
     context: context,
     builder: (BuildContext sheetContext) => _StatusSheet(dose: dose),
     backgroundColor: careblazersColors.background,
   );
   if (next == null) return;
-  await _setStatus(ref, dose, next);
+  await _setStatus(ref, dose, next, note: note);
 }
 
 class _StatusSheet extends StatelessWidget {

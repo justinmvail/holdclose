@@ -46,6 +46,7 @@ Future<({MedicationRepository repo, CareblazersDatabase db})> _pumpScreen(
   required MedicationRepository repo,
   required CareblazersDatabase db,
   String Function()? idFactory,
+  String? initialNote,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1100));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -59,7 +60,7 @@ Future<({MedicationRepository repo, CareblazersDatabase db})> _pumpScreen(
         path: '/medications/today',
         parentNavigatorKey: rootKey,
         builder: (BuildContext context, GoRouterState state) =>
-            const DoseLogScreen(),
+            DoseLogScreen(initialNote: initialNote),
       ),
     ],
   );
@@ -296,6 +297,81 @@ void main() {
             'med-1', DateTime(2026, 5, 30, 8))),
         findsOneWidget,
       );
+    });
+  });
+
+  group('DoseLogScreen — voice-intake dose note (Phase 14.14)', () {
+    testWidgets('no note field when opened without an initial note',
+        (WidgetTester tester) async {
+      await repo.upsertMedication(_med(id: 'med-1', name: 'Donepezil'));
+      await repo.upsertSchedule(_dailyAt('sched-1', 'med-1', 11));
+
+      await _pumpScreen(tester, repo: repo, db: db);
+
+      expect(find.byKey(DoseLogScreen.noteFieldKey), findsNothing);
+    });
+
+    testWidgets('pre-fills the note field with the transcript',
+        (WidgetTester tester) async {
+      await repo.upsertMedication(_med(id: 'med-1', name: 'Donepezil'));
+      await repo.upsertSchedule(_dailyAt('sched-1', 'med-1', 11));
+
+      await _pumpScreen(
+        tester,
+        repo: repo,
+        db: db,
+        initialNote: 'gave it with breakfast',
+      );
+
+      final TextField field = tester.widget<TextField>(
+        find.byKey(DoseLogScreen.noteFieldKey),
+      );
+      expect(field.controller?.text, 'gave it with breakfast');
+    });
+
+    testWidgets('marking a dose taken saves the note on the DoseLog',
+        (WidgetTester tester) async {
+      await repo.upsertMedication(_med(id: 'med-1', name: 'Donepezil'));
+      await repo.upsertSchedule(_dailyAt('sched-1', 'med-1', 11));
+
+      await _pumpScreen(
+        tester,
+        repo: repo,
+        db: db,
+        initialNote: 'gave it with breakfast',
+      );
+
+      await tester.tap(find.byKey(DoseLogScreen.markTakenButtonKey(
+          'med-1', DateTime(2026, 5, 30, 11))));
+      await tester.pumpAndSettle();
+
+      final List<DoseLog> logs = await repo.logsFor('med-1');
+      expect(logs.single.status, DoseStatus.taken);
+      expect(logs.single.notes, 'gave it with breakfast');
+    });
+
+    testWidgets('an edited note rides along with the dose marked taken',
+        (WidgetTester tester) async {
+      await repo.upsertMedication(_med(id: 'med-1', name: 'Donepezil'));
+      await repo.upsertSchedule(_dailyAt('sched-1', 'med-1', 11));
+
+      await _pumpScreen(
+        tester,
+        repo: repo,
+        db: db,
+        initialNote: 'gave it with breakfast',
+      );
+
+      await tester.enterText(
+        find.byKey(DoseLogScreen.noteFieldKey),
+        'crushed into applesauce',
+      );
+      await tester.tap(find.byKey(DoseLogScreen.markTakenButtonKey(
+          'med-1', DateTime(2026, 5, 30, 11))));
+      await tester.pumpAndSettle();
+
+      final List<DoseLog> logs = await repo.logsFor('med-1');
+      expect(logs.single.notes, 'crushed into applesauce');
     });
   });
 

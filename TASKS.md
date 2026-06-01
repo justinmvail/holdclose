@@ -1400,7 +1400,7 @@ amber / plum are placeholders to be discarded.
   Tests: every row's tap pushes the correct route; the voice button
   is wired per row; bottom sheet dismiss restores Home focus.
 
-- [ ] **Phase 14.14: Voice intake plumbing
+- [x] **Phase 14.14: Voice intake plumbing
   (`lib/services/voice_intake.dart`).** Small service bridging
   voice transcripts from Add FAB rows into destination screens.
   For `/medications/today`, the transcript pre-fills the dose note

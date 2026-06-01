@@ -19,10 +19,27 @@ part 'voice_capture_provider.g.dart';
 /// live microphone.
 abstract class VoiceCapture {
   /// Capture one spoken phrase, resolving to the recognized transcript.
-  /// Returns null when nothing usable was captured — permission denied,
-  /// silence, or (in v1) no recognizer is wired yet. Callers treat a
-  /// null/blank result as "no transcript" and don't navigate.
+  /// Returns null when nothing usable was captured — silence or (in v1)
+  /// no recognizer is wired yet. Callers treat a null/blank result as
+  /// "no transcript" and don't navigate.
+  ///
+  /// Throws [VoiceCapturePermissionDeniedException] when the OS refused
+  /// microphone / speech access — distinct from a null result so the
+  /// caller can surface a clear "turn the mic on" prompt instead of
+  /// failing silently (Phase 14.14).
   Future<String?> capture();
+}
+
+/// Raised by [VoiceCapture.capture] when microphone / speech-recognition
+/// permission was denied. Carried as an exception (rather than a null
+/// transcript) so the [VoiceButton] capture flow can tell "the caregiver
+/// said nothing" apart from "the mic is blocked" and only show the
+/// permission snackbar in the latter case (Phase 14.14).
+class VoiceCapturePermissionDeniedException implements Exception {
+  const VoiceCapturePermissionDeniedException();
+
+  @override
+  String toString() => 'VoiceCapturePermissionDeniedException';
 }
 
 /// Production stand-in until a real speech recognizer is bundled

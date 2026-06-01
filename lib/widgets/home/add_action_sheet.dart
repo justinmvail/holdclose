@@ -2,8 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../routing/router.dart';
+import '../../services/voice_intake.dart';
 import '../../theme.dart';
 import '../voice_button.dart';
+
+// The Add-sheet payload types moved to the voice-intake service (Phase
+// 14.14) so destination screens can interpret a transcript without
+// importing this widget. Re-exported so existing call sites that import
+// them from here keep resolving.
+export '../../services/voice_intake.dart'
+    show AddSheetKind, AddSheetTranscript;
 
 /// The Add-sheet's teal accent. The brand palette (BUILD_SPEC.md §3.1)
 /// carries no teal token, but the dashboard cards already use this exact
@@ -11,33 +19,6 @@ import '../voice_button.dart';
 /// (`MedicationsTodayCard.takenColor`); the quick-add FAB reuses it so
 /// "add something" reads as the same calm, affirmative color family.
 const Color addSheetTeal = Color(0xFF1F8A70);
-
-/// Which quick-add the caregiver chose from the Add sheet. Rides along
-/// with a captured transcript (see [AddSheetTranscript]) so the
-/// destination screen knows which field to pre-fill — Phase 14.14 owns
-/// that downstream wiring.
-enum AddSheetKind { journalEntry, medDose, appointment, quickNote }
-
-/// Nav-`extra` payload handed to a quick-add destination when the row's
-/// [VoiceButton] captured a transcript. A plain immutable value (mirrors
-/// `JournalWizardArgs`) — not a freezed model, since it never persists or
-/// serializes; it only rides a single `push`.
-@immutable
-class AddSheetTranscript {
-  const AddSheetTranscript({required this.text, required this.kind});
-
-  final String text;
-  final AddSheetKind kind;
-
-  @override
-  bool operator ==(Object other) =>
-      other is AddSheetTranscript &&
-      other.text == text &&
-      other.kind == kind;
-
-  @override
-  int get hashCode => Object.hash(text, kind);
-}
 
 /// Static description of one Add-sheet row: its label, leading glyph, and
 /// the destination route a tap (or a captured transcript) pushes.

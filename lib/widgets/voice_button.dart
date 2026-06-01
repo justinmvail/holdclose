@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/voice_capture_provider.dart';
+import '../services/voice_intake.dart';
 import '../theme.dart';
 
 /// A compact circular mic button. On press it captures one spoken phrase
@@ -45,6 +46,12 @@ class _VoiceButtonState extends ConsumerState<VoiceButton> {
       if (!mounted) return;
       final String text = transcript?.trim() ?? '';
       if (text.isNotEmpty) widget.onTranscript(text);
+    } on VoiceCapturePermissionDeniedException {
+      // Mic blocked — surface a clear, actionable prompt instead of
+      // failing silently (Phase 14.14). A null/blank capture stays
+      // silent; only a denied permission speaks up.
+      if (!mounted) return;
+      showVoiceCapturePermissionDeniedSnackBar(context);
     } finally {
       if (mounted) setState(() => _capturing = false);
     }

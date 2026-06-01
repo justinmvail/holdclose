@@ -31,6 +31,7 @@ import '../screens/medication/medication_list_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
 import '../screens/onboarding/welcome_carousel.dart';
 import '../screens/settings/settings_screen.dart';
+import '../services/voice_intake.dart';
 import '../widgets/tab_scaffold.dart';
 
 part 'router.g.dart';
@@ -232,10 +233,23 @@ GoRouter buildRouter({
         name: CareblazersRoutes.journalNew,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) {
+          // Two ways in: the chat coach pushes a fully-formed
+          // [JournalWizardArgs]; the Home Add sheet's voice button
+          // pushes an [AddSheetTranscript] (journal-entry or quick-note
+          // kind). The voice-intake bridge (Phase 14.14) turns the
+          // latter into the wizard's initial value; anything else opens
+          // the wizard blank.
           final Object? extra = state.extra;
-          return JournalWizardScreen(
-            args: extra is JournalWizardArgs ? extra : null,
-          );
+          JournalWizardArgs? args;
+          if (extra is JournalWizardArgs) {
+            args = extra;
+          } else {
+            final String? transcript = VoiceIntake.journalTranscript(extra);
+            if (transcript != null) {
+              args = JournalWizardArgs(initialTranscript: transcript);
+            }
+          }
+          return JournalWizardScreen(args: args);
         },
       ),
       GoRoute(
@@ -269,8 +283,11 @@ GoRouter buildRouter({
             path: 'today',
             name: CareblazersRoutes.medicationDoseLog,
             parentNavigatorKey: rootNavigatorKey,
+            // The Home Add sheet's voice button may push a dose-kind
+            // [AddSheetTranscript]; the voice-intake bridge (Phase
+            // 14.14) pre-fills the dose-note field from it.
             builder: (BuildContext context, GoRouterState state) =>
-                const DoseLogScreen(),
+                DoseLogScreen(initialNote: VoiceIntake.doseNote(state.extra)),
           ),
         ],
       ),
@@ -285,8 +302,13 @@ GoRouter buildRouter({
             path: 'new',
             name: CareblazersRoutes.appointmentForm,
             parentNavigatorKey: rootNavigatorKey,
+            // The Home Add sheet's voice button may push an
+            // appointment-kind [AddSheetTranscript]; the voice-intake
+            // bridge (Phase 14.14) pre-fills the visit-notes textarea.
             builder: (BuildContext context, GoRouterState state) =>
-                const AppointmentFormScreen(),
+                AppointmentFormScreen(
+              initialNotes: VoiceIntake.appointmentNotes(state.extra),
+            ),
           ),
           GoRoute(
             path: ':id',

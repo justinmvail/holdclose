@@ -17,11 +17,19 @@ class JournalWizardArgs {
     this.occurredAt,
     this.situationText,
     this.attemptsText,
+    this.initialTranscript,
   });
 
   final DateTime? occurredAt;
   final String? situationText;
   final String? attemptsText;
+
+  /// A spoken phrase captured from the Home Add sheet's voice button
+  /// (Phase 14.14). Seeds the situation step so the caregiver lands on
+  /// the wizard with their own words already typed in — they confirm /
+  /// edit rather than retype. [situationText] (the chat-coach path)
+  /// wins when both are supplied.
+  final String? initialTranscript;
 }
 
 /// "When did it happen?" presets the wizard surfaces (BUILD_SPEC.md
@@ -99,6 +107,11 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
     }
     if (args.situationText != null) {
       _situationController.text = args.situationText!;
+    } else if (args.initialTranscript != null) {
+      // Voice intake (Phase 14.14): the spoken phrase is the caregiver's
+      // own account of the moment, so it seeds the "what was happening?"
+      // step. They edit from there.
+      _situationController.text = args.initialTranscript!;
     }
     if (args.attemptsText != null) {
       _attemptsController.text = args.attemptsText!;
