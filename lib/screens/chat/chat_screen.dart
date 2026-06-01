@@ -10,13 +10,16 @@ import '../../services/chat_service.dart';
 import '../../theme.dart';
 import '../../widgets/caption_fade.dart';
 import '../../widgets/message_body.dart';
+import '../../widgets/path_header.dart';
 import 'conversation_list_screen.dart';
 
 /// Multi-turn chat with the dementia-care coach (TASKS.md Phase 11.4).
 ///
 /// Layout:
-///   - AppBar with auto back arrow (the screen is pushed onto the root
-///     navigator from `/chat`).
+///   - A [PathHeader] (`Chat › <conversation name>`, back to Chat) at the
+///     top of the body — the thread is pushed inside the Chat shell
+///     branch from `/chat`, so Back pops to the conversation list (Phase
+///     14.34). The Home tab swaps this for its own [appBarOverride].
 ///   - Scrolling message list:
 ///     * Assistant messages: warm-coach styling — surfaceWarm bubble,
 ///       left-aligned, body text in `bodyLarge`. While the assistant
@@ -43,9 +46,10 @@ class ChatScreen extends ConsumerStatefulWidget {
 
   final String conversationId;
 
-  /// AppBar to render in place of the default "Coach chat" bar. Used by
-  /// the Home tab to surface tab-root chrome (Today title, settings
-  /// gear, history button) without re-rolling the whole chat surface.
+  /// AppBar to render in place of the thread's default in-body
+  /// [PathHeader]. Used by the Home tab to surface tab-root chrome
+  /// (Today title, settings gear, history button) without re-rolling the
+  /// whole chat surface. When non-null the PathHeader is suppressed.
   final PreferredSizeWidget? appBarOverride;
 
   /// Optional widget rendered immediately above the input composer.
@@ -193,6 +197,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
+  /// Display name for the thread — the first user message's first 60
+  /// chars (shared with the conversation-list tile via
+  /// [conversationDisplayTitle]), or "New chat" before the caregiver has
+  /// typed. Drives the [PathHeader] crumb + title (Phase 14.34).
+  String get _conversationName {
+    for (final String id in _order) {
+      final Message? m = _messages[id];
+      if (m != null && m.role == MessageRole.user) {
+        return conversationDisplayTitle(m.body);
+      }
+    }
+    return conversationDisplayTitle(null);
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<Message> ordered = <Message>[
@@ -202,13 +220,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       backgroundColor: careblazersColors.background,
-      appBar: widget.appBarOverride ??
-          AppBar(
-            title: const Text('Coach chat'),
-          ),
+      // The Home tab passes its own [appBarOverride]; the `/chat/:id`
+      // thread leaves it null and renders a [PathHeader] inside the body
+      // instead (Phase 14.34) — `Chat › <conversation name>`, back to the
+      // Chat list (which the thread popped from inside the Chat shell
+      // branch).
+      appBar: widget.appBarOverride,
       body: SafeArea(
         child: Column(
           children: <Widget>[
+            if (widget.appBarOverride == null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: PathHeader(
+                  breadcrumbs: <PathHeaderCrumb>[
+                    const PathHeaderCrumb(label: 'Chat', route: '/chat'),
+                    PathHeaderCrumb(label: _conversationName),
+                  ],
+                  title: _conversationName,
+                  backLabel: 'Back to Chat',
+                  leadingIcon: Icons.chat_bubble_outline,
+                ),
+              ),
             Expanded(
               child: _hydrated && ordered.isEmpty
                   ? const _EmptyHint()

@@ -8,6 +8,7 @@ import 'package:careblazers/services/chat_service.dart';
 import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/caption_fade.dart';
 import 'package:careblazers/widgets/message_body.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -127,7 +128,7 @@ Future<({
 
 void main() {
   group('ChatScreen — TASKS.md Phase 11.4 chrome', () {
-    testWidgets('renders the AppBar title and the composer', (
+    testWidgets('renders the path header (back to Chat) and the composer', (
       WidgetTester tester,
     ) async {
       await _pump(
@@ -136,7 +137,11 @@ void main() {
         deltas: const <ChatDelta>[],
       );
 
-      expect(find.widgetWithText(AppBar, 'Coach chat'), findsOneWidget);
+      // The thread renders a [PathHeader] in place of an AppBar (Phase
+      // 14.34) — `Chat › <name>` with a "Back to Chat" control. An empty
+      // thread's name falls back to "New chat".
+      expect(find.byType(PathHeader), findsOneWidget);
+      expect(find.text('Back to Chat'), findsOneWidget);
       expect(find.byKey(ChatScreen.inputFieldKey), findsOneWidget);
       expect(find.byKey(ChatScreen.sendButtonKey), findsOneWidget);
     });
@@ -193,7 +198,15 @@ void main() {
         find.byKey(ChatScreen.messageBubbleKey('pre-2')),
         findsOneWidget,
       );
-      expect(find.text('What is sundowning?'), findsOneWidget);
+      // Scope to the bubble — the first user message also surfaces in the
+      // PathHeader crumb + title now (Phase 14.34).
+      expect(
+        find.descendant(
+          of: find.byKey(ChatScreen.messageBubbleKey('pre-1')),
+          matching: find.text('What is sundowning?'),
+        ),
+        findsOneWidget,
+      );
     });
   });
 
@@ -222,8 +235,16 @@ void main() {
       // The async stream + caption ticker need a few pumps.
       await tester.pumpAndSettle();
 
-      // The user message bubble shows the entered text.
-      expect(find.text('What is sundowning?'), findsOneWidget);
+      // The user message bubble shows the entered text. Scope to the
+      // message list — the same text now also drives the PathHeader
+      // crumb + title (Phase 14.34).
+      expect(
+        find.descendant(
+          of: find.byKey(ChatScreen.listKey),
+          matching: find.text('What is sundowning?'),
+        ),
+        findsOneWidget,
+      );
       // The assistant reply lands too.
       expect(find.text('Hello Careblazer.'), findsAtLeastNWidgets(1));
       // The persistence layer holds both turns now.
@@ -335,7 +356,12 @@ void main() {
       // The user bubble sits to the right of the screen midpoint; the
       // assistant bubble sits to the left of it.
       final double midX = tester.getSize(find.byType(MaterialApp)).width / 2;
-      final Finder userBubble = find.text('A question for the coach.');
+      // Scope to the message list — the user text now also appears in the
+      // PathHeader title (Phase 14.34), so an unscoped finder is ambiguous.
+      final Finder userBubble = find.descendant(
+        of: find.byKey(ChatScreen.listKey),
+        matching: find.text('A question for the coach.'),
+      );
       final Finder assistantBubble =
           find.text('Here is a thought to try.');
 

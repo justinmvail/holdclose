@@ -1685,7 +1685,7 @@ amber / plum are placeholders to be discarded.
 
 ### Chat tab move
 
-- [ ] **Phase 14.34: Chat tab branch + PathHeader integration
+- [x] **Phase 14.34: Chat tab branch + PathHeader integration
   (`lib/screens/chat/conversation_list_screen.dart`,
   `lib/screens/chat/chat_screen.dart`).** Conversation list now
   mounts at `/chat` as a shell branch (the router rewrite in 14.5

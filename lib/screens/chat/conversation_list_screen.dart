@@ -8,8 +8,25 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../models/chat.dart';
 import '../../services/chat_repository.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 part 'conversation_list_screen.g.dart';
+
+/// Derive a conversation's display name from the first user-authored
+/// message body — the spec-mandated "first user message's first 60
+/// chars" title (TASKS.md Phase 11.4), with a soft "New chat" fallback
+/// for a thread the caregiver hasn't typed into yet.
+///
+/// Shared by [ConversationListItem.displayTitle] (the list tile) and the
+/// chat thread's [PathHeader] crumb (Phase 14.34) so a tile and the
+/// thread it opens read the same name.
+String conversationDisplayTitle(String? firstUserMessage) {
+  final String? body = firstUserMessage;
+  if (body == null || body.trim().isEmpty) return 'New chat';
+  final String trimmed = body.trim();
+  if (trimmed.length <= 60) return trimmed;
+  return '${trimmed.substring(0, 60)}…';
+}
 
 /// One tile in the conversation list (BUILD_SPEC.md / TASKS.md Phase
 /// 11.4). Joins a [Conversation] row with the first user-authored
@@ -39,13 +56,7 @@ class ConversationListItem {
 
   /// Title to display in the tile — first user message's first 60
   /// chars per spec, or a soft fallback when the thread is empty.
-  String get displayTitle {
-    final String? body = firstUserMessage;
-    if (body == null || body.trim().isEmpty) return 'New chat';
-    final String trimmed = body.trim();
-    if (trimmed.length <= 60) return trimmed;
-    return '${trimmed.substring(0, 60)}…';
-  }
+  String get displayTitle => conversationDisplayTitle(firstUserMessage);
 }
 
 /// Async list of conversations enriched with each thread's first user
@@ -127,17 +138,38 @@ class ConversationListScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text('Coach chat'),
-      ),
       body: SafeArea(
-        child: async.when(
-          loading: () => const SizedBox.shrink(),
-          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-          data: (List<ConversationListItem> items) {
-            if (items.isEmpty) return _EmptyState(onStart: () => _start(context, ref));
-            return _PopulatedList(items: items);
-          },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // Tab landing → a single-crumb [PathHeader] renders the title
+            // row only (no breadcrumb trail, no Back control). You reach
+            // the list by tapping the Chat tab; re-tapping it pops the
+            // branch back here (Phase 14.34).
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Chat'),
+                ],
+                title: 'Chat',
+                backLabel: 'Back to Home',
+                leadingIcon: Icons.chat_bubble_outline,
+              ),
+            ),
+            Expanded(
+              child: async.when(
+                loading: () => const SizedBox.shrink(),
+                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                data: (List<ConversationListItem> items) {
+                  if (items.isEmpty) {
+                    return _EmptyState(onStart: () => _start(context, ref));
+                  }
+                  return _PopulatedList(items: items);
+                },
+              ),
+            ),
+          ],
         ),
       ),
       floatingActionButton: async.maybeWhen(
