@@ -1414,7 +1414,7 @@ amber / plum are placeholders to be discarded.
 
 ### Medical hub + sub-screens
 
-- [ ] **Phase 14.15: MedicalHubScreen
+- [x] **Phase 14.15: MedicalHubScreen
   (`lib/screens/medical/medical_hub_screen.dart`).** Mounts at
   `/medical` (shell branch — replace the placeholder added in 14.5).
   Renders PathHeader (single crumb "Medical"; no Back since it's a

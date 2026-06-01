@@ -12,6 +12,7 @@ import 'package:careblazers/screens/community/community_feed_screen.dart';
 import 'package:careblazers/screens/crisis/crisis_card_screen.dart';
 import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
+import 'package:careblazers/screens/medical/medical_hub_screen.dart';
 import 'package:careblazers/screens/medication/medication_list_screen.dart';
 import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
 import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
@@ -183,11 +184,11 @@ void main() {
       (WidgetTester tester) async {
         final GoRouter router = await pumpRouter(tester);
 
-        // Medical branch — placeholder hub until Phase 14.15.
+        // Medical branch — the tile hub (Phase 14.15).
         router.go('/medical');
         await tester.pumpAndSettle();
         expect(currentPath(router), '/medical');
-        expect(find.widgetWithText(AppBar, 'Medical'), findsOneWidget);
+        expect(find.byType(MedicalHubScreen), findsOneWidget);
         expect(
           find.byType(NavigationBar),
           findsOneWidget,

@@ -22,6 +22,7 @@ import '../screens/home_screen.dart';
 import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
 import '../screens/journal/journal_wizard_screen.dart';
+import '../screens/medical/medical_hub_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
 import '../screens/appointment/appointment_list_screen.dart';
@@ -411,19 +412,18 @@ GoRouter buildRouter({
               ),
             ],
           ),
-          // Medical hub (Phase 14.15 replaces this placeholder with
-          // MedicalHubScreen). The emergency card is registered as a
-          // pushed child now — it's the `/crisis` redirect target + the
-          // Home pinned-card destination (Phase 14.8). Until Phase 14.23
-          // it renders the existing CrisisCardScreen; 14.23 swaps in the
-          // real Emergency Card and deletes the old screen.
+          // Medical hub (Phase 14.15). The emergency card is registered
+          // as a pushed child now — it's the `/crisis` redirect target +
+          // the Home pinned-card destination (Phase 14.8). Until Phase
+          // 14.23 it renders the existing CrisisCardScreen; 14.23 swaps in
+          // the real Emergency Card and deletes the old screen.
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
                 path: '/medical',
                 name: CareblazersRoutes.medicalHub,
                 builder: (BuildContext context, GoRouterState state) =>
-                    Scaffold(appBar: AppBar(title: const Text('Medical'))),
+                    const MedicalHubScreen(),
                 routes: <RouteBase>[
                   GoRoute(
                     path: 'cards/emergency',
