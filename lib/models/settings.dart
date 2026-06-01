@@ -47,21 +47,6 @@ abstract class AppSettings with _$AppSettings {
     required bool resetOnLaunchDemo,
     @Default(true) bool useBundledVoice,
 
-    /// Master "Use trackers" switch (BUILD_SPEC.md Phase 12.8). When
-    /// false, the Medications + Appointments tabs hide and no
-    /// notifications are scheduled — the lean-app mode for caregivers
-    /// who don't want the structured tracker surfaces.
-    @Default(true) bool useTrackers,
-
-    /// Per-feature toggle for the Medications tab + reminder
-    /// scheduling. Overrides [useTrackers] only by being false — if
-    /// the master is off, this can't be on.
-    @Default(true) bool medicationsEnabled,
-
-    /// Per-feature toggle for the Appointments tab + reminder
-    /// scheduling. Same precedence rule as [medicationsEnabled].
-    @Default(true) bool appointmentsEnabled,
-
     /// Per-feature toggle for whether the app schedules local
     /// notifications at all (Phase 12.8 master). Lets a caregiver
     /// keep the tracker UIs but suppress OS reminders without
@@ -78,6 +63,11 @@ abstract class AppSettings with _$AppSettings {
     @Default(true) bool useDemoForum,
   }) = _AppSettings;
 
+  /// Hydrate from persisted JSON. Unknown keys are silently ignored —
+  /// json_serializable does not set `disallowUnrecognizedKeys`, so demo
+  /// seed + pre-existing user state that still carries the removed
+  /// Phase 12.8 tracker keys (`useTrackers`, `medicationsEnabled`,
+  /// `appointmentsEnabled`) hydrates clean without throwing.
   factory AppSettings.fromJson(Map<String, dynamic> json) =>
       _$AppSettingsFromJson(json);
 

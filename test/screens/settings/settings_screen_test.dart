@@ -84,33 +84,25 @@ void main() {
     });
 
     testWidgets(
-      'Phase 12.8 — master useTrackers toggle persists and gates per-feature',
+      'Phase 14.6 — Send reminders toggle persists through storage',
       (WidgetTester tester) async {
         final built = await _pumpSettings(tester);
 
-        // All four switches start ON.
-        expect(_switchValue(tester, SettingsScreen.useTrackersToggleKey),
-            isTrue);
-        expect(_switchValue(tester, SettingsScreen.medicationsToggleKey),
-            isTrue);
-        expect(_switchValue(tester, SettingsScreen.appointmentsToggleKey),
-            isTrue);
+        // The reminders toggle starts ON and is always interactive —
+        // Phase 14.6 removed the master "Use trackers" gate.
         expect(_switchValue(tester, SettingsScreen.notificationsToggleKey),
             isTrue);
+        final SwitchListTile remindersTile = tester.widget<SwitchListTile>(
+            find.byKey(SettingsScreen.notificationsToggleKey));
+        expect(remindersTile.onChanged, isNotNull,
+            reason: 'reminders toggle is no longer gated on a master switch');
 
-        // Flip the master OFF — per-feature SwitchListTiles must
-        // become non-interactive (onChanged null disables them).
-        await tester.tap(find.byKey(SettingsScreen.useTrackersToggleKey));
+        await tester.tap(find.byKey(SettingsScreen.notificationsToggleKey));
         await tester.pumpAndSettle();
-
-        final SwitchListTile medsTile = tester.widget<SwitchListTile>(
-            find.byKey(SettingsScreen.medicationsToggleKey));
-        expect(medsTile.onChanged, isNull,
-            reason: 'master OFF disables Medications per-feature toggle');
 
         // The flip persisted through storage.
         final AppSettings stored = await built.storage.getSettings();
-        expect(stored.useTrackers, isFalse);
+        expect(stored.notificationsEnabled, isFalse);
       },
     );
 

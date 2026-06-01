@@ -1295,7 +1295,7 @@ amber / plum are placeholders to be discarded.
   path resolving + push semantics on the new pushed routes + tab
   switch semantics on the new shell branches.
 
-- [ ] **Phase 14.6: Delete tracker toggles from settings.** Remove
+- [x] **Phase 14.6: Delete tracker toggles from settings.** Remove
   `useTrackers`, `medicationsEnabled`, `appointmentsEnabled` fields
   from `lib/models/settings.dart` (regenerate `settings.freezed.dart`
   / `settings.g.dart` via `dart run build_runner build --delete-

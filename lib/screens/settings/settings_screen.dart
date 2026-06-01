@@ -43,12 +43,6 @@ class SettingsScreen extends ConsumerWidget {
       Key('settings-delete-account-confirm');
   static const Key methodologyButtonKey = Key('settings-methodology');
   static const Key brandCreditKey = Key('settings-brand-credit');
-  static const Key useTrackersToggleKey =
-      Key('settings-use-trackers-toggle');
-  static const Key medicationsToggleKey =
-      Key('settings-medications-toggle');
-  static const Key appointmentsToggleKey =
-      Key('settings-appointments-toggle');
   static const Key notificationsToggleKey =
       Key('settings-notifications-toggle');
   static const Key trackersSectionKey = Key('settings-trackers-section');
@@ -430,15 +424,11 @@ class _AppearanceSection extends StatelessWidget {
 /// Settings card for the medication + appointment trackers
 /// (BUILD_SPEC.md Phase 12.8).
 ///
-/// Three controls stacked:
-///   - Master "Use trackers" switch — hides both tab-bar entries and
-///     suppresses notification scheduling when off.
-///   - Per-feature toggles for Medications and Appointments — only
-///     interactive when the master is on (greys out otherwise so a
-///     caregiver who turned everything off doesn't have to flip three
-///     switches back on to restore).
-///   - "Send reminders" — orthogonal to the tracker visibility; lets a
-///     caregiver keep the tracker UIs but suppress the OS pings.
+/// Two controls stacked:
+///   - "Send reminders" — master for whether the app schedules local
+///     notifications for the tracker surfaces at all.
+///   - "Use demo community" — serves the Community tab from the
+///     on-device fake instead of the live backend.
 ///
 /// The notifier setters persist immediately via the storage provider
 /// (same pattern as the audio + appearance sections).
@@ -450,7 +440,6 @@ class _TrackersSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool master = settings.useTrackers;
     return Column(
       key: SettingsScreen.trackersSectionKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -459,44 +448,6 @@ class _TrackersSection extends StatelessWidget {
         _SectionCard(
           child: Column(
             children: <Widget>[
-              SwitchListTile(
-                key: SettingsScreen.useTrackersToggleKey,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Use trackers'),
-                subtitle: const Text(
-                  'Show the medications + appointments tabs and schedule '
-                  'reminders. Turn off to keep the app lean.',
-                ),
-                value: master,
-                onChanged: (bool v) => notifier.setUseTrackers(v),
-              ),
-              const Divider(height: 1),
-              SwitchListTile(
-                key: SettingsScreen.medicationsToggleKey,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Medications'),
-                subtitle: const Text(
-                  'Track meds + dose schedules; remind at the dose time.',
-                ),
-                value: settings.medicationsEnabled,
-                onChanged: master
-                    ? (bool v) => notifier.setMedicationsEnabled(v)
-                    : null,
-              ),
-              const Divider(height: 1),
-              SwitchListTile(
-                key: SettingsScreen.appointmentsToggleKey,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Appointments'),
-                subtitle: const Text(
-                  "Track upcoming visits; remind 24 hours + 1 hour before.",
-                ),
-                value: settings.appointmentsEnabled,
-                onChanged: master
-                    ? (bool v) => notifier.setAppointmentsEnabled(v)
-                    : null,
-              ),
-              const Divider(height: 1),
               SwitchListTile(
                 key: SettingsScreen.notificationsToggleKey,
                 contentPadding: EdgeInsets.zero,
@@ -507,9 +458,7 @@ class _TrackersSection extends StatelessWidget {
                   'a medication or appointment.',
                 ),
                 value: settings.notificationsEnabled,
-                onChanged: master
-                    ? (bool v) => notifier.setNotificationsEnabled(v)
-                    : null,
+                onChanged: (bool v) => notifier.setNotificationsEnabled(v),
               ),
               const Divider(height: 1),
               SwitchListTile(

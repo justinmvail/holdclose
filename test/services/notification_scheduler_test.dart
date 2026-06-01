@@ -137,16 +137,16 @@ void main() {
       expect(await noop.pending(), isEmpty);
     });
 
-    test('master useTrackers OFF blocks scheduling but still cancels',
+    test('notificationsEnabled OFF blocks med scheduling but still cancels',
         () async {
       await seedMed();
       // Land a stale pending reminder first.
       await scheduler().rescheduleForMedication('med-1');
       expect((await noop.pending()).length, 1);
 
-      // Now the caregiver turns trackers off — re-schedule should cancel.
+      // Now the caregiver turns reminders off — re-schedule should cancel.
       final AppSettings off =
-          AppSettings.defaults().copyWith(useTrackers: false);
+          AppSettings.defaults().copyWith(notificationsEnabled: false);
       final List<ScheduledNotification> targets =
           await scheduler(settings: off).rescheduleForMedication('med-1');
       expect(targets, isEmpty);
@@ -154,34 +154,12 @@ void main() {
           reason: 'A turn-off must clear the prior pending reminder.');
     });
 
-    test('per-feature medicationsEnabled OFF skips scheduling', () async {
-      await seedMed();
-      final AppSettings off =
-          AppSettings.defaults().copyWith(medicationsEnabled: false);
-      final List<ScheduledNotification> targets =
-          await scheduler(settings: off).rescheduleForMedication('med-1');
-      expect(targets, isEmpty);
-      expect(await noop.pending(), isEmpty);
-    });
-
-    test('per-feature appointmentsEnabled OFF skips appointment scheduling',
-        () async {
+    test('notificationsEnabled OFF skips appointment scheduling', () async {
       await seedAppt();
-      final AppSettings off =
-          AppSettings.defaults().copyWith(appointmentsEnabled: false);
-      final List<ScheduledNotification> targets =
-          await scheduler(settings: off).rescheduleForAppointment('appt-1');
-      expect(targets, isEmpty);
-      expect(await noop.pending(), isEmpty);
-    });
-
-    test('notificationsEnabled OFF skips scheduling even when trackers on',
-        () async {
-      await seedMed();
       final AppSettings off =
           AppSettings.defaults().copyWith(notificationsEnabled: false);
       final List<ScheduledNotification> targets =
-          await scheduler(settings: off).rescheduleForMedication('med-1');
+          await scheduler(settings: off).rescheduleForAppointment('appt-1');
       expect(targets, isEmpty);
       expect(await noop.pending(), isEmpty);
     });

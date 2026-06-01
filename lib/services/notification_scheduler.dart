@@ -21,10 +21,7 @@ part 'notification_scheduler.g.dart';
 /// rather than two overlapping reminders.
 ///
 /// Honors the [AppSettings] gates:
-///   - [AppSettings.useTrackers] master OFF → cancel only, never schedule
 ///   - [AppSettings.notificationsEnabled] OFF → cancel only, never schedule
-///   - per-feature ([medicationsEnabled] / [appointmentsEnabled]) OFF →
-///     cancel only for that surface
 ///
 /// The "first add prompts for permission" flow is intentionally kept
 /// out of this service — the form screens own the UI choice. This
@@ -44,15 +41,9 @@ class NotificationScheduler {
   final AppSettings settings;
   final DateTime Function() _clock;
 
-  bool get _medsEnabled =>
-      settings.useTrackers &&
-      settings.medicationsEnabled &&
-      settings.notificationsEnabled;
+  bool get _medsEnabled => settings.notificationsEnabled;
 
-  bool get _apptsEnabled =>
-      settings.useTrackers &&
-      settings.appointmentsEnabled &&
-      settings.notificationsEnabled;
+  bool get _apptsEnabled => settings.notificationsEnabled;
 
   /// Cancel-and-(re)schedule every reminder for [medicationId]. Reads
   /// the current [DoseSchedule] rows through

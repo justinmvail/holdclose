@@ -114,30 +114,19 @@ void main() {
       expect(stored.resetOnLaunchDemo, isTrue);
     });
 
-    test('Phase 12.8 tracker setters persist through storage', () async {
+    test('notificationsEnabled setter persists through storage', () async {
       final ({ProviderContainer container, InMemoryStorageProvider storage})
           built = _build();
       await Future<void>.delayed(Duration.zero);
       final Settings n = built.container.read(settingsProvider.notifier);
 
-      // Defaults match BUILD_SPEC.md Phase 12.8 — every tracker on.
-      expect(built.container.read(settingsProvider).useTrackers, isTrue);
-      expect(built.container.read(settingsProvider).medicationsEnabled,
-          isTrue);
-      expect(built.container.read(settingsProvider).appointmentsEnabled,
-          isTrue);
+      // Default per BUILD_SPEC.md Phase 12.8 — reminders on.
       expect(built.container.read(settingsProvider).notificationsEnabled,
           isTrue);
 
-      await n.setUseTrackers(false);
-      await n.setMedicationsEnabled(false);
-      await n.setAppointmentsEnabled(false);
       await n.setNotificationsEnabled(false);
 
       final AppSettings stored = await built.storage.getSettings();
-      expect(stored.useTrackers, isFalse);
-      expect(stored.medicationsEnabled, isFalse);
-      expect(stored.appointmentsEnabled, isFalse);
       expect(stored.notificationsEnabled, isFalse);
     });
 
@@ -239,6 +228,33 @@ void main() {
       await container.pump();
 
       expect(container.read(ttsProvider), isA<NoopTTSProvider>());
+    });
+  });
+
+  group('AppSettings.fromJson — Phase 14.6 tracker-key removal', () {
+    test('drops the removed Phase 12.8 tracker keys without throwing', () {
+      // Simulate pre-existing user state / demo seed persisted before
+      // Phase 14.6 deleted these fields. fromJson must ignore the
+      // unknown keys rather than throw on them.
+      final Map<String, dynamic> legacy =
+          AppSettings.defaults().toJson()
+            ..['useTrackers'] = false
+            ..['medicationsEnabled'] = false
+            ..['appointmentsEnabled'] = false;
+
+      final AppSettings hydrated = AppSettings.fromJson(legacy);
+
+      expect(hydrated, AppSettings.defaults(),
+          reason: 'the removed keys must not affect any surviving field');
+    });
+
+    test('round-trips the surviving fields through json', () {
+      final AppSettings settings = AppSettings.defaults().copyWith(
+        notificationsEnabled: false,
+        useDemoForum: false,
+        fontSize: FontSizeMultiplier.large,
+      );
+      expect(AppSettings.fromJson(settings.toJson()), settings);
     });
   });
 
