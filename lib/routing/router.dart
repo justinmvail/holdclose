@@ -44,6 +44,7 @@ import '../screens/team/calendar_screen.dart';
 import '../screens/team/care_circle_screen.dart';
 import '../screens/team/care_team_hub_screen.dart';
 import '../screens/team/invite_caregiver_screen.dart';
+import '../screens/team/tasks_screen.dart';
 import '../services/voice_intake.dart';
 import '../widgets/tab_scaffold.dart';
 
@@ -645,6 +646,17 @@ GoRouter buildRouter({
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (BuildContext context, GoRouterState state) =>
                         const CalendarScreen(),
+                  ),
+                  // Tasks board (Phase 14.30) — Open / Claimed / Done
+                  // segmented task list. Pushed onto the root navigator so
+                  // the feature page covers the tab bar, matching the other
+                  // Care Team feature pages.
+                  GoRoute(
+                    path: 'tasks',
+                    name: CareblazersRoutes.teamTasks,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const TasksScreen(),
                   ),
                   // Care Circle roster (Phase 14.27). Pushed onto the root
                   // navigator so the feature page covers the tab bar; the

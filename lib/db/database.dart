@@ -20,7 +20,9 @@ part 'database.g.dart';
 /// (Phase 14.18), the three documents tables `emergency_cards` +
 /// `power_of_attorney_docs` + `identification_docs` (Phase 14.21), and
 /// the care-circle pair `caregivers` + `care_circle_memberships`
-/// (Phase 14.25) — FK-linked with `ON DELETE CASCADE`.
+/// (Phase 14.25) — FK-linked with `ON DELETE CASCADE` — the shared-calendar
+/// table `care_events` (Phase 14.29), and the Care Team task board
+/// `care_tasks` (Phase 14.30).
 ///
 /// Construct with [CareblazersDatabase.open] in production — it lazily
 /// opens a SQLite file under the platform's app-documents directory via
@@ -46,6 +48,7 @@ part 'database.g.dart';
     CaregiversTable,
     CareCircleMembershipsTable,
     CareEventsTable,
+    CareTasksTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
@@ -59,7 +62,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       );
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -89,6 +92,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   ///   (Phase 14.29). Existing data is untouched; the shared calendar
   ///   lights up with just the projected appointments (no native notes
   ///   yet).
+  /// - On upgrade from v9 → v10, create the care-tasks table
+  ///   (Phase 14.30). Existing data is untouched; the Care Team task
+  ///   board lights up empty.
   /// - On every open — fresh or upgraded — set
   ///   `PRAGMA foreign_keys = ON`. SQLite ships with FK enforcement
   ///   off by default; without this pragma the `ON DELETE CASCADE` on
@@ -133,6 +139,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
           if (from < 9) {
             await m.createTable(careEventsTable);
           }
+          if (from < 10) {
+            await m.createTable(careTasksTable);
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -161,6 +170,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(careCircleMembershipsTable).go();
       await delete(caregiversTable).go();
       await delete(careEventsTable).go();
+      await delete(careTasksTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();

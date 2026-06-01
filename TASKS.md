@@ -1625,7 +1625,7 @@ amber / plum are placeholders to be discarded.
   Week-cycling arrows in the header. Tests cover the four-source
   projection + tap routing + golden for an event-rich week.
 
-- [ ] **Phase 14.30: Tasks model + drift table + provider + screen
+- [x] **Phase 14.30: Tasks model + drift table + provider + screen
   (`lib/models/care_task.dart`, `lib/db/tables.dart`,
   `lib/providers/care_tasks_provider.dart`,
   `lib/screens/team/tasks_screen.dart`).** Freezed `CareTask` (id,

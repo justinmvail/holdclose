@@ -454,6 +454,37 @@ class CareEventsTable extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// One shared to-do on the Care Team task board (TASKS.md Phase 14.30).
+///
+/// Backs Care Team → Tasks (BUILD_SPEC.md §5.14). Same
+/// blob-with-lifted-keys pattern the journal / care-event tables use: the
+/// full freezed `CareTask` lives in [payload] as JSON so a new model field
+/// is persisted without a schema bump. Two keys are lifted out so the
+/// common reads don't parse every row's blob — [dueAtMs] (nullable; the
+/// board orders tasks by due time) and [patientId] (room for a future
+/// `byPatient` filter). Like the health-log + care-event tables there's no
+/// DB-level foreign key onto [PatientsTable]: that table is single-row
+/// ("one loved one per install"), so a cascade buys nothing and the
+/// [patientId] link stays logical.
+///
+/// The [assigneeCaregiverId] is intentionally NOT a DB foreign key onto
+/// [CaregiversTable] — a task can be claimed by the signed-in caregiver
+/// before any care-circle row exists for them, and a removed caregiver
+/// should leave their finished tasks intact rather than cascade-deleting
+/// the history. The screen resolves the assignee name softly at read time.
+class CareTasksTable extends Table {
+  @override
+  String get tableName => 'care_tasks';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  IntColumn get dueAtMs => integer().nullable()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 /// One caregiver's membership in a loved one's care circle (TASKS.md
 /// Phase 14.25).
 ///
