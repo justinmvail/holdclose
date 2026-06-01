@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('TabScaffoldBar golden', () {
     goldenTest(
-      'renders the four-tab bar (default state, Home selected)',
+      'renders the five-tab bar (default state, Home selected)',
       fileName: 'tab_scaffold_default',
       builder: () => GoldenTestGroup(
         columns: 1,

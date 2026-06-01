@@ -1255,7 +1255,7 @@ amber / plum are placeholders to be discarded.
   the callback. Tests: 2-col layout at 360 + 412 + 768 widths; tap
   callback fires once. Golden for a populated 6-tile grid.
 
-- [ ] **Phase 14.4: Rewrite `lib/widgets/tab_scaffold.dart` for the
+- [x] **Phase 14.4: Rewrite `lib/widgets/tab_scaffold.dart` for the
   fixed 5-tab bar.** Drop `visibleBranchIndicesFor` + the
   `AppSettings` watch entirely. New destinations in exact order:
   Home (`Icons.home_outlined` / `Icons.home`), Medical
