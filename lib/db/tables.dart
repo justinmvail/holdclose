@@ -485,6 +485,38 @@ class CareTasksTable extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// One caregiving shift on the Care Team coverage board (TASKS.md Phase
+/// 14.31).
+///
+/// Backs Care Team → Shifts (BUILD_SPEC.md §5.14). Same
+/// blob-with-lifted-keys pattern the journal / care-event / care-task
+/// tables use: the full freezed `CareShift` lives in [payload] as JSON so
+/// a new model field is persisted without a schema bump. Three keys are
+/// lifted out so the per-day coverage reads don't parse every row's blob —
+/// [startMs] / [endMs] (the day strip filters to the shifts whose window
+/// intersects each day and clamps them onto the 24-hour bar) and
+/// [patientId] (room for a future `byPatient` filter).
+///
+/// Like the care-task table there's no DB-level foreign key onto
+/// [PatientsTable] (single-row, so a cascade buys nothing) nor onto
+/// [CaregiversTable] — a shift should survive its caregiver being removed
+/// from the circle rather than cascade-deleting the coverage history, so
+/// the `caregiverId` inside the payload stays a logical link the screen
+/// resolves softly at read time.
+class CareShiftsTable extends Table {
+  @override
+  String get tableName => 'care_shifts';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  IntColumn get startMs => integer()();
+  IntColumn get endMs => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 /// One caregiver's membership in a loved one's care circle (TASKS.md
 /// Phase 14.25).
 ///

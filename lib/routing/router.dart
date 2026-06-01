@@ -45,6 +45,7 @@ import '../screens/team/calendar_screen.dart';
 import '../screens/team/care_circle_screen.dart';
 import '../screens/team/care_team_hub_screen.dart';
 import '../screens/team/invite_caregiver_screen.dart';
+import '../screens/team/shifts_screen.dart';
 import '../screens/team/tasks_screen.dart';
 import '../services/voice_intake.dart';
 import '../widgets/tab_scaffold.dart';
@@ -658,6 +659,17 @@ GoRouter buildRouter({
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (BuildContext context, GoRouterState state) =>
                         const TasksScreen(),
+                  ),
+                  // Shifts board (Phase 14.31) — a 7-day coverage strip with
+                  // per-caregiver bands + gap flags. Pushed onto the root
+                  // navigator so the feature page covers the tab bar,
+                  // matching the other Care Team feature pages.
+                  GoRoute(
+                    path: 'shifts',
+                    name: CareblazersRoutes.teamShifts,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const ShiftsScreen(),
                   ),
                   // Activity feed (Phase 14.32) — the chronological,
                   // filterable feed of every care event. Pushed onto the

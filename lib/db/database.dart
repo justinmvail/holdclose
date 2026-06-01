@@ -21,8 +21,9 @@ part 'database.g.dart';
 /// `power_of_attorney_docs` + `identification_docs` (Phase 14.21), and
 /// the care-circle pair `caregivers` + `care_circle_memberships`
 /// (Phase 14.25) — FK-linked with `ON DELETE CASCADE` — the shared-calendar
-/// table `care_events` (Phase 14.29), and the Care Team task board
-/// `care_tasks` (Phase 14.30).
+/// table `care_events` (Phase 14.29), the Care Team task board
+/// `care_tasks` (Phase 14.30), and the Care Team shift coverage board
+/// `care_shifts` (Phase 14.31).
 ///
 /// Construct with [CareblazersDatabase.open] in production — it lazily
 /// opens a SQLite file under the platform's app-documents directory via
@@ -49,6 +50,7 @@ part 'database.g.dart';
     CareCircleMembershipsTable,
     CareEventsTable,
     CareTasksTable,
+    CareShiftsTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
@@ -62,7 +64,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       );
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -95,6 +97,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   /// - On upgrade from v9 → v10, create the care-tasks table
   ///   (Phase 14.30). Existing data is untouched; the Care Team task
   ///   board lights up empty.
+  /// - On upgrade from v10 → v11, create the care-shifts table
+  ///   (Phase 14.31). Existing data is untouched; the Care Team shift
+  ///   coverage board lights up empty.
   /// - On every open — fresh or upgraded — set
   ///   `PRAGMA foreign_keys = ON`. SQLite ships with FK enforcement
   ///   off by default; without this pragma the `ON DELETE CASCADE` on
@@ -142,6 +147,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
           if (from < 10) {
             await m.createTable(careTasksTable);
           }
+          if (from < 11) {
+            await m.createTable(careShiftsTable);
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -171,6 +179,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(caregiversTable).go();
       await delete(careEventsTable).go();
       await delete(careTasksTable).go();
+      await delete(careShiftsTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();

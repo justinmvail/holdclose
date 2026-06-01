@@ -1640,7 +1640,7 @@ amber / plum are placeholders to be discarded.
   title + body + due picker + optional assignee. Tests cover the
   state machine + segmented filtering; goldens for the three states.
 
-- [ ] **Phase 14.31: Shifts model + drift table + provider + screen
+- [x] **Phase 14.31: Shifts model + drift table + provider + screen
   (`lib/models/care_shift.dart`, `lib/db/tables.dart`,
   `lib/providers/care_shifts_provider.dart`,
   `lib/screens/team/shifts_screen.dart`).** Freezed `CareShift` (id,
