@@ -27,8 +27,10 @@ import '../screens/medical/care_plan_section_form.dart';
 import '../screens/medical/emergency_card_screen.dart';
 import '../screens/medical/health_log_entry_form.dart';
 import '../screens/medical/health_log_screen.dart';
+import '../screens/medical/ids_screen.dart';
 import '../screens/medical/med_schedule_screen.dart';
 import '../screens/medical/medical_hub_screen.dart';
+import '../screens/medical/poa_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
 import '../screens/appointment/appointment_list_screen.dart';
@@ -94,7 +96,11 @@ class CareblazersRoutes {
   static const String medicalCardsEmergency = 'medical-cards-emergency';
   static const String medicalCardsEmergencyEdit = 'medical-cards-emergency-edit';
   static const String medicalCardsPoa = 'medical-cards-poa';
+  static const String medicalCardsPoaEdit = 'medical-cards-poa-edit';
   static const String medicalCardsIds = 'medical-cards-ids';
+  static const String medicalCardsIdsNew = 'medical-cards-ids-new';
+  static const String medicalCardsIdDetail = 'medical-cards-id-detail';
+  static const String medicalCardsIdEdit = 'medical-cards-id-edit';
 
   // Phase 14 IA — Care Team hub + its feature pages. Same forward-
   // declaration contract as the Medical names: `teamHub` → `/team`
@@ -475,6 +481,67 @@ GoRouter buildRouter({
                             title: const Text('Edit Emergency Card'),
                           ),
                         ),
+                      ),
+                    ],
+                  ),
+                  // Power of Attorney (Phase 14.24) — the single POA
+                  // document on file + its edit form. Pushed onto the root
+                  // navigator so the feature pages cover the tab bar, like
+                  // the other Cards & Documents pages.
+                  GoRoute(
+                    path: 'cards/poa',
+                    name: CareblazersRoutes.medicalCardsPoa,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const PoaScreen(),
+                    routes: <RouteBase>[
+                      GoRoute(
+                        path: 'edit',
+                        name: CareblazersRoutes.medicalCardsPoaEdit,
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (BuildContext context, GoRouterState state) =>
+                            const PoaEditForm(),
+                      ),
+                    ],
+                  ),
+                  // Identification (Phase 14.24) — the list of ID documents,
+                  // a per-ID detail page, and the add/edit form. `ids/new`
+                  // is registered before `ids/:id` so the literal `new`
+                  // segment isn't swallowed by the `:id` parameter.
+                  GoRoute(
+                    path: 'cards/ids',
+                    name: CareblazersRoutes.medicalCardsIds,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const IdsScreen(),
+                    routes: <RouteBase>[
+                      GoRoute(
+                        path: 'new',
+                        name: CareblazersRoutes.medicalCardsIdsNew,
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (BuildContext context, GoRouterState state) =>
+                            const IdEditForm(),
+                      ),
+                      GoRoute(
+                        path: ':id',
+                        name: CareblazersRoutes.medicalCardsIdDetail,
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (BuildContext context, GoRouterState state) =>
+                            IdDetailScreen(
+                          docId: state.pathParameters['id'] ?? '',
+                        ),
+                        routes: <RouteBase>[
+                          GoRoute(
+                            path: 'edit',
+                            name: CareblazersRoutes.medicalCardsIdEdit,
+                            parentNavigatorKey: rootNavigatorKey,
+                            builder:
+                                (BuildContext context, GoRouterState state) =>
+                                    IdEditForm(
+                              docId: state.pathParameters['id'],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

@@ -1539,7 +1539,7 @@ amber / plum are placeholders to be discarded.
   goldens under `test/screens/crisis/` + `test/golden/crisis_*`.
   Tests + goldens for populated + empty Emergency Card states.
 
-- [ ] **Phase 14.24: POA + IDs screens
+- [x] **Phase 14.24: POA + IDs screens
   (`lib/screens/medical/poa_screen.dart`,
   `lib/screens/medical/ids_screen.dart`).** POA at
   `/medical/cards/poa`: PathHeader + a single-document card with
