@@ -1700,7 +1700,7 @@ amber / plum are placeholders to be discarded.
 
 ### Community sub-nav
 
-- [ ] **Phase 14.35: SegmentedSubnav widget
+- [x] **Phase 14.35: SegmentedSubnav widget
   (`lib/widgets/segmented_subnav.dart` +
   `test/widgets/segmented_subnav_test.dart` +
   `test/golden/segmented_subnav_golden_test.dart`).** Three-segment
