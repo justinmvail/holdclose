@@ -46,7 +46,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
         cmd = [
-            CLAUDE_CMD, "--print", "--output-format", "stream-json",
+            CLAUDE_CMD, "--print", "--verbose", "--output-format", "stream-json",
             "--model", "claude-sonnet-4-6",
             "--append-system-prompt", system,
             user,
