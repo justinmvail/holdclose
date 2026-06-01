@@ -1,44 +1,47 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/providers/home_conversation_provider.dart';
+import 'dart:async';
+
+import 'package:careblazers/providers/auth_provider.dart';
+import 'package:careblazers/providers/home_clock_provider.dart';
+import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:drift/native.dart';
+import 'package:careblazers/screens/settings/settings_screen.dart';
+import 'package:careblazers/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
-final DateTime _fixedNow = DateTime.utc(2026, 5, 30, 12);
-
-Conversation _stubConversation() => Conversation(
-      id: 'home-conv-stub',
-      title: 'Today',
-      createdAt: _fixedNow,
-      updatedAt: _fixedNow,
-    );
-
+/// Pumps Home inside the real router so the AppBar-less dashboard renders
+/// in the tab shell it ships in, with the clock pinned to [now] and a
+/// signed-in fake caregiver (Sarah Henderson) driving the greeting name.
 Future<GoRouter> _pumpHome(
   WidgetTester tester, {
-  Conversation? conversation,
+  required DateTime now,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1100));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  final Conversation conv = conversation ?? _stubConversation();
-  final CareblazersDatabase db =
-      CareblazersDatabase(NativeDatabase.memory());
-  addTearDown(db.close);
+
+  // FakeAuthProvider starts signedOut; sign in so the greeting renders
+  // the caregiver's first name. `_signIn` flips state synchronously, so
+  // the StreamBuilder replays signedIn on subscribe.
+  final FakeAuthProvider auth = FakeAuthProvider();
+  unawaited(auth.signInWithGoogle());
+  addTearDown(auth.dispose);
+
   final GoRouter router = buildRouter();
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        homeConversationProvider.overrideWith((_) async => conv),
-        chatRepositoryProvider.overrideWith((_) => ChatRepository(db)),
+        storageBackendProvider.overrideWithValue(InMemoryStorageProvider()),
+        authProvider.overrideWithValue(auth),
+        homeClockProvider.overrideWithValue(() => now),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        routerConfig: router,
+        theme: careblazersLightTheme,
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -46,62 +49,84 @@ Future<GoRouter> _pumpHome(
 }
 
 void main() {
-  group('HomeScreen — chat-shaped tab root (home refactor)', () {
-    testWidgets('AppBar title is "Today" with the three actions',
+  group('greetingForHour — pure boundaries (BUILD_SPEC.md Phase 14.7)', () {
+    test('morning before noon', () {
+      expect(greetingForHour(0), 'Good morning');
+      expect(greetingForHour(11), 'Good morning');
+    });
+
+    test('afternoon from noon through 4:59pm', () {
+      expect(greetingForHour(12), 'Good afternoon');
+      expect(greetingForHour(16), 'Good afternoon');
+    });
+
+    test('evening from 5pm on', () {
+      expect(greetingForHour(17), 'Good evening');
+      expect(greetingForHour(23), 'Good evening');
+    });
+  });
+
+  group('firstNameOf', () {
+    test('takes the first whitespace-delimited token', () {
+      expect(firstNameOf('Sarah Henderson'), 'Sarah');
+      expect(firstNameOf('  Sarah   Henderson '), 'Sarah');
+      expect(firstNameOf('Sarah'), 'Sarah');
+    });
+
+    test('empty for a blank name', () {
+      expect(firstNameOf(''), '');
+      expect(firstNameOf('   '), '');
+    });
+  });
+
+  group('HomeScreen — dashboard scaffold (Phase 14.7)', () {
+    testWidgets('AppBar-less scroll view with greeting + profile',
         (WidgetTester tester) async {
-      await _pumpHome(tester);
+      await _pumpHome(tester, now: DateTime(2026, 6, 1, 9));
 
       expect(find.byType(HomeScreen), findsOneWidget);
-      expect(find.widgetWithText(AppBar, 'Today'), findsOneWidget);
-      expect(find.byKey(HomeScreen.historyButtonKey), findsOneWidget);
-      expect(find.byKey(HomeScreen.newConversationKey), findsOneWidget);
-      expect(find.byKey(HomeScreen.settingsGearKey), findsOneWidget);
+      // The dashboard is AppBar-less — no AppBar anywhere in the shell.
+      expect(find.byType(AppBar), findsNothing);
+      expect(find.byKey(HomeScreen.dashboardListKey), findsOneWidget);
+      expect(find.byKey(HomeScreen.greetingKey), findsOneWidget);
+      expect(find.byKey(HomeScreen.profileButtonKey), findsOneWidget);
     });
 
-    testWidgets('renders a ChatScreen against the resolved conversation',
+    testWidgets('greeting says "Good morning" before noon',
         (WidgetTester tester) async {
-      await _pumpHome(tester);
-
-      expect(find.byType(ChatScreen), findsOneWidget);
+      await _pumpHome(tester, now: DateTime(2026, 6, 1, 9));
+      expect(find.text('Good morning, Sarah'), findsOneWidget);
     });
 
-    testWidgets('"Log a journal entry" quick action wires to the wizard',
+    testWidgets('greeting says "Good afternoon" mid-day',
         (WidgetTester tester) async {
-      await _pumpHome(tester);
-
-      final Finder action = find.byKey(HomeScreen.journalQuickActionKey);
-      expect(action, findsOneWidget);
-
-      // Just assert the action exists + its first descendant InkWell
-      // has an onTap closure. Driving the closure through GoRouter
-      // navigation is covered end-to-end by the router_test suite for
-      // the `/journal/new` registration; pumping a live nav here would
-      // need a real drift store (the wizard screen's submit path reads
-      // it on mount).
-      final InkWell well = tester
-          .widgetList<InkWell>(
-              find.descendant(of: action, matching: find.byType(InkWell)))
-          .first;
-      expect(well.onTap, isNotNull);
+      await _pumpHome(tester, now: DateTime(2026, 6, 1, 14));
+      expect(find.text('Good afternoon, Sarah'), findsOneWidget);
     });
 
-    testWidgets('settings gear wires onPressed (closure attached)',
+    testWidgets('greeting says "Good evening" at night',
         (WidgetTester tester) async {
-      await _pumpHome(tester);
-      final IconButton gear = tester
-          .widget<IconButton>(find.byKey(HomeScreen.settingsGearKey));
-      expect(gear.onPressed, isNotNull);
+      await _pumpHome(tester, now: DateTime(2026, 6, 1, 20));
+      expect(find.text('Good evening, Sarah'), findsOneWidget);
     });
 
-    testWidgets('settings gear carries a Settings tooltip',
+    testWidgets('profile icon is account_circle_outlined at 32px',
         (WidgetTester tester) async {
-      await _pumpHome(tester);
-      // Tooltip is what IconButton wires into the semantics tree via
-      // `tooltip:` — assert it's the canonical "Settings" wording the
-      // gear has carried since BUILD_SPEC.md §5.1.
-      final IconButton gear = tester
-          .widget<IconButton>(find.byKey(HomeScreen.settingsGearKey));
-      expect(gear.tooltip, 'Settings');
+      await _pumpHome(tester, now: DateTime(2026, 6, 1, 9));
+      final IconButton button = tester
+          .widget<IconButton>(find.byKey(HomeScreen.profileButtonKey));
+      expect((button.icon as Icon).icon, Icons.account_circle_outlined);
+      expect(button.iconSize, 32);
+    });
+
+    testWidgets('tapping the profile icon pushes Settings',
+        (WidgetTester tester) async {
+      await _pumpHome(tester, now: DateTime(2026, 6, 1, 9));
+
+      expect(find.byType(SettingsScreen), findsNothing);
+      await tester.tap(find.byKey(HomeScreen.profileButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsOneWidget);
     });
   });
 }

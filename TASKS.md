@@ -1310,7 +1310,7 @@ amber / plum are placeholders to be discarded.
 
 ### Home — "Today" dashboard
 
-- [ ] **Phase 14.7: HomeScreen scaffold rewrite
+- [x] **Phase 14.7: HomeScreen scaffold rewrite
   (`lib/screens/home_screen.dart`).** Tear out the "chat at the
   root" layout from the post-home-refactor commit (b8ddd5e). New
   scaffold: AppBar-less, top row inside the body with a greeting on
