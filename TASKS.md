@@ -1356,7 +1356,7 @@ amber / plum are placeholders to be discarded.
   present). Card tap pushes `/appointments/:id`. Empty state: "No
   upcoming appointments." Tests + golden for populated + empty.
 
-- [ ] **Phase 14.11: Recent Activity card on Home
+- [x] **Phase 14.11: Recent Activity card on Home
   (`lib/widgets/home/recent_activity_card.dart`).** Aggregates the
   latest 3 entries across journal + dose log + appointment changes
   + (when Phase 14.32 lands) care-team handoffs, sorted by
