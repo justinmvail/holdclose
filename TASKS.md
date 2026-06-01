@@ -1607,7 +1607,7 @@ amber / plum are placeholders to be discarded.
   later phase — this task lands the data + the share surface only.
   Tests cover form validation + the pending row landing in storage.
 
-- [ ] **Phase 14.29: Shared Calendar model + drift table + provider +
+- [x] **Phase 14.29: Shared Calendar model + drift table + provider +
   screen (`lib/models/care_event.dart`, `lib/db/tables.dart`,
   `lib/providers/care_events_provider.dart`,
   `lib/screens/team/calendar_screen.dart`).** Freezed `CareEvent`

@@ -422,6 +422,38 @@ class CaregiversTable extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// One natively-stored calendar event for the loved one (TASKS.md Phase
+/// 14.29).
+///
+/// Backs Care Team → Calendar (BUILD_SPEC.md §5.14). The shared calendar
+/// unifies four sources, but only ad-hoc **notes** ([CareEventKind.note])
+/// live here — appointments, tasks, and shifts are *projected* onto the
+/// calendar from their own tables at read time, so this row never
+/// double-stores them. (The column shape doesn't enforce that; the
+/// projection lives in `lib/providers/care_events_provider.dart`.)
+///
+/// Same blob-with-lifted-keys pattern the journal / appointment /
+/// health-log tables use: the full freezed `CareEvent` lives in [payload]
+/// as JSON so a new model field is persisted without a schema bump. Two
+/// keys are lifted out so the common reads don't parse every row's blob —
+/// [startMs] (the calendar orders chronologically on it) and [patientId]
+/// (room for a future `byPatient` filter). Like the health-log + care-plan
+/// tables there's no DB-level foreign key onto [PatientsTable]: that table
+/// is single-row ("one loved one per install"), so a cascade buys nothing
+/// and the [patientId] link stays logical.
+class CareEventsTable extends Table {
+  @override
+  String get tableName => 'care_events';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  IntColumn get startMs => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 /// One caregiver's membership in a loved one's care circle (TASKS.md
 /// Phase 14.25).
 ///

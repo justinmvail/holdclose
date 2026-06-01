@@ -45,6 +45,7 @@ part 'database.g.dart';
     IdentificationDocsTable,
     CaregiversTable,
     CareCircleMembershipsTable,
+    CareEventsTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
@@ -58,7 +59,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       );
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -84,6 +85,10 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   /// - On upgrade from v7 → v8, create the care-circle pair
   ///   (Phase 14.25). Existing data is untouched; the Care Circle roster
   ///   lights up empty (just the owner).
+  /// - On upgrade from v8 → v9, create the calendar table
+  ///   (Phase 14.29). Existing data is untouched; the shared calendar
+  ///   lights up with just the projected appointments (no native notes
+  ///   yet).
   /// - On every open — fresh or upgraded — set
   ///   `PRAGMA foreign_keys = ON`. SQLite ships with FK enforcement
   ///   off by default; without this pragma the `ON DELETE CASCADE` on
@@ -125,6 +130,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
             await m.createTable(caregiversTable);
             await m.createTable(careCircleMembershipsTable);
           }
+          if (from < 9) {
+            await m.createTable(careEventsTable);
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -152,6 +160,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(identificationDocsTable).go();
       await delete(careCircleMembershipsTable).go();
       await delete(caregiversTable).go();
+      await delete(careEventsTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();

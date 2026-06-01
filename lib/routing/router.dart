@@ -40,6 +40,7 @@ import '../screens/medication/medication_list_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
 import '../screens/onboarding/welcome_carousel.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/team/calendar_screen.dart';
 import '../screens/team/care_circle_screen.dart';
 import '../screens/team/care_team_hub_screen.dart';
 import '../screens/team/invite_caregiver_screen.dart';
@@ -634,6 +635,17 @@ GoRouter buildRouter({
                 builder: (BuildContext context, GoRouterState state) =>
                     const CareTeamHubScreen(),
                 routes: <RouteBase>[
+                  // Shared Calendar (Phase 14.29) — the 7-day week view of
+                  // appointments, tasks, shifts, and notes. Pushed onto the
+                  // root navigator so the feature page covers the tab bar,
+                  // matching the other Care Team feature pages.
+                  GoRoute(
+                    path: 'calendar',
+                    name: CareblazersRoutes.teamCalendar,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const CalendarScreen(),
+                  ),
                   // Care Circle roster (Phase 14.27). Pushed onto the root
                   // navigator so the feature page covers the tab bar; the
                   // `circle/invite` form route (Phase 14.28) pushes onto

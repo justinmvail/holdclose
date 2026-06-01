@@ -124,8 +124,8 @@ void main() {
       expect(await db.select(db.identificationDocsTable).get(), isEmpty);
     });
 
-    test('schemaVersion is 8 (care-circle migration step)', () {
-      expect(db.schemaVersion, 8);
+    test('schemaVersion is 9 (calendar migration step)', () {
+      expect(db.schemaVersion, 9);
     });
   });
 }
