@@ -261,3 +261,33 @@ class HealthLogEntriesTable extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
+
+/// One section of the loved one's care plan (TASKS.md Phase 14.18).
+///
+/// Backs Medical → Care Plan (BUILD_SPEC.md §5.13). The full freezed
+/// `CarePlanSection` (slot + title + body markdown + appliesInStage)
+/// lives in [payload] as JSON — same blob-with-lifted-keys pattern the
+/// journal, chat, medication, appointment, and health-log tables use, so
+/// a new model field is persisted automatically without a schema bump.
+///
+/// Three keys are lifted out of the blob so the common reads never parse
+/// a payload: [slot] and [orderIndex] (the `bySlot` query filters on the
+/// slot and orders within it by index — the care-plan provider keeps
+/// those indices contiguous and duplicate-free per slot), and
+/// [patientId] (room for a future `byPatient` filter). Like the
+/// health-log table there's no DB-level foreign key onto [PatientsTable]:
+/// that table is single-row ("one loved one per install"), so a cascade
+/// buys nothing and the [patientId] link stays logical.
+class CarePlanSectionsTable extends Table {
+  @override
+  String get tableName => 'care_plan_sections';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  TextColumn get slot => text()();
+  IntColumn get orderIndex => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}

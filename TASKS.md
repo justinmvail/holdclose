@@ -1456,7 +1456,7 @@ amber / plum are placeholders to be discarded.
   conditional-field rendering + form validation + goldens for empty
   list, populated list, new-form, edit-form.
 
-- [ ] **Phase 14.18: Care Plan model + drift table + provider
+- [x] **Phase 14.18: Care Plan model + drift table + provider
   (`lib/models/care_plan_section.dart`, `lib/db/tables.dart`,
   `lib/providers/care_plan_provider.dart`).** Freezed
   `CarePlanSection` (id, patientId, slot enum

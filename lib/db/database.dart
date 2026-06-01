@@ -6,16 +6,17 @@ import 'tables.dart';
 part 'database.g.dart';
 
 /// Drift-managed SQLite database (BUILD_SPEC.md §6.2 + TASKS.md
-/// Phase 11.2 + Phase 12.1 + Phase 12.5 + Phase 14.16). Holds eleven
-/// tables:
+/// Phase 11.2 + Phase 12.1 + Phase 12.5 + Phase 14.16 + Phase 14.18).
+/// Holds twelve tables:
 /// `journal_entries` (auto-logged decoder runs), `patients` (the loved
 /// one — one row per install), `app_settings` (single-row preferences
 /// blob), the chat pair `chat_conversations` + `chat_messages`
 /// (Phase 11 dementia-care chatbot history), the medication-tracker
 /// trio `medications` + `dose_schedules` + `dose_logs` (Phase 12.1),
 /// the appointment pair `providers` + `appointments` (Phase 12.5)
-/// — all FK-linked with `ON DELETE CASCADE` — and the standalone
-/// `health_log_entries` table (Phase 14.16).
+/// — all FK-linked with `ON DELETE CASCADE` — and the two standalone
+/// tables `health_log_entries` (Phase 14.16) and `care_plan_sections`
+/// (Phase 14.18).
 ///
 /// Construct with [CareblazersDatabase.open] in production — it lazily
 /// opens a SQLite file under the platform's app-documents directory via
@@ -34,6 +35,7 @@ part 'database.g.dart';
     ProvidersTable,
     AppointmentsTable,
     HealthLogEntriesTable,
+    CarePlanSectionsTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
@@ -47,7 +49,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       );
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -63,6 +65,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   ///   appointment list lights up empty.
   /// - On upgrade from v4 → v5, create the health-log table
   ///   (Phase 14.16). Existing data is untouched; the health log lights
+  ///   up empty.
+  /// - On upgrade from v5 → v6, create the care-plan table
+  ///   (Phase 14.18). Existing data is untouched; the care plan lights
   ///   up empty.
   /// - On every open — fresh or upgraded — set
   ///   `PRAGMA foreign_keys = ON`. SQLite ships with FK enforcement
@@ -93,6 +98,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
           if (from < 5) {
             await m.createTable(healthLogEntriesTable);
           }
+          if (from < 6) {
+            await m.createTable(carePlanSectionsTable);
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -114,6 +122,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(appointmentsTable).go();
       await delete(providersTable).go();
       await delete(healthLogEntriesTable).go();
+      await delete(carePlanSectionsTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();
