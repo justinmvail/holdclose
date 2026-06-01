@@ -1,0 +1,988 @@
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../../models/caregiver.dart';
+import '../../models/expense.dart';
+import '../../providers/care_tasks_provider.dart' show currentCaregiverIdProvider;
+import '../../providers/expenses_provider.dart';
+import '../../theme.dart';
+import '../../widgets/path_header.dart';
+
+part 'expenses_screen.g.dart';
+
+/// Mints the unique id a new expense needs. Overridable for tests + the
+/// demo tour so the minted ids are deterministic; same shape as the task /
+/// invite / appointment form id factories.
+typedef ExpenseIdFactory = String Function();
+
+String _defaultExpenseIdFactory() {
+  final int ms = DateTime.now().millisecondsSinceEpoch;
+  final int rand = math.Random().nextInt(1 << 32);
+  return 'expense-$ms-$rand';
+}
+
+/// Id factory the create form uses. Tests override this with a monotonic
+/// counter so the minted ids are stable across runs.
+@Riverpod(keepAlive: true)
+ExpenseIdFactory expenseIdFactory(Ref ref) => _defaultExpenseIdFactory;
+
+/// Care Team → Expenses at `/team/expenses` (TASKS.md Phase 14.33,
+/// BUILD_SPEC.md §5.14).
+///
+/// A [PathHeader] (`Home › Care Team › Expenses`, back to Care Team) over a
+/// sticky current-month total card and a list of expenses grouped by month.
+/// Each row shows the amount, a kind chip, the description, and the paying
+/// caregiver's initials. The FAB opens a create form (amount + kind +
+/// description + paid date + payer picker + optional receipt path).
+///
+/// The grouped view comes from [expensesViewProvider]; the screen watches
+/// it and routes mutations through the [Expenses] notifier.
+class ExpensesScreen extends ConsumerWidget {
+  const ExpensesScreen({super.key});
+
+  static const Key fabKey = Key('expenses-fab');
+  static const Key listKey = Key('expenses-list');
+  static const Key emptyStateKey = Key('expenses-empty');
+  static const Key monthlyTotalCardKey = Key('expenses-monthly-total');
+
+  /// Stable per-section + per-row keys derived from ids so tests target a
+  /// node rather than a copy string.
+  static Key monthHeaderKey(String monthKey) =>
+      Key('expenses-month-$monthKey');
+  static Key rowKey(String expenseId) => Key('expenses-row-$expenseId');
+
+  // Create-expense sheet.
+  static const Key createSheetKey = Key('expenses-create-sheet');
+  static const Key amountFieldKey = Key('expenses-create-amount');
+  static const Key amountErrorKey = Key('expenses-create-amount-error');
+  static const Key descriptionFieldKey = Key('expenses-create-description');
+  static const Key descriptionErrorKey = Key('expenses-create-description-error');
+  static const Key paidDateButtonKey = Key('expenses-create-date');
+  static const Key receiptFieldKey = Key('expenses-create-receipt');
+  static const Key saveButtonKey = Key('expenses-create-save');
+
+  static Key kindOptionKey(ExpenseKind kind) =>
+      Key('expenses-create-kind-${kind.name}');
+  static Key payerOptionKey(String payerId) =>
+      Key('expenses-create-payer-$payerId');
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<List<ExpenseMonthGroup>> async =
+        ref.watch(expensesViewProvider);
+    final String me = ref.watch(currentCaregiverIdProvider);
+    final DateTime now = ref.watch(expensesClockProvider)();
+    final String currentMonthKey = monthKeyOf(now);
+
+    return Scaffold(
+      backgroundColor: careblazersColors.background,
+      floatingActionButton:
+          _AddExpenseFab(onPressed: () => _openCreateSheet(context)),
+      body: SafeArea(
+        child: async.when(
+          loading: () => const SizedBox.shrink(),
+          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+          data: (List<ExpenseMonthGroup> groups) {
+            final int currentTotal = groups
+                .where((ExpenseMonthGroup g) => g.monthKey == currentMonthKey)
+                .fold<int>(0, (int sum, ExpenseMonthGroup g) => sum + g.totalCents);
+            final String currency = _ledgerCurrency(groups);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      const PathHeader(
+                        breadcrumbs: <PathHeaderCrumb>[
+                          PathHeaderCrumb(label: 'Home', route: '/'),
+                          PathHeaderCrumb(label: 'Care Team', route: '/team'),
+                          PathHeaderCrumb(label: 'Expenses'),
+                        ],
+                        title: 'Expenses',
+                        backLabel: 'Back to Care Team',
+                        leadingIcon: Icons.account_balance_wallet_outlined,
+                      ),
+                      const SizedBox(height: 12),
+                      _MonthlyTotalCard(
+                        monthKey: currentMonthKey,
+                        totalCents: currentTotal,
+                        currency: currency,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: groups.isEmpty
+                      ? const _EmptyState()
+                      : _Ledger(groups: groups, me: me),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openCreateSheet(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: careblazersColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext sheetContext) => const _CreateExpenseSheet(),
+    );
+  }
+}
+
+class _AddExpenseFab extends StatelessWidget {
+  const _AddExpenseFab({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      button: true,
+      label: 'Add expense. Open the new-expense form.',
+      child: FloatingActionButton.extended(
+        key: ExpensesScreen.fabKey,
+        onPressed: onPressed,
+        backgroundColor: careblazersColors.cta,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: Text(
+          'Add expense',
+          style: textTheme.labelLarge?.copyWith(color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sticky card at the top of the ledger showing the current month's total
+/// (BUILD_SPEC.md §5.14).
+class _MonthlyTotalCard extends StatelessWidget {
+  const _MonthlyTotalCard({
+    required this.monthKey,
+    required this.totalCents,
+    required this.currency,
+  });
+
+  final String monthKey;
+  final int totalCents;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Container(
+      key: ExpensesScreen.monthlyTotalCardKey,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+      decoration: BoxDecoration(
+        color: careblazersColors.primary,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Spent in ${monthLabel(monthKey)}',
+            style: textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.82),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            formatMoney(totalCents, currency),
+            style: textTheme.displayLarge?.copyWith(color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Ledger extends StatelessWidget {
+  const _Ledger({required this.groups, required this.me});
+
+  final List<ExpenseMonthGroup> groups;
+  final String me;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      key: ExpensesScreen.listKey,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+      children: <Widget>[
+        for (final ExpenseMonthGroup group in groups)
+          _MonthSection(group: group, me: me),
+      ],
+    );
+  }
+}
+
+class _MonthSection extends StatelessWidget {
+  const _MonthSection({required this.group, required this.me});
+
+  final ExpenseMonthGroup group;
+  final String me;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final String currency =
+        group.rows.isEmpty ? 'USD' : group.rows.first.expense.currency;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Padding(
+          key: ExpensesScreen.monthHeaderKey(group.monthKey),
+          padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  monthLabel(group.monthKey),
+                  style: textTheme.titleLarge
+                      ?.copyWith(color: careblazersColors.primary),
+                ),
+              ),
+              Text(
+                formatMoney(group.totalCents, currency),
+                style: textTheme.titleLarge?.copyWith(
+                  color: careblazersColors.primarySoft,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        for (final ExpenseRow row in group.rows)
+          _ExpenseTile(row: row, me: me),
+      ],
+    );
+  }
+}
+
+class _ExpenseTile extends StatelessWidget {
+  const _ExpenseTile({required this.row, required this.me});
+
+  final ExpenseRow row;
+  final String me;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final Expense expense = row.expense;
+    final bool isMe = expense.paidByCaregiverId == me;
+    final String payerName =
+        row.payer?.displayName ?? (isMe ? 'You' : 'Unknown');
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        key: ExpensesScreen.rowKey(expense.id),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: careblazersColors.surfaceWarm,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    expense.description,
+                    style: textTheme.bodyLarge?.copyWith(
+                      color: careblazersColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: <Widget>[
+                      _KindChip(kind: expense.kind),
+                      _PayerChip(
+                        name: payerName,
+                        avatarPath: row.payer?.avatarPath,
+                      ),
+                      if (expense.receiptPath != null &&
+                          expense.receiptPath!.trim().isNotEmpty)
+                        _ReceiptChip(),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              formatMoney(expense.amountCents, expense.currency),
+              style: textTheme.bodyLarge?.copyWith(
+                color: careblazersColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KindChip extends StatelessWidget {
+  const _KindChip({required this.kind});
+
+  final ExpenseKind kind;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: careblazersColors.primarySoft.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(kindIcon(kind), size: 15, color: careblazersColors.primarySoft),
+          const SizedBox(width: 5),
+          Text(
+            kindLabel(kind),
+            style: textTheme.bodyMedium?.copyWith(
+              color: careblazersColors.primarySoft,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PayerChip extends StatelessWidget {
+  const _PayerChip({required this.name, this.avatarPath});
+
+  final String name;
+  final String? avatarPath;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _MiniAvatar(name: name, avatarPath: avatarPath),
+        const SizedBox(width: 6),
+        Text(
+          name,
+          style: textTheme.bodyMedium?.copyWith(
+            color: careblazersColors.text,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReceiptChip extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Icon(Icons.receipt_long_outlined,
+            size: 15, color: careblazersColors.link),
+        const SizedBox(width: 4),
+        Text(
+          'Receipt',
+          style: textTheme.bodyMedium?.copyWith(
+            color: careblazersColors.link,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniAvatar extends StatelessWidget {
+  const _MiniAvatar({required this.name, this.avatarPath});
+
+  final String name;
+  final String? avatarPath;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final String? path = avatarPath;
+    final bool hasPhoto = path != null && File(path).existsSync();
+    return CircleAvatar(
+      radius: 12,
+      backgroundColor: careblazersColors.primarySoft.withValues(alpha: 0.14),
+      backgroundImage: hasPhoto ? FileImage(File(path)) : null,
+      child: hasPhoto
+          ? null
+          : Text(
+              initials(name),
+              style: textTheme.bodyMedium?.copyWith(
+                color: careblazersColors.primary,
+                fontWeight: FontWeight.w700,
+                fontSize: 10,
+              ),
+            ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Padding(
+      key: ExpensesScreen.emptyStateKey,
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Icon(
+            Icons.account_balance_wallet_outlined,
+            size: 56,
+            color: careblazersColors.primarySoft,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No expenses logged yet. Tap Add expense to start tracking '
+            'what the care circle spends.',
+            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Create-expense sheet
+// ---------------------------------------------------------------------------
+
+/// Bottom sheet that creates an expense (TASKS.md Phase 14.33). Collects an
+/// amount (required, parsed from dollars to cents), a kind, a description
+/// (required), a paid date, a payer drawn from the care circle (or "You"),
+/// and an optional receipt path. Save writes through the [Expenses]
+/// notifier — which refreshes the ledger — then pops.
+class _CreateExpenseSheet extends ConsumerStatefulWidget {
+  const _CreateExpenseSheet();
+
+  @override
+  ConsumerState<_CreateExpenseSheet> createState() =>
+      _CreateExpenseSheetState();
+}
+
+class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
+  final TextEditingController _amount = TextEditingController();
+  final TextEditingController _description = TextEditingController();
+  final TextEditingController _receipt = TextEditingController();
+  ExpenseKind _kind = ExpenseKind.meds;
+  DateTime? _paidAt;
+  String? _payerId;
+  String? _amountError;
+  String? _descriptionError;
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _description.dispose();
+    _receipt.dispose();
+    super.dispose();
+  }
+
+  DateTime get _effectivePaidAt =>
+      _paidAt ?? ref.read(expensesClockProvider)();
+
+  String get _effectivePayerId =>
+      _payerId ?? ref.read(currentCaregiverIdProvider);
+
+  Future<void> _pickDate() async {
+    final DateTime now = ref.read(expensesClockProvider)();
+    final DateTime base = _effectivePaidAt;
+    final DateTime? date = await showDatePicker(
+      context: context,
+      initialDate: base,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 1),
+    );
+    if (date == null || !mounted) return;
+    setState(() => _paidAt = DateTime(date.year, date.month, date.day));
+  }
+
+  Future<void> _save() async {
+    if (_submitting) return;
+    final int? cents = parseAmountCents(_amount.text);
+    final String description = _description.text.trim();
+
+    String? amountError;
+    String? descriptionError;
+    if (cents == null || cents <= 0) {
+      amountError = 'Enter an amount greater than zero.';
+    }
+    if (description.isEmpty) {
+      descriptionError = 'Add a short description.';
+    }
+    if (amountError != null || descriptionError != null) {
+      setState(() {
+        _amountError = amountError;
+        _descriptionError = descriptionError;
+      });
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _amountError = null;
+      _descriptionError = null;
+    });
+
+    final String receipt = _receipt.text.trim();
+    final Expense expense = Expense(
+      id: ref.read(expenseIdFactoryProvider)(),
+      amountCents: cents!,
+      description: description,
+      paidByCaregiverId: _effectivePayerId,
+      paidAt: _effectivePaidAt,
+      kind: _kind,
+      receiptPath: receipt.isEmpty ? null : receipt,
+      patientId: expensesPatientId,
+    );
+    await ref.read(expensesProvider.notifier).addExpense(expense);
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final AsyncValue<List<Caregiver>> caregivers =
+        ref.watch(expensePayerCandidatesProvider);
+    final String me = ref.watch(currentCaregiverIdProvider);
+
+    return Padding(
+      key: ExpensesScreen.createSheetKey,
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'New expense',
+              style: textTheme.titleLarge
+                  ?.copyWith(color: careblazersColors.primary),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              key: ExpensesScreen.amountFieldKey,
+              controller: _amount,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: <TextInputFormatter>[
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              ],
+              decoration: InputDecoration(
+                labelText: 'Amount',
+                prefixText: r'$ ',
+                errorText: _amountError,
+                errorMaxLines: 2,
+              ),
+            ),
+            if (_amountError != null)
+              Padding(
+                key: ExpensesScreen.amountErrorKey,
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _amountError!,
+                  style: textTheme.bodyMedium
+                      ?.copyWith(color: careblazersColors.error),
+                ),
+              ),
+            const SizedBox(height: 16),
+            TextField(
+              key: ExpensesScreen.descriptionFieldKey,
+              controller: _description,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                labelText: 'Description',
+                errorText: _descriptionError,
+                errorMaxLines: 2,
+              ),
+            ),
+            if (_descriptionError != null)
+              Padding(
+                key: ExpensesScreen.descriptionErrorKey,
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _descriptionError!,
+                  style: textTheme.bodyMedium
+                      ?.copyWith(color: careblazersColors.error),
+                ),
+              ),
+            const SizedBox(height: 20),
+            Text(
+              'Kind',
+              style: textTheme.bodyLarge?.copyWith(
+                color: careblazersColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                for (final ExpenseKind kind in ExpenseKind.values)
+                  _ChoicePill(
+                    key: ExpensesScreen.kindOptionKey(kind),
+                    label: kindLabel(kind),
+                    selected: _kind == kind,
+                    onTap: () => setState(() => _kind = kind),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _PaidDateRow(
+              paidAt: _effectivePaidAt,
+              onPick: _pickDate,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Paid by',
+              style: textTheme.bodyLarge?.copyWith(
+                color: careblazersColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            caregivers.when(
+              loading: () => const SizedBox.shrink(),
+              error: (Object e, StackTrace _) => const SizedBox.shrink(),
+              data: (List<Caregiver> list) => Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  _ChoicePill(
+                    key: ExpensesScreen.payerOptionKey(me),
+                    label: 'You',
+                    selected: _effectivePayerId == me,
+                    onTap: () => setState(() => _payerId = me),
+                  ),
+                  for (final Caregiver c in list)
+                    if (c.id != me)
+                      _ChoicePill(
+                        key: ExpensesScreen.payerOptionKey(c.id),
+                        label: c.displayName,
+                        selected: _effectivePayerId == c.id,
+                        onTap: () => setState(() => _payerId = c.id),
+                      ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              key: ExpensesScreen.receiptFieldKey,
+              controller: _receipt,
+              decoration: const InputDecoration(
+                labelText: 'Receipt path (optional)',
+                helperText: 'Path to a saved receipt image, if you have one.',
+                helperMaxLines: 2,
+              ),
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton(
+              key: ExpensesScreen.saveButtonKey,
+              onPressed: _submitting ? null : _save,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(56),
+                backgroundColor: careblazersColors.cta,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(
+                _submitting ? 'Saving…' : 'Add expense',
+                style: textTheme.labelLarge?.copyWith(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PaidDateRow extends StatelessWidget {
+  const _PaidDateRow({required this.paidAt, required this.onPick});
+
+  final DateTime paidAt;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      button: true,
+      label: 'Paid on ${formatDate(paidAt)}. Change the paid date.',
+      child: OutlinedButton.icon(
+        key: ExpensesScreen.paidDateButtonKey,
+        onPressed: onPick,
+        icon: Icon(Icons.event_outlined, color: careblazersColors.link),
+        label: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'Paid ${formatDate(paidAt)}',
+            style: textTheme.labelLarge?.copyWith(color: careblazersColors.link),
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          side: BorderSide(color: careblazersColors.primarySoft),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChoicePill extends StatelessWidget {
+  const _ChoicePill({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final Color border =
+        selected ? careblazersColors.cta : careblazersColors.primarySoft;
+    final Color fill = selected
+        ? careblazersColors.cta.withValues(alpha: 0.12)
+        : Colors.transparent;
+    final Color fg = selected ? careblazersColors.cta : careblazersColors.text;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+          decoration: BoxDecoration(
+            color: fill,
+            border: Border.all(color: border, width: selected ? 2 : 1),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            label,
+            style: textTheme.bodyMedium?.copyWith(
+              color: fg,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Text(
+          "We couldn't load the expenses.\n$message",
+          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// The `YYYY-MM` key for [date] — the bucket the ledger groups by.
+String monthKeyOf(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}';
+
+const List<String> _monthsLong = <String>[
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/// "June 2026" from a `YYYY-MM` key. Falls back to the raw key if it can't
+/// be parsed (defensive — every stored key is well-formed).
+String monthLabel(String monthKey) {
+  final List<String> parts = monthKey.split('-');
+  if (parts.length != 2) return monthKey;
+  final int? year = int.tryParse(parts[0]);
+  final int? month = int.tryParse(parts[1]);
+  if (year == null || month == null || month < 1 || month > 12) {
+    return monthKey;
+  }
+  return '${_monthsLong[month - 1]} $year';
+}
+
+const List<String> _monthsShort = <String>[
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/// "Jun 3, 2026" — the paid date shown on the create form's date button.
+String formatDate(DateTime date) =>
+    '${_monthsShort[date.month - 1]} ${date.day}, ${date.year}';
+
+/// Format integer [cents] as money in [currency]. USD renders with a `$`
+/// and thousands separators ("$1,234.56"); any other currency prefixes its
+/// code ("EUR 12.34"). Negative inputs aren't expected, so this assumes a
+/// non-negative amount.
+String formatMoney(int cents, String currency) {
+  final int dollars = cents ~/ 100;
+  final int remainder = cents % 100;
+  final String grouped = _withThousands(dollars);
+  final String fraction = remainder.toString().padLeft(2, '0');
+  if (currency == 'USD') {
+    return '\$$grouped.$fraction';
+  }
+  return '$currency $grouped.$fraction';
+}
+
+String _withThousands(int value) {
+  final String digits = value.toString();
+  final StringBuffer out = StringBuffer();
+  for (int i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+    out.write(digits[i]);
+  }
+  return out.toString();
+}
+
+/// Parse a user-typed dollar amount ("12", "12.5", "1,234.56") into integer
+/// cents. Returns null when the text isn't a parseable non-negative number.
+int? parseAmountCents(String raw) {
+  final String cleaned = raw.replaceAll(',', '').replaceAll(r'$', '').trim();
+  if (cleaned.isEmpty) return null;
+  final double? dollars = double.tryParse(cleaned);
+  if (dollars == null || dollars.isNaN || dollars.isInfinite || dollars < 0) {
+    return null;
+  }
+  return (dollars * 100).round();
+}
+
+/// The currency to show on the sticky total — the most recent expense's, or
+/// USD when the ledger is empty.
+String _ledgerCurrency(List<ExpenseMonthGroup> groups) {
+  for (final ExpenseMonthGroup g in groups) {
+    if (g.rows.isNotEmpty) return g.rows.first.expense.currency;
+  }
+  return 'USD';
+}
+
+/// Human label for an [ExpenseKind] chip.
+String kindLabel(ExpenseKind kind) {
+  switch (kind) {
+    case ExpenseKind.meds:
+      return 'Meds';
+    case ExpenseKind.groceries:
+      return 'Groceries';
+    case ExpenseKind.transport:
+      return 'Transport';
+    case ExpenseKind.equipment:
+      return 'Equipment';
+    case ExpenseKind.aide:
+      return 'Aide';
+    case ExpenseKind.other:
+      return 'Other';
+  }
+}
+
+/// Glyph for an [ExpenseKind] chip.
+IconData kindIcon(ExpenseKind kind) {
+  switch (kind) {
+    case ExpenseKind.meds:
+      return Icons.medication_outlined;
+    case ExpenseKind.groceries:
+      return Icons.local_grocery_store_outlined;
+    case ExpenseKind.transport:
+      return Icons.directions_car_outlined;
+    case ExpenseKind.equipment:
+      return Icons.medical_services_outlined;
+    case ExpenseKind.aide:
+      return Icons.volunteer_activism_outlined;
+    case ExpenseKind.other:
+      return Icons.receipt_outlined;
+  }
+}
+
+/// Up to two uppercase initials from [name]; falls back to `?` for an empty
+/// name. Mirrors the task-board + care-circle roster helper.
+String initials(String name) {
+  final List<String> parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((String p) => p.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+  return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+      .toUpperCase();
+}

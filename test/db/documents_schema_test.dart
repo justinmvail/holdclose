@@ -124,8 +124,8 @@ void main() {
       expect(await db.select(db.identificationDocsTable).get(), isEmpty);
     });
 
-    test('schemaVersion is 11 (care-shifts migration step)', () {
-      expect(db.schemaVersion, 11);
+    test('schemaVersion is 12 (expenses migration step)', () {
+      expect(db.schemaVersion, 12);
     });
   });
 }

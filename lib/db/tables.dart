@@ -517,6 +517,37 @@ class CareShiftsTable extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// One shared cost on the Care Team expenses ledger (TASKS.md Phase
+/// 14.33).
+///
+/// Backs Care Team → Expenses (BUILD_SPEC.md §5.14). Same
+/// blob-with-lifted-keys pattern the journal / care-event / care-task /
+/// care-shift tables use: the full freezed `Expense` lives in [payload] as
+/// JSON so a new model field is persisted without a schema bump. Two keys
+/// are lifted out so the per-month grouping + total reads don't parse every
+/// row's blob — [paidAtMs] (the ledger orders rows newest-first and buckets
+/// them by `YYYY-MM`) and [patientId] (room for a future `byPatient`
+/// filter).
+///
+/// Like the care-task table there's no DB-level foreign key onto
+/// [PatientsTable] (single-row, so a cascade buys nothing) nor onto
+/// [CaregiversTable] — an expense should survive its payer being removed
+/// from the circle rather than cascade-deleting the spending history, so
+/// the `paidByCaregiverId` inside the payload stays a logical link the
+/// screen resolves softly at read time.
+class ExpensesTable extends Table {
+  @override
+  String get tableName => 'expenses';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  IntColumn get paidAtMs => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 /// One caregiver's membership in a loved one's care circle (TASKS.md
 /// Phase 14.25).
 ///

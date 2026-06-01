@@ -1667,7 +1667,7 @@ amber / plum are placeholders to be discarded.
   Tests cover filter combinations + ordering; golden for a populated
   feed.
 
-- [ ] **Phase 14.33: Expenses model + drift table + provider + screen
+- [x] **Phase 14.33: Expenses model + drift table + provider + screen
   (`lib/models/expense.dart`, `lib/db/tables.dart`,
   `lib/providers/expenses_provider.dart`,
   `lib/screens/team/expenses_screen.dart`).** Freezed `Expense` (id,

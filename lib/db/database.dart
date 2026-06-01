@@ -51,6 +51,7 @@ part 'database.g.dart';
     CareEventsTable,
     CareTasksTable,
     CareShiftsTable,
+    ExpensesTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
@@ -64,7 +65,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       );
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -100,6 +101,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   /// - On upgrade from v10 → v11, create the care-shifts table
   ///   (Phase 14.31). Existing data is untouched; the Care Team shift
   ///   coverage board lights up empty.
+  /// - On upgrade from v11 → v12, create the expenses table
+  ///   (Phase 14.33). Existing data is untouched; the Care Team expenses
+  ///   ledger lights up empty.
   /// - On every open — fresh or upgraded — set
   ///   `PRAGMA foreign_keys = ON`. SQLite ships with FK enforcement
   ///   off by default; without this pragma the `ON DELETE CASCADE` on
@@ -150,6 +154,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
           if (from < 11) {
             await m.createTable(careShiftsTable);
           }
+          if (from < 12) {
+            await m.createTable(expensesTable);
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -180,6 +187,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(careEventsTable).go();
       await delete(careTasksTable).go();
       await delete(careShiftsTable).go();
+      await delete(expensesTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();
