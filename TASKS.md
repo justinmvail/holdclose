@@ -1723,7 +1723,7 @@ amber / plum are placeholders to be discarded.
   segment swap, tab-reentry-resets-to-Feed, and push-pop-segment-
   preservation; refresh community feed goldens.
 
-- [ ] **Phase 14.37: Learn segment + content seeds
+- [x] **Phase 14.37: Learn segment + content seeds
   (`lib/screens/community/learn_screen.dart`,
   `lib/seed/learn_content.dart` +
   `lib/screens/community/learn_video_detail_screen.dart` +

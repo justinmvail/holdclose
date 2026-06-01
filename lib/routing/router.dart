@@ -12,6 +12,8 @@ import '../models/forum.dart';
 import '../screens/community/admin_reports_screen.dart';
 import '../screens/community/community_feed_screen.dart';
 import '../screens/community/community_guidelines_screen.dart';
+import '../screens/community/learn_playbook_detail_screen.dart';
+import '../screens/community/learn_video_detail_screen.dart';
 import '../screens/community/post_compose_screen.dart';
 import '../screens/community/post_detail_screen.dart';
 import '../screens/decoder/behavior_picker_screen.dart';
@@ -84,6 +86,10 @@ class CareblazersRoutes {
   static const String communityCompose = 'community-compose';
   static const String communityGuidelines = 'community-guidelines';
   static const String communityAdminReports = 'community-admin-reports';
+  // Community → Learn detail pages (Phase 14.37). Pushed onto the root
+  // navigator so they cover the tab bar, matching the post-detail page.
+  static const String communityLearnVideo = 'community-learn-video';
+  static const String communityLearnPlaybook = 'community-learn-playbook';
 
   // Phase 14 IA — Medical hub + its feature pages (BUILD_SPEC.md §4–§5).
   // The hub branch (`medicalHub` → `/medical`) lands in this phase as a
@@ -378,6 +384,27 @@ GoRouter buildRouter({
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const AdminReportsScreen(),
+      ),
+      // Community → Learn detail pages (Phase 14.37). The Learn segment
+      // lives in-tab under `/community`; these pushed pages render the
+      // seeded video / playbook content. Registered before the
+      // `/community/:postId` catch-all so the static `learn` segment is
+      // never swallowed by the post-detail param route.
+      GoRoute(
+        path: '/community/learn/videos/:id',
+        name: CareblazersRoutes.communityLearnVideo,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            LearnVideoDetailScreen(videoId: state.pathParameters['id'] ?? ''),
+      ),
+      GoRoute(
+        path: '/community/learn/playbooks/:id',
+        name: CareblazersRoutes.communityLearnPlaybook,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            LearnPlaybookDetailScreen(
+          playbookId: state.pathParameters['id'] ?? '',
+        ),
       ),
       GoRoute(
         path: '/community/:postId',

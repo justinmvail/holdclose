@@ -14,6 +14,7 @@ import '../../routing/router.dart' show CareblazersRoutes;
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/segmented_subnav.dart';
+import 'learn_screen.dart';
 
 part 'community_feed_screen.g.dart';
 
@@ -241,13 +242,10 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
           ],
         );
       case CommunitySegment.learn:
-        return const _SegmentPlaceholder(
-          key: CommunityFeedScreen.learnSegmentKey,
-          icon: Icons.play_circle_outline,
-          title: 'Learn is on the way',
-          body: "Dr. Natali's videos and step-by-step playbooks will "
-              'live here.',
-        );
+        // The Careblazers content library — videos + playbooks (Phase
+        // 14.37). Keyed with [learnSegmentKey] so the sub-nav swap tests
+        // still find the Learn body.
+        return const LearnScreen(key: CommunityFeedScreen.learnSegmentKey);
       case CommunitySegment.support:
         return const _SegmentPlaceholder(
           key: CommunityFeedScreen.supportSegmentKey,
