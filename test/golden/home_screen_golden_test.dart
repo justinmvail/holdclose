@@ -4,7 +4,10 @@ import 'package:careblazers/providers/auth_provider.dart';
 import 'package:careblazers/providers/home_clock_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/routing/router.dart';
+import 'package:careblazers/screens/appointment/appointment_list_screen.dart'
+    show appointmentListClockProvider;
 import 'package:careblazers/screens/medication/dose_log_screen.dart';
+import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/theme.dart';
 import 'package:drift/native.dart';
@@ -57,6 +60,19 @@ void main() {
                   ),
                 ),
                 doseLogClockProvider.overrideWithValue(() => _goldenNow),
+                // The Next Appointment card (Phase 14.10) reads the
+                // appointment repository; an empty in-memory repo keeps
+                // the golden deterministic and renders the card's "No
+                // upcoming appointments." empty state.
+                appointmentRepositoryBackendProvider.overrideWithValue(
+                  AppointmentRepository(
+                    CareblazersDatabase(NativeDatabase.memory()),
+                    clock: () => _goldenNow,
+                  ),
+                ),
+                appointmentListClockProvider.overrideWithValue(
+                  () => _goldenNow,
+                ),
               ],
               child: SizedBox(
                 width: 390,

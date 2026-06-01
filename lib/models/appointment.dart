@@ -75,7 +75,10 @@ abstract class Provider with _$Provider {
 /// agenda positions the caregiver has ticked off — persisted alongside
 /// the agenda itself so the cross-off state survives an app relaunch
 /// mid-visit. [notes] is the post-appointment debrief and stays null
-/// until the caregiver fills it in.
+/// until the caregiver fills it in. [driverName] is the optional name of
+/// whoever is driving the loved one to this visit — surfaced on the Home
+/// "Next Appointment" card (Phase 14.10) so the caregiver sees the ride
+/// arrangement at a glance; null when no driver has been assigned.
 ///
 /// FK on [providerId] cascades on delete — wiping a provider wipes its
 /// appointment history alongside it.
@@ -91,6 +94,7 @@ abstract class Appointment with _$Appointment {
     required AppointmentStatus status,
     @Default(<int>{}) Set<int> completedAgendaIndices,
     String? notes,
+    String? driverName,
   }) = _Appointment;
 
   factory Appointment.fromJson(Map<String, dynamic> json) =>

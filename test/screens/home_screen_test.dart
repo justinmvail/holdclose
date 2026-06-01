@@ -5,9 +5,12 @@ import 'package:careblazers/providers/auth_provider.dart';
 import 'package:careblazers/providers/home_clock_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/routing/router.dart';
+import 'package:careblazers/screens/appointment/appointment_list_screen.dart'
+    show appointmentListClockProvider;
 import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/medication/dose_log_screen.dart';
 import 'package:careblazers/screens/settings/settings_screen.dart';
+import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/theme.dart';
 import 'package:drift/native.dart';
@@ -44,6 +47,15 @@ Future<GoRouter> _pumpHome(
   final MedicationRepository medRepo =
       MedicationRepository(medDb, clock: () => now);
 
+  // The Next Appointment card (Phase 14.10) reads the appointment
+  // repository. An empty in-memory database keeps Home off the on-device
+  // sqlite file and renders the card's "No upcoming appointments." state.
+  final CareblazersDatabase apptDb =
+      CareblazersDatabase(NativeDatabase.memory());
+  addTearDown(apptDb.close);
+  final AppointmentRepository apptRepo =
+      AppointmentRepository(apptDb, clock: () => now);
+
   final GoRouter router = buildRouter();
   await tester.pumpWidget(
     ProviderScope(
@@ -53,6 +65,8 @@ Future<GoRouter> _pumpHome(
         homeClockProvider.overrideWithValue(() => now),
         medicationRepositoryBackendProvider.overrideWithValue(medRepo),
         doseLogClockProvider.overrideWithValue(() => now),
+        appointmentRepositoryBackendProvider.overrideWithValue(apptRepo),
+        appointmentListClockProvider.overrideWithValue(() => now),
       ],
       child: MaterialApp.router(
         routerConfig: router,

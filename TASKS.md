@@ -1347,7 +1347,7 @@ amber / plum are placeholders to be discarded.
   empty state when there are no scheduled doses; goldens for empty,
   partial, all-taken.
 
-- [ ] **Phase 14.10: Next Appointment card on Home
+- [x] **Phase 14.10: Next Appointment card on Home
   (`lib/widgets/home/next_appointment_card.dart`).** Reads the
   appointment provider; picks the soonest upcoming appointment
   (`status != cancelled` AND `startsAt > now`). Row renders status

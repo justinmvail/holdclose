@@ -8,6 +8,7 @@ import '../routing/router.dart';
 import '../theme.dart';
 import '../widgets/home/emergency_card_pin.dart';
 import '../widgets/home/medications_today_card.dart';
+import '../widgets/home/next_appointment_card.dart';
 
 /// Home tab root — the "Today" dashboard (BUILD_SPEC.md §4 Home IA,
 /// Phase 14.7+).
@@ -66,6 +67,11 @@ class HomeScreen extends ConsumerWidget {
             // Medications Today (Phase 14.9): today's doses with a status
             // dot + an X-of-Y count, tapping through to the full dose log.
             const MedicationsTodayCard(),
+            const SizedBox(height: 16),
+            // Next Appointment (Phase 14.10): the soonest upcoming visit
+            // with a today/future status dot, tapping through to the
+            // appointment detail screen.
+            const NextAppointmentCard(),
           ],
         ),
       ),
