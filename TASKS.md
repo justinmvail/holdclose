@@ -1189,3 +1189,614 @@ the API contract.
   Tests use mocked D1/R2/Analytics clients + assert the email
   sends with the right severity. Document the threshold schema
   in `backend/README.md` so future tuning is obvious.
+
+---
+
+## Phase 14 — IA refactor: fixed 5-tab bar (Home · Medical · Care Team · Chat · Community)
+
+Replaces the post-home-refactor bar (Home · Journal · Meds · Visits ·
+Community) with the layout in `docs/MENU_LAYOUT_SPEC.md` (added in
+14.1): five always-visible tabs, two-level-max depth, tile hubs for
+Medical + Care Team, direct landings for Chat + Community, persistent
+path-header with word-labeled Back on every feature page.
+
+Scope decisions (locked at the start of the phase, not up for litigation
+mid-iter): every new tile is a full feature build with its own freezed
+model + drift table + provider + screen + tests; Emergency Card replaces
+the old CrisisCardScreen (delete the old); the Home FAB opens a
+multi-kind add sheet with voice; the `useTrackers` /
+`medicationsEnabled` / `appointmentsEnabled` flags are deleted (the bar
+is fixed). Visual tokens come from `lib/theme.dart` —
+`docs/MENU_LAYOUT_SPEC.md` is explicit that the HTML's coral / teal /
+amber / plum are placeholders to be discarded.
+
+### Foundation — spec, shared widgets, shell rewrite
+
+- [ ] **Phase 14.1: Land the layout spec + rewrite BUILD_SPEC.md §4–§5.**
+  Copy `~/Downloads/menu_layout_spec.md` to
+  `docs/MENU_LAYOUT_SPEC.md` (verbatim — it's the authoritative IA
+  doc Phase 14 builds against; downstream tasks reference it).
+  Rewrite BUILD_SPEC.md §4.1 to describe the fixed 5-tab bar
+  (`Home · Medical · Team · Chat · Community`), the 2-level-max
+  depth rule, the path-header + word-labeled-Back invariant, the
+  no-hamburger rule, and the tile-hub vs. direct-landing distinction.
+  Replace the §4.2 screen-map ASCII with the new tree. Add new §5
+  sub-sections describing Medical hub, Care Team hub, Chat list,
+  Community sub-nav (Feed / Learn / Support), Emergency Card (which
+  replaces §5.9 Crisis). Mark §5.7 Library + §5.9 Crisis as
+  "Removed in Phase 14 — see Phase 14.23 / 14.41." No code, no tests.
+
+- [ ] **Phase 14.2: PathHeader widget (`lib/widgets/path_header.dart`
+  + `test/widgets/path_header_test.dart` +
+  `test/golden/path_header_golden_test.dart`).** Reusable header at
+  the top of every feature page below a hub. Renders: a breadcrumb
+  row (e.g. `Home › Medical › Medications`) with `›` separators and
+  every non-terminal segment tappable (calls `context.go(crumb.route)`);
+  a title row with optional leading icon (24px); a word-labeled Back
+  control below the title (e.g. `‹ Back to Medical`). Constructor:
+  `breadcrumbs: List<PathHeaderCrumb>` (terminal crumb's `route` is
+  null), `title`, `leadingIcon?`, `backLabel`, `onBack` (defaults to
+  `context.pop()` if poppable, else `context.go` to the deepest
+  routed crumb). Hub landings render the title row only —
+  `breadcrumbs.length == 1` suppresses the breadcrumb row + Back.
+  Brand tokens: navy text, `careblazersColors.primarySoft` for `›`,
+  teal accent on the Back chevron. Tests cover tap-parent-routes,
+  tap-Back, hub-landing-render. Golden for three-crumb + single-crumb.
+
+- [ ] **Phase 14.3: HubTile + HubGrid widgets (`lib/widgets/hub_tile.dart`
+  + `test/widgets/hub_tile_test.dart` +
+  `test/golden/hub_grid_golden_test.dart`).** `HubTile` = 32px icon
+  on an 11-radius colored chip + 15.5pt bold label + 11pt sub-label,
+  96px min height, 18-radius outer card, 1.5px brand border. `HubGrid`
+  = 2-column responsive grid with 12px gap + 16px page padding, wraps
+  in a single scroll view. Tile chip colors pull from
+  `careblazersColors` (the HTML's coral/teal/amber/plum are
+  placeholders per `docs/MENU_LAYOUT_SPEC.md` — discard). Tap fires
+  the callback. Tests: 2-col layout at 360 + 412 + 768 widths; tap
+  callback fires once. Golden for a populated 6-tile grid.
+
+- [ ] **Phase 14.4: Rewrite `lib/widgets/tab_scaffold.dart` for the
+  fixed 5-tab bar.** Drop `visibleBranchIndicesFor` + the
+  `AppSettings` watch entirely. New destinations in exact order:
+  Home (`Icons.home_outlined` / `Icons.home`), Medical
+  (`Icons.local_hospital_outlined` / `Icons.local_hospital`), Team
+  (`Icons.diversity_3_outlined` / `Icons.diversity_3` — bar label
+  "Team" since "Care Team" is too wide per the spec), Chat
+  (`Icons.chat_bubble_outline` / `Icons.chat_bubble`), Community
+  (`Icons.forum_outlined` / `Icons.forum`). `tabBranchPaths` =
+  `['/', '/medical', '/team', '/chat', '/community']`. Tapping the
+  already-active tab calls
+  `navigationShell.goBranch(currentIndex, initialLocation: true)` so
+  the branch pops to its hub. Update
+  `test/widgets/tab_scaffold_test.dart` to assert all 5 always
+  render + re-tap-pops-to-hub; refresh
+  `test/golden/tab_scaffold_golden_test.dart`.
+
+- [ ] **Phase 14.5: Rewrite `lib/routing/router.dart` shell branches.**
+  Replace the 5 existing branches with the new 5: `/` → HomeScreen,
+  `/medical` → MedicalHubScreen (Phase 14.15 — until then, render a
+  Scaffold with an `AppBar(title: Text('Medical'))` placeholder so
+  the shell compiles), `/team` → CareTeamHubScreen (Phase 14.26
+  placeholder), `/chat` → ConversationListScreen, `/community` →
+  CommunityFeedScreen. Add new route names to `CareblazersRoutes`:
+  `medicalHub`, `medicalHealthLog`, `medicalCarePlan`,
+  `medicalSchedule`, `medicalCardsHub`, `medicalCardsEmergency`,
+  `medicalCardsPoa`, `medicalCardsIds`, `teamHub`, `teamCalendar`,
+  `teamTasks`, `teamShifts`, `teamCircle`, `teamCircleInvite`,
+  `teamActivity`, `teamExpenses`. Move the existing `/medications/*`,
+  `/appointments/*`, `/journal`, `/journal/new`, `/journal/:id`
+  routes to top-level pushed routes (`parentNavigatorKey:
+  rootNavigatorKey`). Remove the existing top-level `/chat` /
+  `/chat/:id` routes — `/chat` is now a shell branch and `/chat/:id`
+  pushes onto that branch's navigator. Keep `/crisis` top-level
+  redirecting to `/medical/cards/emergency` (Phase 14.23 deletes the
+  old screen but keeps the route alive for deep-link compat).
+  Update `test/routing/router_test.dart` to cover every old + new
+  path resolving + push semantics on the new pushed routes + tab
+  switch semantics on the new shell branches.
+
+- [ ] **Phase 14.6: Delete tracker toggles from settings.** Remove
+  `useTrackers`, `medicationsEnabled`, `appointmentsEnabled` fields
+  from `lib/models/settings.dart` (regenerate `settings.freezed.dart`
+  / `settings.g.dart` via `dart run build_runner build --delete-
+  conflicting-outputs`). Drop the matching mutators from
+  `lib/providers/settings_provider.dart` and the toggle UI from
+  `lib/screens/settings/settings_screen.dart`. Make
+  `AppSettings.fromJson` tolerate persisted state that still carries
+  the removed keys (silently ignore unknowns) so demo seed +
+  pre-existing user state hydrates clean. Tests: settings notifier
+  no longer exposes the removed fields; settings screen golden
+  refresh; fromJson drops unknown keys without throwing.
+
+### Home — "Today" dashboard
+
+- [ ] **Phase 14.7: HomeScreen scaffold rewrite
+  (`lib/screens/home_screen.dart`).** Tear out the "chat at the
+  root" layout from the post-home-refactor commit (b8ddd5e). New
+  scaffold: AppBar-less, top row inside the body with a greeting on
+  the left (`Good morning, ${caregiverName}` — switch
+  `morning`/`afternoon`/`evening` by hour) + profile icon
+  (`Icons.account_circle_outlined`, 32px) on the right pushing
+  `/settings`. Body is a `ListView` with 16px padding carrying the
+  dashboard cards — this task lays the scroll view + greeting +
+  profile only; cards arrive in 14.8–14.12; FAB slot reserved for
+  14.13. Tests: greeting text varies by hour (mock the clock);
+  profile tap pushes Settings. Refresh
+  `test/golden/home_screen_golden_test.dart` to the empty scaffold.
+
+- [ ] **Phase 14.8: Pinned Emergency Card on Home
+  (`lib/widgets/home/emergency_card_pin.dart`).** First card in the
+  Home ListView, full-width, orange→deeper-orange gradient using
+  brand tokens, white shield icon in a 34px chip + "Emergency Card"
+  bold label + "One tap — info for first responders" sub-label.
+  Tap pushes `/medical/cards/emergency` (the route exists from 14.5;
+  the destination screen lands in 14.23). Renders consistently
+  whether the destination screen is built yet. Tests: tap pushes
+  the right route; semantic label for screen readers reads
+  "Emergency Card. Show to first responders." Golden in light + dark.
+
+- [ ] **Phase 14.9: Medications Today card on Home
+  (`lib/widgets/home/medications_today_card.dart`).** Reads the
+  existing medication + dose-log providers; computes today's
+  scheduled doses (between local midnights). Header: "Medications
+  Today" + a `X of Y` count. Dose rows with status dot (teal=taken,
+  amber=due-within-2h, coral=overdue), drug name + strength, time +
+  status string. Card tap pushes `/medications/today`. Empty state:
+  "No medications today." Skeleton-loading state while the provider
+  resolves. Tests: X-of-Y math under a mix of taken/due/overdue;
+  empty state when there are no scheduled doses; goldens for empty,
+  partial, all-taken.
+
+- [ ] **Phase 14.10: Next Appointment card on Home
+  (`lib/widgets/home/next_appointment_card.dart`).** Reads the
+  appointment provider; picks the soonest upcoming appointment
+  (`status != cancelled` AND `startsAt > now`). Row renders status
+  dot (coral if today, navy if future), provider name + specialty +
+  formatted time + driver name (from `appointment.driverName` if
+  present). Card tap pushes `/appointments/:id`. Empty state: "No
+  upcoming appointments." Tests + golden for populated + empty.
+
+- [ ] **Phase 14.11: Recent Activity card on Home
+  (`lib/widgets/home/recent_activity_card.dart`).** Aggregates the
+  latest 3 entries across journal + dose log + appointment changes
+  + (when Phase 14.32 lands) care-team handoffs, sorted by
+  `createdAt desc`. Each row: origin-color dot (plum=journal,
+  teal=dose, coral=appointment, navy=team), short summary, relative
+  time ("20 min ago"). Tap routes to the source detail. Empty state
+  matches the rest of the dashboard. Tests cover the mixed-source
+  ordering invariant (an out-of-order insertion across sources still
+  surfaces the right top 3) + goldens.
+
+- [ ] **Phase 14.12: AI "catch me up" card
+  (`lib/widgets/home/catch_me_up_card.dart` +
+  `lib/providers/llm_provider.dart` +
+  `lib/seed/fake_llm_seeds.dart`).** Optional card above Recent
+  Activity. Calls a new
+  `LLMProvider.generateActivitySummary({lastNHours: 24, events})`
+  with the last 24h of journal + dose + appointment + handoff
+  events, streams a single-paragraph plain-language summary, and
+  renders it with a refresh action. Caches the result for 30 min in
+  shared_preferences (key
+  `home.catch_me_up.${date.yyyyMMdd}.${hashOfEvents}`) so reopening
+  Home doesn't burn a generation per open. Add
+  `generateActivitySummary` to the LLMProvider interface + author a
+  deterministic canned response in FakeLLMProvider + a real-impl
+  stub in ClaudeCLIProvider. Tests: fake returns the canned summary;
+  cache hit returns the stored copy without invoking the provider;
+  expired cache regenerates. Golden for the populated card.
+
+- [ ] **Phase 14.13: Multi-kind Add FAB + bottom sheet
+  (`lib/widgets/home/add_action_sheet.dart`).** Floating action
+  button (teal background, 58px, white `+` glyph) anchored
+  bottom-right of HomeScreen with safe-area + tab-bar padding. Tap
+  opens a `showModalBottomSheet` with four word-labeled rows: 1)
+  "Journal entry" — leading book icon, pushes `/journal/new`; 2)
+  "Med dose" — pill icon, pushes `/medications/today`; 3)
+  "Appointment" — calendar icon, pushes `/appointments/new`; 4)
+  "Quick note" — note icon, pushes `/journal/new?kind=note`. Each
+  row has the existing `VoiceButton` on the right that, when
+  pressed, captures voice and forwards the transcript to the
+  destination via `extra: AddSheetTranscript(text: …, kind: …)`.
+  Tests: every row's tap pushes the correct route; the voice button
+  is wired per row; bottom sheet dismiss restores Home focus.
+
+- [ ] **Phase 14.14: Voice intake plumbing
+  (`lib/services/voice_intake.dart`).** Small service bridging
+  voice transcripts from Add FAB rows into destination screens.
+  For `/medications/today`, the transcript pre-fills the dose note
+  field. For `/appointments/new`, the transcript pre-fills the
+  visit-notes textarea. For `/journal/new` (entry + note kinds), the
+  existing wizard already supports voice — pass the transcript
+  through as the wizard's initial value (`extra:
+  JournalWizardArgs(initialTranscript: …)`). Tests cover the
+  transcript flow end-to-end via widget tests + a permission-denied
+  path that surfaces a clear snackbar.
+
+### Medical hub + sub-screens
+
+- [ ] **Phase 14.15: MedicalHubScreen
+  (`lib/screens/medical/medical_hub_screen.dart`).** Mounts at
+  `/medical` (shell branch — replace the placeholder added in 14.5).
+  Renders PathHeader (single crumb "Medical"; no Back since it's a
+  hub) + HubGrid with 7 tiles in this order: Medications
+  (`Icons.medication_outlined`, pushes `/medications`), Med Schedule
+  (`Icons.schedule_outlined`, `/medical/schedule`), Appointments
+  (`Icons.event_outlined`, `/appointments`), Health Log
+  (`Icons.monitor_heart_outlined`, `/medical/health-log`), Care Plan
+  (`Icons.assignment_outlined`, `/medical/care-plan`), Cards & Docs
+  (`Icons.badge_outlined`, `/medical/cards`), Journal
+  (`Icons.book_outlined`, `/journal`). Tests: every tile present in
+  the documented order + tap routes correctly; golden of the
+  populated hub.
+
+- [ ] **Phase 14.16: Health Log model + drift table + provider
+  (`lib/models/health_log_entry.dart`, `lib/db/tables.dart`,
+  `lib/providers/health_log_provider.dart`).** Freezed
+  `HealthLogEntry` (id, patientId, recordedAt, kind enum
+  [vitals/symptom/note], severity 1-5 nullable, systolic, diastolic,
+  heartRate, temperatureF, notes). Drift `HealthLogEntries` table +
+  migration step in `lib/db/database.dart` (bump schemaVersion + add
+  the new step). AsyncNotifier provider with `add`, `update`,
+  `delete`, `byPatient`, `todayByKind` selectors. Tests: round-trip
+  through fromJson/toJson; CRUD via the fake storage; the
+  `todayByKind` selector buckets correctly across local-midnight.
+
+- [ ] **Phase 14.17: Health Log screens
+  (`lib/screens/medical/health_log_screen.dart` +
+  `lib/screens/medical/health_log_entry_form.dart`).** List at
+  `/medical/health-log`: PathHeader (`Home › Medical`, title "Health
+  Log", back to Medical) + entries grouped by day (newest first)
+  with kind glyph + a one-line summary (vitals → "BP 130/82 ·
+  HR 76"; symptom → "Headache · 3/5"; note → first 60 chars) +
+  relative time. Header FAB pushes the entry form at
+  `/medical/health-log/new` and `/medical/health-log/:id/edit`:
+  kind picker, conditional vitals fields (only render BP/HR/temp
+  inputs when kind=vitals), 1-5 severity chip row for kind=symptom,
+  notes textarea always present, save + delete actions. Tests cover
+  conditional-field rendering + form validation + goldens for empty
+  list, populated list, new-form, edit-form.
+
+- [ ] **Phase 14.18: Care Plan model + drift table + provider
+  (`lib/models/care_plan_section.dart`, `lib/db/tables.dart`,
+  `lib/providers/care_plan_provider.dart`).** Freezed
+  `CarePlanSection` (id, patientId, slot enum
+  [morning/afternoon/evening/night/asNeeded], title, body (markdown
+  string), order int, appliesInStage enum
+  [early/middle/late/anyStage]). Drift table + migration step.
+  AsyncNotifier provider with `list`, `add`, `update`, `reorder`,
+  `delete`, and a `bySlot()` selector. Tests cover CRUD + reorder
+  integrity (no duplicate order ints; gaps closed on delete).
+
+- [ ] **Phase 14.19: Care Plan screen
+  (`lib/screens/medical/care_plan_screen.dart`).** Mounts at
+  `/medical/care-plan`. PathHeader + segmented control at the top
+  (All / Early / Middle / Late) that filters which sections show.
+  Body groups visible sections by slot (Morning, Afternoon, Evening,
+  Night, As needed) and renders each section as a card with title +
+  rendered markdown body + stage chip. Long-press a card to reorder
+  within its slot; tap to edit (pushed form); FAB adds a new section
+  with slot + stage pickers. Tests cover the stage filter + slot
+  grouping + reorder; goldens for empty + populated.
+
+- [ ] **Phase 14.20: Med Schedule screen
+  (`lib/screens/medical/med_schedule_screen.dart`).** Mounts at
+  `/medical/schedule`. PathHeader + a vertical 24-hour timeline (6am
+  at the top by default; scroll to see midnight–6am). Time labels on
+  the left gutter at hour marks. Today's scheduled doses (from the
+  medication + dose-log providers) render as markers at their
+  scheduled time with the medication name, strength, and current
+  status (taken/due/missed) reusing Home's dose-card dot colors.
+  Header row has `‹ Yesterday` / `Tomorrow ›` chips to cycle the
+  displayed day. Tests: marker positions correspond to scheduled
+  times within ±1px; day-cycling navigation works; goldens for
+  today, yesterday, tomorrow.
+
+- [ ] **Phase 14.21: Documents models + drift tables + provider
+  (`lib/models/document.dart`, `lib/db/tables.dart`,
+  `lib/providers/documents_provider.dart`).** Three drift tables in
+  one task: `EmergencyCards`, `PowerOfAttorneyDocs`,
+  `IdentificationDocs`. Shared columns: id, patientId, updatedAt,
+  attachmentPath?. Per-kind columns: EmergencyCard carries
+  conditions / medications / allergies (each TEXT, JSON-encoded list
+  of strings), emergencyContacts (JSON list of `{name, relation,
+  phone}`), insurance (`{carrier, policyNumber, groupNumber}`),
+  donorStatus enum. POA carries agentName, alternateName?, scope
+  enum [medical/financial/general], effectiveDate, scanPath?. ID
+  carries kind enum [driverLicense/stateId/passport/medicare/
+  insuranceCard], idNumber, expiresOn?, photoFrontPath?,
+  photoBackPath?. Freezed models per kind + AsyncNotifier provider
+  per kind (or one provider with three lists — pick the pattern that
+  matches existing providers most closely). Migration step. Tests:
+  round-trip + CRUD + JSON list encoding survives the boundary.
+
+- [ ] **Phase 14.22: Cards & Documents hub screen
+  (`lib/screens/medical/cards_documents_hub_screen.dart`).** Mounts
+  at `/medical/cards`. PathHeader (`Home › Medical`, title "Cards &
+  Documents", back to Medical). Renders a 2-column HubGrid with 3
+  tiles: Emergency Card (orange chip, opens
+  `/medical/cards/emergency`), Power of Attorney (navy chip, opens
+  `/medical/cards/poa`), Identification (teal chip, opens
+  `/medical/cards/ids`). Tests + golden.
+
+- [ ] **Phase 14.23: Emergency Card screen — replaces CrisisCardScreen
+  (`lib/screens/medical/emergency_card_screen.dart`).** Mounts at
+  `/medical/cards/emergency`. PathHeader (`Home › Medical › Cards &
+  Documents`, title "Emergency Card", back to Cards & Documents).
+  Top of body: bold "ICE CARD — Show to First Responders" headline
+  in coral. Sections (each a labeled bordered card): Patient (name +
+  DOB + photo thumbnail), Conditions (chips), Medications (rows from
+  the medications provider — read-only mirror), Allergies (chips),
+  Emergency Contacts (rows with a call button per contact via
+  `url_launcher` `tel:` URIs), Insurance (carrier + policy + group),
+  Donor status. AppBar action pushes `/medical/cards/emergency/edit`
+  for the form. Update the top-level `/crisis` route in
+  `lib/routing/router.dart` to redirect to
+  `/medical/cards/emergency` so notification deep-links keep
+  resolving. Remove the AppBar action on MedicationListScreen that
+  pushed `/crisis` (the new entry points are the Home pin + the
+  Cards hub). Delete `lib/screens/crisis/crisis_card_screen.dart`,
+  `lib/screens/crisis/crisis_card_screen.g.dart`, and any tests +
+  goldens under `test/screens/crisis/` + `test/golden/crisis_*`.
+  Tests + goldens for populated + empty Emergency Card states.
+
+- [ ] **Phase 14.24: POA + IDs screens
+  (`lib/screens/medical/poa_screen.dart`,
+  `lib/screens/medical/ids_screen.dart`).** POA at
+  `/medical/cards/poa`: PathHeader + a single-document card with
+  agent name, alternate, scope chip, effective date, scan
+  thumbnail (taps to open full-screen viewer), Share action via
+  `share_plus`. Edit form pushes at `/medical/cards/poa/edit`. IDs
+  at `/medical/cards/ids`: PathHeader + list of IDs with kind chip,
+  masked id number (`****1234`), expires date in coral when within
+  60 days or past. Tap an ID opens
+  `/medical/cards/ids/:id` with front + back photo thumbnails,
+  unmasked id number, expires, Share. FAB on the list adds a new ID.
+  Tests cover expiry coloring at boundaries + masking + form
+  validation; goldens for empty + populated.
+
+### Care Team hub + sub-screens
+
+- [ ] **Phase 14.25: Care circle models + drift tables + provider
+  (`lib/models/caregiver.dart`,
+  `lib/models/care_circle_membership.dart`, `lib/db/tables.dart`,
+  `lib/providers/care_circle_provider.dart`).** Freezed `Caregiver`
+  (id, displayName, role enum
+  [primary/spouse/child/sibling/aide/agency/friend/other], phone?,
+  email?, avatarPath?). Freezed `CareCircleMembership` (id,
+  caregiverId, patientId, permissionLevel enum
+  [owner/editor/viewer], invitedAt, acceptedAt?). Drift tables +
+  migration. AsyncNotifier provider exposing the caregiver list +
+  pending invites + an `acceptInvite(id)` action that flips
+  `acceptedAt`. This is the data foundation for everything in
+  14.26–14.33. Tests cover CRUD + the accept-invite transition.
+
+- [ ] **Phase 14.26: CareTeamHubScreen
+  (`lib/screens/team/care_team_hub_screen.dart`).** Mounts at
+  `/team` (shell branch — replace the placeholder from 14.5).
+  PathHeader (single crumb "Care Team"; no Back). HubGrid with 6
+  tiles in this order: Calendar
+  (`Icons.calendar_view_week_outlined`, pushes `/team/calendar`),
+  Tasks (`Icons.task_alt_outlined`, `/team/tasks`), Shifts
+  (`Icons.access_time_outlined`, `/team/shifts`), Care Circle
+  (`Icons.diversity_3_outlined`, `/team/circle`), Activity
+  (`Icons.timeline_outlined`, `/team/activity`), Expenses
+  (`Icons.account_balance_wallet_outlined`, `/team/expenses`).
+  Tests + golden.
+
+- [ ] **Phase 14.27: Care Circle roster screen
+  (`lib/screens/team/care_circle_screen.dart`).** Mounts at
+  `/team/circle`. PathHeader + a list of caregivers from 14.25's
+  provider. Each row: avatar (initials fallback), display name,
+  role chip, permission badge (Owner/Editor/Viewer), a tap-to-call
+  trailing button on phone if present, and a long-press menu to
+  edit role + permission. Header action "Invite caregiver" pushes
+  `/team/circle/invite`. Empty state: "Your care circle is just you
+  right now. Invite someone to share the load." Tests + golden for
+  populated + empty.
+
+- [ ] **Phase 14.28: Care Circle invite form
+  (`lib/screens/team/invite_caregiver_screen.dart`).** Mounts at
+  `/team/circle/invite`. Form: display name (required), role
+  picker, email OR phone (at least one required), permission level
+  radio (Owner/Editor/Viewer defaulting to Viewer). Send action
+  creates a pending `CareCircleMembership` row (acceptedAt=null) +
+  composes a share message ("Join my Careblazers care circle:
+  https://careblazers.app/invite/<token>") and either uses
+  `share_plus` if it's already a dep or copies to clipboard with a
+  snackbar. Token generation + acceptance back-end is deferred to a
+  later phase — this task lands the data + the share surface only.
+  Tests cover form validation + the pending row landing in storage.
+
+- [ ] **Phase 14.29: Shared Calendar model + drift table + provider +
+  screen (`lib/models/care_event.dart`, `lib/db/tables.dart`,
+  `lib/providers/care_events_provider.dart`,
+  `lib/screens/team/calendar_screen.dart`).** Freezed `CareEvent`
+  (id, kind enum [appointment/task/shift/note], title, start, end?,
+  ownerCaregiverId?, patientId, externalRef?). Drift table +
+  migration. Provider unifies three data sources: existing
+  appointments project to `kind=appointment` events (read-only —
+  no double-storage; the provider materializes them from the
+  appointment list); 14.30 Tasks project to `kind=task`; 14.31
+  Shifts project to `kind=shift`; ad-hoc notes live natively as
+  `kind=note`. Screen at `/team/calendar`: PathHeader + a 7-day
+  week-view grid (7 columns × 24-hour rows, scrollable). Each event
+  renders as a colored block (coral=appointment, teal=task,
+  amber=shift, plum=note). Tap a block routes to the source detail.
+  Week-cycling arrows in the header. Tests cover the four-source
+  projection + tap routing + golden for an event-rich week.
+
+- [ ] **Phase 14.30: Tasks model + drift table + provider + screen
+  (`lib/models/care_task.dart`, `lib/db/tables.dart`,
+  `lib/providers/care_tasks_provider.dart`,
+  `lib/screens/team/tasks_screen.dart`).** Freezed `CareTask` (id,
+  title, body?, dueAt?, assigneeCaregiverId?, claimedAt?,
+  completedAt?, patientId). Drift table + migration. Provider with
+  the usual CRUD + `claim(taskId, caregiverId)` + `unclaim(taskId)`
+  + `complete(taskId)`. Screen at `/team/tasks`: PathHeader +
+  segmented (Open / Claimed / Done) + task list. Each card: title,
+  due time, assignee avatar/name if claimed, action buttons that
+  swap by state (Open → Claim; Claimed-by-me → Complete + Unclaim;
+  Done → no actions). Header FAB pushes a create-task sheet with
+  title + body + due picker + optional assignee. Tests cover the
+  state machine + segmented filtering; goldens for the three states.
+
+- [ ] **Phase 14.31: Shifts model + drift table + provider + screen
+  (`lib/models/care_shift.dart`, `lib/db/tables.dart`,
+  `lib/providers/care_shifts_provider.dart`,
+  `lib/screens/team/shifts_screen.dart`).** Freezed `CareShift` (id,
+  caregiverId, start, end, patientId, notes?). Drift table +
+  migration. Provider with CRUD + `gapsFor(date)` that computes
+  hour-band uncovered intervals on a given day. Screen at
+  `/team/shifts`: PathHeader + a 7-day strip starting today. Each
+  day row shows a 24-hour bar with colored hour-bands per active
+  caregiver + red striped bands where there's no coverage. A
+  caption per day summarizes ("3 caregivers · 2h uncovered: 6am–8am").
+  FAB schedules a new shift (caregiver picker + start + end + notes).
+  Tests cover `gapsFor` at hour boundaries + multi-caregiver overlap;
+  goldens for a fully-covered day + a day with gaps.
+
+- [ ] **Phase 14.32: Care Team activity feed
+  (`lib/screens/team/activity_screen.dart`).** Mounts at
+  `/team/activity`. PathHeader + a chronological feed of every
+  meaningful event: dose taken, journal entry, appointment kept,
+  task completed, shift handoff, expense added. Same source pool as
+  Home's Recent Activity card (Phase 14.11) but unbounded paginated
+  scroll + filter-chip row at the top (All / Doses / Notes / Tasks
+  / Shifts / Expenses, multi-select toggle). Each row tap routes to
+  the source detail. Pull-to-refresh re-queries the providers.
+  Tests cover filter combinations + ordering; golden for a populated
+  feed.
+
+- [ ] **Phase 14.33: Expenses model + drift table + provider + screen
+  (`lib/models/expense.dart`, `lib/db/tables.dart`,
+  `lib/providers/expenses_provider.dart`,
+  `lib/screens/team/expenses_screen.dart`).** Freezed `Expense` (id,
+  amountCents, currency (default USD), description,
+  paidByCaregiverId, paidAt, kind enum
+  [meds/groceries/transport/equipment/aide/other], receiptPath?,
+  patientId). Drift table + migration. Provider with CRUD + a
+  `monthlyTotals()` selector grouped by `YYYY-MM`. Screen at
+  `/team/expenses`: PathHeader + a sticky monthly-total card at the
+  top + a list grouped by month with kind chips and the paying
+  caregiver's initials. FAB pushes a create form (amount, kind,
+  description, paid date, payer picker, optional receipt — uses
+  `image_picker` if it's a dep, otherwise a path-text field).
+  Tests + goldens.
+
+### Chat tab move
+
+- [ ] **Phase 14.34: Chat tab branch + PathHeader integration
+  (`lib/screens/chat/conversation_list_screen.dart`,
+  `lib/screens/chat/chat_screen.dart`).** Conversation list now
+  mounts at `/chat` as a shell branch (the router rewrite in 14.5
+  already wired this). Wrap the existing list body in PathHeader
+  (single crumb "Chat"; no Back since it's a tab landing). The
+  thread at `/chat/:id` (now pushed inside the Chat shell branch
+  rather than top-level) renders PathHeader (`Chat › <conversation
+  name>`, back to Chat). Tab-tap on Chat from another tab lands on
+  the list; tab-tap while on a thread pops to the list. Tests cover
+  the tap-pops-to-list invariant + thread-back-returns-to-list +
+  refreshed goldens.
+
+### Community sub-nav
+
+- [ ] **Phase 14.35: SegmentedSubnav widget
+  (`lib/widgets/segmented_subnav.dart` +
+  `test/widgets/segmented_subnav_test.dart` +
+  `test/golden/segmented_subnav_golden_test.dart`).** Three-segment
+  pill control. Each pill: equal width, 11-radius corners, bold
+  13.5pt label. Active = navy fill + white label + navy border;
+  inactive = warm-white fill + slate label + brand-line border.
+  Constructor: `items: List<SegmentedSubnavItem>` (label + key),
+  `activeIndex`, `onChanged`. Tests: tap fires onChanged with the
+  right index; default to activeIndex=0; goldens for active=0,1,2.
+
+- [ ] **Phase 14.36: Community feed gets the Feed/Learn/Support
+  sub-nav (`lib/screens/community/community_feed_screen.dart`).**
+  Add the SegmentedSubnav directly below the screen's title. Three
+  items: Feed (existing body), Learn (LearnScreen — 14.37), Support
+  (SupportScreen — 14.38). Segment swap is in-tab — does NOT change
+  the URL (per `docs/MENU_LAYOUT_SPEC.md`: in-tab sub-nav exists
+  precisely to avoid a 6th tab). Tab-tap on Community from another
+  tab returns to the Feed segment. Pushing into a post detail then
+  popping preserves the active segment via local state. Tests cover
+  segment swap, tab-reentry-resets-to-Feed, and push-pop-segment-
+  preservation; refresh community feed goldens.
+
+- [ ] **Phase 14.37: Learn segment + content seeds
+  (`lib/screens/community/learn_screen.dart`,
+  `lib/seed/learn_content.dart` +
+  `lib/screens/community/learn_video_detail_screen.dart` +
+  `lib/screens/community/learn_playbook_detail_screen.dart`).** Top
+  sub-section "Videos" = a vertical list of seeded Careblazers
+  videos with a thumbnail placeholder, title, duration, and a
+  "Watch" button that pushes
+  `/community/learn/videos/:id` rendering a soft placeholder body
+  (real video hosting is deferred to a later phase). Bottom
+  sub-section "Playbooks" = a list grouped by topic (sundowning,
+  refusal, wandering, repetition, sleep, hygiene, hallucinations,
+  aggression) where each playbook pushes
+  `/community/learn/playbooks/:id` and renders ordered step cards.
+  Seed data lives in `lib/seed/learn_content.dart` (operator-curated,
+  locked content). Tests cover list rendering + navigation +
+  golden.
+
+- [ ] **Phase 14.38: Support segment + caregiver wellbeing tools
+  (`lib/screens/community/support_screen.dart`,
+  `lib/services/burnout_score.dart`,
+  `lib/seed/support_content.dart`).** Three collapsible cards:
+  Burnout self-check (a 10-item Likert 1-5 form scored by
+  `lib/services/burnout_score.dart` returning a band + a
+  Dr.-Natali-style response — purely on-device, no LLM); Respite
+  resources (national hotlines from `support_content.dart` + a
+  "search local respite" link launching a web search URL — local
+  directory deferred); Expert Q&A (read-only list of curated
+  operator-seeded answers from `support_content.dart`). Each card
+  expands inline; the self-check shows the result inline after
+  submit with a "Retake" action. Tests cover the burnout scoring
+  thresholds (low / moderate / high / severe bands) + golden for
+  each card collapsed and expanded.
+
+### Cleanup + tests
+
+- [ ] **Phase 14.39: Update integration_test/demo_tour.dart to walk
+  the new IA.** Replace the existing tour. New sequence: Home →
+  read the dashboard → tap profile icon → close Settings → tap
+  Emergency pin → back → tap a Medications Today dose row → back to
+  Home → tab Medical → tap Health Log tile → add an entry → back to
+  Medical → tap Care Plan → tap Cards & Docs → open Emergency
+  Card → back → tab Team → tap Care Circle → start an invite (don't
+  send) → back → tab Chat → open the first thread → back → tab
+  Community → swipe through Feed → Learn → Support segments → return
+  to Feed. Each tab-landing capture saves a demo screenshot. Tour
+  runs under `flutter test integration_test/demo_tour.dart
+  --dart-define=DEMO_MODE=true`. Updates the demo screenshot
+  baselines.
+
+- [ ] **Phase 14.40: Update CLAUDE.md project layout + invariants.**
+  In CLAUDE.md's `lib/screens/` block: add `medical/`, `team/`;
+  remove `library/`, `crisis/`. In "Architectural invariants",
+  append three new invariants: (1) "Bottom tab bar is always exactly
+  five items in this order — Home, Medical, Team, Chat, Community
+  — never collapsed or conditionally hidden." (2) "Every feature
+  page below a hub uses `PathHeader` with breadcrumb + word-labeled
+  Back. No screen below a hub relies on the OS back button alone."
+  (3) "Maximum two levels deep below a tab landing. Additional depth
+  uses in-page tabs / segmented controls, not another tile grid."
+  Add `docs/MENU_LAYOUT_SPEC.md` to the "When in doubt" list as a
+  primary reference alongside BUILD_SPEC.md. No tests.
+
+- [ ] **Phase 14.41: Sweep dead code.** Delete the now-empty
+  `lib/screens/crisis/` and `lib/screens/library/` directories.
+  Re-run `dart run build_runner build --delete-conflicting-outputs`
+  to drop the removed `useTrackers` / etc. fields from
+  `lib/models/settings.g.dart` + `settings.freezed.dart`. Prune
+  unused imports and any dead route registrations from
+  `lib/routing/router.dart` (the journal-as-tab branch in
+  particular). Scrub the strings "Crisis tab", "Library tab",
+  "useTrackers", "medicationsEnabled", "appointmentsEnabled" from
+  BUILD_SPEC.md prose where they linger (they were referenced
+  outside §4–§5 in earlier phases' text). Delete
+  `test/widgets/tab_scaffold_visibility_test.dart` if it exists +
+  any other tests that exercised the deleted tracker-flag visibility
+  logic. Run `flutter analyze` clean. No new behavior — pure cleanup.
