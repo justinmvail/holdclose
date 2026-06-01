@@ -41,6 +41,7 @@ import '../screens/onboarding/sign_in_screen.dart';
 import '../screens/onboarding/welcome_carousel.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/team/care_circle_screen.dart';
+import '../screens/team/care_team_hub_screen.dart';
 import '../services/voice_intake.dart';
 import '../widgets/tab_scaffold.dart';
 
@@ -621,15 +622,16 @@ GoRouter buildRouter({
               ),
             ],
           ),
-          // Care Team hub (Phase 14.26 replaces this placeholder with
-          // CareTeamHubScreen).
+          // Care Team hub (Phase 14.26) — the 6-tile landing for Calendar,
+          // Tasks, Shifts, Care Circle, Activity, and Expenses. Feature
+          // pages below it land in Phases 14.27+.
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
                 path: '/team',
                 name: CareblazersRoutes.teamHub,
                 builder: (BuildContext context, GoRouterState state) =>
-                    Scaffold(appBar: AppBar(title: const Text('Care Team'))),
+                    const CareTeamHubScreen(),
                 routes: <RouteBase>[
                   // Care Circle roster (Phase 14.27). Pushed onto the root
                   // navigator so the feature page covers the tab bar; the

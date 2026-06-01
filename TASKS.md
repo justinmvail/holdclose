@@ -1570,7 +1570,7 @@ amber / plum are placeholders to be discarded.
   `acceptedAt`. This is the data foundation for everything in
   14.26–14.33. Tests cover CRUD + the accept-invite transition.
 
-- [ ] **Phase 14.26: CareTeamHubScreen
+- [x] **Phase 14.26: CareTeamHubScreen
   (`lib/screens/team/care_team_hub_screen.dart`).** Mounts at
   `/team` (shell branch — replace the placeholder from 14.5).
   PathHeader (single crumb "Care Team"; no Back). HubGrid with 6

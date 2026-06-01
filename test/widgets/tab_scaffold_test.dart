@@ -7,6 +7,7 @@ import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/chat/conversation_list_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/medical/medical_hub_screen.dart';
+import 'package:careblazers/screens/team/care_team_hub_screen.dart';
 import 'package:careblazers/services/chat_repository.dart';
 import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/tab_scaffold.dart';
@@ -217,11 +218,11 @@ void main() {
         expect(_currentPath(router), '/medical');
         expect(find.byType(MedicalHubScreen), findsOneWidget);
 
-        // Team — placeholder hub until Phase 14.26.
+        // Team — the tile hub (Phase 14.26).
         await tester.tap(find.byIcon(Icons.diversity_3_outlined));
         await tester.pumpAndSettle();
         expect(_currentPath(router), '/team');
-        expect(find.widgetWithText(AppBar, 'Care Team'), findsOneWidget);
+        expect(find.byType(CareTeamHubScreen), findsOneWidget);
 
         // Chat — direct landing.
         await tester.tap(find.byIcon(Icons.chat_bubble_outline));

@@ -13,6 +13,7 @@ import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/medical/emergency_card_screen.dart';
 import 'package:careblazers/screens/medical/medical_hub_screen.dart';
+import 'package:careblazers/screens/team/care_team_hub_screen.dart';
 import 'package:careblazers/screens/medication/medication_list_screen.dart';
 import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
 import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
@@ -197,11 +198,11 @@ void main() {
           reason: 'a shell branch keeps the bottom tab bar visible',
         );
 
-        // Care Team branch — placeholder hub until Phase 14.26.
+        // Care Team branch — the tile hub (Phase 14.26).
         router.go('/team');
         await tester.pumpAndSettle();
         expect(currentPath(router), '/team');
-        expect(find.widgetWithText(AppBar, 'Care Team'), findsOneWidget);
+        expect(find.byType(CareTeamHubScreen), findsOneWidget);
         expect(find.byType(NavigationBar), findsOneWidget);
 
         // Chat branch — direct landing.
