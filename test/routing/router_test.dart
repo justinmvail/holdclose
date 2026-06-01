@@ -9,9 +9,9 @@ import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/appointment/appointment_list_screen.dart';
 import 'package:careblazers/screens/chat/conversation_list_screen.dart';
 import 'package:careblazers/screens/community/community_feed_screen.dart';
-import 'package:careblazers/screens/crisis/crisis_card_screen.dart';
 import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
+import 'package:careblazers/screens/medical/emergency_card_screen.dart';
 import 'package:careblazers/screens/medical/medical_hub_screen.dart';
 import 'package:careblazers/screens/medication/medication_list_screen.dart';
 import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
@@ -146,6 +146,8 @@ void main() {
       _NamedRoute(CareblazersRoutes.medicalHub, '/medical'),
       _NamedRoute(
           CareblazersRoutes.medicalCardsEmergency, '/medical/cards/emergency'),
+      _NamedRoute(CareblazersRoutes.medicalCardsEmergencyEdit,
+          '/medical/cards/emergency/edit'),
       _NamedRoute(CareblazersRoutes.teamHub, '/team'),
       _NamedRoute(CareblazersRoutes.chatList, '/chat'),
       _NamedRoute(CareblazersRoutes.chatThread, '/chat/sample-id',
@@ -259,7 +261,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(currentPath(router), '/medical/cards/emergency');
-        expect(find.byType(CrisisCardScreen), findsOneWidget);
+        expect(find.byType(EmergencyCardScreen), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );

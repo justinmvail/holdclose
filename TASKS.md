@@ -1518,7 +1518,7 @@ amber / plum are placeholders to be discarded.
   `/medical/cards/poa`), Identification (teal chip, opens
   `/medical/cards/ids`). Tests + golden.
 
-- [ ] **Phase 14.23: Emergency Card screen — replaces CrisisCardScreen
+- [x] **Phase 14.23: Emergency Card screen — replaces CrisisCardScreen
   (`lib/screens/medical/emergency_card_screen.dart`).** Mounts at
   `/medical/cards/emergency`. PathHeader (`Home › Medical › Cards &
   Documents`, title "Emergency Card", back to Cards & Documents).

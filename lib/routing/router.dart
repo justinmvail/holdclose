@@ -14,7 +14,6 @@ import '../screens/community/community_feed_screen.dart';
 import '../screens/community/community_guidelines_screen.dart';
 import '../screens/community/post_compose_screen.dart';
 import '../screens/community/post_detail_screen.dart';
-import '../screens/crisis/crisis_card_screen.dart';
 import '../screens/decoder/behavior_picker_screen.dart';
 import '../screens/decoder/decoder_result_screen.dart';
 import '../screens/decoder/triage_screen.dart';
@@ -25,6 +24,7 @@ import '../screens/journal/journal_wizard_screen.dart';
 import '../screens/medical/cards_documents_hub_screen.dart';
 import '../screens/medical/care_plan_screen.dart';
 import '../screens/medical/care_plan_section_form.dart';
+import '../screens/medical/emergency_card_screen.dart';
 import '../screens/medical/health_log_entry_form.dart';
 import '../screens/medical/health_log_screen.dart';
 import '../screens/medical/med_schedule_screen.dart';
@@ -92,6 +92,7 @@ class CareblazersRoutes {
   static const String medicalSchedule = 'medical-schedule';
   static const String medicalCardsHub = 'medical-cards-hub';
   static const String medicalCardsEmergency = 'medical-cards-emergency';
+  static const String medicalCardsEmergencyEdit = 'medical-cards-emergency-edit';
   static const String medicalCardsPoa = 'medical-cards-poa';
   static const String medicalCardsIds = 'medical-cards-ids';
 
@@ -424,9 +425,9 @@ GoRouter buildRouter({
           ),
           // Medical hub (Phase 14.15). The emergency card is registered
           // as a pushed child now — it's the `/crisis` redirect target +
-          // the Home pinned-card destination (Phase 14.8). Until Phase
-          // 14.23 it renders the existing CrisisCardScreen; 14.23 swaps in
-          // the real Emergency Card and deletes the old screen.
+          // the Home pinned-card destination (Phase 14.8). Phase 14.23
+          // landed the real Emergency Card screen here and deleted the old
+          // CrisisCardScreen.
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
@@ -447,12 +448,35 @@ GoRouter buildRouter({
                     builder: (BuildContext context, GoRouterState state) =>
                         const CardsDocumentsHubScreen(),
                   ),
+                  // Emergency Card (Phase 14.23) — the read-only ICE card
+                  // first responders see, replacing the old CrisisCardScreen.
+                  // Pushed onto the root navigator so it covers the tab bar
+                  // like the other Medical feature pages. It's the `/crisis`
+                  // redirect target + the Home pinned-card destination.
                   GoRoute(
                     path: 'cards/emergency',
                     name: CareblazersRoutes.medicalCardsEmergency,
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (BuildContext context, GoRouterState state) =>
-                        const CrisisCardScreen(),
+                        const EmergencyCardScreen(),
+                    routes: <RouteBase>[
+                      // Edit form for the emergency card. A placeholder
+                      // until its own phase lands the form — mirrors the
+                      // Phase 14.5 convention of registering future-phase
+                      // screens as a titled Scaffold so the entry point
+                      // (the screen's AppBar Edit action) resolves today.
+                      GoRoute(
+                        path: 'edit',
+                        name: CareblazersRoutes.medicalCardsEmergencyEdit,
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (BuildContext context, GoRouterState state) =>
+                            Scaffold(
+                          appBar: AppBar(
+                            title: const Text('Edit Emergency Card'),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   // Med Schedule (Phase 14.20) — a 24-hour daily timeline
                   // of today's doses. Pushed onto the root navigator so
