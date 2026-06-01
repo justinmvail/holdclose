@@ -1800,3 +1800,397 @@ amber / plum are placeholders to be discarded.
   `test/widgets/tab_scaffold_visibility_test.dart` if it exists +
   any other tests that exercised the deleted tracker-flag visibility
   logic. Run `flutter analyze` clean. No new behavior — pure cleanup.
+
+---
+
+## Phase 15 — End-to-end integration test coverage
+
+Post-Phase-14 audit found integration coverage sitting at 28% — the
+single `integration_test/demo_tour.dart` is a marketing-walkthrough
+artifact pulling double duty as the entire end-to-end safety net. It
+leaves the core Behavior Decoder (THE WEDGE), medication dose marking,
+appointment CRUD, chat composition, care circle mutations, journal
+display, community post interactions, settings persistence, and ~12
+hub-tile feature screens with zero end-to-end coverage. Phase 15 fills
+those gaps with **targeted integration tests under `test/integration/`
+(NOT `integration_test/`)** so they get picked up by the existing
+`flutter test --coverage` gate without needing a connected device.
+
+### Test architecture invariants (every Phase 15 task follows)
+
+- New file at `test/integration/<area>_flow_test.dart`. Naming
+  pattern is `*_flow_test.dart` so it's distinct from widget tests
+  in `test/widgets/*_test.dart` and golden tests in
+  `test/golden/*_golden_test.dart`.
+- Uses `testWidgets` from `flutter_test` + the shared harness from
+  15.1 to pump the full `CareblazersApp` widget with fake providers,
+  in-memory drift, pinned clock, and the test's seed state.
+- Asserts visible state via `find.text`, `find.byKey`,
+  `find.byType` — never goldens. Goldens drift on every screen
+  rewrite; integration tests must keep working through visual
+  refreshes.
+- Each `testWidgets` group covers one logical user flow end-to-end
+  with multiple `expect()` checkpoints (entry, mid-flow state, post-
+  flow assertion). One file = one screen's flows; multiple
+  `testWidgets` per file is fine.
+- Live LLM forbidden (BUILD_SPEC.md §6.1 invariant). Use
+  `FakeLLMProvider` with seeded canned responses. Chat tests run
+  with the streaming fake.
+- The existing `integration_test/demo_tour.dart` is preserved as the
+  demo-pitch artifact — Phase 15 does NOT modify it.
+
+The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
+
+### Foundation
+
+- [ ] **Phase 15.1: Shared integration harness
+  (`test/integration/test_harness.dart` +
+  `test/integration/test_harness_test.dart`).** Reusable helper for
+  every Phase 15 `*_flow_test.dart`. Exposes:
+    - `Future<ProviderContainer> pumpCareblazersApp(WidgetTester
+      tester, {DateTime? clock, List<Override>? extraOverrides,
+      String initialLocation = '/', bool demoMode = true})` — wires
+      a `ProviderScope` with default overrides: `FakeLLMProvider`,
+      `FakeAuthProvider` (auto-signed-in as Mary's caregiver when
+      demoMode=true), in-memory drift via 15.2's
+      `CareblazersDatabase.testInstance()`, fixed clock
+      (`Clock.fixed(clock ?? DateTime(2026, 6, 1, 11, 0))`), no-op
+      `FakeTTSProvider`, no-op `FakeAnalyticsProvider`,
+      `FakeUrlLauncher` capturing launched URLs. Pumps
+      `CareblazersApp(...)`, settles, returns the container.
+    - `Future<void> seedMaryHenderson(ProviderContainer container)`
+      — invokes the existing `lib/seed/mary_henderson.dart` seeder
+      against the in-memory drift.
+    - `Future<void> seedDashboard(ProviderContainer container, {int
+      unloggedDoses = 0, int loggedDoses = 0, bool hasAppointment =
+      false, bool hasJournalEntry = false})` — surgical seeder for
+      Home dashboard state.
+    - `Finder homeGreeting`, `Finder tabFor(String label)`,
+      `Finder pathHeaderBackTo(String label)`,
+      `Finder findHubTile(String label)` — common finders.
+    - `FakeUrlLauncher` test double that captures every URL passed
+      to `url_launcher` so tests can assert on launched URIs (used
+      by 15.4, 15.9, 15.19, 15.20, 15.21).
+  Tests in `test_harness_test.dart`: pumping yields a renderable
+  app at `/`; clock override holds; FakeAuthProvider lands the
+  shell directly on Home; `findHubTile` resolves both Medical and
+  Team tiles. Single-task scope but the foundation for 15.3
+  onward — DO NOT split.
+
+- [ ] **Phase 15.2: Drift test instance factory
+  (`lib/db/database.dart`).** Add static
+  `CareblazersDatabase.testInstance()` returning a fresh database
+  backed by `NativeDatabase.memory()` (no on-disk file). Used by
+  15.1's harness + every Phase 15 test. Each test gets an isolated
+  database; the harness invokes `.close()` in a teardown so no state
+  leaks across tests. Tests in `test/db/database_test.dart`:
+  `testInstance()` opens at the current schema version, applies
+  migrations cleanly, multiple instances are independent. If a
+  parallel test-instance helper already exists in this file, extend
+  rather than duplicate.
+
+### Tier 1 — Core wedges (highest risk; zero current coverage)
+
+- [ ] **Phase 15.3: Behavior Decoder full flow
+  (`test/integration/decoder_flow_test.dart`).** Tests THE WEDGE.
+  Three `testWidgets` groups: (1) **Canonical behavior happy path**
+  — pump app → push `/decoder/behavior` → tap "Repetitive
+  questions" card → `TriageScreen` Q1 → pick answer → Next → Q2 →
+  pick → Next → Q3 → pick → Next → `DecoderResultScreen` renders
+  with all three sections visible ("Say", "Tweak", "Don't say")
+  populated from `FakeLLMProvider.generateDecoderScript()` canned
+  response → footer medical disclaimer present → tap "That helped"
+  → assert a `JournalEntry` row was written via the storage
+  provider with `behavior=repetitiveQuestions`, `outcome=helped`,
+  `attempt=1`. (2) **Free-text "Something else" path** — tap the
+  bottom pill → describe text → triage → result with free-text
+  variant. (3) **"Try a different approach" outcome** — happy-path
+  to result → tap retry → `attempt` increments to 2 → fake
+  provider streams a different response → "That helped" → journal
+  entry has `attempt=2`. Asserts the PLAY-button keys for TTS
+  exist (FakeTTSProvider.speak() is a no-op stub).
+
+- [ ] **Phase 15.4: Decoder back-stack + escape paths
+  (`test/integration/decoder_back_flow_test.dart`).** Four
+  `testWidgets` groups: (1) **Back from Q1 exits the flow** —
+  navigate to triage Q1 → tap Back → router location returns to
+  the screen that pushed it; (2) **Back from Q2 reverts to Q1
+  with prior answer retained** — assert the radio that was
+  selected on Q1 is still selected after popping back; (3) **Back
+  from DecoderResultScreen returns to Home without persisting** —
+  assert no `JournalEntry` row written; (4) **"Talk to Natali"
+  outcome** — tap the third outcome → `FakeUrlLauncher` captures
+  the launched URL and assert it matches the Care Collective
+  endpoint exactly (string match, not pattern).
+
+- [ ] **Phase 15.5: Dose log marking flow
+  (`test/integration/dose_log_flow_test.dart`).** Seed 4 doses
+  for Mary today (2 unlogged morning, 1 taken morning, 1 missed
+  afternoon). Pump app → tap Home Medications Today card → land
+  on `DoseLogScreen`. Five `testWidgets`: (1) Tap unlogged
+  dose's checkbox → status flips to taken; reload provider →
+  drift row persisted; (2) Tap "Mark taken" button row → same
+  flow; (3) Tap a logged-taken dose row → bottom sheet appears
+  → tap "Mark as skipped" → status changes + sheet dismisses;
+  (4) Tap "Mark all before noon" → assert every morning unlogged
+  dose flips to taken in one tap; (5) Voice-note pre-fill from
+  the Home FAB quick-add path arrives in the bottom sheet
+  textarea via `extra: VoiceTranscript(...)`. After each
+  mutation, assert the Medications Today card on Home updates
+  its "X of Y" count (pump and re-navigate to Home).
+
+- [ ] **Phase 15.6: Medication CRUD flow
+  (`test/integration/medication_crud_flow_test.dart`).** Pump
+  app → Medical → Medications tile → `MedicationListScreen`.
+  Three `testWidgets`: (1) **Add medication** — empty list → tap
+  "Add medication" CTA → `MedicationFormScreen` → fill name +
+  dosage + route + frequency → Save → row appears in list with
+  the entered name; assert drift row written. (2) **Edit
+  medication** — tap existing row → form pre-filled correctly →
+  change dosage → Save → list reflects the new dosage. (3)
+  **Delete medication** — long-press row → confirm delete →
+  drift soft-deletes (`deletedAt` set) → list excludes the
+  medication. After each step, navigate to `DoseLogScreen` and
+  assert the dose-schedule provider reflects the change.
+
+- [ ] **Phase 15.7: Appointment CRUD flow
+  (`test/integration/appointment_crud_flow_test.dart`).** Pump
+  app → Medical → Appointments tile. Four `testWidgets`: (1)
+  **Empty state** — both Upcoming + Past sections show empty
+  state copy; (2) **Add appointment** — FAB → `AppointmentForm
+  Screen` → fill provider + date + time + location + notes →
+  Save → row in Upcoming section; (3) **View + edit** — tap row
+  → `AppointmentDetailScreen` renders all fields → tap Edit →
+  form pre-filled → change time → Save → detail shows new time;
+  (4) **Past section** — seed an appointment with `startsAt <
+  now` → appears in Past section, not Upcoming; (5) **Home
+  cross-screen sync** — after Add, navigate to Home → Next
+  Appointment card surfaces the soonest Upcoming with the right
+  driver name + relative time.
+
+- [ ] **Phase 15.8: Chat composition + streaming reply
+  (`test/integration/chat_flow_test.dart`).** Seed 1 conversation
+  thread + 3 prior messages. Pump app → Chat tab → tap the thread
+  tile. Five `testWidgets`: (1) **Send + streaming reply** — type
+  a message → tap Send → user message renders right-aligned navy
+  → `FakeLLMProvider.chatStream()` streams the canned response →
+  reply renders left-aligned warm with the `CaptionFade` widget
+  → message list scrolls to bottom; (2) **Multi-turn** — send 3
+  messages sequentially, each gets a streamed reply, list shows
+  6 messages in order; (3) **Empty input no-op** — tap Send with
+  empty field → no new message added; (4) **Streaming flag
+  prevents double-send race** — set fake stream delay → tap Send
+  during the stream → assert only the first stream completes
+  before the second message can be sent; (5) **Back returns to
+  list with scroll preserved** — scroll thread to middle → Back
+  → list → re-enter thread → assert scroll position restored.
+
+### Tier 2 — High-volume workflows
+
+- [ ] **Phase 15.9: Care Circle membership mutations
+  (`test/integration/care_circle_flow_test.dart`).** Seed Mary's
+  circle with 2 caregivers (primary + sibling). Pump → Team →
+  Care Circle tile. Four `testWidgets`: (1) **Invite flow** —
+  tap "Invite caregiver" → form → fill display name + email +
+  role + permission → Send → pending membership row created in
+  drift + `FakeUrlLauncher` (or share-plus fake) captures the
+  composed share message containing an invite URL; (2) **Edit
+  role** — long-press a member → edit sheet → change role
+  Spouse→Aide → Save → row updates; (3) **Edit permission** —
+  long-press → change Editor→Viewer → drift + roster both
+  update; (4) **Remove member** — long-press → Remove →
+  confirmation → drift row soft-deleted → roster excludes them.
+  Also assert call/email trailing buttons launch via
+  `FakeUrlLauncher` with the right `tel:` / `mailto:` URIs.
+
+- [ ] **Phase 15.10: Care Circle invite form validation
+  (`test/integration/care_circle_invite_validation_flow_test.dart`).**
+  Companion to 15.9. Five `testWidgets`: (1) Empty display name
+  → Send disabled or surfaces "Name required" inline error; (2)
+  Empty email AND empty phone → "At least one contact required"
+  error; (3) Invalid email format → field-level error; (4) Valid
+  form, rapid double-tap on Send → exactly one pending
+  membership created; (5) Form Back button does NOT create the
+  membership.
+
+- [ ] **Phase 15.11: Journal screen navigation + display
+  (`test/integration/journal_flow_test.dart`).** Seed Mary's
+  journal with 5 entries: 2 today (one repetitive-questions at
+  5pm, one at 4:50pm — pattern fodder), 1 yesterday, 2 last
+  week. Pump → Medical → Journal tile. Six `testWidgets`: (1)
+  **Week summary** — "This week" card shows entry count + topics
+  derived from behavior chips; (2) **Pattern alert** — when
+  seeded with 3+ repetitions of the same behavior in the
+  evening window, the "Heads up" pattern card appears with the
+  specific pattern surfaced; (3) **Day grouping** — Today /
+  Yesterday / Earlier sections in correct order; (4) **Entry
+  detail** — tap entry row → `JournalEntryScreen` → behavior
+  chip + decoder script + notes all render; (5) **Empty CTA** —
+  with zero entries, the empty-state CTA pushes `/decoder/
+  behavior`; (6) **Wizard end-to-end** — FAB → `JournalWizard
+  Screen` → step through the multi-step form → Save → returns
+  to list with the new entry rendered.
+
+- [ ] **Phase 15.12: Community post detail + voting + commenting
+  (`test/integration/community_post_flow_test.dart`).** Seed 3
+  forum posts + 2 nested comments on the first post. Pump →
+  Community → Feed → tap first post card. Six `testWidgets`:
+  (1) **Post body + header** — title + author + relative time +
+  full body render; (2) **Upvote toggle** — tap upvote →
+  vote_count +1 + button highlighted; tap again → vote_count
+  reverts (-1 from highlighted state, back to original); (3)
+  **Mutual exclusion** — upvote active, then tap downvote →
+  upvote clears, downvote highlights, vote_count -2; (4)
+  **Inline reply** — tap reply on a depth-0 comment → inline
+  composer appears below the parent → submit → new comment in
+  thread with depth+1 indent; (5) **Max-depth reply hidden** —
+  6-level-deep comment seeded → reply button absent; (6)
+  **Report flow** — long-press comment → report menu → pick
+  "Off-topic" → assert report row created in fake backend with
+  the right `target_kind` + `target_id` + `reason`.
+
+- [ ] **Phase 15.13: Community sort + compose + admin
+  (`test/integration/community_feed_flow_test.dart`).** Pump →
+  Community → Feed. Four `testWidgets`: (1) **Sort switching** —
+  Hot/New/Top selector → switch each → re-fetches posts in the
+  deterministic order returned by the fake backend; (2)
+  **Pull-to-refresh** — drag list down → triggers re-fetch
+  (assert provider invalidation + spinner appears mid-pull); (3)
+  **Compose FAB** — tap → `PostComposeScreen` → fill title +
+  body → tap Post → returns to feed with the new post at top of
+  the New sort; (4) **Admin moderation entry** — flip
+  FakeAuthProvider to staff role → re-pump → admin reports icon
+  becomes visible → tap → `AdminReportsScreen` lists seeded
+  reports.
+
+- [ ] **Phase 15.14: Team hub tile coverage
+  (`test/integration/team_hubs_flow_test.dart`).** Pump → Team
+  tab. Five `testWidgets`, one per unvisited tile: (1)
+  **Calendar** → `CalendarScreen` → 7-day week-view renders
+  seeded care events in correct day columns + tap an event
+  opens its source detail; (2) **Tasks** → `TasksScreen` →
+  seeded tasks render + tap "Mark done" toggles status + filter
+  chips work; (3) **Shifts** → `ShiftsScreen` → roster grid
+  renders seeded shifts + tap "Take shift" claims an unfilled
+  slot; (4) **Activity** → `ActivityScreen` → timeline renders
+  seeded entries chronologically + filter chips work; (5)
+  **Expenses** → `ExpensesScreen` → list renders + tap "Add
+  expense" → form → Save → row appears.
+
+- [ ] **Phase 15.15: Medical hub tile coverage
+  (`test/integration/medical_hubs_flow_test.dart`).** Pump →
+  Medical tab. Three `testWidgets` for the unvisited
+  sub-screens: (1) **Med Schedule** → `MedScheduleScreen` →
+  daily timeline renders seeded doses with correct time
+  positions; (2) **IDs** → `IDsScreen` → grid of seeded IDs
+  renders + tap an ID opens its detail screen; (3) **POA** →
+  `POAScreen` → seeded POA documents render with correct
+  agent + scope fields.
+
+- [ ] **Phase 15.16: Care Plan filter + reorder + edit
+  (`test/integration/care_plan_flow_test.dart`).** Seed Care
+  Plan with sections across all 5 slots + all 3 stages. Pump →
+  Medical → Care Plan. Five `testWidgets`: (1) Stage filter
+  segments — All shows all, Early hides Middle+Late sections;
+  (2) Slot grouping correct (Morning sections appear under the
+  Morning header); (3) Long-press a section → drag handle
+  appears → reorder within slot → drift `order` int updated +
+  list reflects new order on re-pump; (4) Tap section → edit
+  form → change title + body markdown → Save → updated in
+  place; (5) FAB → new section form → fill slot + stage + body
+  → Save → appears in correct group.
+
+- [ ] **Phase 15.17: Health Log entry detail + edit + validation
+  (`test/integration/health_log_flow_test.dart`).** Seed Mary's
+  log with 3 entries (1 vitals, 1 symptom, 1 note). Pump →
+  Medical → Health Log. Six `testWidgets`: (1) Populated list
+  groups entries by day; (2) Tap row → `HealthLogEntryScreen` →
+  all fields render; (3) Edit → form pre-filled → change value
+  → Save → detail updates; (4) Validation — vitals kind with
+  no readings filled → Save disabled; (5) Cancel from form →
+  no drift mutation; (6) Symptom multi-select chips toggle on
+  + off correctly. Builds on the happy-path coverage already
+  in `demo_tour.dart`.
+
+### Tier 3 — Peripheral but real-world important
+
+- [ ] **Phase 15.18: Settings persistence + every toggle
+  (`test/integration/settings_flow_test.dart`).** Pump app →
+  Home profile icon → `SettingsScreen`. One `testWidgets`
+  group per setting (use a parameterized `testWidgets`-with-
+  data-table pattern to keep this tight): for each of Read
+  Aloud, Allow Audio, Quiet Hours, Dark Mode, Notifications,
+  Use Demo Forum — toggle → assert `SettingsProvider` state +
+  persistence layer write (mock the SharedPreferences). Plus
+  three custom groups: (1) TTS speed slider → assert
+  `settings.ttsSpeed` updates + slider position reflects on
+  re-pump; (2) Font size segment (Small/Normal/Large) → assert
+  `MediaQuery.textScaler` reflects the change at app root; (3)
+  Cold-start hydration — make every change → tear down + pump
+  fresh app → assert every setting hydrates from storage.
+
+- [ ] **Phase 15.19: Settings destructive actions
+  (`test/integration/settings_destructive_flow_test.dart`).**
+  Four `testWidgets`: (1) **Sign Out** (non-demo mode) — tap →
+  confirmation → `FakeAuthProvider` flips to signedOut →
+  redirect to `/sign-in`; (2) **Delete Account** — tap →
+  confirmation → calls `FakeAuthProvider.deleteAccount()` +
+  clears local drift + redirects to `/onboarding`; (3) **Methodology
+  link** — tap → `FakeUrlLauncher` captures Care Collective URL;
+  (4) **Brand Credit link** — tap → captures Dr. Natali's site
+  URL.
+
+- [ ] **Phase 15.20: Emergency Card edit flow
+  (`test/integration/emergency_card_edit_flow_test.dart`).** Pump
+  → Medical → Cards & Docs → Emergency Card → tap Edit. Five
+  `testWidgets`: (1) Form pre-filled with seeded info; (2) Add
+  new contact (name + relation + phone) → Save → detail shows
+  new contact + tap phone launches `tel:` via FakeUrlLauncher;
+  (3) Remove contact → Save → contact gone; (4) Update insurance
+  carrier → Save → reflects; (5) Toggle donor status → Save →
+  reflects.
+
+- [ ] **Phase 15.21: Onboarding + sign-in error paths
+  (`test/integration/onboarding_auth_flow_test.dart`).** Pump
+  fresh-install app (no completion state, no seeded auth).
+  Eight `testWidgets`: (1) Carousel Skip on page 1 → `/sign-in`;
+  (2) Skip on page 2 → same; (3) Skip on page 3 → same; (4)
+  Apple OAuth (iOS variant) — fake provider throws → error
+  banner with the thrown message + signed-out state retained;
+  (5) Google OAuth — fake throws → same error banner; (6)
+  Apple success → routes to `/`; (7) Google success → routes to
+  `/`; (8) Demo skip (DEMO_MODE) → routes to `/` as Mary's
+  caregiver. Also Terms + Privacy links via FakeUrlLauncher.
+
+- [ ] **Phase 15.22: Home dashboard auxiliary interactions
+  (`test/integration/home_dashboard_flow_test.dart`).** Pump
+  fully-seeded app. Six `testWidgets`: (1) **Catch Me Up
+  refresh** — tap refresh icon → `FakeLLMProvider` re-streams a
+  new summary; (2) **Recent Activity (journal)** — tap a
+  journal row → routes to `/journal/:id`; (3) **Recent Activity
+  (dose)** — tap a dose row → routes to `/medications/today`;
+  (4) **Recent Activity (appointment)** — tap an appointment
+  row → routes to `/appointments/:id`; (5) **Add FAB** — tap →
+  bottom sheet with 4 quick-add options (journal entry, dose,
+  appointment, decoder) → each option lands on the right
+  destination; (6) **Voice quick-add** — record a stub
+  transcript via FakeVoiceProvider → assert the destination's
+  note field is pre-filled with the transcript.
+
+### Verification
+
+- [ ] **Phase 15.23: Coverage table refresh
+  (`docs/INTEGRATION_COVERAGE.md` + CLAUDE.md invariant).** Walk
+  every screen under `lib/screens/` + every feature widget
+  under `lib/widgets/home/` and `lib/widgets/community/`,
+  cross-reference against `test/integration/*_flow_test.dart` +
+  `integration_test/demo_tour.dart`, produce a markdown table
+  with: screen path, total functionality items, integration-
+  covered items, % covered. Target ≥85% overall. Any remaining
+  gaps documented inline with an explicit "intentionally out of
+  scope" rationale OR queued for a future phase. Append a new
+  invariant to CLAUDE.md: "Every screen lists its integration-
+  test coverage status in `docs/INTEGRATION_COVERAGE.md`; new
+  screens land with at least one happy-path test in
+  `test/integration/<area>_flow_test.dart` before merge." No
+  new code, no new tests — just the audit + the invariant.
