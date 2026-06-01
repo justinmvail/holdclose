@@ -8,10 +8,12 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/forum.dart';
 import '../../providers/community_feed_provider.dart';
+import '../../providers/community_subnav_provider.dart';
 import '../../providers/my_forum_profile_provider.dart';
 import '../../routing/router.dart' show CareblazersRoutes;
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/segmented_subnav.dart';
 
 part 'community_feed_screen.g.dart';
 
@@ -27,22 +29,46 @@ DateTime Function() communityFeedClock(Ref ref) => DateTime.now;
 /// caregiver's thumb reaches the spinner footer.
 const double _loadMoreTriggerPx = 240;
 
-/// Community feed at `/community` (BUILD_SPEC.md §13 / Phase 13.10).
+/// The three in-tab views surfaced by the Community sub-nav
+/// (Phase 14.36, `docs/MENU_LAYOUT_SPEC.md` §5). The segment swap is
+/// in-tab and does NOT change the URL — the sub-nav exists precisely so
+/// a sixth destination's worth of content can live under `/community`
+/// without adding a sixth bottom tab.
+enum CommunitySegment {
+  /// The social feed of caregiver + official posts (the tab's landing).
+  feed,
+
+  /// The Careblazers content library — videos + playbooks (Phase 14.37
+  /// lands the real `LearnScreen` here).
+  learn,
+
+  /// Caregiver wellbeing tools — burnout self-check, respite, expert
+  /// Q&A (Phase 14.38 lands the real `SupportScreen` here).
+  support,
+}
+
+/// Community landing at `/community` (BUILD_SPEC.md §13 / Phase 13.10),
+/// fronted by the Feed/Learn/Support in-tab sub-nav (Phase 14.36).
 ///
 /// Layout:
 ///   * AppBar: title "Community".
-///   * Sort selector (Hot / New / Top) as a segmented chip row.
-///   * Pull-to-refresh list of post cards. Each card carries title,
-///     a derived author display name + initial-letter avatar, relative
+///   * [SegmentedSubnav] directly below the title — Feed · Learn ·
+///     Support. Swapping a segment is in-tab and leaves the URL on
+///     `/community` (per `docs/MENU_LAYOUT_SPEC.md`: the in-tab sub-nav
+///     avoids a 6th tab). The active segment is held in local widget
+///     state so a push into a post detail and back preserves it;
+///     re-selecting the Community bottom-tab snaps back to Feed via
+///     [CommunityTabReentry].
+///   * **Feed segment** — sort selector (Hot / New / Top) over a
+///     pull-to-refresh list of post cards. Each card carries title, a
+///     derived author display name + initial-letter avatar, relative
 ///     time, a 3-line body preview, and the vote + comment counts.
-///   * Empty state: "Be the first to post." with a soft illustration.
-///   * Loading state: a soft skeleton so a slow first fetch doesn't
-///     flash the empty-state copy.
+///     Empty state: "Be the first to post." Loading: a soft skeleton.
+///   * **Learn / Support segments** — owned by Phases 14.37 / 14.38;
+///     rendered here as soft placeholders until those screens land.
 ///
-/// The screen never mints or mutates posts itself — Phase 13.12 will
-/// own the compose surface. Tapping a tile pushes to the post detail
-/// screen Phase 13.11 will own; for now it's a stable callback the
-/// router rewires when that screen lands.
+/// The compose FAB and the moderation action are feed-scoped — they
+/// only show while the Feed segment is active.
 class CommunityFeedScreen extends ConsumerStatefulWidget {
   const CommunityFeedScreen({super.key});
 
@@ -57,6 +83,14 @@ class CommunityFeedScreen extends ConsumerStatefulWidget {
   static const Key composeFabKey = Key('community-feed-compose-fab');
   static const Key adminActionKey = Key('community-feed-admin-action');
 
+  /// The Feed/Learn/Support sub-nav (Phase 14.36).
+  static const Key subnavKey = Key('community-subnav');
+
+  /// Body wrappers for the two not-yet-built segments, so tests can
+  /// assert the swap without depending on the placeholder copy.
+  static const Key learnSegmentKey = Key('community-learn-segment');
+  static const Key supportSegmentKey = Key('community-support-segment');
+
   static Key postTileKey(String postId) => Key('community-feed-tile-$postId');
 
   @override
@@ -66,6 +100,12 @@ class CommunityFeedScreen extends ConsumerStatefulWidget {
 
 class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
   final ScrollController _scrollController = ScrollController();
+
+  /// The active in-tab segment. Local state (not a provider) so a push
+  /// into a post detail and back preserves it — only a Community
+  /// bottom-tab selection resets it (see the [CommunityTabReentry]
+  /// listener in [build]).
+  CommunitySegment _segment = CommunitySegment.feed;
 
   @override
   void initState() {
@@ -93,19 +133,39 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
     });
   }
 
+  /// Map the active segment onto its sub-nav index for [SegmentedSubnav].
+  static const List<CommunitySegment> _segmentOrder = <CommunitySegment>[
+    CommunitySegment.feed,
+    CommunitySegment.learn,
+    CommunitySegment.support,
+  ];
+
   @override
   Widget build(BuildContext context) {
     final CommunityFeedState feed = ref.watch(communityFeedProvider);
     final DateTime now = ref.watch(communityFeedClockProvider)();
-
     final bool isAdmin = ref.watch(isForumAdminProvider);
+
+    // A Community bottom-tab selection (switch-from-another-tab or
+    // active-tab re-tap) bumps the re-entry counter — snap back to the
+    // Feed segment, the tab's landing. A push into a post detail and
+    // back never bumps it, so the segment survives that round-trip.
+    ref.listen<int>(communityTabReentryProvider, (int? _, int __) {
+      if (_segment != CommunitySegment.feed) {
+        setState(() => _segment = CommunitySegment.feed);
+      }
+    });
+
+    final bool onFeed = _segment == CommunitySegment.feed;
     return Scaffold(
       backgroundColor: careblazersColors.background,
       appBar: AppBar(
         title: const Text('Community'),
         automaticallyImplyLeading: false,
         actions: <Widget>[
-          if (isAdmin)
+          // Moderation is a feed concern — only surface it on the Feed
+          // segment.
+          if (isAdmin && onFeed)
             IconButton(
               key: CommunityFeedScreen.adminActionKey,
               tooltip: 'Moderation queue',
@@ -115,17 +175,54 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: CommunityFeedScreen.composeFabKey,
-        backgroundColor: careblazersColors.cta,
-        foregroundColor: Colors.white,
-        onPressed: () =>
-            context.pushNamed(CareblazersRoutes.communityCompose),
-        icon: const Icon(Icons.edit_outlined),
-        label: const Text('New post'),
-      ),
+      // The compose surface posts to the feed, so it only belongs on the
+      // Feed segment.
+      floatingActionButton: onFeed
+          ? FloatingActionButton.extended(
+              key: CommunityFeedScreen.composeFabKey,
+              backgroundColor: careblazersColors.cta,
+              foregroundColor: Colors.white,
+              onPressed: () =>
+                  context.pushNamed(CareblazersRoutes.communityCompose),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('New post'),
+            )
+          : null,
       body: SafeArea(
         child: Column(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: SegmentedSubnav(
+                key: CommunityFeedScreen.subnavKey,
+                activeIndex: _segmentOrder.indexOf(_segment),
+                items: const <SegmentedSubnavItem>[
+                  SegmentedSubnavItem(label: 'Feed', key: 'feed'),
+                  SegmentedSubnavItem(label: 'Learn', key: 'learn'),
+                  SegmentedSubnavItem(label: 'Support', key: 'support'),
+                ],
+                onChanged: (int index) {
+                  final CommunitySegment next = _segmentOrder[index];
+                  if (next != _segment) {
+                    setState(() => _segment = next);
+                  }
+                },
+              ),
+            ),
+            Expanded(child: _segmentBody(feed, now)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The body for the active segment. Feed renders the live post list;
+  /// Learn / Support render soft placeholders until Phases 14.37 / 14.38
+  /// land the real `LearnScreen` / `SupportScreen`.
+  Widget _segmentBody(CommunityFeedState feed, DateTime now) {
+    switch (_segment) {
+      case CommunitySegment.feed:
+        return Column(
           children: <Widget>[
             _SortSelector(
               sort: feed.sort,
@@ -142,9 +239,24 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
+        );
+      case CommunitySegment.learn:
+        return const _SegmentPlaceholder(
+          key: CommunityFeedScreen.learnSegmentKey,
+          icon: Icons.play_circle_outline,
+          title: 'Learn is on the way',
+          body: "Dr. Natali's videos and step-by-step playbooks will "
+              'live here.',
+        );
+      case CommunitySegment.support:
+        return const _SegmentPlaceholder(
+          key: CommunityFeedScreen.supportSegmentKey,
+          icon: Icons.favorite_outline,
+          title: 'Support is on the way',
+          body: 'A burnout self-check, respite resources, and expert '
+              'answers will live here.',
+        );
+    }
   }
 }
 
@@ -348,6 +460,51 @@ class _EmptyState extends StatelessWidget {
             style: textTheme.bodyLarge?.copyWith(
               color: careblazersColors.text,
             ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Soft placeholder for the Learn / Support segments until Phases 14.37
+/// / 14.38 land the real screens. Centered icon + heading + one warm,
+/// non-clinical line so the swap reads as intentional rather than empty.
+class _SegmentPlaceholder extends StatelessWidget {
+  const _SegmentPlaceholder({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Icon(icon, size: 56, color: careblazersColors.primarySoft),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: textTheme.headlineMedium?.copyWith(
+              color: careblazersColors.primary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            body,
+            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
             textAlign: TextAlign.center,
           ),
         ],

@@ -1711,7 +1711,7 @@ amber / plum are placeholders to be discarded.
   `activeIndex`, `onChanged`. Tests: tap fires onChanged with the
   right index; default to activeIndex=0; goldens for active=0,1,2.
 
-- [ ] **Phase 14.36: Community feed gets the Feed/Learn/Support
+- [x] **Phase 14.36: Community feed gets the Feed/Learn/Support
   sub-nav (`lib/screens/community/community_feed_screen.dart`).**
   Add the SegmentedSubnav directly below the screen's title. Three
   items: Feed (existing body), Learn (LearnScreen — 14.37), Support

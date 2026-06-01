@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../providers/community_subnav_provider.dart';
 import '../theme.dart';
 
 /// Bottom-tab shell for the fixed five-tab bar introduced in the Phase
@@ -16,7 +18,7 @@ import '../theme.dart';
 /// Re-tapping the already-active tab resets that branch to its hub via
 /// `goBranch(..., initialLocation: true)` — the iOS-style "tap the
 /// active tab to pop to root" affordance the spec calls for.
-class TabScaffold extends StatelessWidget {
+class TabScaffold extends ConsumerWidget {
   const TabScaffold({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
@@ -33,12 +35,20 @@ class TabScaffold extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: TabScaffoldBar(
         currentIndex: navigationShell.currentIndex,
         onDestinationSelected: (int index) {
+          // Selecting the Community destination — a switch from another
+          // tab OR an active-tab re-tap — drops the caregiver back on the
+          // Feed segment of the in-tab sub-nav (Phase 14.36). The segment
+          // lives in CommunityFeedScreen's local state, so the bottom bar
+          // signals the reset rather than reaching into the screen.
+          if (tabBranchPaths[index] == '/community') {
+            ref.read(communityTabReentryProvider.notifier).bump();
+          }
           if (index == navigationShell.currentIndex) {
             // Re-tap the active tab — pop the branch back to its hub.
             navigationShell.goBranch(index, initialLocation: true);
