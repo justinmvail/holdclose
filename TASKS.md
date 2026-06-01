@@ -1655,7 +1655,7 @@ amber / plum are placeholders to be discarded.
   Tests cover `gapsFor` at hour boundaries + multi-caregiver overlap;
   goldens for a fully-covered day + a day with gaps.
 
-- [ ] **Phase 14.32: Care Team activity feed
+- [x] **Phase 14.32: Care Team activity feed
   (`lib/screens/team/activity_screen.dart`).** Mounts at
   `/team/activity`. PathHeader + a chronological feed of every
   meaningful event: dose taken, journal entry, appointment kept,
