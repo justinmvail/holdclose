@@ -1441,7 +1441,7 @@ amber / plum are placeholders to be discarded.
   through fromJson/toJson; CRUD via the fake storage; the
   `todayByKind` selector buckets correctly across local-midnight.
 
-- [ ] **Phase 14.17: Health Log screens
+- [x] **Phase 14.17: Health Log screens
   (`lib/screens/medical/health_log_screen.dart` +
   `lib/screens/medical/health_log_entry_form.dart`).** List at
   `/medical/health-log`: PathHeader (`Home › Medical`, title "Health

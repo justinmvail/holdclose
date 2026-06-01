@@ -22,6 +22,8 @@ import '../screens/home_screen.dart';
 import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
 import '../screens/journal/journal_wizard_screen.dart';
+import '../screens/medical/health_log_entry_form.dart';
+import '../screens/medical/health_log_screen.dart';
 import '../screens/medical/medical_hub_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
@@ -78,6 +80,8 @@ class CareblazersRoutes {
   // owning phase lands.
   static const String medicalHub = 'medical-hub';
   static const String medicalHealthLog = 'medical-health-log';
+  static const String medicalHealthLogNew = 'medical-health-log-new';
+  static const String medicalHealthLogEdit = 'medical-health-log-edit';
   static const String medicalCarePlan = 'medical-care-plan';
   static const String medicalSchedule = 'medical-schedule';
   static const String medicalCardsHub = 'medical-cards-hub';
@@ -431,6 +435,36 @@ GoRouter buildRouter({
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (BuildContext context, GoRouterState state) =>
                         const CrisisCardScreen(),
+                  ),
+                  // Health Log (Phase 14.17) — list + add/edit form.
+                  // Pushed onto the root navigator so the feature pages
+                  // cover the tab bar; `health-log/new` is registered
+                  // before `health-log/:id/edit` so the literal `new`
+                  // segment isn't swallowed by the `:id` parameter.
+                  GoRoute(
+                    path: 'health-log',
+                    name: CareblazersRoutes.medicalHealthLog,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const HealthLogScreen(),
+                    routes: <RouteBase>[
+                      GoRoute(
+                        path: 'new',
+                        name: CareblazersRoutes.medicalHealthLogNew,
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (BuildContext context, GoRouterState state) =>
+                            const HealthLogEntryForm(),
+                      ),
+                      GoRoute(
+                        path: ':id/edit',
+                        name: CareblazersRoutes.medicalHealthLogEdit,
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (BuildContext context, GoRouterState state) =>
+                            HealthLogEntryForm(
+                          entryId: state.pathParameters['id'],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
