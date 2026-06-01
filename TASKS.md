@@ -1583,7 +1583,7 @@ amber / plum are placeholders to be discarded.
   (`Icons.account_balance_wallet_outlined`, `/team/expenses`).
   Tests + golden.
 
-- [ ] **Phase 14.27: Care Circle roster screen
+- [x] **Phase 14.27: Care Circle roster screen
   (`lib/screens/team/care_circle_screen.dart`).** Mounts at
   `/team/circle`. PathHeader + a list of caregivers from 14.25's
   provider. Each row: avatar (initials fallback), display name,

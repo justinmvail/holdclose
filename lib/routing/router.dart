@@ -40,6 +40,7 @@ import '../screens/medication/medication_list_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
 import '../screens/onboarding/welcome_carousel.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/team/care_circle_screen.dart';
 import '../services/voice_intake.dart';
 import '../widgets/tab_scaffold.dart';
 
@@ -629,6 +630,18 @@ GoRouter buildRouter({
                 name: CareblazersRoutes.teamHub,
                 builder: (BuildContext context, GoRouterState state) =>
                     Scaffold(appBar: AppBar(title: const Text('Care Team'))),
+                routes: <RouteBase>[
+                  // Care Circle roster (Phase 14.27). Pushed onto the root
+                  // navigator so the feature page covers the tab bar; the
+                  // `circle/invite` form route is added by Phase 14.28.
+                  GoRoute(
+                    path: 'circle',
+                    name: CareblazersRoutes.teamCircle,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const CareCircleScreen(),
+                  ),
+                ],
               ),
             ],
           ),

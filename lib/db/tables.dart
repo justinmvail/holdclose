@@ -395,3 +395,66 @@ class IdentificationDocsTable extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
+
+/// One caregiver in the loved one's care circle (TASKS.md Phase 14.25).
+///
+/// Backs Care Team → Care Circle (BUILD_SPEC.md §5.14). Typed-column
+/// schema like the documents tables: [role] is the `CaregiverRole` enum's
+/// `.name`, [displayName] is lifted to its own column so the roster can
+/// sort alphabetically, and the optional [phone] / [email] / [avatarPath]
+/// are nullable TEXT. The companion [CareCircleMembershipsTable] FKs onto
+/// [id] with `ON DELETE CASCADE`, so removing a caregiver removes their
+/// membership in the same statement.
+class CaregiversTable extends Table {
+  @override
+  String get tableName => 'caregivers';
+
+  TextColumn get id => text()();
+  TextColumn get displayName => text()();
+
+  /// `CaregiverRole` enum `.name`.
+  TextColumn get role => text()();
+  TextColumn get phone => text().nullable()();
+  TextColumn get email => text().nullable()();
+  TextColumn get avatarPath => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// One caregiver's membership in a loved one's care circle (TASKS.md
+/// Phase 14.25).
+///
+/// Backs Care Team → Care Circle (BUILD_SPEC.md §5.14). FK on
+/// [caregiverId] references [CaregiversTable.id] with `ON DELETE CASCADE`
+/// — removing a caregiver wipes their membership in the same statement,
+/// so the roster never shows an orphaned permission row.
+///
+/// SQLite only honours that FK action when the per-connection
+/// `PRAGMA foreign_keys = ON` is set; [CareblazersDatabase]'s
+/// `MigrationStrategy.beforeOpen` enables it on every connection.
+///
+/// [permissionLevel] is the `PermissionLevel` enum's `.name`;
+/// [invitedAtMs] / [acceptedAtMs] are epoch-ms ([acceptedAtMs] nullable —
+/// null while the invite is pending). [patientId] is a logical link to
+/// the single-row [PatientsTable] (no DB FK — see [EmergencyCardsTable]).
+class CareCircleMembershipsTable extends Table {
+  @override
+  String get tableName => 'care_circle_memberships';
+
+  TextColumn get id => text()();
+  TextColumn get caregiverId => text().references(
+        CaregiversTable,
+        #id,
+        onDelete: KeyAction.cascade,
+      )();
+  TextColumn get patientId => text()();
+
+  /// `PermissionLevel` enum `.name`.
+  TextColumn get permissionLevel => text()();
+  IntColumn get invitedAtMs => integer()();
+  IntColumn get acceptedAtMs => integer().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}

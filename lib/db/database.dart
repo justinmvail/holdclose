@@ -8,7 +8,7 @@ part 'database.g.dart';
 /// Drift-managed SQLite database (BUILD_SPEC.md §6.2 + TASKS.md
 /// Phase 11.2 + Phase 12.1 + Phase 12.5 + Phase 14.16 + Phase 14.18 +
 /// Phase 14.21).
-/// Holds fifteen tables:
+/// Holds seventeen tables:
 /// `journal_entries` (auto-logged decoder runs), `patients` (the loved
 /// one — one row per install), `app_settings` (single-row preferences
 /// blob), the chat pair `chat_conversations` + `chat_messages`
@@ -17,8 +17,10 @@ part 'database.g.dart';
 /// the appointment pair `providers` + `appointments` (Phase 12.5)
 /// — all FK-linked with `ON DELETE CASCADE` — the two standalone
 /// tables `health_log_entries` (Phase 14.16) and `care_plan_sections`
-/// (Phase 14.18), and the three documents tables `emergency_cards` +
-/// `power_of_attorney_docs` + `identification_docs` (Phase 14.21).
+/// (Phase 14.18), the three documents tables `emergency_cards` +
+/// `power_of_attorney_docs` + `identification_docs` (Phase 14.21), and
+/// the care-circle pair `caregivers` + `care_circle_memberships`
+/// (Phase 14.25) — FK-linked with `ON DELETE CASCADE`.
 ///
 /// Construct with [CareblazersDatabase.open] in production — it lazily
 /// opens a SQLite file under the platform's app-documents directory via
@@ -41,6 +43,8 @@ part 'database.g.dart';
     EmergencyCardsTable,
     PowerOfAttorneyDocsTable,
     IdentificationDocsTable,
+    CaregiversTable,
+    CareCircleMembershipsTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
@@ -54,7 +58,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       );
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -77,6 +81,9 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   /// - On upgrade from v6 → v7, create the three documents tables
   ///   (Phase 14.21). Existing data is untouched; Cards & Documents
   ///   lights up empty.
+  /// - On upgrade from v7 → v8, create the care-circle pair
+  ///   (Phase 14.25). Existing data is untouched; the Care Circle roster
+  ///   lights up empty (just the owner).
   /// - On every open — fresh or upgraded — set
   ///   `PRAGMA foreign_keys = ON`. SQLite ships with FK enforcement
   ///   off by default; without this pragma the `ON DELETE CASCADE` on
@@ -114,6 +121,10 @@ class CareblazersDatabase extends _$CareblazersDatabase {
             await m.createTable(powerOfAttorneyDocsTable);
             await m.createTable(identificationDocsTable);
           }
+          if (from < 8) {
+            await m.createTable(caregiversTable);
+            await m.createTable(careCircleMembershipsTable);
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -139,6 +150,8 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(emergencyCardsTable).go();
       await delete(powerOfAttorneyDocsTable).go();
       await delete(identificationDocsTable).go();
+      await delete(careCircleMembershipsTable).go();
+      await delete(caregiversTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();
