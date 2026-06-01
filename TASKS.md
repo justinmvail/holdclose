@@ -1910,7 +1910,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   entry has `attempt=2`. Asserts the PLAY-button keys for TTS
   exist (FakeTTSProvider.speak() is a no-op stub).
 
-- [ ] **Phase 15.4: Decoder back-stack + escape paths
+- [x] **Phase 15.4: Decoder back-stack + escape paths
   (`test/integration/decoder_back_flow_test.dart`).** Four
   `testWidgets` groups: (1) **Back from Q1 exits the flow** —
   navigate to triage Q1 → tap Back → router location returns to
