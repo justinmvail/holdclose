@@ -22,6 +22,7 @@ import '../screens/home_screen.dart';
 import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
 import '../screens/journal/journal_wizard_screen.dart';
+import '../screens/medical/cards_documents_hub_screen.dart';
 import '../screens/medical/care_plan_screen.dart';
 import '../screens/medical/care_plan_section_form.dart';
 import '../screens/medical/health_log_entry_form.dart';
@@ -434,6 +435,18 @@ GoRouter buildRouter({
                 builder: (BuildContext context, GoRouterState state) =>
                     const MedicalHubScreen(),
                 routes: <RouteBase>[
+                  // Cards & Documents sub-hub (Phase 14.22) — the 3-tile
+                  // landing for Emergency Card, Power of Attorney, and
+                  // Identification. Pushed onto the root navigator so the
+                  // hub covers the tab bar, matching the other Medical
+                  // feature pages.
+                  GoRoute(
+                    path: 'cards',
+                    name: CareblazersRoutes.medicalCardsHub,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const CardsDocumentsHubScreen(),
+                  ),
                   GoRoute(
                     path: 'cards/emergency',
                     name: CareblazersRoutes.medicalCardsEmergency,

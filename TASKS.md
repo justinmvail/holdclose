@@ -1509,7 +1509,7 @@ amber / plum are placeholders to be discarded.
   matches existing providers most closely). Migration step. Tests:
   round-trip + CRUD + JSON list encoding survives the boundary.
 
-- [ ] **Phase 14.22: Cards & Documents hub screen
+- [x] **Phase 14.22: Cards & Documents hub screen
   (`lib/screens/medical/cards_documents_hub_screen.dart`).** Mounts
   at `/medical/cards`. PathHeader (`Home › Medical`, title "Cards &
   Documents", back to Medical). Renders a 2-column HubGrid with 3
