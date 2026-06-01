@@ -26,6 +26,7 @@ import '../screens/medical/care_plan_screen.dart';
 import '../screens/medical/care_plan_section_form.dart';
 import '../screens/medical/health_log_entry_form.dart';
 import '../screens/medical/health_log_screen.dart';
+import '../screens/medical/med_schedule_screen.dart';
 import '../screens/medical/medical_hub_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
@@ -439,6 +440,17 @@ GoRouter buildRouter({
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (BuildContext context, GoRouterState state) =>
                         const CrisisCardScreen(),
+                  ),
+                  // Med Schedule (Phase 14.20) — a 24-hour daily timeline
+                  // of today's doses. Pushed onto the root navigator so
+                  // the feature page covers the tab bar, matching the
+                  // other Medical feature pages.
+                  GoRoute(
+                    path: 'schedule',
+                    name: CareblazersRoutes.medicalSchedule,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const MedScheduleScreen(),
                   ),
                   // Health Log (Phase 14.17) — list + add/edit form.
                   // Pushed onto the root navigator so the feature pages

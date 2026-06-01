@@ -1478,7 +1478,7 @@ amber / plum are placeholders to be discarded.
   with slot + stage pickers. Tests cover the stage filter + slot
   grouping + reorder; goldens for empty + populated.
 
-- [ ] **Phase 14.20: Med Schedule screen
+- [x] **Phase 14.20: Med Schedule screen
   (`lib/screens/medical/med_schedule_screen.dart`).** Mounts at
   `/medical/schedule`. PathHeader + a vertical 24-hour timeline (6am
   at the top by default; scroll to see midnight–6am). Time labels on
