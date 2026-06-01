@@ -91,11 +91,10 @@ careblazers/
       journal/
         journal_screen.dart
         journal_entry_screen.dart
-      library/
-        library_screen.dart
-        library_card_screen.dart
-      crisis/
-        crisis_card_screen.dart
+      medical/
+        medical_screen.dart
+      team/
+        team_screen.dart
       settings/
         settings_screen.dart
       onboarding/
@@ -155,6 +154,14 @@ careblazers/
   output includes a footer reminder. The LLM system prompt
   explicitly forbids medication dosing recommendations, prognosis
   claims, and "your loved one has X condition" diagnoses.
+- **Bottom tab bar is always exactly five items in this order —
+  Home, Medical, Team, Chat, Community — never collapsed or
+  conditionally hidden.**
+- **Every feature page below a hub uses `PathHeader` with breadcrumb
+  + word-labeled Back. No screen below a hub relies on the OS back
+  button alone.**
+- **Maximum two levels deep below a tab landing. Additional depth
+  uses in-page tabs / segmented controls, not another tile grid.**
 
 ## Common workflows
 
@@ -216,7 +223,8 @@ flutter test integration_test/demo_tour.dart --dart-define=DEMO_MODE=true
 
 ## When in doubt
 
-1. Re-read BUILD_SPEC.md for the relevant section.
+1. Re-read BUILD_SPEC.md (and `docs/MENU_LAYOUT_SPEC.md` for
+   navigation / tab / hub structure) for the relevant section.
 2. Read 3 nearby screens or services for patterns.
 3. If something is genuinely ambiguous, leave a `// TODO(decision):`
    and continue.

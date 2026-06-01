@@ -1773,7 +1773,7 @@ amber / plum are placeholders to be discarded.
   --dart-define=DEMO_MODE=true`. Updates the demo screenshot
   baselines.
 
-- [ ] **Phase 14.40: Update CLAUDE.md project layout + invariants.**
+- [x] **Phase 14.40: Update CLAUDE.md project layout + invariants.**
   In CLAUDE.md's `lib/screens/` block: add `medical/`, `team/`;
   remove `library/`, `crisis/`. In "Architectural invariants",
   append three new invariants: (1) "Bottom tab bar is always exactly
