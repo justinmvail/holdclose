@@ -1385,7 +1385,7 @@ amber / plum are placeholders to be discarded.
   cache hit returns the stored copy without invoking the provider;
   expired cache regenerates. Golden for the populated card.
 
-- [ ] **Phase 14.13: Multi-kind Add FAB + bottom sheet
+- [x] **Phase 14.13: Multi-kind Add FAB + bottom sheet
   (`lib/widgets/home/add_action_sheet.dart`).** Floating action
   button (teal background, 58px, white `+` glyph) anchored
   bottom-right of HomeScreen with safe-area + tab-bar padding. Tap

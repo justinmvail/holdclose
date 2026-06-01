@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/home_clock_provider.dart';
 import '../routing/router.dart';
 import '../theme.dart';
+import '../widgets/home/add_action_sheet.dart';
 import '../widgets/home/catch_me_up_card.dart';
 import '../widgets/home/emergency_card_pin.dart';
 import '../widgets/home/medications_today_card.dart';
@@ -18,9 +19,8 @@ import '../widgets/home/recent_activity_card.dart';
 /// AppBar-less. The body is a scrolling [ListView] (16px padding) whose
 /// first row carries the time-of-day greeting on the left and a profile
 /// affordance on the right that pushes Settings. The dashboard cards
-/// (Phases 14.8–14.12) and the quick-action FAB (Phase 14.13) land as
-/// further children of this same scroll view; this task lays only the
-/// scroll view + greeting + profile.
+/// (Phases 14.8–14.12) are children of this scroll view; the quick-action
+/// FAB (Phase 14.13) sits in the scaffold's `floatingActionButton` slot.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -38,6 +38,11 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: careblazersColors.background,
+      // Quick-add FAB (Phase 14.13). The scaffold slot keeps it clear of
+      // the safe-area inset; because Home's body ends at the top of the
+      // shell's tab bar, the default end-float position also clears the
+      // tab bar.
+      floatingActionButton: const AddActionFab(),
       body: SafeArea(
         child: ListView(
           key: dashboardListKey,
