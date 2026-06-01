@@ -1923,7 +1923,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   the launched URL and assert it matches the Care Collective
   endpoint exactly (string match, not pattern).
 
-- [ ] **Phase 15.5: Dose log marking flow
+- [x] **Phase 15.5: Dose log marking flow
   (`test/integration/dose_log_flow_test.dart`).** Seed 4 doses
   for Mary today (2 unlogged morning, 1 taken morning, 1 missed
   afternoon). Pump app → tap Home Medications Today card → land
