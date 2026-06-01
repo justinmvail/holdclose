@@ -22,6 +22,8 @@ import '../screens/home_screen.dart';
 import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
 import '../screens/journal/journal_wizard_screen.dart';
+import '../screens/medical/care_plan_screen.dart';
+import '../screens/medical/care_plan_section_form.dart';
 import '../screens/medical/health_log_entry_form.dart';
 import '../screens/medical/health_log_screen.dart';
 import '../screens/medical/medical_hub_screen.dart';
@@ -83,6 +85,8 @@ class CareblazersRoutes {
   static const String medicalHealthLogNew = 'medical-health-log-new';
   static const String medicalHealthLogEdit = 'medical-health-log-edit';
   static const String medicalCarePlan = 'medical-care-plan';
+  static const String medicalCarePlanNew = 'medical-care-plan-new';
+  static const String medicalCarePlanEdit = 'medical-care-plan-edit';
   static const String medicalSchedule = 'medical-schedule';
   static const String medicalCardsHub = 'medical-cards-hub';
   static const String medicalCardsEmergency = 'medical-cards-emergency';
@@ -462,6 +466,36 @@ GoRouter buildRouter({
                         builder: (BuildContext context, GoRouterState state) =>
                             HealthLogEntryForm(
                           entryId: state.pathParameters['id'],
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Care Plan (Phase 14.19) — list + add/edit form. Pushed
+                  // onto the root navigator so the feature pages cover the
+                  // tab bar; `care-plan/new` is registered before
+                  // `care-plan/:id/edit` so the literal `new` segment isn't
+                  // swallowed by the `:id` parameter.
+                  GoRoute(
+                    path: 'care-plan',
+                    name: CareblazersRoutes.medicalCarePlan,
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const CarePlanScreen(),
+                    routes: <RouteBase>[
+                      GoRoute(
+                        path: 'new',
+                        name: CareblazersRoutes.medicalCarePlanNew,
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (BuildContext context, GoRouterState state) =>
+                            const CarePlanSectionForm(),
+                      ),
+                      GoRoute(
+                        path: ':id/edit',
+                        name: CareblazersRoutes.medicalCarePlanEdit,
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (BuildContext context, GoRouterState state) =>
+                            CarePlanSectionForm(
+                          sectionId: state.pathParameters['id'],
                         ),
                       ),
                     ],

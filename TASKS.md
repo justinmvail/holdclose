@@ -1467,7 +1467,7 @@ amber / plum are placeholders to be discarded.
   `delete`, and a `bySlot()` selector. Tests cover CRUD + reorder
   integrity (no duplicate order ints; gaps closed on delete).
 
-- [ ] **Phase 14.19: Care Plan screen
+- [x] **Phase 14.19: Care Plan screen
   (`lib/screens/medical/care_plan_screen.dart`).** Mounts at
   `/medical/care-plan`. PathHeader + segmented control at the top
   (All / Early / Middle / Late) that filters which sections show.
