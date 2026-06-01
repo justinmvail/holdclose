@@ -1891,7 +1891,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
 
 ### Tier 1 — Core wedges (highest risk; zero current coverage)
 
-- [ ] **Phase 15.3: Behavior Decoder full flow
+- [x] **Phase 15.3: Behavior Decoder full flow
   (`test/integration/decoder_flow_test.dart`).** Tests THE WEDGE.
   Three `testWidgets` groups: (1) **Canonical behavior happy path**
   — pump app → push `/decoder/behavior` → tap "Repetitive
