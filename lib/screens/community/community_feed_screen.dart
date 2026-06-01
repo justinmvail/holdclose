@@ -15,6 +15,7 @@ import '../../services/forum_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/segmented_subnav.dart';
 import 'learn_screen.dart';
+import 'support_screen.dart';
 
 part 'community_feed_screen.g.dart';
 
@@ -65,8 +66,8 @@ enum CommunitySegment {
 ///     derived author display name + initial-letter avatar, relative
 ///     time, a 3-line body preview, and the vote + comment counts.
 ///     Empty state: "Be the first to post." Loading: a soft skeleton.
-///   * **Learn / Support segments** — owned by Phases 14.37 / 14.38;
-///     rendered here as soft placeholders until those screens land.
+///   * **Learn / Support segments** — the `LearnScreen` (Phase 14.37)
+///     and `SupportScreen` (Phase 14.38) render in-tab here.
 ///
 /// The compose FAB and the moderation action are feed-scoped — they
 /// only show while the Feed segment is active.
@@ -218,8 +219,8 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
   }
 
   /// The body for the active segment. Feed renders the live post list;
-  /// Learn / Support render soft placeholders until Phases 14.37 / 14.38
-  /// land the real `LearnScreen` / `SupportScreen`.
+  /// Learn renders the `LearnScreen` content library (Phase 14.37) and
+  /// Support renders the `SupportScreen` wellbeing tools (Phase 14.38).
   Widget _segmentBody(CommunityFeedState feed, DateTime now) {
     switch (_segment) {
       case CommunitySegment.feed:
@@ -247,13 +248,11 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
         // still find the Learn body.
         return const LearnScreen(key: CommunityFeedScreen.learnSegmentKey);
       case CommunitySegment.support:
-        return const _SegmentPlaceholder(
-          key: CommunityFeedScreen.supportSegmentKey,
-          icon: Icons.favorite_outline,
-          title: 'Support is on the way',
-          body: 'A burnout self-check, respite resources, and expert '
-              'answers will live here.',
-        );
+        // Caregiver wellbeing tools — burnout self-check, respite
+        // resources, expert Q&A (Phase 14.38). Keyed with
+        // [supportSegmentKey] so the sub-nav swap tests still find the
+        // Support body.
+        return const SupportScreen(key: CommunityFeedScreen.supportSegmentKey);
     }
   }
 }
@@ -458,51 +457,6 @@ class _EmptyState extends StatelessWidget {
             style: textTheme.bodyLarge?.copyWith(
               color: careblazersColors.text,
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Soft placeholder for the Learn / Support segments until Phases 14.37
-/// / 14.38 land the real screens. Centered icon + heading + one warm,
-/// non-clinical line so the swap reads as intentional rather than empty.
-class _SegmentPlaceholder extends StatelessWidget {
-  const _SegmentPlaceholder({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
-
-  final IconData icon;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Icon(icon, size: 56, color: careblazersColors.primarySoft),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            body,
-            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
             textAlign: TextAlign.center,
           ),
         ],

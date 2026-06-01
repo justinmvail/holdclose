@@ -1741,7 +1741,7 @@ amber / plum are placeholders to be discarded.
   locked content). Tests cover list rendering + navigation +
   golden.
 
-- [ ] **Phase 14.38: Support segment + caregiver wellbeing tools
+- [x] **Phase 14.38: Support segment + caregiver wellbeing tools
   (`lib/screens/community/support_screen.dart`,
   `lib/services/burnout_score.dart`,
   `lib/seed/support_content.dart`).** Three collapsible cards:
