@@ -66,6 +66,34 @@ class CareblazersRoutes {
   static const String communityCompose = 'community-compose';
   static const String communityGuidelines = 'community-guidelines';
   static const String communityAdminReports = 'community-admin-reports';
+
+  // Phase 14 IA — Medical hub + its feature pages (BUILD_SPEC.md §4–§5).
+  // The hub branch (`medicalHub` → `/medical`) lands in this phase as a
+  // placeholder; the feature-page names below are forward-declared here
+  // so Phases 14.15–14.24 can wire `goNamed(...)` without re-touching
+  // this enum-like surface. Only `medicalHub` + `medicalCardsEmergency`
+  // resolve to a registered route today; the rest gain routes as their
+  // owning phase lands.
+  static const String medicalHub = 'medical-hub';
+  static const String medicalHealthLog = 'medical-health-log';
+  static const String medicalCarePlan = 'medical-care-plan';
+  static const String medicalSchedule = 'medical-schedule';
+  static const String medicalCardsHub = 'medical-cards-hub';
+  static const String medicalCardsEmergency = 'medical-cards-emergency';
+  static const String medicalCardsPoa = 'medical-cards-poa';
+  static const String medicalCardsIds = 'medical-cards-ids';
+
+  // Phase 14 IA — Care Team hub + its feature pages. Same forward-
+  // declaration contract as the Medical names: `teamHub` → `/team`
+  // lands here as a placeholder, the rest gain routes in 14.26–14.33.
+  static const String teamHub = 'team-hub';
+  static const String teamCalendar = 'team-calendar';
+  static const String teamTasks = 'team-tasks';
+  static const String teamShifts = 'team-shifts';
+  static const String teamCircle = 'team-circle';
+  static const String teamCircleInvite = 'team-circle-invite';
+  static const String teamActivity = 'team-activity';
+  static const String teamExpenses = 'team-expenses';
 }
 
 /// Build a fresh GoRouter wired with every BUILD_SPEC.md §5 route.
@@ -186,6 +214,19 @@ GoRouter buildRouter({
           );
         },
       ),
+      // Journal moved out of the tab bar in the Phase 14 IA refactor —
+      // it's no longer a shell branch. The list + wizard + entry detail
+      // are top-level pushed routes (root navigator) reached from Home's
+      // quick actions and the Recent Activity card. `/journal/new` is
+      // registered before `/journal/:id` so the literal `new` segment
+      // isn't swallowed by the `:id` parameter.
+      GoRoute(
+        path: '/journal',
+        name: CareblazersRoutes.journal,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const JournalScreen(),
+      ),
       GoRoute(
         path: '/journal/new',
         name: CareblazersRoutes.journalNew,
@@ -203,6 +244,71 @@ GoRouter buildRouter({
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             JournalEntryScreen(entryId: state.pathParameters['id'] ?? ''),
+      ),
+      // Medications + Appointments moved out of the tab bar in the Phase
+      // 14 IA refactor — they live under the Medical hub now and are
+      // reached as top-level pushed routes (root navigator) from Home's
+      // medical cards + the Medical hub tiles (Phase 14.15+). The nested
+      // form/detail routes already pushed onto the root navigator; the
+      // only change here is the list root joining them at the top level.
+      GoRoute(
+        path: '/medications',
+        name: CareblazersRoutes.medicationList,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const MedicationListScreen(),
+        routes: <RouteBase>[
+          GoRoute(
+            path: 'new',
+            name: CareblazersRoutes.medicationForm,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                const MedicationFormScreen(),
+          ),
+          GoRoute(
+            path: 'today',
+            name: CareblazersRoutes.medicationDoseLog,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                const DoseLogScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/appointments',
+        name: CareblazersRoutes.appointmentList,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const AppointmentListScreen(),
+        routes: <RouteBase>[
+          GoRoute(
+            path: 'new',
+            name: CareblazersRoutes.appointmentForm,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                const AppointmentFormScreen(),
+          ),
+          GoRoute(
+            path: ':id',
+            name: CareblazersRoutes.appointmentDetail,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                AppointmentDetailScreen(
+              appointmentId: state.pathParameters['id'] ?? '',
+            ),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'edit',
+                name: CareblazersRoutes.appointmentEdit,
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (BuildContext context, GoRouterState state) =>
+                    AppointmentFormScreen(
+                  appointmentId: state.pathParameters['id'],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/community/compose',
@@ -241,44 +347,30 @@ GoRouter buildRouter({
           );
         },
       ),
-      GoRoute(
-        path: '/chat',
-        name: CareblazersRoutes.chatList,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) =>
-            const ConversationListScreen(),
-      ),
-      GoRoute(
-        path: '/chat/:id',
-        name: CareblazersRoutes.chatThread,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) => ChatScreen(
-          conversationId: state.pathParameters['id'] ?? '',
-        ),
-      ),
-      // Crisis card (BUILD_SPEC.md §5.9). Pushed onto the root
-      // navigator from the Medications screen's AppBar action — it
-      // used to be a bottom-tab in the original spec but the
-      // home-refactor moved it under Meds since it's a medical-context
-      // resource. Keeping the route at the top level means deep links
-      // from notifications still resolve.
+      // Crisis card — deep-link compatibility shim (Phase 14.5). The
+      // emergency content now lives at `/medical/cards/emergency` under
+      // the Medical hub; `/crisis` survives only so old notification
+      // deep links + saved shortcuts still resolve. It redirects to the
+      // canonical location rather than rendering a screen of its own.
+      // Phase 14.23 deletes the old CrisisCardScreen and lands the real
+      // Emergency Card at the redirect target — this route stays alive.
       GoRoute(
         path: '/crisis',
         name: CareblazersRoutes.crisis,
         parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) =>
-            const CrisisCardScreen(),
+        redirect: (BuildContext context, GoRouterState state) =>
+            '/medical/cards/emergency',
       ),
-      // Tab shell — Home / Journal / Medications / Appointments /
-      // Community (BUILD_SPEC.md §4.1 + Phase 12.8 + home-refactor).
-      // Library + Crisis were removed from the tab bar in the home-
-      // refactor; the Crisis card lives behind the Medications AppBar
-      // action.
-      // Each branch is a separate Navigator so back-stacks survive
-      // tab switches. The medication + appointment branches stay
-      // registered even when the matching Settings toggle hides them
-      // from the tab bar — a notification-tap deep link still needs
-      // to land on the right branch (BUILD_SPEC.md Phase 12.8 wiring).
+      // Tab shell — the fixed 5-tab bar (Phase 14 IA refactor,
+      // BUILD_SPEC.md §4.1): Home · Medical · Team · Chat · Community.
+      // Always exactly five branches, always visible (the old
+      // `useTrackers` visibility toggles are gone). Each branch is a
+      // separate Navigator so back-stacks survive tab switches.
+      //
+      // Medical + Team are tile-hub landings (placeholders here until
+      // Phase 14.15 / 14.26 land the real hubs); Chat + Community are
+      // direct landings. Branch order MUST match
+      // `TabScaffold.tabBranchPaths` index-for-index.
       StatefulShellRoute.indexedStack(
         builder: (
           BuildContext context,
@@ -297,87 +389,68 @@ GoRouter buildRouter({
               ),
             ],
           ),
+          // Medical hub (Phase 14.15 replaces this placeholder with
+          // MedicalHubScreen). The emergency card is registered as a
+          // pushed child now — it's the `/crisis` redirect target + the
+          // Home pinned-card destination (Phase 14.8). Until Phase 14.23
+          // it renders the existing CrisisCardScreen; 14.23 swaps in the
+          // real Emergency Card and deletes the old screen.
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: '/journal',
-                name: CareblazersRoutes.journal,
+                path: '/medical',
+                name: CareblazersRoutes.medicalHub,
                 builder: (BuildContext context, GoRouterState state) =>
-                    const JournalScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: <RouteBase>[
-              GoRoute(
-                path: '/medications',
-                name: CareblazersRoutes.medicationList,
-                builder: (BuildContext context, GoRouterState state) =>
-                    const MedicationListScreen(),
+                    Scaffold(appBar: AppBar(title: const Text('Medical'))),
                 routes: <RouteBase>[
                   GoRoute(
-                    path: 'new',
-                    name: CareblazersRoutes.medicationForm,
+                    path: 'cards/emergency',
+                    name: CareblazersRoutes.medicalCardsEmergency,
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (BuildContext context, GoRouterState state) =>
-                        const MedicationFormScreen(),
-                  ),
-                  GoRoute(
-                    path: 'today',
-                    name: CareblazersRoutes.medicationDoseLog,
-                    parentNavigatorKey: rootNavigatorKey,
-                    builder: (BuildContext context, GoRouterState state) =>
-                        const DoseLogScreen(),
+                        const CrisisCardScreen(),
                   ),
                 ],
               ),
             ],
           ),
+          // Care Team hub (Phase 14.26 replaces this placeholder with
+          // CareTeamHubScreen).
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: '/appointments',
-                name: CareblazersRoutes.appointmentList,
+                path: '/team',
+                name: CareblazersRoutes.teamHub,
                 builder: (BuildContext context, GoRouterState state) =>
-                    const AppointmentListScreen(),
+                    Scaffold(appBar: AppBar(title: const Text('Care Team'))),
+              ),
+            ],
+          ),
+          // Chat — direct landing. `/chat/:id` pushes onto THIS branch's
+          // navigator (no `parentNavigatorKey`), so a thread keeps the
+          // tab bar and pops back to the conversation list.
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(
+                path: '/chat',
+                name: CareblazersRoutes.chatList,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const ConversationListScreen(),
                 routes: <RouteBase>[
-                  GoRoute(
-                    path: 'new',
-                    name: CareblazersRoutes.appointmentForm,
-                    parentNavigatorKey: rootNavigatorKey,
-                    builder: (BuildContext context, GoRouterState state) =>
-                        const AppointmentFormScreen(),
-                  ),
                   GoRoute(
                     path: ':id',
-                    name: CareblazersRoutes.appointmentDetail,
-                    parentNavigatorKey: rootNavigatorKey,
+                    name: CareblazersRoutes.chatThread,
                     builder: (BuildContext context, GoRouterState state) =>
-                        AppointmentDetailScreen(
-                      appointmentId: state.pathParameters['id'] ?? '',
+                        ChatScreen(
+                      conversationId: state.pathParameters['id'] ?? '',
                     ),
-                    routes: <RouteBase>[
-                      GoRoute(
-                        path: 'edit',
-                        name: CareblazersRoutes.appointmentEdit,
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (BuildContext context, GoRouterState state) =>
-                            AppointmentFormScreen(
-                          appointmentId: state.pathParameters['id'],
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
             ],
           ),
-          // Crisis lives outside the tab shell now (home-refactor
-          // follow-up). It's still reachable as a top-level route
-          // (`/crisis`) registered above the StatefulShellRoute, but
-          // the Medications screen exposes the tap target instead of
-          // the bottom bar.
-          // Community lives in its own branch (Phase 13.10).
+          // Community — direct landing (Feed; Learn/Support sub-nav
+          // arrives in Phase 14.36).
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(

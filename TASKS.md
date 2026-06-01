@@ -1272,7 +1272,7 @@ amber / plum are placeholders to be discarded.
   render + re-tap-pops-to-hub; refresh
   `test/golden/tab_scaffold_golden_test.dart`.
 
-- [ ] **Phase 14.5: Rewrite `lib/routing/router.dart` shell branches.**
+- [x] **Phase 14.5: Rewrite `lib/routing/router.dart` shell branches.**
   Replace the 5 existing branches with the new 5: `/` → HomeScreen,
   `/medical` → MedicalHubScreen (Phase 14.15 — until then, render a
   Scaffold with an `AppBar(title: Text('Medical'))` placeholder so
