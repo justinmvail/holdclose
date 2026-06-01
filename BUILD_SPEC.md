@@ -287,15 +287,64 @@ Type ramp (logical names map to `TextTheme`):
 
 ### 4.1 Navigation model
 
-- **Bottom tab bar** with four items in this exact order:
-  `Home` · `Journal` · `Library` · `Crisis`.
-- Tab switching uses `context.go` (per CLAUDE.md navigation invariants).
-- Pushing onto a tab (e.g. Home → decoder flow) uses `context.push`
-  so the back-stack survives and AppBars auto-render a back arrow.
-- Inside a pushed stack, `context.go` is acceptable for "back to fixed
-  location" patterns (e.g. decoder result → home after "That helped").
-- Settings lives behind a small gear icon in the top-right of Home —
-  NOT in the tab bar.
+The information architecture is governed by
+[`docs/MENU_LAYOUT_SPEC.md`](docs/MENU_LAYOUT_SPEC.md) — the
+authoritative IA doc the Phase 14 refactor builds against. This
+section is the BUILD_SPEC restatement of that contract; where the two
+disagree, the layout spec wins. Only the accessibility constraints
+from that doc carry over as hard visual rules (large tap targets,
+large readable text, high contrast, word labels alongside icons). The
+palette/fonts in the layout spec's companion HTML are placeholders —
+ignore them; the brand tokens in §3 remain load-bearing.
+
+- **Fixed 5-tab bottom bar**, persistent on every screen, in this
+  exact order: `Home` · `Medical` · `Team` · `Chat` · `Community`.
+  ("Care Team" is the full name; the tab label is `Team` so it fits
+  the bar.) Built with `go_router`'s `StatefulShellRoute` — one branch
+  per tab, each branch keeping its own navigation stack.
+- **Five equal-width tabs, always shown, never collapsed.** Each tab
+  is **icon + word label**, both always visible. The active tab is
+  clearly highlighted.
+- **No hamburger / no hidden menu anywhere.** Account, settings, and
+  help sit behind a **profile icon on the Home screen** — NOT in the
+  tab bar, NOT in a drawer.
+- **Tile-hub vs. direct-landing.** Each tab has one of two landing
+  behaviors, and the distinction is invariant:
+  - **Direct-landing tabs** open straight to their content:
+    - `Home` → a vertical scroll of dashboard cards (the "Today"
+      dashboard).
+    - `Chat` → a conversation list.
+    - `Community` → the social Feed (with an in-tab Feed · Learn ·
+      Support sub-nav).
+  - **Tile-hub tabs** open to a grid of large labeled tiles, each
+    tile = icon + label + short sub-label:
+    - `Medical` → tile hub.
+    - `Team` (Care Team) → tile hub.
+- **Tapping the already-active tab** returns the user to that
+  section's landing/hub (clears that branch's stack back to root).
+- **Two-levels-max depth rule.** The deepest any flow goes is
+  Section → (tile hub) → feature page. Anything that would be a third
+  level uses **in-page tabs or a segmented control** instead of
+  another grid of tiles. (The Community Feed/Learn/Support sub-nav is
+  the canonical example: a sixth destination's worth of content lives
+  inside one tab rather than adding a sixth tab.)
+- **Path-header + word-labeled-Back invariant.** Every feature page
+  below a hub shows, at the top:
+  - the **path** as tappable breadcrumb segments, e.g. `Home › Medical`
+    followed by the page title (e.g. "Medications"). Tapping a parent
+    segment navigates up to it.
+  - an explicit **word-labeled Back control** (e.g. "‹ Back to
+    Medical"). Never rely on swipe gestures or the bare OS back arrow
+    alone — the label always names the destination.
+  - Landing screens (Home, Chat, Community, and the Medical / Care
+    Team hubs themselves) show just the section title — **no
+    breadcrumb and no Back**, because they are top level.
+- **Routing mechanics.** Tab switching uses `context.go` to the
+  branch's root. Pushing a feature page onto a hub (e.g. Medical hub →
+  Medications) uses `context.push` so the back-stack survives and the
+  path-header Back control resolves to the parent. Inside a pushed
+  stack, `context.go` is acceptable for "back to a fixed location"
+  patterns (e.g. a completed decoder flow returning to Home).
 
 ### 4.2 Screen map
 
@@ -304,30 +353,46 @@ Welcome carousel (onboarding) ─ Sign-in screen
                   │
                   ↓ (after sign-in OR demo skip)
                   │
-            ┌─────┴─────┬──────────┬──────────┐
-            ↓           ↓          ↓          ↓
-        ┌──────┐   ┌──────┐   ┌──────┐   ┌──────┐
-        │ Home │   │Journal│   │Library│   │Crisis│
-        └──┬───┘   └──┬───┘   └──┬───┘   └──┬───┘
-           │          │          │          │
-           ↓          ↓          ↓          ↓
-   ┌───────────┐  ┌──────┐   ┌──────┐   (single screen)
-   │ Behavior  │  │Entry │   │ Card │
-   │ picker    │  │detail│   │detail│
-   └─────┬─────┘  └──────┘   └──────┘
-         ↓
-   ┌───────────┐
-   │  Triage   │
-   └─────┬─────┘
-         ↓
-   ┌───────────┐
-   │  Decoder  │
-   │  result   │
-   └───────────┘
+   ┌──────────┬──────────┬──────────┬──────────┬──────────────┐
+   ↓          ↓          ↓          ↓          ↓              │
+┌──────┐  ┌───────┐  ┌──────┐  ┌──────┐  ┌───────────┐       │
+│ Home │  │Medical│  │ Team │  │ Chat │  │ Community  │       │
+│(cards)│ │ (hub) │  │(hub) │  │(list)│  │  (feed)    │       │
+└──┬───┘  └───┬───┘  └──┬───┘  └──┬───┘  └─────┬─────┘       │
+   │          │         │         │            │              │
+   │          │         │         │       Feed·Learn·Support  │
+   │          │         │         │       (in-tab sub-nav)    │
+   │          │         │         │                           │
+   │   ┌──────┴──────┐  │    ┌────┴─────┐                     │
+   │   ↓ feature      │  │    ↓ thread   │                     │
+   │  pages (2 deep): │  │  conversation │                     │
+   │   Medications    │  │               │                     │
+   │   Medication     │  │  ┌──Team feature pages (2 deep):    │
+   │     Schedule     │  └─▶│   Calendar · Tasks · Shifts ·    │
+   │   Appointments   │     │   Care Circle · Activity ·       │
+   │   Health Log     │     │   Expenses                       │
+   │   Care Plan      │     └──────────────────────────────────┘
+   │   Cards & Docs   │          (Cards & Docs → Emergency Card)
+   │     ├─ Emergency │
+   │     │  Card      │
+   │   Journal        │
+   │                  │
+   ↓                  │
+ Pinned Emergency Card (also reachable in one tap from Home)
+ + Decoder flow: Home → behavior picker → triage → result
+   (pushed; returns to Home on "That helped")
 
            ↑
-    ⚙ Settings (push from Home top-right; modal-style)
+    👤 Profile → Settings / account / help
+       (push from Home top-right — NOT in the tab bar)
 ```
+
+Depth never exceeds two levels: Section → (tile hub) → feature page.
+The decoder flow (behavior picker → triage → result) is a pushed
+linear stack launched from Home and is exempt from the tile-hub
+shape — it is a guided wizard, not a navigable hub. The Emergency
+Card is pinned on Home for one-tap crisis reach and also lives under
+Medical → Cards & Documents.
 
 ---
 
@@ -530,7 +595,15 @@ Every screen below must include:
 - Photo attach + display.
 - Notes edit + save persists across rebuild.
 
-### 5.7 Library (`/library`)
+### 5.7 Library (`/library`) — REMOVED in Phase 14
+
+> **Removed in Phase 14 — see Phase 14.23.** The standalone Library
+> tab no longer exists in the 5-tab IA (§4.1). Its educational content
+> (Dr. Natali's framework primers + the 12 seed cards in §9.4) is
+> re-homed under **Community → Learn** (the Careblazers content
+> library; see §5.16). The card-detail reader survives as the Learn
+> article reader. Phase 14.23 owns the migration. The historical spec
+> is retained below for reference until that task lands.
 
 **Purpose**: Topical primers on Dr. Natali's frameworks. Not coaching — education.
 
@@ -576,7 +649,16 @@ Every screen below must include:
 - Play button reads body via TTS provider.
 - Related-behavior chips deep-link correctly.
 
-### 5.9 Crisis card (`/crisis`)
+### 5.9 Crisis card (`/crisis`) — REMOVED in Phase 14
+
+> **Removed in Phase 14 — see Phase 14.41.** The standalone Crisis
+> tab is gone in the 5-tab IA (§4.1). Its function is replaced by the
+> **Emergency Card** (§5.17), which lives under **Medical → Cards &
+> Documents** AND is pinned to the top of the Home dashboard for
+> one-tap crisis reach. Phase 14.41 owns the rebuild; the inline-edit,
+> print/QR, and `patientProvider` backing all carry forward. The
+> historical spec is retained below for reference until that task
+> lands.
 
 **Purpose**: A single-screen reference for paramedics / ER staff.
 
@@ -681,6 +763,264 @@ CTA on page 3: "Get started" → pushes `/sign-in`.
 **Tests**:
 - Tapping Google → mocked `authProvider.signInWithGoogle()` called.
 - DEMO_MODE skip button visible only under `--dart-define=DEMO_MODE=true`.
+
+---
+
+The following sections (§5.13–§5.17) specify the Phase 14 IA screens
+introduced by [`docs/MENU_LAYOUT_SPEC.md`](docs/MENU_LAYOUT_SPEC.md).
+Phase 14 task numbers own the implementation; the specs here are the
+contract those tasks build to. The §4.1 invariants apply to every one:
+direct-landing tabs show only a section title (no breadcrumb/Back);
+tile-hub tabs render a 2-column grid; every feature page below a hub
+carries the tappable path-header breadcrumb + a word-labeled Back
+control; depth never exceeds two levels.
+
+### 5.13 Medical hub (`/medical`) — tile hub
+
+**Purpose**: The single entry point to everything clinical — meds,
+appointments, health log, care plan, documents, journal. A tile hub,
+not a dashboard.
+
+**Landing behavior**: Tapping the `Medical` tab opens this hub
+directly. Tapping the already-active `Medical` tab returns here
+(clears the Medical branch stack to root). This is a **landing
+screen** — header shows just the section title "Medical"; **no
+breadcrumb, no Back control.**
+
+**Layout**:
+- Header: "Medical" (`headlineMedium`). No breadcrumb (top level).
+- Two-column grid of large tiles. Each tile = icon (top) + label +
+  short sub-label, `surfaceWarm` background, rounded 16px, soft
+  shadow, large hit area. Tiles (in order):
+
+  | Tile | Sub-label | Pushes |
+  |---|---|---|
+  | **Medications** | doses & reminders | `/medical/medications` |
+  | **Medication Schedule** | daily timeline | `/medical/schedule` |
+  | **Appointments** | calendar & visits | `/medical/appointments` |
+  | **Health Log** | symptoms & vitals | `/medical/health-log` |
+  | **Care Plan** | routine & stages | `/medical/care-plan` |
+  | **Cards & Documents** | emergency card, POA, IDs | `/medical/documents` |
+  | **Journal** | care notes | `/medical/journal` |
+
+- Target 4–6 tiles per hub; this hub is at the upper bound (7).
+  Medications + Medication Schedule MAY be merged into one tile with
+  an in-page toggle if a trim is wanted (the two-levels-max rule
+  prefers an in-page segmented control over a deeper grid). The
+  Journal tile re-homes the former `/journal` screens (§5.5–§5.6) —
+  per the layout spec, Journal may alternatively move under
+  Community → Support if it proves to be primarily caregiver
+  reflection; defer that call to the Phase 14 implementer.
+
+**Feature pages**: each tile pushes a single feature page (level 2).
+Those pages carry the path-header (`Home › Medical` → page title) and
+a word-labeled Back ("‹ Back to Medical"). Individual feature-page
+specs (Medications, Appointments, Health Log, Care Plan) are owned by
+their respective Phase 14 tasks; Cards & Documents contains the
+Emergency Card (§5.17).
+
+**Tests**:
+- Hub renders all tiles with label + sub-label.
+- Each tile pushes its route.
+- Landing shows no Back control / no breadcrumb (it is top level).
+- Re-tapping the active Medical tab pops to the hub.
+
+### 5.14 Care Team hub (`/team`) — tile hub
+
+**Purpose**: The multi-caregiver orchestration layer — shared
+calendar, task assignment, shift coverage, the care-circle roster,
+the activity feed, and shared expenses. A tile hub.
+
+**Landing behavior**: Tapping the `Team` tab (labeled `Team` in the
+bar; "Care Team" is the full name) opens this hub directly.
+Re-tapping the active tab returns here. **Landing screen** — header
+shows "Care Team"; **no breadcrumb, no Back.**
+
+**Layout**:
+- Header: "Care Team" (`headlineMedium`). No breadcrumb.
+- Two-column tile grid, same tile treatment as §5.13. Tiles:
+
+  | Tile | Sub-label | Pushes |
+  |---|---|---|
+  | **Calendar** | shared schedule | `/team/calendar` |
+  | **Tasks** | assign & claim | `/team/tasks` |
+  | **Shifts** | coverage & gaps | `/team/shifts` |
+  | **Care Circle** | roster, roles & invites | `/team/circle` |
+  | **Activity** | feed & handoffs | `/team/activity` |
+  | **Expenses** | shared costs | `/team/expenses` |
+
+  Six tiles — within the 4–6 target.
+
+**Feature pages**: each tile pushes one level-2 feature page with the
+path-header (`Home › Care Team` → page title) + word-labeled Back
+("‹ Back to Care Team"). Feature-page detail is owned by the
+per-tile Phase 14 tasks.
+
+**Tests**:
+- Hub renders all six tiles.
+- Each tile pushes its route.
+- Landing shows no Back / no breadcrumb.
+- Re-tapping the active Team tab pops to the hub.
+
+### 5.15 Chat (`/chat`) — direct landing (conversation list)
+
+**Purpose**: Messaging across the care circle and provider threads.
+
+**Landing behavior**: Tapping the `Chat` tab opens **straight to the
+conversation list** — no hub. **Landing screen** — header shows
+"Chat"; **no breadcrumb, no Back.**
+
+**Layout**:
+- Header: "Chat" (`headlineMedium`).
+- Standard message-list layout — a vertical list of conversation
+  rows, each: avatar + name + last-message preview + timestamp.
+  Conversations include the care-circle group thread, individual
+  member threads, and provider threads.
+- Tap a row → push the conversation thread (level 2), which carries
+  the path-header (`Home › Chat` → conversation name) + word-labeled
+  Back ("‹ Back to Chat").
+
+**State**: conversation list streams from the Chat data source behind
+the same interface seam pattern as every other backend (§1
+invariants); thread detail is owned by its Phase 14 task. See
+[`docs/CHAT_FEATURE.md`](docs/CHAT_FEATURE.md) for the chat data model
+and provider contract.
+
+**Tests**:
+- List renders rows with avatar + name + preview + timestamp.
+- Tapping a row pushes the thread.
+- Landing shows no Back / no breadcrumb.
+
+### 5.16 Community (`/community`) — direct landing (social feed + sub-nav)
+
+**Purpose**: The caregiver community surface — a social feed, the
+Careblazers content library, and caregiver-wellbeing/support
+resources. Replaces nothing in the old IA; it is a net-new tab plus
+the new home for the former Library content (§5.7).
+
+**Landing behavior**: Tapping the `Community` tab lands on the
+**Feed**. **Landing screen** — header shows "Community"; **no
+breadcrumb, no Back.**
+
+**Sub-nav (in-tab segmented control)**: at the top of the Community
+tab, a segmented control offers three views — **Feed · Learn ·
+Support**. This in-tab sub-nav is the canonical application of the
+two-levels-max rule: it lets a sixth destination's worth of content
+live inside one tab rather than adding a sixth bottom-bar tab (which
+would shrink tap targets below what the 65+ audience needs). Switching
+segments does NOT push a route or add a Back control — it swaps the
+in-page body.
+
+- **Feed** — the social experience. A scroll of posts; each post:
+  avatar + name + timestamp + body text + optional image, with
+  **word-labeled actions: Like · Comment · Share** (word labels, not
+  icon-only, per the accessibility constraint). Includes official
+  Careblazers posts and caregiver posts; supports grouping by topic /
+  disease stage. (Tapping a post → post detail, level 2, with
+  path-header `Home › Community` + word-labeled Back.)
+- **Learn** — the Careblazers content library: framework videos and
+  "what do I do when…" playbooks. **This is the new home for the
+  former Library cards** (§9.4's 12 seed cards migrate here in Phase
+  14.23). Tapping a card/article opens the reader (the surviving
+  library-card-detail screen, §5.8), level 2, with path-header +
+  word-labeled Back.
+- **Support** — caregiver wellbeing: burnout self-check, respite
+  guidance, expert Q&A, and crisis resources. (Crisis resources here
+  are referral/help-line content — distinct from the Emergency Card
+  in §5.17, which is the printable medical handoff.)
+
+**Scope guardrail**: Community content is wellness/peer-support, not
+medical advice. Support's crisis resources refer users to
+professional help; they do not diagnose or prescribe. Honor the §13.1
+framing.
+
+**Tests**:
+- Lands on Feed by default.
+- Segmented control switches Feed / Learn / Support without pushing a
+  route (no Back control appears).
+- Feed posts render avatar + name + timestamp + body + word-labeled
+  Like/Comment/Share actions.
+- Learn lists the migrated content cards; tapping opens the reader.
+
+### 5.17 Emergency Card (`/medical/documents/emergency-card`) — replaces §5.9
+
+**Purpose**: A single-screen, printable reference for paramedics /
+ER staff — the medical handoff card. This is the §5.9 Crisis-card
+function, re-homed and renamed for the Phase 14 IA.
+
+**Reachability (two paths, by design)**:
+- Lives under **Medical → Cards & Documents** (level 2 below the
+  Medical hub), with the path-header `Home › Medical › Cards &
+  Documents` → "Emergency Card" + word-labeled Back.
+- **Pinned to the top of the Home dashboard** (§5.18) as a prominent,
+  full-width button — one tap opens it from anywhere the user starts,
+  for instant crisis reach. The pinned Home entry and the Medical
+  location resolve to the same screen.
+
+**Layout** (one scrollable card — carried forward from §5.9):
+- Header/title: "Emergency Card" with "🖨 Print" + "📷 QR" actions.
+- 👤 Loved-one's name, age, condition, diagnosis date.
+- 💊 Medications (list).
+- ⚠ Allergies.
+- "**What calms her:**" bullets (editable).
+- "**What escalates her:**" bullets (editable).
+- 📞 Primary caregiver name + phone.
+- 📞 Healthcare POA name + phone.
+- ⚙ Advance directive status ("on file at X / DNR Y/N").
+- Footer: small "Updated [date]" timestamp.
+
+**Editing**: inline edit per field (tap to edit → text field appears).
+
+**Print**: generates a PDF via `pdfExporter.emergencyCard(patient)`
+(the former `crisisCard(...)` exporter, renamed). The PDF includes a
+corner QR code encoding a public-safe summary URL (placeholder in v1).
+
+**State**: backed by `patientProvider` → `patientRepository` (single
+patient, single `patient` row) — unchanged from §5.9.
+
+**Copy note**: per CLAUDE.md vocabulary, the card never says "the
+patient" in UI copy — use "your loved one" / the loved one's name.
+
+**Tests**:
+- Opens from both the Home pinned button and Medical → Cards &
+  Documents, resolving to the same screen.
+- Inline edit + save persists.
+- Print button generates a PDF.
+
+### 5.18 Home — "Today" dashboard (`/`) — supersedes §5.1 in Phase 14
+
+> Phase 14 reshapes Home from the single-button decoder launcher
+> (§5.1) into a **vertical scroll of dashboard cards**. §5.1 remains
+> the spec for the decoder-launch affordance, which becomes one card
+> in this scroll. The two-levels-max + no-hidden-nav rules apply;
+> account/settings/help move behind a **profile icon** (replacing the
+> §5.1 gear), top-right of Home.
+
+**Landing behavior**: the `Home` tab opens directly to the dashboard.
+**Landing screen** — section title only, no breadcrumb/Back.
+
+**Layout** (top to bottom, a scroll of cards — not a tile grid):
+1. Greeting / header, with the **profile icon** top-right →
+   pushes Settings / account / help (§5.10). NOT a hamburger.
+2. **Pinned Emergency Card** — prominent full-width button at the top.
+   One tap opens the Emergency Card (§5.17).
+3. **Medications Today** card — today's doses with status (taken /
+   due).
+4. **Next Appointment** card.
+5. **Recent Activity** card — latest care-circle events.
+6. A floating **"+ Add"** action for quick logging (voice input
+   supported).
+- The "What's happening right now?" decoder launcher (§5.1) lives as a
+  card in this scroll; tapping it pushes the decoder flow
+  (`/decoder/behavior` → triage → result), which returns to Home on
+  "That helped". A "catch me up" recent-activity summary may also live
+  here.
+
+**Tests**:
+- Profile icon pushes Settings (not a drawer).
+- Pinned Emergency Card button opens §5.17.
+- Decoder launcher card pushes `/decoder/behavior`.
+- No Back control on Home (it is the Home-tab root).
 
 ---
 

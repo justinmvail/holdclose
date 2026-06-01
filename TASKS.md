@@ -1212,7 +1212,7 @@ amber / plum are placeholders to be discarded.
 
 ### Foundation — spec, shared widgets, shell rewrite
 
-- [ ] **Phase 14.1: Land the layout spec + rewrite BUILD_SPEC.md §4–§5.**
+- [x] **Phase 14.1: Land the layout spec + rewrite BUILD_SPEC.md §4–§5.**
   Copy `~/Downloads/menu_layout_spec.md` to
   `docs/MENU_LAYOUT_SPEC.md` (verbatim — it's the authoritative IA
   doc Phase 14 builds against; downstream tasks reference it).
