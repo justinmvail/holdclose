@@ -1582,8 +1582,9 @@ note that Phase 8 polish needs to refine each one.
 ### 10.1 integration_test/demo_tour.dart
 
 A scripted walkthrough that taps through three full decoder flows
-back-to-back, then visits the journal, library, crisis card, and
-settings. Runs against `FakeLLMProvider` (no shim required).
+back-to-back, then visits the journal, the Community library, the
+emergency card, and settings. Runs against `FakeLLMProvider` (no shim
+required).
 
 **Pre-conditions**:
 - `DEMO_MODE=true` build define set.
@@ -1609,12 +1610,13 @@ settings. Runs against `FakeLLMProvider` (no shim required).
 11. **Home** → tap again → behavior picker → tap "I want to go home".
 12. **Triage** — answer (Evening, Nothing, Walked away).
 13. **Decoder result** — assert wants-home script. Tap "That helped".
-14. **Journal tab** — assert week summary shows 3 incidents +
-    "Sundowning" pattern flag (because seed data already had 3 + this
-    decoder run made it 4).
-15. **Library tab** — assert "Today's card" visible. Tap "Sundowning".
-16. **Library card detail** — assert body text + PLAY button.
-17. **Crisis tab** — assert Mary Henderson loaded.
+14. **Journal** (opened from Home) — assert week summary shows 3
+    incidents + "Sundowning" pattern flag (because seed data already
+    had 3 + this decoder run made it 4).
+15. **Community → Learn** — assert "Today's card" visible. Tap
+    "Sundowning".
+16. **Learn card detail** — assert body text + PLAY button.
+17. **Medical → Emergency Card** — assert Mary Henderson loaded.
 18. **Settings (via gear from Home)** — toggle "Read scripts aloud"
     OFF, assert; toggle ON; close.
 

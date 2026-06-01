@@ -1786,7 +1786,7 @@ amber / plum are placeholders to be discarded.
   Add `docs/MENU_LAYOUT_SPEC.md` to the "When in doubt" list as a
   primary reference alongside BUILD_SPEC.md. No tests.
 
-- [ ] **Phase 14.41: Sweep dead code.** Delete the now-empty
+- [x] **Phase 14.41: Sweep dead code.** Delete the now-empty
   `lib/screens/crisis/` and `lib/screens/library/` directories.
   Re-run `dart run build_runner build --delete-conflicting-outputs`
   to drop the removed `useTrackers` / etc. fields from
