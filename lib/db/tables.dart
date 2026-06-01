@@ -232,3 +232,32 @@ class AppointmentsTable extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
+
+/// One health-log row for the loved one (TASKS.md Phase 14.16).
+///
+/// Backs Medical → Health Log (BUILD_SPEC.md §5.13). The full freezed
+/// `HealthLogEntry` (kind + severity + vitals + notes) lives in
+/// [payload] as JSON — same blob-with-lifted-keys pattern the journal,
+/// chat, medication, and appointment tables use, so a new model field
+/// is persisted automatically without a schema bump.
+///
+/// Two keys are lifted out of the blob so the common reads don't parse
+/// every row: [recordedAtMs] (the `todayByKind` / recency queries order
+/// + filter on it) and [patientId] (the `byPatient` query filters on
+/// it). Unlike the appointment / medication tables there's no DB-level
+/// foreign key onto [PatientsTable]: that table is single-row ("one
+/// loved one per install"), so a cascade buys nothing, and keeping the
+/// link logical leaves room for a future multi-patient model to land
+/// without reworking the FK graph.
+class HealthLogEntriesTable extends Table {
+  @override
+  String get tableName => 'health_log_entries';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  IntColumn get recordedAtMs => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}

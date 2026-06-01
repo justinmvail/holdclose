@@ -1429,7 +1429,7 @@ amber / plum are placeholders to be discarded.
   the documented order + tap routes correctly; golden of the
   populated hub.
 
-- [ ] **Phase 14.16: Health Log model + drift table + provider
+- [x] **Phase 14.16: Health Log model + drift table + provider
   (`lib/models/health_log_entry.dart`, `lib/db/tables.dart`,
   `lib/providers/health_log_provider.dart`).** Freezed
   `HealthLogEntry` (id, patientId, recordedAt, kind enum
