@@ -1877,7 +1877,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   Team tiles. Single-task scope but the foundation for 15.3
   onward — DO NOT split.
 
-- [ ] **Phase 15.2: Drift test instance factory
+- [x] **Phase 15.2: Drift test instance factory
   (`lib/db/database.dart`).** Add static
   `CareblazersDatabase.testInstance()` returning a fresh database
   backed by `NativeDatabase.memory()` (no on-disk file). Used by

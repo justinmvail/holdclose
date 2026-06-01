@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import 'tables.dart';
@@ -63,6 +64,18 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   factory CareblazersDatabase.open() => CareblazersDatabase(
         driftDatabase(name: 'careblazers'),
       );
+
+  /// Builds a fresh database backed entirely by `NativeDatabase.memory()`
+  /// — no on-disk SQLite file, no shared app-documents path. Each call
+  /// returns an isolated connection, so two instances never see each
+  /// other's rows; the [migration] strategy runs `onCreate` against the
+  /// blank in-memory file, materialising every table at the current
+  /// [schemaVersion]. Backs the Phase 15 integration harness
+  /// (`test/integration/test_harness.dart`) and every Phase 15 `test/db/`
+  /// case — the caller is responsible for `.close()` in a teardown so the
+  /// connection doesn't outlive the test (TASKS.md Phase 15.2).
+  factory CareblazersDatabase.testInstance() =>
+      CareblazersDatabase(NativeDatabase.memory());
 
   @override
   int get schemaVersion => 12;

@@ -36,7 +36,6 @@ import 'package:careblazers/seed/sample_journal.dart';
 import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/widgets/hub_tile.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -129,9 +128,10 @@ Future<ProviderContainer> pumpCareblazersApp(
 
   // One in-memory drift DB backs the medication + appointment
   // repositories, whose reads are Future-based (no live drift stream to
-  // leak a teardown timer). (Phase 15.2 will swap the raw constructor for
-  // `CareblazersDatabase.testInstance()`.)
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  // leak a teardown timer). [CareblazersDatabase.testInstance] wraps a
+  // fresh `NativeDatabase.memory()` so each pump gets an isolated DB; the
+  // teardown closes the connection before the next test (Phase 15.2).
+  final CareblazersDatabase db = CareblazersDatabase.testInstance();
   addTearDown(db.close);
 
   // The journal/patient/settings seam uses the Map-backed fake rather than
