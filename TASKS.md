@@ -1335,7 +1335,7 @@ amber / plum are placeholders to be discarded.
   the right route; semantic label for screen readers reads
   "Emergency Card. Show to first responders." Golden in light + dark.
 
-- [ ] **Phase 14.9: Medications Today card on Home
+- [x] **Phase 14.9: Medications Today card on Home
   (`lib/widgets/home/medications_today_card.dart`).** Reads the
   existing medication + dose-log providers; computes today's
   scheduled doses (between local midnights). Header: "Medications

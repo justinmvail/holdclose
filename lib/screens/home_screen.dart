@@ -7,6 +7,7 @@ import '../providers/home_clock_provider.dart';
 import '../routing/router.dart';
 import '../theme.dart';
 import '../widgets/home/emergency_card_pin.dart';
+import '../widgets/home/medications_today_card.dart';
 
 /// Home tab root — the "Today" dashboard (BUILD_SPEC.md §4 Home IA,
 /// Phase 14.7+).
@@ -58,9 +59,13 @@ class HomeScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             // First dashboard card: the pinned Emergency Card (Phase
-            // 14.8). Further cards (14.9–14.12) and the quick-action FAB
+            // 14.8). Further cards (14.10–14.12) and the quick-action FAB
             // (14.13) land as later children here.
             const EmergencyCardPin(),
+            const SizedBox(height: 16),
+            // Medications Today (Phase 14.9): today's doses with a status
+            // dot + an X-of-Y count, tapping through to the full dose log.
+            const MedicationsTodayCard(),
           ],
         ),
       ),

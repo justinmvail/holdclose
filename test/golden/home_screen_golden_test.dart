@@ -1,9 +1,13 @@
 import 'package:alchemist/alchemist.dart';
+import 'package:careblazers/db/database.dart';
 import 'package:careblazers/providers/auth_provider.dart';
 import 'package:careblazers/providers/home_clock_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/routing/router.dart';
+import 'package:careblazers/screens/medication/dose_log_screen.dart';
+import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/theme.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,6 +46,17 @@ void main() {
                   FakeAuthProvider()..signInWithGoogle(),
                 ),
                 homeClockProvider.overrideWithValue(() => _goldenNow),
+                // The Medications Today card (Phase 14.9) reads the
+                // dose-log providers; an empty in-memory repo keeps the
+                // golden off on-device sqlite and renders the card's
+                // "No medications today." empty state.
+                medicationRepositoryBackendProvider.overrideWithValue(
+                  MedicationRepository(
+                    CareblazersDatabase(NativeDatabase.memory()),
+                    clock: () => _goldenNow,
+                  ),
+                ),
+                doseLogClockProvider.overrideWithValue(() => _goldenNow),
               ],
               child: SizedBox(
                 width: 390,

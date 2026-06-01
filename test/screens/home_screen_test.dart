@@ -1,12 +1,16 @@
 import 'dart:async';
 
+import 'package:careblazers/db/database.dart';
 import 'package:careblazers/providers/auth_provider.dart';
 import 'package:careblazers/providers/home_clock_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/home_screen.dart';
+import 'package:careblazers/screens/medication/dose_log_screen.dart';
 import 'package:careblazers/screens/settings/settings_screen.dart';
+import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/theme.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +34,16 @@ Future<GoRouter> _pumpHome(
   unawaited(auth.signInWithGoogle());
   addTearDown(auth.dispose);
 
+  // The Medications Today card (Phase 14.9) reads the dose-log providers,
+  // which back onto the medication repository. Point them at an empty
+  // in-memory database so Home stays off the on-device sqlite file and
+  // the card renders its "No medications today." empty state.
+  final CareblazersDatabase medDb =
+      CareblazersDatabase(NativeDatabase.memory());
+  addTearDown(medDb.close);
+  final MedicationRepository medRepo =
+      MedicationRepository(medDb, clock: () => now);
+
   final GoRouter router = buildRouter();
   await tester.pumpWidget(
     ProviderScope(
@@ -37,6 +51,8 @@ Future<GoRouter> _pumpHome(
         storageBackendProvider.overrideWithValue(InMemoryStorageProvider()),
         authProvider.overrideWithValue(auth),
         homeClockProvider.overrideWithValue(() => now),
+        medicationRepositoryBackendProvider.overrideWithValue(medRepo),
+        doseLogClockProvider.overrideWithValue(() => now),
       ],
       child: MaterialApp.router(
         routerConfig: router,
