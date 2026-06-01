@@ -1556,7 +1556,7 @@ amber / plum are placeholders to be discarded.
 
 ### Care Team hub + sub-screens
 
-- [ ] **Phase 14.25: Care circle models + drift tables + provider
+- [x] **Phase 14.25: Care circle models + drift tables + provider
   (`lib/models/caregiver.dart`,
   `lib/models/care_circle_membership.dart`, `lib/db/tables.dart`,
   `lib/providers/care_circle_provider.dart`).** Freezed `Caregiver`
