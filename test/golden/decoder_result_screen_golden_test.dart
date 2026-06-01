@@ -33,6 +33,14 @@ class _DoneLLM implements LLMProvider {
   }) async* {
     yield DecoderChunk.done(result: result);
   }
+
+  @override
+  Stream<String> generateActivitySummary({
+    int lastNHours = 24,
+    required List<ActivityEvent> events,
+  }) {
+    throw UnimplementedError();
+  }
 }
 
 DecoderResult _seedResult() => DecoderResult(

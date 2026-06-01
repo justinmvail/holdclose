@@ -1367,7 +1367,7 @@ amber / plum are placeholders to be discarded.
   ordering invariant (an out-of-order insertion across sources still
   surfaces the right top 3) + goldens.
 
-- [ ] **Phase 14.12: AI "catch me up" card
+- [x] **Phase 14.12: AI "catch me up" card
   (`lib/widgets/home/catch_me_up_card.dart` +
   `lib/providers/llm_provider.dart` +
   `lib/seed/fake_llm_seeds.dart`).** Optional card above Recent

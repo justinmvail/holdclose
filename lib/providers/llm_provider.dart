@@ -54,6 +54,53 @@ abstract class PatientContext with _$PatientContext {
   }) = _PatientContext;
 }
 
+/// Which surface a [ActivityEvent] in the "catch me up" feed came from
+/// (Phase 14.12). Mirrors `RecentActivityOrigin` but lives here because
+/// the LLM call surface (not the Recent Activity card) owns the shape it
+/// passes to [LLMProvider.generateActivitySummary]. [handoff] is the
+/// care-team shift-handoff source that joins when Phase 14.32 lands;
+/// nothing emits one in v1.
+enum ActivityEventKind { journal, dose, appointment, handoff }
+
+/// One thing that happened in the caregiver's last 24 hours, flattened to
+/// the narrow slice [LLMProvider.generateActivitySummary] needs (Phase
+/// 14.12).
+///
+/// Kept deliberately small — a [kind], a one-line [summary] already in the
+/// app's own voice, and the [occurredAt] timestamp. The model never sees
+/// raw rows; it gets this pre-summarized list so the prompt stays short
+/// and free of anything resembling a diagnosis. [cacheToken] is the stable
+/// per-event string the card hashes into its 30-minute cache key, so the
+/// same set of events reopens to the same cached summary.
+@immutable
+class ActivityEvent {
+  const ActivityEvent({
+    required this.kind,
+    required this.summary,
+    required this.occurredAt,
+  });
+
+  final ActivityEventKind kind;
+  final String summary;
+  final DateTime occurredAt;
+
+  /// Canonical, order-stable string used to fingerprint the event for the
+  /// Home card's cache key. UTC-normalized so a host timezone shift can't
+  /// silently bust the cache.
+  String get cacheToken =>
+      '${kind.name}|${occurredAt.toUtc().toIso8601String()}|$summary';
+
+  @override
+  bool operator ==(Object other) =>
+      other is ActivityEvent &&
+      other.kind == kind &&
+      other.summary == summary &&
+      other.occurredAt == occurredAt;
+
+  @override
+  int get hashCode => Object.hash(kind, summary, occurredAt);
+}
+
 /// Backend for the decoder LLM call (BUILD_SPEC.md §6.1).
 ///
 /// Two v1 implementations: [FakeLLMProvider] (canned + streamed for
@@ -70,6 +117,20 @@ abstract class LLMProvider {
     required TriageAnswers triage,
     required PatientContext patient,
     required int attempt,
+  });
+
+  /// Stream a single-paragraph, plain-language recap of the caregiver's
+  /// last [lastNHours] of [events] for the Home "catch me up" card
+  /// (Phase 14.12).
+  ///
+  /// Each yielded string is the growing accumulated paragraph (the same
+  /// word-by-word contract the decoder uses); the last value is the whole
+  /// summary and the stream then closes. The recap is a warm, factual
+  /// recap of what happened — never a clinical assessment or a suggested
+  /// treatment plan.
+  Stream<String> generateActivitySummary({
+    int lastNHours,
+    required List<ActivityEvent> events,
   });
 }
 
@@ -135,6 +196,34 @@ class FakeLLMProvider implements LLMProvider {
       }
     }
     yield DecoderChunk.done(result: stamped);
+  }
+
+  @override
+  Stream<String> generateActivitySummary({
+    int lastNHours = 24,
+    required List<ActivityEvent> events,
+  }) async* {
+    // Deterministic canned recap (BUILD_SPEC.md §6.1 — the fake never
+    // calls out). Streams the hand-authored paragraph in the same
+    // [chunkSize]-token slices the decoder uses so the Home card shows
+    // the same word-by-word fade-in in the demo.
+    final List<String> tokens = _tokenize(fakeActivitySummary);
+    final StringBuffer buffer = StringBuffer();
+    if (tokens.isEmpty) {
+      yield '';
+      return;
+    }
+    for (int i = 0; i < tokens.length; i += chunkSize) {
+      final int end =
+          (i + chunkSize) > tokens.length ? tokens.length : (i + chunkSize);
+      for (int j = i; j < end; j++) {
+        buffer.write(tokens[j]);
+      }
+      yield buffer.toString();
+      if (end < tokens.length) {
+        await Future<void>.delayed(delay);
+      }
+    }
   }
 
   /// Tokenize on whitespace boundaries, keeping both the whitespace and
@@ -383,6 +472,22 @@ class ClaudeCLIProvider implements LLMProvider {
     } on FormatException catch (e) {
       yield DecoderChunk.error(message: 'decoder JSON parse failed: ${e.message}');
     }
+  }
+
+  @override
+  Stream<String> generateActivitySummary({
+    int lastNHours = 24,
+    required List<ActivityEvent> events,
+  }) async* {
+    // TODO(phase): wire the shim's summary endpoint. The Home "catch me
+    // up" card is fake-backed in v1 (USE_FAKE_LLM defaults true); the
+    // live shim path lands alongside the deferred production backend, so
+    // a real-shim run surfaces this as a stream error rather than a
+    // silent empty card.
+    throw UnimplementedError(
+      'generateActivitySummary is not wired to the shim in v1 — '
+      'the Home catch-me-up card runs against FakeLLMProvider',
+    );
   }
 
   /// Try parsing [text] as a [DecoderResult]. Returns null if the JSON

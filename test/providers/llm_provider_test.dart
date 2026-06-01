@@ -201,6 +201,85 @@ void main() {
     });
   });
 
+  group('FakeLLMProvider — generateActivitySummary (Phase 14.12)', () {
+    final List<ActivityEvent> events = <ActivityEvent>[
+      ActivityEvent(
+        kind: ActivityEventKind.journal,
+        summary: 'Sundowning',
+        occurredAt: DateTime.utc(2026, 6, 1, 17, 30),
+      ),
+      ActivityEvent(
+        kind: ActivityEventKind.dose,
+        summary: 'Gave Donepezil 10 mg',
+        occurredAt: DateTime.utc(2026, 6, 1, 19),
+      ),
+    ];
+
+    test('streams accumulations terminating in the canned summary',
+        () async {
+      final FakeLLMProvider fake = buildFake();
+      final List<String> accumulations = await fake
+          .generateActivitySummary(lastNHours: 24, events: events)
+          .toList();
+
+      expect(accumulations, isNotEmpty);
+      // The last accumulation is the whole canned paragraph.
+      expect(accumulations.last, fakeActivitySummary);
+    });
+
+    test('accumulations grow monotonically toward the full paragraph',
+        () async {
+      final FakeLLMProvider fake = buildFake();
+      final List<String> accumulations = await fake
+          .generateActivitySummary(events: events)
+          .toList();
+
+      for (int i = 1; i < accumulations.length; i++) {
+        expect(accumulations[i].startsWith(accumulations[i - 1]), isTrue,
+            reason: 'accumulation #$i is not a prefix-superset of #${i - 1}');
+        expect(accumulations[i].length,
+            greaterThan(accumulations[i - 1].length));
+      }
+    });
+
+    test('the canned recap stays warm and non-clinical', () {
+      // Scope guardrail: a recap, never a diagnosis or treatment plan, and
+      // the brand voice carries no exclamation marks (BUILD_SPEC.md §3.3).
+      expect(fakeActivitySummary, isNot(contains('!')));
+      expect(fakeActivitySummary.toLowerCase(), isNot(contains('diagnos')));
+      expect(fakeActivitySummary.toLowerCase(), isNot(contains('prescrib')));
+      expect(fakeActivitySummary, contains('your loved one'));
+    });
+  });
+
+  group('ClaudeCLIProvider — generateActivitySummary stub (Phase 14.12)', () {
+    test('surfaces a deferred-stub error rather than a silent empty stream',
+        () async {
+      const ClaudeCLIProvider provider = ClaudeCLIProvider();
+      final Stream<String> stream = provider.generateActivitySummary(
+        events: const <ActivityEvent>[],
+      );
+      await expectLater(stream.toList(), throwsUnimplementedError);
+    });
+  });
+
+  group('ActivityEvent — cache fingerprint (Phase 14.12)', () {
+    test('cacheToken is content-stable and UTC-normalized', () {
+      final ActivityEvent local = ActivityEvent(
+        kind: ActivityEventKind.dose,
+        summary: 'Gave Donepezil 10 mg',
+        occurredAt: DateTime.utc(2026, 6, 1, 19).toLocal(),
+      );
+      final ActivityEvent utc = ActivityEvent(
+        kind: ActivityEventKind.dose,
+        summary: 'Gave Donepezil 10 mg',
+        occurredAt: DateTime.utc(2026, 6, 1, 19),
+      );
+      expect(local.cacheToken, utc.cacheToken);
+      expect(local.cacheToken, contains('dose'));
+    });
+  });
+
   group('llmProvider riverpod wiring', () {
     test('defaults to FakeLLMProvider under test (USE_FAKE_LLM=true)',
         () {

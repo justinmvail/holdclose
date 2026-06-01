@@ -146,3 +146,20 @@ final Map<String, DecoderResult> fakeLLMSeeds = <String, DecoderResult>{
 /// replaces this with `DateTime.now()` (or its injected clock) before
 /// yielding the `done` chunk — so consumers never see this value.
 final DateTime _seedTimestamp = DateTime.utc(2026, 1, 1);
+
+/// The deterministic "catch me up" recap the [FakeLLMProvider] streams
+/// for the Home dashboard card (Phase 14.12 / BUILD_SPEC.md §6.1).
+///
+/// One warm, plain-language paragraph — a factual recap of the last
+/// day, in the family vocabulary the rest of the app uses ("your loved
+/// one"). It deliberately stays a recap: no diagnosis, no symptom
+/// reading, no treatment suggestion, no exclamation marks. The card
+/// caches it for 30 minutes so reopening Home doesn't re-stream it.
+const String fakeActivitySummary =
+    'Over the last day, things have been mostly steady. You logged a '
+    'late-afternoon moment when your loved one got upset, and the '
+    'gentle approach you tried seemed to settle it. Medications stayed '
+    'on track — the evening dose went down without a fuss. There is a '
+    'visit with the doctor coming up on the calendar, so it may help to '
+    'jot down anything you have noticed before then. All in all, a '
+    'manageable day — and you handled it with a lot of care.';

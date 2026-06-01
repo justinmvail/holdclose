@@ -43,6 +43,14 @@ class _ScriptedLLM implements LLMProvider {
       yield chunk;
     }
   }
+
+  @override
+  Stream<String> generateActivitySummary({
+    int lastNHours = 24,
+    required List<ActivityEvent> events,
+  }) {
+    throw UnimplementedError();
+  }
 }
 
 ProviderContainer _container({
@@ -202,5 +210,13 @@ class _RecordingLLM implements LLMProvider {
     for (final DecoderChunk chunk in chunks) {
       yield chunk;
     }
+  }
+
+  @override
+  Stream<String> generateActivitySummary({
+    int lastNHours = 24,
+    required List<ActivityEvent> events,
+  }) {
+    throw UnimplementedError();
   }
 }

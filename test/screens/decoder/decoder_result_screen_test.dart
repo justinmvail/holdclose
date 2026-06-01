@@ -63,6 +63,14 @@ class _ScriptedLLM implements LLMProvider {
       yield chunk;
     }
   }
+
+  @override
+  Stream<String> generateActivitySummary({
+    int lastNHours = 24,
+    required List<ActivityEvent> events,
+  }) {
+    throw UnimplementedError();
+  }
 }
 
 const Behavior _sundowning =
@@ -549,5 +557,13 @@ class FakeRetryLlm implements LLMProvider {
     for (final DecoderChunk chunk in onCall()) {
       yield chunk;
     }
+  }
+
+  @override
+  Stream<String> generateActivitySummary({
+    int lastNHours = 24,
+    required List<ActivityEvent> events,
+  }) {
+    throw UnimplementedError();
   }
 }

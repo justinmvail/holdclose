@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/home_clock_provider.dart';
 import '../routing/router.dart';
 import '../theme.dart';
+import '../widgets/home/catch_me_up_card.dart';
 import '../widgets/home/emergency_card_pin.dart';
 import '../widgets/home/medications_today_card.dart';
 import '../widgets/home/next_appointment_card.dart';
@@ -74,6 +75,12 @@ class HomeScreen extends ConsumerWidget {
             // appointment detail screen.
             const NextAppointmentCard(),
             const SizedBox(height: 16),
+            // Catch me up (Phase 14.12): an optional streamed recap of the
+            // last 24h, cached for 30 min. It owns its own bottom gap and
+            // collapses to nothing on a quiet day, so there's no spacer
+            // around it here — a hidden card leaves the dashboard
+            // pixel-identical to having no card at all.
+            const CatchMeUpCard(),
             // Recent Activity (Phase 14.11): the latest events across the
             // journal, dose log, and appointments, each row tapping through
             // to its own source detail.
