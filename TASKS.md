@@ -1243,7 +1243,7 @@ amber / plum are placeholders to be discarded.
   teal accent on the Back chevron. Tests cover tap-parent-routes,
   tap-Back, hub-landing-render. Golden for three-crumb + single-crumb.
 
-- [ ] **Phase 14.3: HubTile + HubGrid widgets (`lib/widgets/hub_tile.dart`
+- [x] **Phase 14.3: HubTile + HubGrid widgets (`lib/widgets/hub_tile.dart`
   + `test/widgets/hub_tile_test.dart` +
   `test/golden/hub_grid_golden_test.dart`).** `HubTile` = 32px icon
   on an 11-radius colored chip + 15.5pt bold label + 11pt sub-label,
