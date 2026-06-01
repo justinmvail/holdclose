@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/home_clock_provider.dart';
 import '../routing/router.dart';
 import '../theme.dart';
+import '../widgets/home/emergency_card_pin.dart';
 
 /// Home tab root — the "Today" dashboard (BUILD_SPEC.md §4 Home IA,
 /// Phase 14.7+).
@@ -55,8 +56,11 @@ class HomeScreen extends ConsumerWidget {
                 return _GreetingRow(hour: now.hour, name: name);
               },
             ),
-            // Dashboard cards (Phases 14.8–14.12) and the quick-action
-            // FAB (Phase 14.13) land as further children here.
+            const SizedBox(height: 16),
+            // First dashboard card: the pinned Emergency Card (Phase
+            // 14.8). Further cards (14.9–14.12) and the quick-action FAB
+            // (14.13) land as later children here.
+            const EmergencyCardPin(),
           ],
         ),
       ),

@@ -1324,7 +1324,7 @@ amber / plum are placeholders to be discarded.
   profile tap pushes Settings. Refresh
   `test/golden/home_screen_golden_test.dart` to the empty scaffold.
 
-- [ ] **Phase 14.8: Pinned Emergency Card on Home
+- [x] **Phase 14.8: Pinned Emergency Card on Home
   (`lib/widgets/home/emergency_card_pin.dart`).** First card in the
   Home ListView, full-width, orange→deeper-orange gradient using
   brand tokens, white shield icon in a 34px chip + "Emergency Card"
