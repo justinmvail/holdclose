@@ -1759,7 +1759,7 @@ amber / plum are placeholders to be discarded.
 
 ### Cleanup + tests
 
-- [ ] **Phase 14.39: Update integration_test/demo_tour.dart to walk
+- [x] **Phase 14.39: Update integration_test/demo_tour.dart to walk
   the new IA.** Replace the existing tour. New sequence: Home →
   read the dashboard → tap profile icon → close Settings → tap
   Emergency pin → back → tap a Medications Today dose row → back to
