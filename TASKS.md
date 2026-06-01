@@ -1594,7 +1594,7 @@ amber / plum are placeholders to be discarded.
   right now. Invite someone to share the load." Tests + golden for
   populated + empty.
 
-- [ ] **Phase 14.28: Care Circle invite form
+- [x] **Phase 14.28: Care Circle invite form
   (`lib/screens/team/invite_caregiver_screen.dart`).** Mounts at
   `/team/circle/invite`. Form: display name (required), role
   picker, email OR phone (at least one required), permission level
