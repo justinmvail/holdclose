@@ -1843,7 +1843,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
 
 ### Foundation
 
-- [ ] **Phase 15.1: Shared integration harness
+- [x] **Phase 15.1: Shared integration harness
   (`test/integration/test_harness.dart` +
   `test/integration/test_harness_test.dart`).** Reusable helper for
   every Phase 15 `*_flow_test.dart`. Exposes:
