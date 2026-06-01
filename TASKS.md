@@ -1226,7 +1226,7 @@ amber / plum are placeholders to be discarded.
   replaces §5.9 Crisis). Mark §5.7 Library + §5.9 Crisis as
   "Removed in Phase 14 — see Phase 14.23 / 14.41." No code, no tests.
 
-- [ ] **Phase 14.2: PathHeader widget (`lib/widgets/path_header.dart`
+- [x] **Phase 14.2: PathHeader widget (`lib/widgets/path_header.dart`
   + `test/widgets/path_header_test.dart` +
   `test/golden/path_header_golden_test.dart`).** Reusable header at
   the top of every feature page below a hub. Renders: a breadcrumb
