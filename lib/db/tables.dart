@@ -291,3 +291,107 @@ class CarePlanSectionsTable extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
+
+/// The loved one's emergency / hospital-handoff card (TASKS.md Phase
+/// 14.21).
+///
+/// Backs Medical → Cards & Documents → Emergency Card (BUILD_SPEC.md
+/// §5.17). Unlike the journal / chat / medication tables — which blob the
+/// whole freezed model into a single `payload` column — this table breaks
+/// the [EmergencyCard] fields into typed columns so each is queryable
+/// straight from SQLite. The three string lists ([conditions] /
+/// [medications] / [allergies]) and the [emergencyContacts] / [insurance]
+/// structures don't have a native column type, so they're stored as
+/// JSON-encoded TEXT; the repository (`lib/providers/documents_provider
+/// .dart`) owns that encode/decode at the boundary. [donorStatus] is the
+/// enum's `.name`; [updatedAtMs] is the epoch-ms of `updatedAt`.
+///
+/// [patientId] is a logical link to [PatientsTable], not a DB foreign
+/// key — that table is single-row ("one loved one per install"), so a
+/// cascade buys nothing and the link stays logical (mirroring the
+/// health-log + care-plan tables).
+class EmergencyCardsTable extends Table {
+  @override
+  String get tableName => 'emergency_cards';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  IntColumn get updatedAtMs => integer()();
+  TextColumn get attachmentPath => text().nullable()();
+
+  /// JSON-encoded `List<String>`.
+  TextColumn get conditions => text()();
+  TextColumn get medications => text()();
+  TextColumn get allergies => text()();
+
+  /// JSON-encoded `List<{name, relation, phone}>`.
+  TextColumn get emergencyContacts => text()();
+
+  /// JSON-encoded `{carrier, policyNumber, groupNumber}`.
+  TextColumn get insurance => text()();
+
+  /// [DonorStatus] enum `.name`.
+  TextColumn get donorStatus => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// A power-of-attorney document on file for the loved one (TASKS.md
+/// Phase 14.21).
+///
+/// Backs Medical → Cards & Documents (BUILD_SPEC.md §5.17). Typed-column
+/// schema like [EmergencyCardsTable]: [scope] is the [PoaScope] enum's
+/// `.name`, [effectiveDateMs] / [updatedAtMs] are epoch-ms, and the
+/// optional [alternateName] / [scanPath] / [attachmentPath] are nullable
+/// TEXT. [patientId] is a logical link to [PatientsTable] (no DB FK — see
+/// [EmergencyCardsTable]).
+class PowerOfAttorneyDocsTable extends Table {
+  @override
+  String get tableName => 'power_of_attorney_docs';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  IntColumn get updatedAtMs => integer()();
+  TextColumn get attachmentPath => text().nullable()();
+
+  TextColumn get agentName => text()();
+  TextColumn get alternateName => text().nullable()();
+
+  /// [PoaScope] enum `.name`.
+  TextColumn get scope => text()();
+  IntColumn get effectiveDateMs => integer()();
+  TextColumn get scanPath => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// An identification document captured for the loved one (TASKS.md Phase
+/// 14.21).
+///
+/// Backs Medical → Cards & Documents (BUILD_SPEC.md §5.17). Typed-column
+/// schema like [EmergencyCardsTable]: [kind] is the [IdKind] enum's
+/// `.name`, [updatedAtMs] is epoch-ms, the optional [expiresOnMs] is a
+/// nullable epoch-ms, and the photo / attachment pointers are nullable
+/// TEXT. [patientId] is a logical link to [PatientsTable] (no DB FK — see
+/// [EmergencyCardsTable]).
+class IdentificationDocsTable extends Table {
+  @override
+  String get tableName => 'identification_docs';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  IntColumn get updatedAtMs => integer()();
+  TextColumn get attachmentPath => text().nullable()();
+
+  /// [IdKind] enum `.name`.
+  TextColumn get kind => text()();
+  TextColumn get idNumber => text()();
+  IntColumn get expiresOnMs => integer().nullable()();
+  TextColumn get photoFrontPath => text().nullable()();
+  TextColumn get photoBackPath => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}

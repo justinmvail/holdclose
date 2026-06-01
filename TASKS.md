@@ -1491,7 +1491,7 @@ amber / plum are placeholders to be discarded.
   times within ±1px; day-cycling navigation works; goldens for
   today, yesterday, tomorrow.
 
-- [ ] **Phase 14.21: Documents models + drift tables + provider
+- [x] **Phase 14.21: Documents models + drift tables + provider
   (`lib/models/document.dart`, `lib/db/tables.dart`,
   `lib/providers/documents_provider.dart`).** Three drift tables in
   one task: `EmergencyCards`, `PowerOfAttorneyDocs`,
