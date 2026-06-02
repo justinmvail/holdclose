@@ -2003,7 +2003,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   Also assert call/email trailing buttons launch via
   `FakeUrlLauncher` with the right `tel:` / `mailto:` URIs.
 
-- [ ] **Phase 15.10: Care Circle invite form validation
+- [x] **Phase 15.10: Care Circle invite form validation
   (`test/integration/care_circle_invite_validation_flow_test.dart`).**
   Companion to 15.9. Five `testWidgets`: (1) Empty display name
   → Send disabled or surfaces "Name required" inline error; (2)
