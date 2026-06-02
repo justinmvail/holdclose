@@ -35,6 +35,7 @@ import 'package:careblazers/seed/mary_henderson.dart';
 import 'package:careblazers/seed/sample_journal.dart';
 import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/medication_repository.dart';
+import 'package:careblazers/services/provider_repository.dart';
 import 'package:careblazers/widgets/hub_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -150,6 +151,15 @@ Future<ProviderContainer> pumpCareblazersApp(
       MedicationRepository(db, clock: fixedClock);
   final AppointmentRepository appointmentRepository =
       AppointmentRepository(db, clock: fixedClock);
+  // The appointment list/detail screens + the Home "Next Appointment"
+  // card resolve provider names through the appointment repo's reads,
+  // while the appointment form writes new providers through the separate
+  // [ProviderRepository] seam. Both must point at the SAME in-memory db
+  // or an inline-added provider would land in a different store than the
+  // one the list reads back from. Production wires its own
+  // `CareblazersDatabase.open()` handle here; in the harness we share the
+  // one in-memory db so provider names round-trip (Phase 15.7).
+  final ProviderRepository providerRepository = ProviderRepository(db);
 
   final FakeAuthProvider auth = FakeAuthProvider();
   addTearDown(auth.dispose);
@@ -168,6 +178,7 @@ Future<ProviderContainer> pumpCareblazersApp(
     medicationRepositoryBackendProvider.overrideWithValue(medicationRepository),
     appointmentRepositoryBackendProvider
         .overrideWithValue(appointmentRepository),
+    providerRepositoryBackendProvider.overrideWithValue(providerRepository),
     authBackendProvider.overrideWithValue(auth),
     onboardingCompletedProvider.overrideWith(_AlreadyOnboarded.new),
     llmProvider.overrideWithValue(const FakeLLMProvider()),

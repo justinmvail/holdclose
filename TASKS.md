@@ -1953,7 +1953,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   medication. After each step, navigate to `DoseLogScreen` and
   assert the dose-schedule provider reflects the change.
 
-- [ ] **Phase 15.7: Appointment CRUD flow
+- [x] **Phase 15.7: Appointment CRUD flow
   (`test/integration/appointment_crud_flow_test.dart`).** Pump
   app → Medical → Appointments tile. Four `testWidgets`: (1)
   **Empty state** — both Upcoming + Past sections show empty
