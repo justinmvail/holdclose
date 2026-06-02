@@ -2049,7 +2049,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   "Off-topic" → assert report row created in fake backend with
   the right `target_kind` + `target_id` + `reason`.
 
-- [ ] **Phase 15.13: Community sort + compose + admin
+- [x] **Phase 15.13: Community sort + compose + admin
   (`test/integration/community_feed_flow_test.dart`).** Pump →
   Community → Feed. Four `testWidgets`: (1) **Sort switching** —
   Hot/New/Top selector → switch each → re-fetches posts in the
