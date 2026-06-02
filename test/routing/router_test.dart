@@ -125,15 +125,16 @@ void main() {
       // Medications — moved to top-level pushed routes in Phase 14.5.
       _NamedRoute(CareblazersRoutes.medicationList, '/medications'),
       _NamedRoute(CareblazersRoutes.medicationForm, '/medications/new'),
+      _NamedRoute(CareblazersRoutes.medicationEdit,
+          '/medications/sample-id/edit', <String, String>{'id': 'sample-id'}),
       _NamedRoute(CareblazersRoutes.medicationDoseLog, '/medications/today'),
       // Appointments — moved to top-level pushed routes in Phase 14.5.
       _NamedRoute(CareblazersRoutes.appointmentList, '/appointments'),
       _NamedRoute(CareblazersRoutes.appointmentForm, '/appointments/new'),
-      _NamedRoute(CareblazersRoutes.appointmentDetail, '/appointments/sample-id',
-          <String, String>{'id': 'sample-id'}),
-      _NamedRoute(
-          CareblazersRoutes.appointmentEdit, '/appointments/sample-id/edit',
-          <String, String>{'id': 'sample-id'}),
+      _NamedRoute(CareblazersRoutes.appointmentDetail,
+          '/appointments/sample-id', <String, String>{'id': 'sample-id'}),
+      _NamedRoute(CareblazersRoutes.appointmentEdit,
+          '/appointments/sample-id/edit', <String, String>{'id': 'sample-id'}),
       // Community shell branch + its pushed companions.
       _NamedRoute(CareblazersRoutes.community, '/community'),
       _NamedRoute(CareblazersRoutes.communityCompose, '/community/compose'),
@@ -141,8 +142,8 @@ void main() {
           CareblazersRoutes.communityGuidelines, '/community/guidelines'),
       _NamedRoute(
           CareblazersRoutes.communityAdminReports, '/community/admin/reports'),
-      _NamedRoute(CareblazersRoutes.communityPostDetail, '/community/sample-post',
-          <String, String>{'postId': 'sample-post'}),
+      _NamedRoute(CareblazersRoutes.communityPostDetail,
+          '/community/sample-post', <String, String>{'postId': 'sample-post'}),
       // New Phase 14 shell branches + the Medical emergency sub-route.
       _NamedRoute(CareblazersRoutes.medicalHub, '/medical'),
       _NamedRoute(

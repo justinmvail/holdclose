@@ -69,8 +69,7 @@ class TimeOfDayJsonConverter implements JsonConverter<TimeOfDay, String> {
   }
 
   @override
-  String toJson(TimeOfDay value) =>
-      '${value.hour.toString().padLeft(2, '0')}:'
+  String toJson(TimeOfDay value) => '${value.hour.toString().padLeft(2, '0')}:'
       '${value.minute.toString().padLeft(2, '0')}';
 }
 
@@ -100,6 +99,14 @@ abstract class Medication with _$Medication {
     /// Free-text notes the caregiver wants to keep visible on the
     /// med card (e.g. "take with food", "watch for drowsiness").
     String? notes,
+
+    /// Soft-delete tombstone (TASKS.md Phase 15.6). Null for a live
+    /// medication; set to the deletion instant when the caregiver removes
+    /// it from the list. [MedicationRepository.listMedications] excludes
+    /// tombstoned rows so a delete disappears from every derived view
+    /// (the dose-log, the home "today" card, adherence) while the row —
+    /// and its dose history — stays on disk for an undo / audit trail.
+    DateTime? deletedAt,
   }) = _Medication;
 
   factory Medication.fromJson(Map<String, dynamic> json) =>

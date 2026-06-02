@@ -46,8 +46,7 @@ class ScheduledDose {
           other.log == log);
 
   @override
-  int get hashCode =>
-      Object.hash(medication, schedule, scheduledFor, log);
+  int get hashCode => Object.hash(medication, schedule, scheduledFor, log);
 
   @override
   String toString() => 'ScheduledDose(${medication.name} @ $scheduledFor'
@@ -108,25 +107,47 @@ class MedicationRepository {
   /// Drop the medication row. The FK's `ON DELETE CASCADE` removes its
   /// schedules + logs in the same statement — verified by the
   /// `cascade-delete` test.
+  ///
+  /// This is the *hard* delete — it wipes the dose history with the
+  /// medication. The caregiver-facing remove path goes through
+  /// [softDeleteMedication] instead, which keeps the history on disk.
   Future<void> deleteMedication(String medicationId) async {
     await (_db.delete(_db.medicationsTable)
           ..where((t) => t.id.equals(medicationId)))
         .go();
   }
 
-  /// Every medication, alphabetical by name — the order the
-  /// medication-list screen (Phase 12.3) renders tiles in.
+  /// Tombstone [medicationId] (TASKS.md Phase 15.6) — stamp its
+  /// [Medication.deletedAt] with the current clock and leave the row,
+  /// its schedules, and its dose history on disk.
+  ///
+  /// A soft-deleted medication drops out of [listMedications] (and so out
+  /// of every derived view: [upcomingDoses], [dosesByDay], the
+  /// medication-list screen, the home "today" card) while staying
+  /// recoverable. No-op when the medication is absent or already
+  /// tombstoned.
+  Future<void> softDeleteMedication(String medicationId) async {
+    final Medication? med = await getMedication(medicationId);
+    if (med == null || med.deletedAt != null) return;
+    await upsertMedication(med.copyWith(deletedAt: _clock()));
+  }
+
+  /// Every *live* medication, alphabetical by name — the order the
+  /// medication-list screen (Phase 12.3) renders tiles in. Tombstoned
+  /// rows (soft-deleted via [softDeleteMedication]) are filtered out so a
+  /// removed medication disappears from the list and every view layered
+  /// on top of it.
   Future<List<Medication>> listMedications() async {
     final List<MedicationsTableData> rows =
         await (_db.select(_db.medicationsTable)
               ..orderBy(<OrderClauseGenerator<$MedicationsTableTable>>[
-                (t) =>
-                    OrderingTerm(expression: t.name, mode: OrderingMode.asc),
+                (t) => OrderingTerm(expression: t.name, mode: OrderingMode.asc),
               ]))
             .get();
     return rows
-        .map((MedicationsTableData r) => Medication.fromJson(
-            jsonDecode(r.payload) as Map<String, dynamic>))
+        .map((MedicationsTableData r) =>
+            Medication.fromJson(jsonDecode(r.payload) as Map<String, dynamic>))
+        .where((Medication m) => m.deletedAt == null)
         .toList();
   }
 
@@ -215,8 +236,8 @@ class MedicationRepository {
           ]))
         .get();
     return rows
-        .map((DoseLogsTableData r) => DoseLog.fromJson(
-            jsonDecode(r.payload) as Map<String, dynamic>))
+        .map((DoseLogsTableData r) =>
+            DoseLog.fromJson(jsonDecode(r.payload) as Map<String, dynamic>))
         .toList();
   }
 
@@ -273,8 +294,7 @@ class MedicationRepository {
       final List<DoseSchedule> schedules = await schedulesFor(med.id);
       final List<DoseLog> logs = await logsFor(med.id);
       final Map<int, DoseLog> logsByMs = <int, DoseLog>{
-        for (final DoseLog l in logs)
-          l.scheduledFor.millisecondsSinceEpoch: l,
+        for (final DoseLog l in logs) l.scheduledFor.millisecondsSinceEpoch: l,
       };
       for (final DoseSchedule sched in schedules) {
         for (final DateTime occurrence
@@ -315,8 +335,7 @@ class MedicationRepository {
     final List<DoseSchedule> schedules = await schedulesFor(forMedication);
     final List<DoseLog> logs = await logsFor(forMedication);
     final Map<int, DoseLog> logsByMs = <int, DoseLog>{
-      for (final DoseLog l in logs)
-        l.scheduledFor.millisecondsSinceEpoch: l,
+      for (final DoseLog l in logs) l.scheduledFor.millisecondsSinceEpoch: l,
     };
 
     int taken = 0;

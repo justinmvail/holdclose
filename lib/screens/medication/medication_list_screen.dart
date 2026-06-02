@@ -108,6 +108,12 @@ class MedicationListScreen extends ConsumerWidget {
   static const Key emptyCtaKey = Key('medication-list-empty-cta');
   static const Key fabKey = Key('medication-list-fab');
 
+  /// The delete-confirmation dialog raised by a long-press, plus its two
+  /// actions (TASKS.md Phase 15.6).
+  static const Key deleteDialogKey = Key('medication-list-delete-dialog');
+  static const Key deleteConfirmKey = Key('medication-list-delete-confirm');
+  static const Key deleteCancelKey = Key('medication-list-delete-cancel');
+
   /// Stable per-tile key derived from the medication id. Tests tap by
   /// id rather than by visible name so a copy edit doesn't break them.
   static Key tileKey(String medicationId) =>
@@ -239,77 +245,129 @@ class _PopulatedList extends StatelessWidget {
   }
 }
 
-class _MedicationCard extends StatelessWidget {
+class _MedicationCard extends ConsumerWidget {
   const _MedicationCard({required this.item, required this.now});
 
   final MedicationListItem item;
   final DateTime now;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Medication med = item.medication;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Semantics(
+        button: true,
         label: '${med.name}, ${med.dosage}. '
-            'Adherence ${_adherenceLabel(item)} over the last 7 days.',
-        child: Container(
-          key: MedicationListScreen.tileKey(med.id),
-          decoration: BoxDecoration(
-            color: careblazersColors.surfaceWarm,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          med.name,
-                          style: textTheme.titleLarge?.copyWith(
-                            color: careblazersColors.primary,
-                            fontWeight: FontWeight.w700,
+            'Adherence ${_adherenceLabel(item)} over the last 7 days. '
+            'Double-tap to edit, long-press to remove.',
+        child: GestureDetector(
+          // Tap opens the edit form pre-filled with this medication;
+          // long-press raises the soft-delete confirmation (Phase 15.6).
+          onTap: () => context.push('/medications/${med.id}/edit'),
+          onLongPress: () => _confirmAndDelete(context, ref, med),
+          child: Container(
+            key: MedicationListScreen.tileKey(med.id),
+            decoration: BoxDecoration(
+              color: careblazersColors.surfaceWarm,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            med.name,
+                            style: textTheme.titleLarge?.copyWith(
+                              color: careblazersColors.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          med.dosage,
-                          style: textTheme.bodyLarge?.copyWith(
-                            color: careblazersColors.text,
+                          const SizedBox(height: 4),
+                          Text(
+                            med.dosage,
+                            style: textTheme.bodyLarge?.copyWith(
+                              color: careblazersColors.text,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _AdherenceChip(item: item),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Padding(
+                  key: MedicationListScreen.nextDoseKey(med.id),
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    _nextDoseLabel(item.nextDose, now),
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: careblazersColors.primarySoft,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  _AdherenceChip(item: item),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Padding(
-                key: MedicationListScreen.nextDoseKey(med.id),
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  _nextDoseLabel(item.nextDose, now),
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: careblazersColors.primarySoft,
-                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// Long-press handler: confirm, then soft-delete (TASKS.md Phase 15.6).
+  /// Tombstones the medication through [MedicationRepository
+  /// .softDeleteMedication] so it leaves the list (and the dose timeline)
+  /// but its dose history survives on disk. Invalidates
+  /// [medicationListProvider] so the tile disappears without a manual
+  /// refresh.
+  Future<void> _confirmAndDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Medication med,
+  ) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        key: MedicationListScreen.deleteDialogKey,
+        title: Text('Remove ${med.name}?'),
+        content: const Text(
+          'This medication leaves your list. Its dose history is kept in '
+          'case you need it later.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: MedicationListScreen.deleteCancelKey,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: MedicationListScreen.deleteConfirmKey,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: careblazersColors.accentDeep,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final MedicationRepository repo =
+        ref.read(medicationRepositoryBackendProvider);
+    await repo.softDeleteMedication(med.id);
+    ref.invalidate(medicationListProvider);
   }
 }
 
@@ -394,7 +452,13 @@ class _ErrorView extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 const List<String> _weekdayShort = <String>[
-  'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+  'Sun',
 ];
 
 String _formatClock(DateTime t) {

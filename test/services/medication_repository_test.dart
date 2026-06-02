@@ -70,8 +70,7 @@ void main() {
       );
       await repo.upsertSchedule(sched);
 
-      final List<DoseSchedule> rows =
-          await repo.schedulesFor('med-donepezil');
+      final List<DoseSchedule> rows = await repo.schedulesFor('med-donepezil');
       expect(rows, hasLength(1));
       expect(rows.single, sched);
     });
@@ -103,8 +102,7 @@ void main() {
           <String>['log-earlier', 'log-later']);
     });
 
-    test('upsertDoseLog is idempotent — same id overwrites in place',
-        () async {
+    test('upsertDoseLog is idempotent — same id overwrites in place', () async {
       await repo.upsertMedication(donepezil());
       final DateTime scheduledFor = DateTime(2026, 5, 30, 9);
       await repo.upsertDoseLog(DoseLog(
@@ -186,6 +184,53 @@ void main() {
       expect(await repo.schedulesFor('med-memantine'), hasLength(1));
     });
 
+    test('softDeleteMedication tombstones the row + drops it from the list',
+        () async {
+      await repo.upsertMedication(donepezil());
+      await repo.upsertMedication(memantine());
+
+      await repo.softDeleteMedication('med-donepezil');
+
+      // listMedications excludes the tombstoned row…
+      expect((await repo.listMedications()).map((Medication m) => m.id),
+          <String>['med-memantine']);
+      // …but the row survives on disk with its deletedAt stamped to the
+      // repository clock (so the dose history stays recoverable).
+      final Medication? tombstoned = await repo.getMedication('med-donepezil');
+      expect(tombstoned, isNotNull);
+      expect(tombstoned!.deletedAt, now);
+    });
+
+    test('softDeleteMedication is a no-op for an absent or already-deleted id',
+        () async {
+      // Absent id — nothing throws, list stays empty.
+      await repo.softDeleteMedication('does-not-exist');
+      expect(await repo.listMedications(), isEmpty);
+
+      // Already-deleted id keeps its original tombstone (idempotent).
+      await repo.upsertMedication(
+          donepezil().copyWith(deletedAt: DateTime(2026, 5, 1)));
+      await repo.softDeleteMedication('med-donepezil');
+      expect((await repo.getMedication('med-donepezil'))!.deletedAt,
+          DateTime(2026, 5, 1));
+    });
+
+    test('a soft-deleted medication is excluded from dosesByDay', () async {
+      await repo.upsertMedication(donepezil());
+      await repo.upsertSchedule(DoseSchedule(
+        id: 'sched-donepezil',
+        medicationId: 'med-donepezil',
+        frequencyKind: FrequencyKind.daily,
+        timesOfDay: const <TimeOfDay>[TimeOfDay(hour: 8, minute: 0)],
+        daysOfWeek: const <int>{},
+        startsOn: DateTime(2026, 5, 1),
+      ));
+      expect(await repo.dosesByDay(now), isNotEmpty);
+
+      await repo.softDeleteMedication('med-donepezil');
+      expect(await repo.dosesByDay(now), isEmpty);
+    });
+
     // ─────────────────────────────────── Schedule expansion ──
 
     test('upcomingDoses expands a daily schedule across the next 7 days',
@@ -209,8 +254,8 @@ void main() {
       expect(doses.last.scheduledFor, DateTime(2026, 6, 5, 9));
       // Sorted ascending.
       for (int i = 1; i < doses.length; i++) {
-        expect(doses[i].scheduledFor.isAfter(doses[i - 1].scheduledFor),
-            isTrue);
+        expect(
+            doses[i].scheduledFor.isAfter(doses[i - 1].scheduledFor), isTrue);
       }
     });
 
@@ -241,8 +286,7 @@ void main() {
       expect(doses.last.scheduledFor, DateTime(2026, 6, 1, 21));
     });
 
-    test('upcomingDoses respects FrequencyKind.weekly daysOfWeek',
-        () async {
+    test('upcomingDoses respects FrequencyKind.weekly daysOfWeek', () async {
       await repo.upsertMedication(donepezil());
       // Mon (1) + Wed (3) + Fri (5) at 10am.
       await repo.upsertSchedule(DoseSchedule(
@@ -264,15 +308,17 @@ void main() {
       //   Mon 2026-06-01 10:00
       //   Wed 2026-06-03 10:00
       //   Fri 2026-06-05 10:00
-      expect(doses.map((ScheduledDose d) => d.scheduledFor).toList(),
-          <DateTime>[
-            DateTime(2026, 6, 1, 10),
-            DateTime(2026, 6, 3, 10),
-            DateTime(2026, 6, 5, 10),
-          ]);
+      expect(
+          doses.map((ScheduledDose d) => d.scheduledFor).toList(), <DateTime>[
+        DateTime(2026, 6, 1, 10),
+        DateTime(2026, 6, 3, 10),
+        DateTime(2026, 6, 5, 10),
+      ]);
       for (final ScheduledDose d in doses) {
-        expect(<int>{DateTime.monday, DateTime.wednesday, DateTime.friday}
-            .contains(d.scheduledFor.weekday), isTrue);
+        expect(
+            <int>{DateTime.monday, DateTime.wednesday, DateTime.friday}
+                .contains(d.scheduledFor.weekday),
+            isTrue);
       }
     });
 
@@ -314,8 +360,7 @@ void main() {
       expect(doses.last.scheduledFor, DateTime(2026, 6, 5, 9));
     });
 
-    test('upcomingDoses honours schedule.endsOn (paused schedule)',
-        () async {
+    test('upcomingDoses honours schedule.endsOn (paused schedule)', () async {
       await repo.upsertMedication(donepezil());
       await repo.upsertSchedule(DoseSchedule(
         id: 'sched-ending',
@@ -396,13 +441,12 @@ void main() {
 
       // Today 9am (don), today 8pm (mem), tomorrow 9am (don), tomorrow
       // 8pm (mem) — merged + sorted.
-      expect(doses.map((ScheduledDose d) => d.medication.id).toList(),
-          <String>[
-            'med-donepezil',
-            'med-memantine',
-            'med-donepezil',
-            'med-memantine',
-          ]);
+      expect(doses.map((ScheduledDose d) => d.medication.id).toList(), <String>[
+        'med-donepezil',
+        'med-memantine',
+        'med-donepezil',
+        'med-memantine',
+      ]);
     });
 
     // ─────────────────────────────────── dosesByDay ──
@@ -468,8 +512,7 @@ void main() {
     });
 
     test('dosesByDay returns empty when no medications exist', () async {
-      expect(
-          await repo.dosesByDay(DateTime(2026, 5, 30)), isEmpty);
+      expect(await repo.dosesByDay(DateTime(2026, 5, 30)), isEmpty);
     });
 
     // ─────────────────────────────────── adherenceRate ──
@@ -479,20 +522,19 @@ void main() {
       // Unknown medication.
       expect(
           await repo.adherenceRate(
-              forMedication: 'med-ghost',
-              window: const Duration(days: 7)),
+              forMedication: 'med-ghost', window: const Duration(days: 7)),
           1.0);
 
       // Known medication, no schedule yet.
       await repo.upsertMedication(donepezil());
       expect(
           await repo.adherenceRate(
-              forMedication: 'med-donepezil',
-              window: const Duration(days: 7)),
+              forMedication: 'med-donepezil', window: const Duration(days: 7)),
           1.0);
     });
 
-    test('adherenceRate counts taken + late in the numerator, missed in the denominator',
+    test(
+        'adherenceRate counts taken + late in the numerator, missed in the denominator',
         () async {
       await repo.upsertMedication(donepezil());
       // Daily 9am for 7 days back.
@@ -594,8 +636,7 @@ void main() {
       expect(rate, 1.0);
     });
 
-    test('adherenceRate ignores logs that fall outside the window',
-        () async {
+    test('adherenceRate ignores logs that fall outside the window', () async {
       await repo.upsertMedication(donepezil());
       await repo.upsertSchedule(DoseSchedule(
         id: 'sched-month',

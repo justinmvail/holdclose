@@ -1939,7 +1939,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   mutation, assert the Medications Today card on Home updates
   its "X of Y" count (pump and re-navigate to Home).
 
-- [ ] **Phase 15.6: Medication CRUD flow
+- [x] **Phase 15.6: Medication CRUD flow
   (`test/integration/medication_crud_flow_test.dart`).** Pump
   app → Medical → Medications tile → `MedicationListScreen`.
   Three `testWidgets`: (1) **Add medication** — empty list → tap

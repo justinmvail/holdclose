@@ -76,6 +76,7 @@ class CareblazersRoutes {
   static const String chatThread = 'chat-thread';
   static const String medicationList = 'medication-list';
   static const String medicationForm = 'medication-form';
+  static const String medicationEdit = 'medication-edit';
   static const String medicationDoseLog = 'medication-dose-log';
   static const String appointmentList = 'appointment-list';
   static const String appointmentDetail = 'appointment-detail';
@@ -108,7 +109,8 @@ class CareblazersRoutes {
   static const String medicalSchedule = 'medical-schedule';
   static const String medicalCardsHub = 'medical-cards-hub';
   static const String medicalCardsEmergency = 'medical-cards-emergency';
-  static const String medicalCardsEmergencyEdit = 'medical-cards-emergency-edit';
+  static const String medicalCardsEmergencyEdit =
+      'medical-cards-emergency-edit';
   static const String medicalCardsPoa = 'medical-cards-poa';
   static const String medicalCardsPoaEdit = 'medical-cards-poa-edit';
   static const String medicalCardsIds = 'medical-cards-ids';
@@ -320,6 +322,18 @@ GoRouter buildRouter({
             // 14.14) pre-fills the dose-note field from it.
             builder: (BuildContext context, GoRouterState state) =>
                 DoseLogScreen(initialNote: VoiceIntake.doseNote(state.extra)),
+          ),
+          // Edit a medication, pre-filled from its saved row (Phase
+          // 15.6). `:id/edit` is a two-segment path so it never shadows
+          // the literal `new` / `today` children above.
+          GoRoute(
+            path: ':id/edit',
+            name: CareblazersRoutes.medicationEdit,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                MedicationFormScreen(
+              medicationId: state.pathParameters['id'],
+            ),
           ),
         ],
       ),
