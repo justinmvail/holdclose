@@ -64,12 +64,17 @@ class CareCircleScreen extends ConsumerWidget {
   static Key rowKey(String caregiverId) => Key('care-circle-row-$caregiverId');
   static Key callButtonKey(String caregiverId) =>
       Key('care-circle-call-$caregiverId');
+  static Key emailButtonKey(String caregiverId) =>
+      Key('care-circle-email-$caregiverId');
   static Key permissionBadgeKey(String caregiverId) =>
       Key('care-circle-permission-$caregiverId');
 
-  // Long-press edit sheet (role + permission).
+  // Long-press edit sheet (role + permission + remove).
   static const Key editSheetKey = Key('care-circle-edit-sheet');
   static const Key editSaveKey = Key('care-circle-edit-save');
+  static const Key editRemoveKey = Key('care-circle-edit-remove');
+  static const Key removeConfirmKey = Key('care-circle-remove-confirm');
+  static const Key removeCancelKey = Key('care-circle-remove-cancel');
   static Key editRoleOptionKey(CaregiverRole role) =>
       Key('care-circle-edit-role-${role.name}');
   static Key editPermissionOptionKey(PermissionLevel level) =>
@@ -183,6 +188,7 @@ class _MemberRow extends ConsumerWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Caregiver caregiver = member.caregiver;
     final String? phone = caregiver.phone;
+    final String? email = caregiver.email;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -235,6 +241,20 @@ class _MemberRow extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  if (email != null && email.trim().isNotEmpty)
+                    Semantics(
+                      button: true,
+                      label: 'Email ${caregiver.displayName}.',
+                      child: IconButton(
+                        key: CareCircleScreen.emailButtonKey(caregiver.id),
+                        icon: const Icon(Icons.mail_outline),
+                        color: careblazersColors.link,
+                        tooltip: 'Email ${caregiver.displayName}',
+                        onPressed: () => ref
+                            .read(linkLauncherProvider)
+                            .launch(_mailtoUri(email)),
+                      ),
+                    ),
                   if (phone != null && phone.trim().isNotEmpty)
                     Semantics(
                       button: true,
@@ -452,6 +472,49 @@ class _EditMemberSheetState extends ConsumerState<_EditMemberSheet> {
     Navigator.of(context).pop();
   }
 
+  /// Confirm, then drop the caregiver from the circle through the
+  /// [CareCircle] notifier (which cascades to their membership and
+  /// refreshes the roster), then pop the sheet. No-op on cancel.
+  Future<void> _remove() async {
+    if (_submitting) return;
+
+    final bool confirmed = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext dialogContext) => AlertDialog(
+            title: Text('Remove ${widget.member.caregiver.displayName}?'),
+            content: const Text(
+              'They will lose access to this care circle. You can invite '
+              'them again later.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                key: CareCircleScreen.removeCancelKey,
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                key: CareCircleScreen.removeConfirmKey,
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(
+                  'Remove',
+                  style: TextStyle(color: careblazersColors.accentDeep),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+
+    setState(() => _submitting = true);
+    await ref
+        .read(careCircleProvider.notifier)
+        .removeMember(widget.member.caregiver.id);
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
@@ -529,6 +592,27 @@ class _EditMemberSheetState extends ConsumerState<_EditMemberSheet> {
             child: Text(
               _submitting ? 'Saving…' : 'Save changes',
               style: textTheme.labelLarge?.copyWith(color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Semantics(
+              button: true,
+              label: 'Remove ${widget.member.caregiver.displayName} from the '
+                  'care circle.',
+              child: TextButton.icon(
+                key: CareCircleScreen.editRemoveKey,
+                onPressed: _submitting ? null : _remove,
+                icon: Icon(
+                  Icons.person_remove_alt_1_outlined,
+                  color: careblazersColors.accentDeep,
+                ),
+                label: Text(
+                  'Remove from circle',
+                  style: textTheme.labelLarge
+                      ?.copyWith(color: careblazersColors.accentDeep),
+                ),
+              ),
             ),
           ),
         ],
@@ -677,3 +761,7 @@ Uri _telUri(String phone) {
       .replaceAll(RegExp(r'(?!^)\+'), '');
   return Uri(scheme: 'tel', path: digits);
 }
+
+/// Build a `mailto:` URI from a free-text email address, trimming
+/// surrounding whitespace. Drives the roster's tap-to-email button.
+Uri _mailtoUri(String email) => Uri(scheme: 'mailto', path: email.trim());

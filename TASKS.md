@@ -1987,7 +1987,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
 
 ### Tier 2 — High-volume workflows
 
-- [ ] **Phase 15.9: Care Circle membership mutations
+- [x] **Phase 15.9: Care Circle membership mutations
   (`test/integration/care_circle_flow_test.dart`).** Seed Mary's
   circle with 2 caregivers (primary + sibling). Pump → Team →
   Care Circle tile. Four `testWidgets`: (1) **Invite flow** —
