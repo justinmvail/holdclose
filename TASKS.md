@@ -1968,7 +1968,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   Appointment card surfaces the soonest Upcoming with the right
   driver name + relative time.
 
-- [ ] **Phase 15.8: Chat composition + streaming reply
+- [x] **Phase 15.8: Chat composition + streaming reply
   (`test/integration/chat_flow_test.dart`).** Seed 1 conversation
   thread + 3 prior messages. Pump app → Chat tab → tap the thread
   tile. Five `testWidgets`: (1) **Send + streaming reply** — type
