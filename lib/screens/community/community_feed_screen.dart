@@ -182,6 +182,11 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
       floatingActionButton: onFeed
           ? FloatingActionButton.extended(
               key: CommunityFeedScreen.composeFabKey,
+              // Unique hero tag so a root-navigator push over the tab
+              // IndexedStack (e.g. opening a post detail) doesn't collide
+              // with another tab landing's default-tagged FAB (the Chat
+              // conversation list) mid-transition.
+              heroTag: 'community-compose-fab',
               backgroundColor: careblazersColors.cta,
               foregroundColor: Colors.white,
               onPressed: () =>

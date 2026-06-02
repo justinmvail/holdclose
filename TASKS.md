@@ -2031,7 +2031,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   Screen` → step through the multi-step form → Save → returns
   to list with the new entry rendered.
 
-- [ ] **Phase 15.12: Community post detail + voting + commenting
+- [x] **Phase 15.12: Community post detail + voting + commenting
   (`test/integration/community_post_flow_test.dart`).** Seed 3
   forum posts + 2 nested comments on the first post. Pump →
   Community → Feed → tap first post card. Six `testWidgets`:
