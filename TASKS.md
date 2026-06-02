@@ -2013,7 +2013,7 @@ The audit's coverage table moves from 28% → ≥85% once Phase 15 ships.
   membership created; (5) Form Back button does NOT create the
   membership.
 
-- [ ] **Phase 15.11: Journal screen navigation + display
+- [x] **Phase 15.11: Journal screen navigation + display
   (`test/integration/journal_flow_test.dart`).** Seed Mary's
   journal with 5 entries: 2 today (one repetitive-questions at
   5pm, one at 4:50pm — pattern fodder), 1 yesterday, 2 last
