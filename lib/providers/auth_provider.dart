@@ -351,14 +351,24 @@ Stream<AuthState> _replayBroadcast(
 ) {
   late StreamController<AuthState> out;
   StreamSubscription<AuthState>? sub;
-  out = StreamController<AuthState>(
+  out = StreamController<AuthState>.broadcast(
     onListen: () {
+      // Replay current state to every new listener so late subscribers
+      // (and subscribers re-mounting after a ListView scroll-off →
+      // scroll-back cycle) don't see a blank initial frame.
       out.add(currentState());
-      sub = source.stream.listen((AuthState s) {
+      // Subscribe to the source on the FIRST listener only; the
+      // broadcast controller fans the source's events out to every
+      // subsequent listener without re-subscribing.
+      sub ??= source.stream.listen((AuthState s) {
         if (!out.isClosed) out.add(s);
       });
     },
     onCancel: () async {
+      // Broadcast onCancel fires only when the LAST listener cancels;
+      // tear down the source subscription so it can be re-established
+      // on the next listener (avoids leaking the source.stream sub
+      // when every consumer has gone away).
       await sub?.cancel();
       sub = null;
     },

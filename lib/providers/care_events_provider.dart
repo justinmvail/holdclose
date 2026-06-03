@@ -41,6 +41,10 @@ CareEvent careEventFromAppointment(
     id: 'appt-${appointment.id}',
     kind: CareEventKind.appointment,
     title: title,
+    // Activity-feed-style sentence — Calendar reads only [title], so
+    // the longer "Appointment with …" form lives in subtitle and the
+    // Home Recent Activity card reads that.
+    subtitle: 'Appointment with $title',
     start: appointment.startsAt,
     end: appointment.startsAt
         .add(Duration(minutes: appointment.durationMinutes)),

@@ -13,6 +13,7 @@ import '../../providers/my_forum_profile_provider.dart';
 import '../../routing/router.dart' show CareblazersRoutes;
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 import '../../widgets/segmented_subnav.dart';
 import 'learn_screen.dart';
 import 'support_screen.dart';
@@ -161,22 +162,6 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
     final bool onFeed = _segment == CommunitySegment.feed;
     return Scaffold(
       backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text('Community'),
-        automaticallyImplyLeading: false,
-        actions: <Widget>[
-          // Moderation is a feed concern — only surface it on the Feed
-          // segment.
-          if (isAdmin && onFeed)
-            IconButton(
-              key: CommunityFeedScreen.adminActionKey,
-              tooltip: 'Moderation queue',
-              icon: const Icon(Icons.shield_outlined),
-              onPressed: () => context
-                  .pushNamed(CareblazersRoutes.communityAdminReports),
-            ),
-        ],
-      ),
       // The compose surface posts to the feed, so it only belongs on the
       // Feed segment.
       floatingActionButton: onFeed
@@ -198,6 +183,32 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
       body: SafeArea(
         child: Column(
           children: <Widget>[
+            // Tab landing → a single-crumb [PathHeader] renders the title
+            // row only. Same visual language as the Medical / Care Team /
+            // Chat hubs; moderation lives in the trailing slot so the
+            // shield is right of the title and only on the Feed segment.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: PathHeader(
+                breadcrumbs: const <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Community'),
+                ],
+                title: 'Community',
+                backLabel: 'Back to Home',
+                leadingIcon: Icons.forum_outlined,
+                trailing: (isAdmin && onFeed)
+                    ? IconButton(
+                        key: CommunityFeedScreen.adminActionKey,
+                        tooltip: 'Moderation queue',
+                        icon: const Icon(Icons.shield_outlined),
+                        color: careblazersColors.primary,
+                        onPressed: () => context.pushNamed(
+                          CareblazersRoutes.communityAdminReports,
+                        ),
+                      )
+                    : null,
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: SegmentedSubnav(

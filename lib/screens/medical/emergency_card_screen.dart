@@ -4,14 +4,14 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/document.dart';
+import '../../models/medication.dart';
 import '../../models/patient.dart';
 import '../../providers/documents_provider.dart';
 import '../../providers/link_launcher_provider.dart';
 import '../../providers/storage_provider.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
-import '../medication/medication_list_screen.dart'
-    show MedicationListItem, medicationListProvider;
+import '../../services/medication_repository.dart';
 
 part 'emergency_card_screen.g.dart';
 
@@ -39,7 +39,10 @@ class EmergencyCardView {
   final EmergencyCard? card;
 
   /// Read-only mirror of the medication tracker (TASKS.md Phase 14.23).
-  final List<MedicationListItem> medications;
+  /// Flat list of live medications — the ICE view doesn't need the
+  /// window grouping; first responders want "what is she on" not
+  /// "what does she take at 8am".
+  final List<Medication> medications;
 }
 
 /// Bundles the loved one, their emergency card, and the live medication
@@ -61,8 +64,10 @@ Future<EmergencyCardView> emergencyCardView(Ref ref) async {
       ? const <EmergencyCard>[]
       : cards.where((EmergencyCard c) => c.patientId == patient.id).toList();
 
-  final List<MedicationListItem> meds =
-      await ref.watch(medicationListProvider.future);
+  // Live mirror of the medication tracker — flat list, alphabetical.
+  final MedicationRepository medRepo =
+      ref.watch(medicationRepositoryBackendProvider);
+  final List<Medication> meds = await medRepo.listMedications();
 
   return EmergencyCardView(
     patient: patient,
@@ -75,10 +80,12 @@ Future<EmergencyCardView> emergencyCardView(Ref ref) async {
 /// 14.23, BUILD_SPEC.md §5.17). Replaces the old inline-editable
 /// CrisisCardScreen.
 ///
-/// A read-only "show to first responders" card under Medical → Cards &
-/// Documents. The [PathHeader] carries the `Home › Medical › Cards &
-/// Documents` trail (back to Cards & Documents); the AppBar carries a
-/// single Edit action that pushes `/medical/cards/emergency/edit`.
+/// A read-only "show to first responders" card under Medical. The
+/// [PathHeader] carries the `Home › Medical` trail (back to Medical);
+/// the AppBar carries a single Edit action that pushes
+/// `/medical/cards/emergency/edit`. (Was previously nested under a
+/// "Cards & Documents" sub-hub alongside POA + IDs; that sub-hub was
+/// removed and Emergency Card promoted to a top-level Medical tile.)
 ///
 /// Body sections, each a labeled bordered card: Patient identity,
 /// Conditions, Medications (the live tracker mirror), Allergies, Emergency
@@ -169,14 +176,10 @@ class _Body extends ConsumerWidget {
             breadcrumbs: <PathHeaderCrumb>[
               PathHeaderCrumb(label: 'Home', route: '/'),
               PathHeaderCrumb(label: 'Medical', route: '/medical'),
-              PathHeaderCrumb(
-                label: 'Cards & Documents',
-                route: '/medical/cards',
-              ),
               PathHeaderCrumb(label: 'Emergency Card'),
             ],
             title: 'Emergency Card',
-            backLabel: 'Back to Cards & Documents',
+            backLabel: 'Back to Medical',
             leadingIcon: Icons.emergency_outlined,
           ),
           const SizedBox(height: 12),
@@ -503,7 +506,7 @@ class _Chip extends StatelessWidget {
 class _MedicationMirror extends StatelessWidget {
   const _MedicationMirror({required this.items});
 
-  final List<MedicationListItem> items;
+  final List<Medication> items;
 
   @override
   Widget build(BuildContext context) {
@@ -512,21 +515,21 @@ class _MedicationMirror extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        for (final MedicationListItem item in items)
+        for (final Medication item in items)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: Text.rich(
               TextSpan(
                 children: <InlineSpan>[
                   TextSpan(
-                    text: item.medication.name,
+                    text: item.name,
                     style: textTheme.bodyLarge?.copyWith(
                       color: careblazersColors.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   TextSpan(
-                    text: '  ${item.medication.dosage}',
+                    text: '  ${item.dosage}',
                     style: textTheme.bodyMedium?.copyWith(
                       color: careblazersColors.text,
                     ),

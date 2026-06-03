@@ -38,12 +38,13 @@ part 'database.g.dart';
     ChatConversationsTable,
     ChatMessagesTable,
     MedicationsTable,
-    DoseSchedulesTable,
+    DoseWindowsTable,
+    MedicationWindowEntriesTable,
     DoseLogsTable,
     ProvidersTable,
     AppointmentsTable,
     HealthLogEntriesTable,
-    CarePlanSectionsTable,
+    CarePlanRoutinesTable,
     EmergencyCardsTable,
     PowerOfAttorneyDocsTable,
     IdentificationDocsTable,
@@ -78,7 +79,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       CareblazersDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 15;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -135,8 +136,12 @@ class CareblazersDatabase extends _$CareblazersDatabase {
             await m.createTable(chatMessagesTable);
           }
           if (from < 3) {
+            // v3 originally created `dose_schedules` alongside
+            // medications + dose_logs. dose_schedules is dropped at v14
+            // when the medication tracker pivots to window-driven
+            // scheduling, so the v3 step here skips it — v14's
+            // CREATE owns the new tables.
             await m.createTable(medicationsTable);
-            await m.createTable(doseSchedulesTable);
             await m.createTable(doseLogsTable);
           }
           if (from < 4) {
@@ -147,7 +152,11 @@ class CareblazersDatabase extends _$CareblazersDatabase {
             await m.createTable(healthLogEntriesTable);
           }
           if (from < 6) {
-            await m.createTable(carePlanSectionsTable);
+            // v6 originally created `CarePlanSectionsTable`. That table is
+            // dropped at v13; for v1 installs upgrading straight through,
+            // there's no point creating then dropping. v6 → v13 is a
+            // no-op step here so the subsequent CREATE in the v13 block
+            // owns the routines table.
           }
           if (from < 7) {
             await m.createTable(emergencyCardsTable);
@@ -170,6 +179,50 @@ class CareblazersDatabase extends _$CareblazersDatabase {
           if (from < 12) {
             await m.createTable(expensesTable);
           }
+          if (from < 13) {
+            // Care Plan v2: drop the old slot/stage `CarePlanSectionsTable`
+            // and replace with the wall-clock-scheduled
+            // [CarePlanRoutinesTable]. The v1 data was organisational
+            // notes that don't map cleanly onto the new model — wipe + let
+            // the caregiver re-author routines as scheduled tasks. The
+            // schema is too freshly seeded in v1 for this to matter in
+            // practice.
+            await customStatement('DROP TABLE IF EXISTS care_plan_sections');
+            await m.createTable(carePlanRoutinesTable);
+          }
+          if (from < 14) {
+            // Medication scheduling v2: pivot from per-medication
+            // [DoseSchedulesTable] (frequency + timesOfDay × per-med) to
+            // per-window [DoseWindowsTable] + [MedicationWindowEntriesTable].
+            // The pillbox-shaped model matches how caregivers actually
+            // think ("what does Mom take in the morning?"). v1 schedule
+            // rows aren't migrated — the schema is freshly seeded in v1
+            // and the seed wires the new windows directly.
+            await customStatement('DROP TABLE IF EXISTS dose_schedules');
+            await m.createTable(doseWindowsTable);
+            await m.createTable(medicationWindowEntriesTable);
+          }
+          if (from < 15) {
+            // Drop the seeded Morning / Noon / Evening / Bedtime /
+            // As-needed windows the v14 bootstrap auto-created — the
+            // caregiver wanted to manage windows themselves rather
+            // than inherit a default set. FK cascade wipes any
+            // medication entries linked to those windows; the
+            // medications themselves stay (the FK on entries points
+            // to medications, but the cascade only fires when the
+            // *medication* row goes away). Idempotent — a fresh v15
+            // install never holds these rows, so the DELETE is a
+            // no-op.
+            await customStatement(
+              "DELETE FROM dose_windows WHERE id IN ("
+              "'window-demo-patient-mary-morning',"
+              "'window-demo-patient-mary-noon',"
+              "'window-demo-patient-mary-evening',"
+              "'window-demo-patient-mary-bedtime',"
+              "'window-demo-patient-mary-as-needed'"
+              ")",
+            );
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -186,12 +239,13 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(chatMessagesTable).go();
       await delete(chatConversationsTable).go();
       await delete(doseLogsTable).go();
-      await delete(doseSchedulesTable).go();
+      await delete(medicationWindowEntriesTable).go();
+      await delete(doseWindowsTable).go();
       await delete(medicationsTable).go();
       await delete(appointmentsTable).go();
       await delete(providersTable).go();
       await delete(healthLogEntriesTable).go();
-      await delete(carePlanSectionsTable).go();
+      await delete(carePlanRoutinesTable).go();
       await delete(emergencyCardsTable).go();
       await delete(powerOfAttorneyDocsTable).go();
       await delete(identificationDocsTable).go();

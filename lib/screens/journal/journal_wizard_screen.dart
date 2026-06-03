@@ -18,6 +18,7 @@ class JournalWizardArgs {
     this.situationText,
     this.attemptsText,
     this.initialTranscript,
+    this.quickNote = false,
   });
 
   final DateTime? occurredAt;
@@ -30,6 +31,13 @@ class JournalWizardArgs {
   /// edit rather than retype. [situationText] (the chat-coach path)
   /// wins when both are supplied.
   final String? initialTranscript;
+
+  /// When true, the wizard renders a single-page minimal form (just
+  /// "When?" and a free-text area) rather than the multi-step
+  /// behavior/triage/attempts flow. Lets the caregiver capture "she
+  /// kept asking for her mother" in two taps without committing to
+  /// the structured workflow.
+  final bool quickNote;
 }
 
 /// "When did it happen?" presets the wizard surfaces (BUILD_SPEC.md
@@ -238,13 +246,15 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
     }
   }
 
+  bool get _isQuickNote => widget.args?.quickNote ?? false;
+
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Scaffold(
       backgroundColor: careblazersColors.background,
       appBar: AppBar(
-        title: const Text('Log a moment'),
+        title: Text(_isQuickNote ? 'Quick note' : 'Log a moment'),
         leading: IconButton(
           key: JournalWizardScreen.backButtonKey,
           icon: const Icon(Icons.arrow_back),
@@ -254,59 +264,120 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              _ProgressDots(
-                key: JournalWizardScreen.progressKey,
-                step: _step,
-                total: JournalWizardScreen.totalSteps,
-              ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  child: _stepContent(textTheme),
-                ),
-              ),
-              Row(
-                children: <Widget>[
-                  if (_step == JournalWizardScreen.totalSteps - 1)
-                    Expanded(
-                      child: ElevatedButton(
-                        key: JournalWizardScreen.submitButtonKey,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: careblazersColors.cta,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                        ),
-                        onPressed:
-                            (_canAdvance && !_submitting) ? _submit : null,
-                        child: Text(
-                          _submitting ? 'Saving…' : 'Save entry',
-                          style: textTheme.labelLarge,
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: ElevatedButton(
-                        key: JournalWizardScreen.nextButtonKey,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: careblazersColors.cta,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                        ),
-                        onPressed: _canAdvance ? _onNext : null,
-                        child: Text('Next', style: textTheme.labelLarge),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
+          child: _isQuickNote
+              ? _buildQuickNote(textTheme)
+              : _buildWizard(textTheme),
         ),
       ),
+    );
+  }
+
+  Widget _buildQuickNote(TextTheme textTheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'What happened?',
+          style: textTheme.headlineMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Write it however feels natural. You can add structure later.',
+          style: textTheme.bodyMedium?.copyWith(
+            color: careblazersColors.text.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Expanded(
+          child: TextField(
+            key: JournalWizardScreen.situationFieldKey,
+            controller: _situationController,
+            autofocus: true,
+            maxLines: null,
+            expands: true,
+            textAlignVertical: TextAlignVertical.top,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
+            decoration: const InputDecoration(
+              hintText: 'She kept asking to call her mother. I tried '
+                  'redirecting to the photo album…',
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        const SizedBox(height: 16),
+        ElevatedButton(
+          key: JournalWizardScreen.submitButtonKey,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: careblazersColors.cta,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            minimumSize: const Size.fromHeight(56),
+          ),
+          onPressed: (_situationController.text.trim().isEmpty || _submitting)
+              ? null
+              : _submit,
+          child: Text(
+            _submitting ? 'Saving…' : 'Save note',
+            style: textTheme.labelLarge,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWizard(TextTheme textTheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _ProgressDots(
+          key: JournalWizardScreen.progressKey,
+          step: _step,
+          total: JournalWizardScreen.totalSteps,
+        ),
+        const SizedBox(height: 20),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: _stepContent(textTheme),
+          ),
+        ),
+        Row(
+          children: <Widget>[
+            if (_step == JournalWizardScreen.totalSteps - 1)
+              Expanded(
+                child: ElevatedButton(
+                  key: JournalWizardScreen.submitButtonKey,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: careblazersColors.cta,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onPressed: (_canAdvance && !_submitting) ? _submit : null,
+                  child: Text(
+                    _submitting ? 'Saving…' : 'Save entry',
+                    style: textTheme.labelLarge,
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ElevatedButton(
+                  key: JournalWizardScreen.nextButtonKey,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: careblazersColors.cta,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onPressed: _canAdvance ? _onNext : null,
+                  child: Text('Next', style: textTheme.labelLarge),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 

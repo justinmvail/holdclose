@@ -1,15 +1,18 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/medication.dart';
 import '../../providers/notifications_provider.dart';
+import '../../providers/patient_timeline_provider.dart' show invalidatePatientTimeline;
 import '../../services/medication_repository.dart';
 import '../../services/notification_scheduler.dart';
 import '../../theme.dart';
+import 'dose_window_list_screen.dart';
 import 'medication_list_screen.dart';
 
 part 'medication_form_screen.g.dart';
@@ -83,14 +86,68 @@ class MedicationFormScreen extends ConsumerStatefulWidget {
   static const Key formKey = Key('medication-form');
   static const Key nameFieldKey = Key('medication-form-name');
   static const Key dosageFieldKey = Key('medication-form-dosage');
+  static const Key dosageUnitDropdownKey =
+      Key('medication-form-dosage-unit');
   static const Key routeDropdownKey = Key('medication-form-route');
   static const Key prescriberFieldKey = Key('medication-form-prescriber');
   static const Key notesFieldKey = Key('medication-form-notes');
   static const Key submitButtonKey = Key('medication-form-submit');
+  static const Key endDateFieldKey = Key('medication-form-end-date');
+  static const Key endDateClearKey = Key('medication-form-end-date-clear');
+  static const Key deleteButtonKey = Key('medication-form-delete');
+  /// Add-mode picker for which window the new medication joins. Kept
+  /// for parity with the legacy `timesFieldKey` so existing widget
+  /// tests can land on a stable handle.
+  static const Key windowDropdownKey = Key('medication-form-window');
 
   @override
   ConsumerState<MedicationFormScreen> createState() =>
       _MedicationFormScreenState();
+}
+
+/// The selectable dosage units. Default is [mg] — the overwhelming
+/// majority of dementia-care prescriptions are milligram doses (per
+/// caregiver request: "default to mg but units should be selectable").
+/// Ordered roughly by frequency of use in the target population.
+const List<String> _dosageUnits = <String>[
+  'mg',
+  'mcg',
+  'g',
+  'mL',
+  'tablet',
+  'capsule',
+  'drop',
+  'puff',
+  'patch',
+  'unit',
+];
+
+const String _defaultDosageUnit = 'mg';
+
+/// Parse a free-text dosage like "10 mg" into `(amount: '10', unit:
+/// 'mg')`. Splits on the last whitespace; if the trailing token matches
+/// a known unit in [_dosageUnits], it becomes the unit and the rest
+/// becomes the amount. Otherwise the whole string is the amount and
+/// the unit falls back to [_defaultDosageUnit] — keeps edit-mode safe
+/// against legacy values like "1 tablet" or "5 mL" the user typed
+/// before the dropdown existed.
+({String amount, String unit}) parseDosage(String raw) {
+  final String trimmed = raw.trim();
+  if (trimmed.isEmpty) {
+    return (amount: '', unit: _defaultDosageUnit);
+  }
+  final int lastSpace = trimmed.lastIndexOf(RegExp(r'\s+'));
+  if (lastSpace <= 0) {
+    return (amount: trimmed, unit: _defaultDosageUnit);
+  }
+  final String maybeUnit = trimmed.substring(lastSpace).trim();
+  if (_dosageUnits.contains(maybeUnit)) {
+    return (
+      amount: trimmed.substring(0, lastSpace).trim(),
+      unit: maybeUnit,
+    );
+  }
+  return (amount: trimmed, unit: _defaultDosageUnit);
 }
 
 class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
@@ -99,7 +156,22 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
   final TextEditingController _dosage = TextEditingController();
   final TextEditingController _prescriber = TextEditingController();
   final TextEditingController _notes = TextEditingController();
+  String _dosageUnit = _defaultDosageUnit;
   MedicationRoute _route = MedicationRoute.oral;
+  /// Optional end date — when set, the medication disappears from the
+  /// active list once this date passes (handled by the repository).
+  DateTime? _endsAt;
+  /// Windows the medication is given in (multi-select chip picker).
+  /// Starts empty — the caregiver adds chips via the "+ Add time"
+  /// sheet, picking existing windows or creating new ones. Edit mode
+  /// hydrates from the existing entries so the chips match disk.
+  Set<String> _selectedWindowIds = <String>{};
+
+  /// Entry-id by window-id captured on edit-mode hydrate so we can
+  /// diff the chip set on submit (delete removed entries; insert new
+  /// ones; leave untouched ones alone — preserves any custom
+  /// daysOfWeek / endsOn the entry already carried).
+  Map<String, String> _entryIdByWindowId = <String, String>{};
   bool _hydrated = false;
   bool _submitting = false;
 
@@ -112,10 +184,73 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
     _hydrated = true;
     if (med == null) return;
     _name.text = med.name;
-    _dosage.text = med.dosage;
+    final ({String amount, String unit}) parsed = parseDosage(med.dosage);
+    _dosage.text = parsed.amount;
+    _dosageUnit = parsed.unit;
     _prescriber.text = med.prescriber ?? '';
     _notes.text = med.notes ?? '';
     _route = med.route;
+    _endsAt = med.endsAt;
+    // Edit path: pull the existing entries so the chip set reflects
+    // what's currently on disk. Synchronous-looking call queued onto
+    // a microtask so the build pass doesn't reach for `setState`
+    // before the framework finishes the first frame.
+    if (widget.isEdit && widget.medicationId != null) {
+      _hydrateEntries(widget.medicationId!);
+    }
+  }
+
+  Future<void> _confirmAndDelete(BuildContext context) async {
+    final String? id = widget.medicationId;
+    if (id == null) return;
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Delete medication?'),
+        content: Text(
+          "${_name.text.trim()} will stop appearing on the schedule. "
+          "The dose history stays on disk so you can recover it later.",
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final MedicationRepository repo =
+        ref.read(medicationRepositoryBackendProvider);
+    await repo.softDeleteMedication(id);
+    ref.invalidate(medicationListProvider);
+    invalidatePatientTimeline(ref);
+    if (!mounted) return;
+    if (context.mounted && context.canPop()) {
+      context.pop();
+    } else if (context.mounted) {
+      context.go('/medications');
+    }
+  }
+
+  Future<void> _hydrateEntries(String medicationId) async {
+    final MedicationRepository repo =
+        ref.read(medicationRepositoryBackendProvider);
+    final List<MedicationWindowEntry> entries =
+        await repo.entriesForMedication(medicationId);
+    if (!mounted) return;
+    setState(() {
+      _selectedWindowIds = <String>{
+        for (final MedicationWindowEntry e in entries) e.windowId,
+      };
+      _entryIdByWindowId = <String, String>{
+        for (final MedicationWindowEntry e in entries) e.windowId: e.id,
+      };
+    });
   }
 
   @override
@@ -138,18 +273,22 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
     final MedicationIdFactory mint = ref.read(medicationFormIdFactoryProvider);
     final DateTime now = ref.read(medicationFormClockProvider)();
 
-    final bool editing = widget.isEdit;
     final String medicationId = widget.medicationId ?? 'med-${mint()}';
 
     final String prescriber = _prescriber.text.trim();
     final String notes = _notes.text.trim();
+    final String amount = _dosage.text.trim();
     final Medication medication = Medication(
       id: medicationId,
       name: _name.text.trim(),
-      dosage: _dosage.text.trim(),
+      // Compose "<amount> <unit>" so the persisted free-text dosage
+      // string stays human-readable ("10 mg", "1 tablet") and the
+      // doctor-visit PDF + dose-log subtitles read the same as before.
+      dosage: amount.isEmpty ? '' : '$amount $_dosageUnit',
       route: _route,
       prescriber: prescriber.isEmpty ? null : prescriber,
       notes: notes.isEmpty ? null : notes,
+      endsAt: _endsAt,
     );
 
     // BUILD_SPEC.md Phase 12.8 — capture refs BEFORE any await so a
@@ -161,21 +300,34 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
         ref.read(notificationSchedulerProvider);
 
     await repo.upsertMedication(medication);
-    // Add path mints a default daily-8AM schedule alongside the new
-    // medication; edit path leaves the existing schedule(s) alone so the
-    // dose timeline survives a name/dosage change.
-    if (!editing) {
-      final DoseSchedule defaultSchedule = DoseSchedule(
-        id: 'sched-${mint()}',
+    // Diff the chip set against the persisted entries:
+    //   * Delete entries whose window was un-chipped.
+    //   * Insert one fresh entry per newly-chipped window.
+    //   * Leave untouched entries alone so any custom daysOfWeek /
+    //     endsOn the caregiver set on a window survive a name/dosage
+    //     edit.
+    final Set<String> existing = _entryIdByWindowId.keys.toSet();
+    final Set<String> toDelete = existing.difference(_selectedWindowIds);
+    final Set<String> toAdd = _selectedWindowIds.difference(existing);
+    for (final String windowId in toDelete) {
+      final String? entryId = _entryIdByWindowId[windowId];
+      if (entryId != null) await repo.deleteEntry(entryId);
+    }
+    for (final String windowId in toAdd) {
+      await repo.upsertEntry(MedicationWindowEntry(
+        id: 'entry-${mint()}',
         medicationId: medicationId,
-        frequencyKind: FrequencyKind.daily,
-        timesOfDay: const <TimeOfDay>[TimeOfDay(hour: 8, minute: 0)],
+        windowId: windowId,
         daysOfWeek: const <int>{},
         startsOn: DateTime(now.year, now.month, now.day),
-      );
-      await repo.upsertSchedule(defaultSchedule);
+      ));
     }
     ref.invalidate(medicationListProvider);
+    // Home dashboard cards (Medications Today, Recent Activity, Catch
+    // Me Up) cache today's doses + the timeline merger at watch time
+    // and don't see the new medication's first dose otherwise. See
+    // [invalidatePatientTimeline]'s docstring.
+    invalidatePatientTimeline(ref);
 
     // Permission ask on first med add, then schedule dose reminders.
     // Re-asking is idempotent on both platforms, but we only prompt
@@ -214,16 +366,32 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
             _hydrateFromMedication(med);
             return Form(
               key: _formKey,
-              child: ListView(
-                key: MedicationFormScreen.formKey,
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              // Column + Expanded(ListView) + pinned Save button. The
+              // form fields scroll independently of the Save action so
+              // a long med (notes + many windows) can't push the
+              // submit affordance below the fold.
+              child: Column(
                 children: <Widget>[
+                  Expanded(
+                    child: ListView(
+                      key: MedicationFormScreen.formKey,
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                      children: <Widget>[
                   _LabelledField(
                     label: 'Name',
                     child: TextFormField(
                       key: MedicationFormScreen.nameFieldKey,
                       controller: _name,
                       textInputAction: TextInputAction.next,
+                      // Auto-capitalize each word as the caregiver
+                      // types so "donepezil 10 mg" lands on disk as
+                      // "Donepezil 10 mg" without manual editing.
+                      // Keyboard hint + a hard formatter make it
+                      // stick on physical keyboards too.
+                      textCapitalization: TextCapitalization.words,
+                      inputFormatters: <TextInputFormatter>[
+                        TitleCaseTextFormatter(),
+                      ],
                       decoration: const InputDecoration(
                         hintText: 'e.g. Donepezil',
                       ),
@@ -238,19 +406,53 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                   const SizedBox(height: 16),
                   _LabelledField(
                     label: 'Dosage',
-                    child: TextFormField(
-                      key: MedicationFormScreen.dosageFieldKey,
-                      controller: _dosage,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        hintText: 'e.g. 10 mg',
-                      ),
-                      validator: (String? v) {
-                        if (v == null || v.trim().isEmpty) {
-                          return 'Dosage is required.';
-                        }
-                        return null;
-                      },
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            key: MedicationFormScreen.dosageFieldKey,
+                            controller: _dosage,
+                            textInputAction: TextInputAction.next,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. 10',
+                            ),
+                            validator: (String? v) {
+                              if (v == null || v.trim().isEmpty) {
+                                return 'Dosage is required.';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 1,
+                          child: DropdownButtonFormField<String>(
+                            key: MedicationFormScreen.dosageUnitDropdownKey,
+                            initialValue: _dosageUnit,
+                            isExpanded: true,
+                            items: <DropdownMenuItem<String>>[
+                              for (final String unit in _dosageUnits)
+                                DropdownMenuItem<String>(
+                                  value: unit,
+                                  child: Text(
+                                    unit,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (String? next) {
+                              if (next == null) return;
+                              setState(() => _dosageUnit = next);
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -303,6 +505,10 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                       key: MedicationFormScreen.prescriberFieldKey,
                       controller: _prescriber,
                       textInputAction: TextInputAction.next,
+                      textCapitalization: TextCapitalization.words,
+                      inputFormatters: <TextInputFormatter>[
+                        TitleCaseTextFormatter(),
+                      ],
                       decoration: const InputDecoration(
                         hintText: 'e.g. Dr. Kim',
                       ),
@@ -321,40 +527,99 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                       ),
                     ),
                   ),
-                  if (!widget.isEdit) ...<Widget>[
-                    const SizedBox(height: 12),
-                    Text(
-                      "We'll start with a daily-at-8AM schedule you can "
-                      'adjust from the medication card.',
-                      style: textTheme.bodyMedium?.copyWith(
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                      ),
+                  const SizedBox(height: 16),
+                  _LabelledField(
+                    label: 'Times',
+                    child: _WindowChipPicker(
+                      fieldKey:
+                          MedicationFormScreen.windowDropdownKey,
+                      selected: _selectedWindowIds,
+                      onChanged: (Set<String> next) => setState(
+                          () => _selectedWindowIds = next),
                     ),
-                  ],
-                  const SizedBox(height: 24),
-                  Semantics(
-                    button: true,
-                    label: widget.isEdit
-                        ? 'Save changes to this medication.'
-                        : 'Save this medication.',
-                    child: ElevatedButton(
-                      key: MedicationFormScreen.submitButtonKey,
-                      onPressed: _submitting ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(56),
-                        backgroundColor: careblazersColors.cta,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: Text(
-                        _submitting
-                            ? 'Saving…'
-                            : (widget.isEdit
-                                ? 'Save changes'
-                                : 'Save medication'),
-                        style:
-                            textTheme.labelLarge?.copyWith(color: Colors.white),
-                      ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tap a chip to add or remove the window. '
+                    '"+ Add time" opens existing windows or lets you '
+                    'create a new one.',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _LabelledField(
+                    label: 'End date (optional)',
+                    child: _EndDatePicker(
+                      fieldKey: MedicationFormScreen.endDateFieldKey,
+                      clearKey: MedicationFormScreen.endDateClearKey,
+                      value: _endsAt,
+                      onChanged: (DateTime? next) =>
+                          setState(() => _endsAt = next),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Set an end date for short courses (antibiotics, '
+                    'taper plans). The medication automatically drops '
+                    'off the active list when this date passes.',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                      ],
+                    ),
+                  ),
+                  // Pinned at the bottom — out of the scroll view so it
+                  // can't disappear off-screen.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Semantics(
+                          button: true,
+                          label: widget.isEdit
+                              ? 'Save changes to this medication.'
+                              : 'Save this medication.',
+                          child: ElevatedButton(
+                            key: MedicationFormScreen.submitButtonKey,
+                            onPressed: _submitting ? null : _submit,
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(56),
+                              backgroundColor: careblazersColors.cta,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: Text(
+                              _submitting
+                                  ? 'Saving…'
+                                  : (widget.isEdit
+                                      ? 'Save changes'
+                                      : 'Save medication'),
+                              style: textTheme.labelLarge
+                                  ?.copyWith(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                        if (widget.isEdit) ...<Widget>[
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            key: MedicationFormScreen.deleteButtonKey,
+                            onPressed: _submitting
+                                ? null
+                                : () => _confirmAndDelete(context),
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Delete medication'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: careblazersColors.text
+                                  .withValues(alpha: 0.65),
+                              minimumSize: const Size.fromHeight(44),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ],
@@ -407,6 +672,391 @@ class _LabelledField extends StatelessWidget {
         const SizedBox(height: 4),
         child,
       ],
+    );
+  }
+}
+
+/// Times-of-day picker for the medication form (add mode only).
+///
+/// Renders the current [times] as a wrap of [InputChip]s. Tapping a chip
+/// opens the platform time picker pre-filled to the chip's value; tapping
+/// the chip's `X` removes it. The "Add time" trailing button appends a
+/// Multi-window chip picker for the medication form (v14 "windows-as-
+/// times" UX). Each selected window renders as a [FilterChip] showing
+/// the window label and its anchor time ("Morning · 8:00 AM"); the
+/// "+ Add time" chip opens a bottom sheet of the patient's other
+/// windows + a "Create new window" affordance. Tapping an existing
+/// chip toggles it off.
+class _WindowChipPicker extends ConsumerWidget {
+  const _WindowChipPicker({
+    required this.fieldKey,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final Key fieldKey;
+  final Set<String> selected;
+  final ValueChanged<Set<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<List<DoseWindow>> async =
+        ref.watch(doseWindowListProvider);
+    return async.when(
+      loading: () => const SizedBox.shrink(),
+      error: (Object e, StackTrace _) =>
+          Text("Couldn't load windows: $e"),
+      data: (List<DoseWindow> windows) {
+        final Map<String, DoseWindow> byId = <String, DoseWindow>{
+          for (final DoseWindow w in windows) w.id: w,
+        };
+        final List<DoseWindow> selectedList = <DoseWindow>[
+          for (final String id in selected)
+            if (byId[id] != null) byId[id]!,
+        ]..sort(_byAnchorThenAsNeeded);
+        return Wrap(
+          key: fieldKey,
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            for (final DoseWindow w in selectedList)
+              InputChip(
+                label: Text(_windowLabel(context, w)),
+                onDeleted: () {
+                  final Set<String> next = <String>{...selected}..remove(w.id);
+                  onChanged(next);
+                },
+              ),
+            ActionChip(
+              avatar: const Icon(Icons.add, size: 18),
+              label: const Text('Add time'),
+              onPressed: () => _openAddSheet(context, ref, windows),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _openAddSheet(BuildContext context, WidgetRef ref,
+      List<DoseWindow> windows) async {
+    final List<DoseWindow> available = windows
+        .where((DoseWindow w) => !selected.contains(w.id))
+        .toList()
+      ..sort(_byAnchorThenAsNeeded);
+    final _PickedWindow? picked = await showModalBottomSheet<_PickedWindow>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) => _AddWindowSheet(
+        available: available,
+      ),
+    );
+    if (picked == null) return;
+    if (!context.mounted) return;
+    if (picked.createWithLabel != null) {
+      // "Create new window" path. Reject the label early if another
+      // window already uses it (case-insensitive) so a caregiver
+      // doesn't end up with two "Morning"s on disk.
+      final String label = picked.createWithLabel!;
+      final String lower = label.toLowerCase();
+      if (windows.any((DoseWindow w) => w.label.toLowerCase() == lower)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("\"$label\" is already a window name.")),
+        );
+        return;
+      }
+      // Sheet closed with the new label; pop the system time picker
+      // before minting the DoseWindow.
+      final TimeOfDay? time = await showTimePicker(
+        context: context,
+        initialTime: const TimeOfDay(hour: 8, minute: 0),
+      );
+      if (time == null) return;
+      final MedicationRepository repo =
+          ref.read(medicationRepositoryBackendProvider);
+      final List<DoseWindow> existing =
+          await repo.windowsForPatient('demo-patient-mary');
+      final int nextSort = existing.isEmpty
+          ? 0
+          : (existing.map((DoseWindow w) => w.sortOrder).reduce(
+                  (int a, int b) => a > b ? a : b) +
+              1);
+      final DoseWindow window = DoseWindow(
+        id: 'window-${DateTime.now().millisecondsSinceEpoch}',
+        patientId: 'demo-patient-mary',
+        label: label,
+        anchorTime: time,
+        sortOrder: nextSort,
+      );
+      await repo.upsertWindow(window);
+      ref.invalidate(doseWindowListProvider);
+      onChanged(<String>{...selected, window.id});
+    } else if (picked.existingId != null) {
+      onChanged(<String>{...selected, picked.existingId!});
+    }
+  }
+
+  static int _byAnchorThenAsNeeded(DoseWindow a, DoseWindow b) {
+    if (a.isAsNeeded && !b.isAsNeeded) return 1;
+    if (!a.isAsNeeded && b.isAsNeeded) return -1;
+    if (a.isAsNeeded && b.isAsNeeded) return 0;
+    final int am = a.anchorTime!.hour * 60 + a.anchorTime!.minute;
+    final int bm = b.anchorTime!.hour * 60 + b.anchorTime!.minute;
+    return am.compareTo(bm);
+  }
+
+  static String _windowLabel(BuildContext context, DoseWindow w) {
+    if (w.isAsNeeded) return w.label;
+    final String time = MaterialLocalizations.of(context).formatTimeOfDay(
+      w.anchorTime!,
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+    return '${w.label} · $time';
+  }
+}
+
+/// What the [_AddWindowSheet] returns — either an existing window id
+/// to add, or a label to mint a new window with. Time is picked via
+/// the system [showTimePicker] after the sheet dismisses.
+@immutable
+class _PickedWindow {
+  const _PickedWindow.existing(String id)
+      : existingId = id,
+        createWithLabel = null;
+  const _PickedWindow.create(String label)
+      : existingId = null,
+        createWithLabel = label;
+
+  final String? existingId;
+  final String? createWithLabel;
+}
+
+class _AddWindowSheet extends StatefulWidget {
+  const _AddWindowSheet({required this.available});
+  final List<DoseWindow> available;
+
+  @override
+  State<_AddWindowSheet> createState() => _AddWindowSheetState();
+}
+
+class _AddWindowSheetState extends State<_AddWindowSheet> {
+  final TextEditingController _newLabel = TextEditingController();
+  bool _creating = false;
+
+  @override
+  void dispose() {
+    _newLabel.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme tt = Theme.of(context).textTheme;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                'Add a time',
+                style: tt.titleLarge?.copyWith(
+                  color: careblazersColors.primary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (widget.available.isEmpty)
+                Text(
+                  'No other windows on file. Create a new one below.',
+                  style: tt.bodyMedium?.copyWith(
+                    color: careblazersColors.primarySoft,
+                  ),
+                )
+              else ...<Widget>[
+                Text(
+                  'Pick an existing time',
+                  style: tt.titleSmall?.copyWith(
+                    color: careblazersColors.primarySoft,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                for (final DoseWindow w in widget.available)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(w.label),
+                    subtitle: Text(
+                      w.isAsNeeded
+                          ? 'As needed'
+                          : MaterialLocalizations.of(context).formatTimeOfDay(
+                              w.anchorTime!,
+                              alwaysUse24HourFormat:
+                                  MediaQuery.alwaysUse24HourFormatOf(context),
+                            ),
+                    ),
+                    onTap: () => Navigator.of(context)
+                        .pop(_PickedWindow.existing(w.id)),
+                  ),
+              ],
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 12),
+              Text(
+                'Or create a new window',
+                style: tt.titleSmall?.copyWith(
+                  color: careblazersColors.primarySoft,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _newLabel,
+                decoration: const InputDecoration(
+                  labelText: 'Window name',
+                  hintText: 'e.g. Mid-morning',
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _creating
+                    ? null
+                    : () {
+                        final String label = _newLabel.text.trim();
+                        if (label.isEmpty) return;
+                        setState(() => _creating = true);
+                        Navigator.of(context)
+                            .pop(_PickedWindow.create(label));
+                      },
+                icon: const Icon(Icons.add),
+                label: const Text('Pick a time for this window'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: careblazersColors.cta,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(48),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/// Optional end-date picker. Tap the field to open a Material date
+/// picker (defaults to today + 7 days when nothing is set). The "Clear"
+/// affordance lives at the trailing edge so a misset date doesn't
+/// leave a lingering tombstone the caregiver has to manually reset.
+class _EndDatePicker extends StatelessWidget {
+  const _EndDatePicker({
+    required this.fieldKey,
+    required this.clearKey,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final Key fieldKey;
+  final Key clearKey;
+  final DateTime? value;
+  final ValueChanged<DateTime?> onChanged;
+
+  Future<void> _pick(BuildContext context) async {
+    final DateTime initial = value ??
+        DateTime.now().add(const Duration(days: 7));
+    final DateTime firstDate =
+        DateTime.now().subtract(const Duration(days: 365));
+    final DateTime lastDate =
+        DateTime.now().add(const Duration(days: 365 * 5));
+    final DateTime? next = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: firstDate,
+      lastDate: lastDate,
+    );
+    if (next == null) return;
+    onChanged(DateTime(next.year, next.month, next.day));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme tt = Theme.of(context).textTheme;
+    final String label = value == null
+        ? 'No end date'
+        : _formatDate(value!);
+    return InkWell(
+      key: fieldKey,
+      onTap: () => _pick(context),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'End date',
+          suffixIcon: value == null
+              ? const Icon(Icons.event_outlined)
+              : IconButton(
+                  key: clearKey,
+                  tooltip: 'Clear end date',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => onChanged(null),
+                ),
+        ),
+        child: Text(
+          label,
+          style: tt.bodyLarge,
+        ),
+      ),
+    );
+  }
+}
+
+const List<String> _monthNamesShort = <String>[
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+String _formatDate(DateTime d) =>
+    '${_monthNamesShort[d.month - 1]} ${d.day}, ${d.year}';
+
+/// Title-case a free-text input as the user types.
+///
+/// Capitalises the first letter of every whitespace-delimited token —
+/// "donepezil 10 mg" becomes "Donepezil 10 Mg". Side-stepping each
+/// token's interior preserves any all-caps acronym the caregiver
+/// already typed (`DM`, `IV`) and keeps subsequent letters they fix
+/// alone, so the formatter never fights an explicit edit.
+class TitleCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final String text = newValue.text;
+    if (text.isEmpty) return newValue;
+    final StringBuffer out = StringBuffer();
+    bool atWordStart = true;
+    for (int i = 0; i < text.length; i++) {
+      final String ch = text[i];
+      if (ch == ' ' || ch == '\t' || ch == '\n') {
+        out.write(ch);
+        atWordStart = true;
+        continue;
+      }
+      if (atWordStart) {
+        out.write(ch.toUpperCase());
+        atWordStart = false;
+      } else {
+        out.write(ch);
+      }
+    }
+    final String formatted = out.toString();
+    if (formatted == text) return newValue;
+    return TextEditingValue(
+      text: formatted,
+      selection: newValue.selection,
+      composing: newValue.composing,
     );
   }
 }

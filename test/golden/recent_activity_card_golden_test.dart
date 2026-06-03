@@ -1,4 +1,5 @@
 import 'package:alchemist/alchemist.dart';
+import 'package:careblazers/models/care_event.dart';
 import 'package:careblazers/providers/home_clock_provider.dart';
 import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/home/recent_activity_card.dart';
@@ -12,29 +13,37 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// against this fixed clock so the golden render stays deterministic.
 DateTime _fixedNow() => DateTime(2026, 6, 1, 9, 0);
 
-/// One row per source so the golden captures every origin-dot hue
+/// One row per kind so the golden captures every origin-dot hue
 /// (plum=journal, teal=dose, coral=appointment) and the relative stamps.
-final List<RecentActivityItem> _populated = <RecentActivityItem>[
-  RecentActivityItem(
+/// Events are pre-projected with their activity-feed-style `subtitle`,
+/// matching the shape [patientTimelineEventsProvider] hands the card.
+final List<CareEvent> _populated = <CareEvent>[
+  CareEvent(
     id: 'journal-1',
-    origin: RecentActivityOrigin.journal,
-    summary: 'Sundowning',
-    createdAt: _fixedNow().subtract(const Duration(minutes: 20)),
-    route: '/journal/1',
+    kind: CareEventKind.journalEntry,
+    title: 'Sundowning',
+    subtitle: 'Sundowning',
+    start: _fixedNow().subtract(const Duration(minutes: 20)),
+    patientId: 'demo-patient-mary',
+    externalRef: '1',
   ),
-  RecentActivityItem(
-    id: 'dose-1',
-    origin: RecentActivityOrigin.dose,
-    summary: 'Gave Donepezil 10 mg',
-    createdAt: _fixedNow().subtract(const Duration(hours: 2)),
-    route: '/medications/today',
+  CareEvent(
+    id: 'dose-log-d1',
+    kind: CareEventKind.doseLogged,
+    title: 'Donepezil',
+    subtitle: 'Gave Donepezil 10 mg',
+    start: _fixedNow().subtract(const Duration(hours: 2)),
+    patientId: 'demo-patient-mary',
+    externalRef: 'd1',
   ),
-  RecentActivityItem(
-    id: 'appointment-1',
-    origin: RecentActivityOrigin.appointment,
-    summary: 'Appointment with Dr. Ortega',
-    createdAt: _fixedNow().subtract(const Duration(days: 1)),
-    route: '/appointments/7',
+  CareEvent(
+    id: 'appt-7',
+    kind: CareEventKind.appointment,
+    title: 'Dr. Ortega',
+    subtitle: 'Appointment with Dr. Ortega',
+    start: _fixedNow().subtract(const Duration(days: 1)),
+    patientId: 'demo-patient-mary',
+    externalRef: '7',
   ),
 ];
 
@@ -59,10 +68,10 @@ GoRouter _goldenRouter() => GoRouter(
 /// No `theme:` is passed — per `flutter_test_config.dart` goldens avoid
 /// dragging google_fonts through the framework; the card pulls its brand
 /// colors directly off `careblazersColors`.
-Widget _host(List<RecentActivityItem> items, double height) => ProviderScope(
+Widget _host(List<CareEvent> events, double height) => ProviderScope(
       overrides: <Override>[
         homeClockProvider.overrideWithValue(_fixedNow),
-        recentActivityProvider.overrideWith((ref) async => items),
+        recentActivityProvider.overrideWith((ref) async => events),
       ],
       child: SizedBox(
         width: 390,
@@ -87,7 +96,7 @@ void main() {
         children: <Widget>[
           GoldenTestScenario(
             name: 'empty (Phase 14.11)',
-            child: _host(const <RecentActivityItem>[], 200),
+            child: _host(const <CareEvent>[], 200),
           ),
         ],
       ),

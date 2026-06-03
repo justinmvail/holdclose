@@ -7,6 +7,8 @@ import '../../models/journal_entry.dart';
 import '../../providers/journal_entries_provider.dart';
 import '../../providers/pattern_detector_provider.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
+import 'journal_wizard_screen.dart' show JournalWizardArgs;
 
 /// Journal tab root (BUILD_SPEC.md §5.5).
 ///
@@ -31,6 +33,14 @@ class JournalScreen extends ConsumerWidget {
   /// Widget key for the empty-state CTA so tests tap by intent rather
   /// than by copy.
   static const Key emptyCtaKey = Key('journal-empty-cta');
+
+  /// FAB that opens the entry-method chooser (Quick note / Wizard).
+  static const Key addEntryFabKey = Key('journal-add-entry-fab');
+
+  /// Rows in the chooser sheet — quick free-text entry vs. the guided
+  /// coaching wizard. Test taps target these keys instead of copy.
+  static const Key quickNoteOptionKey = Key('journal-add-option-quick-note');
+  static const Key wizardOptionKey = Key('journal-add-option-wizard');
 
   /// Widget key for the "This week" summary card.
   static const Key weekSummaryKey = Key('journal-week-summary');
@@ -61,34 +71,103 @@ class JournalScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text('Journal'),
-        automaticallyImplyLeading: false,
+      floatingActionButton: FloatingActionButton.extended(
+        key: addEntryFabKey,
+        backgroundColor: careblazersColors.cta,
+        foregroundColor: Colors.white,
+        onPressed: () => showJournalAddSheet(context),
+        icon: const Icon(Icons.add),
+        label: const Text('Add entry'),
       ),
       body: SafeArea(
-        child: entriesAsync.when(
-          // Storage's first emission lands within a microtask of mount,
-          // so the loading state is essentially invisible to a real
-          // caregiver. Render a static placeholder rather than a
-          // CircularProgressIndicator — its infinite animation would
-          // wedge `pumpAndSettle` in widget tests that don't override
-          // storage (e.g. the route-registration probes).
-          loading: () => const SizedBox.shrink(),
-          error: (Object error, StackTrace _) => _ErrorView(message: '$error'),
-          data: (List<JournalEntry> entries) {
-            if (entries.isEmpty) {
-              return const _EmptyState();
-            }
-            return _PopulatedView(
-              entries: entries,
-              alerts: alerts,
-              now: now,
-            );
-          },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Medical', route: '/medical'),
+                  PathHeaderCrumb(label: 'Journal'),
+                ],
+                title: 'Journal',
+                backLabel: 'Back to Medical',
+                leadingIcon: Icons.book_outlined,
+              ),
+            ),
+            Expanded(
+              child: entriesAsync.when(
+                // Storage's first emission lands within a microtask of mount,
+                // so the loading state is essentially invisible to a real
+                // caregiver. Render a static placeholder rather than a
+                // CircularProgressIndicator — its infinite animation would
+                // wedge `pumpAndSettle` in widget tests that don't override
+                // storage (e.g. the route-registration probes).
+                loading: () => const SizedBox.shrink(),
+                error: (Object error, StackTrace _) =>
+                    _ErrorView(message: '$error'),
+                data: (List<JournalEntry> entries) {
+                  if (entries.isEmpty) {
+                    return const _EmptyState();
+                  }
+                  return _PopulatedView(
+                    entries: entries,
+                    alerts: alerts,
+                    now: now,
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+/// Bottom sheet the Journal FAB opens — surfaces both entry paths
+/// (free-text quick note + the guided wizard) so the caregiver picks
+/// the cognitive load they have in the moment.
+void showJournalAddSheet(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: careblazersColors.background,
+    showDragHandle: true,
+    builder: (BuildContext sheetContext) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              key: JournalScreen.quickNoteOptionKey,
+              leading: const Icon(Icons.edit_note_outlined),
+              title: const Text('Quick note'),
+              subtitle: const Text('Just write what happened.'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                context.push(
+                  '/journal/new',
+                  extra: const JournalWizardArgs(quickNote: true),
+                );
+              },
+            ),
+            ListTile(
+              key: JournalScreen.wizardOptionKey,
+              leading: const Icon(Icons.menu_book_outlined),
+              title: const Text('Coaching wizard'),
+              subtitle: const Text('Guided steps with Dr. Natali\'s script.'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                context.push('/journal/new');
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      );
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------

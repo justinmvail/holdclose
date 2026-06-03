@@ -22,10 +22,32 @@ part 'care_event.g.dart';
 /// (`json_serializable` serialises enums by `.name`; the drift column
 /// persists that `.name` inside the payload blob).
 enum CareEventKind {
+  // Team-scoped (the Care Team Calendar reads these).
   appointment,
   task,
   shift,
   note,
+  // Patient-scoped (the unified patient timeline reads these +
+  // appointment). Projected from the medication, health-log, and
+  // journal data layers — never double-stored.
+  // - [doseScheduled] — an upcoming dose from a [DoseSchedule]
+  //   (forecast). `externalRef` is `<scheduleId>@<isoTime>` so a
+  //   tapped block opens that specific dose slot.
+  // - [doseLogged] — a recorded dose from [DoseLogs] (history).
+  //   `externalRef` is the dose-log row id; the block's status comes
+  //   from the log's `outcome` (taken/late/skipped/missed).
+  // - [healthLogEntry] — a vitals/symptom/note entry from
+  //   [HealthLogEntriesTable]. `externalRef` is the entry id.
+  // - [journalEntry] — a behavior/outcome jotting from
+  //   [JournalEntriesTable]. `externalRef` is the entry id.
+  doseScheduled,
+  doseLogged,
+  healthLogEntry,
+  journalEntry,
+  // A scheduled occurrence of a [CarePlanRoutine] (BUILD_SPEC.md §5.13
+  // v2). `externalRef` is the routine id; tapping a block opens the
+  // routine edit form.
+  carePlanItem,
 }
 
 /// One thing on the Care Team shared calendar (TASKS.md Phase 14.29,
@@ -54,6 +76,16 @@ abstract class CareEvent with _$CareEvent {
     String? ownerCaregiverId,
     required String patientId,
     String? externalRef,
+    // Pre-formatted rich text for "activity feed"-style consumers
+    // (Home Recent Activity, future Today timeline). The week-view
+    // Calendar reads only [title] so its blocks stay short; the
+    // activity feed reads [subtitle] when non-null and falls back to
+    // [title] when not. Projection helpers populate it with the
+    // kind-appropriate sentence ("Gave Donepezil 10 mg",
+    // "Appointment with Dr. Ortega", a journal's situation text). The
+    // four team-scoped kinds leave it null today; native [note] events
+    // can store it directly in the `care_events` drift table.
+    String? subtitle,
   }) = _CareEvent;
 
   factory CareEvent.fromJson(Map<String, dynamic> json) =>
@@ -87,6 +119,57 @@ extension CareEventX on CareEvent {
         return '/team/shifts/$ref';
       case CareEventKind.note:
         return null;
+      case CareEventKind.doseScheduled:
+      case CareEventKind.doseLogged:
+        // Both routes resolve to the dose log timeline for the dose's
+        // medication. Forecast blocks deep-link to the slot via
+        // `externalRef = <scheduleId>@<isoTime>`; logged blocks carry
+        // the dose-log id and the dose-log screen highlights the row.
+        return '/medications/today';
+      case CareEventKind.healthLogEntry:
+        return '/medical/health-log/$ref';
+      case CareEventKind.journalEntry:
+        return '/journal/$ref';
+      case CareEventKind.carePlanItem:
+        return '/medical/routines/$ref';
+    }
+  }
+
+  /// True if this event participates in the patient timeline (Home
+  /// Recent Activity, Med Schedule, the unified Today view).
+  /// Appointment events are in both audiences so they show on both
+  /// the Team Calendar AND the patient timeline.
+  bool get isPatientScoped {
+    switch (kind) {
+      case CareEventKind.appointment:
+      case CareEventKind.doseScheduled:
+      case CareEventKind.doseLogged:
+      case CareEventKind.healthLogEntry:
+      case CareEventKind.journalEntry:
+      case CareEventKind.carePlanItem:
+        return true;
+      case CareEventKind.task:
+      case CareEventKind.shift:
+      case CareEventKind.note:
+        return false;
+    }
+  }
+
+  /// True if this event participates in the Team Calendar.
+  /// Appointment events are in both audiences so they show on both.
+  bool get isTeamScoped {
+    switch (kind) {
+      case CareEventKind.appointment:
+      case CareEventKind.task:
+      case CareEventKind.shift:
+      case CareEventKind.note:
+        return true;
+      case CareEventKind.doseScheduled:
+      case CareEventKind.doseLogged:
+      case CareEventKind.healthLogEntry:
+      case CareEventKind.journalEntry:
+      case CareEventKind.carePlanItem:
+        return false;
     }
   }
 

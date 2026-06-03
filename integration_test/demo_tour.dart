@@ -21,8 +21,7 @@ import 'package:careblazers/screens/chat/chat_screen.dart';
 import 'package:careblazers/screens/chat/conversation_list_screen.dart';
 import 'package:careblazers/screens/community/community_feed_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/screens/medical/cards_documents_hub_screen.dart';
-import 'package:careblazers/screens/medical/care_plan_screen.dart';
+import 'package:careblazers/screens/medical/care_plan_routines_screen.dart';
 import 'package:careblazers/screens/medical/emergency_card_screen.dart';
 import 'package:careblazers/screens/medical/health_log_entry_form.dart';
 import 'package:careblazers/screens/medical/health_log_screen.dart';
@@ -40,7 +39,6 @@ import 'package:careblazers/services/forum_api_client.dart';
 import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/services/provider_repository.dart';
 import 'package:careblazers/services/seed_repository.dart';
-import 'package:careblazers/widgets/home/emergency_card_pin.dart';
 import 'package:careblazers/widgets/home/medications_today_card.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -133,11 +131,19 @@ void main() {
         dosage: '10 mg',
         route: MedicationRoute.oral,
       ));
-      await medRepo.upsertSchedule(DoseSchedule(
-        id: 'sched-don',
+      // v14 windows pivot — link Donepezil to a Morning window so the
+      // 8 AM dose still appears on the Home Schedule card.
+      await medRepo.upsertWindow(const DoseWindow(
+        id: 'window-demo-patient-mary-morning',
+        patientId: 'demo-patient-mary',
+        label: 'Morning',
+        anchorTime: TimeOfDay(hour: 8, minute: 0),
+        sortOrder: 0,
+      ));
+      await medRepo.upsertEntry(MedicationWindowEntry(
+        id: 'entry-don-morning',
         medicationId: 'med-don',
-        frequencyKind: FrequencyKind.daily,
-        timesOfDay: const <TimeOfDay>[TimeOfDay(hour: 8, minute: 0)],
+        windowId: 'window-demo-patient-mary-morning',
         daysOfWeek: const <int>{},
         startsOn: DateTime(2026, 5, 1),
       ));
@@ -240,7 +246,6 @@ void main() {
       // the Medications Today card all render. Capture the landing.
       // ====================================================================
       expect(find.byKey(HomeScreen.greetingKey), findsOneWidget);
-      expect(find.byKey(EmergencyCardPin.cardKey), findsOneWidget);
       expect(find.byKey(MedicationsTodayCard.cardKey), findsOneWidget);
       await _capture(tester, '01_home');
 
@@ -252,15 +257,9 @@ void main() {
       await _tapBack(tester); // Settings has an AppBar back button.
       expect(find.byKey(HomeScreen.greetingKey), findsOneWidget);
 
-      // ---- Emergency pin → Emergency Card → back ---------------------------
-      await tester.tap(find.byKey(EmergencyCardPin.cardKey));
-      await tester.pumpAndSettle();
-      expect(find.byKey(EmergencyCardScreen.headlineKey), findsOneWidget);
-      expect(find.text('Mary Henderson'), findsAtLeastNWidgets(1));
-      // The Emergency Card AppBar carries no back button (its title lives in
-      // the body PathHeader); the word-labeled PathHeader Back pops it.
-      await _tapPathBack(tester, 'Back to Cards & Documents');
-      expect(find.byKey(HomeScreen.greetingKey), findsOneWidget);
+      // Emergency Card is now reached via Medical → Cards & Docs (covered
+      // later in the tour). The previous Home pin was removed; the
+      // Emergency Card screen itself is still exercised below.
 
       // ---- A Medications Today dose row → dose log → back to Home ----------
       final Finder doseRow = find.byKey(
@@ -308,31 +307,28 @@ void main() {
         findsOneWidget,
       );
 
-      // ---- Care Plan tile → back to Medical --------------------------------
+      // ---- Routines tile → back to Medical (v2 Care Plan, BUILD_SPEC.md
+      // §5.13 v2: slot/stage replaced by scheduled tasks).
       await tester.tap(
-        find.byKey(MedicalHubScreen.tileKey('/medical/care-plan')),
+        find.byKey(MedicalHubScreen.tileKey('/medical/routines')),
       );
       await tester.pumpAndSettle();
-      expect(find.byKey(CarePlanScreen.emptyStateKey), findsOneWidget);
+      expect(find.byKey(CarePlanRoutinesScreen.emptyStateKey),
+          findsOneWidget);
       await _tapPathBack(tester, 'Back to Medical');
       expect(
-        find.byKey(MedicalHubScreen.tileKey('/medical/cards')),
+        find.byKey(MedicalHubScreen.tileKey('/medical/cards/emergency')),
         findsOneWidget,
       );
 
-      // ---- Cards & Docs tile → open Emergency Card → back to Medical --------
-      await tester.tap(find.byKey(MedicalHubScreen.tileKey('/medical/cards')));
-      await tester.pumpAndSettle();
-      final Finder emergencyTile = find.byKey(
-        CardsDocumentsHubScreen.tileKey('/medical/cards/emergency'),
+      // ---- Emergency Card tile → open Emergency Card → back to Medical -----
+      // (Cards & Documents sub-hub + POA + IDs surfaces were removed;
+      // Emergency Card is now a top-level Medical tile.)
+      await tester.tap(
+        find.byKey(MedicalHubScreen.tileKey('/medical/cards/emergency')),
       );
-      expect(emergencyTile, findsOneWidget);
-      await tester.tap(emergencyTile);
       await tester.pumpAndSettle();
       expect(find.byKey(EmergencyCardScreen.headlineKey), findsOneWidget);
-      // Emergency Card → Cards & Documents hub via the PathHeader Back.
-      await _tapPathBack(tester, 'Back to Cards & Documents');
-      // Cards & Documents hub uses a PathHeader back to the Medical hub.
       await _tapPathBack(tester, 'Back to Medical');
       expect(
         find.byKey(MedicalHubScreen.tileKey('/medical/health-log')),

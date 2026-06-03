@@ -8,6 +8,7 @@
 // ignore_for_file: prefer_const_constructors
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -363,7 +364,7 @@ class PdfExporter {
             children: <pw.Widget>[
               _summaryCell(row.medication.name),
               _summaryCell(row.medication.dosage),
-              _summaryCell(_summariseSchedules(row.schedules)),
+              _summaryCell(_summariseSchedules(row.windows)),
               _summaryCell(_routeLabel(row.medication.route)),
             ],
           ),
@@ -739,20 +740,23 @@ class _BehaviorTally {
 }
 
 /// One row in the "Active medications" PDF section (BUILD_SPEC.md Phase
-/// 12.8).
+/// 12.8, v14 windows pivot).
 ///
-/// Pairs the [Medication] with its `[DoseSchedule]` list so the exporter
-/// can render a human-readable schedule summary ("8:00 AM, 8:00 PM
-/// daily") without re-querying drift mid-render.
+/// Pairs the [Medication] with the (window, entry) pairs it
+/// participates in so the exporter can render a human-readable
+/// summary ("Morning · Bedtime") without re-querying drift mid-render.
 @immutable
 class MedicationWithSchedules {
   const MedicationWithSchedules({
     required this.medication,
-    required this.schedules,
+    required this.windows,
   });
 
   final Medication medication;
-  final List<DoseSchedule> schedules;
+
+  /// One entry per window this medication appears in. The exporter
+  /// joins the window labels for the summary cell.
+  final List<({DoseWindow window, MedicationWindowEntry entry})> windows;
 }
 
 /// One row in the "Upcoming appointments" PDF section (BUILD_SPEC.md
@@ -806,50 +810,44 @@ const List<String> _months = <String>[
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-/// Render `8:00 AM, 8:00 PM daily` / `Mon 9:00 AM weekly` / `As needed`
-/// for the PDF medications table (BUILD_SPEC.md Phase 12.8).
+/// Render "Morning · Bedtime · Mon Wed Fri Noon" for the PDF
+/// medications table (v14 windows pivot).
 ///
 /// Top-level so the test suite can exercise it directly without
-/// instantiating the exporter — the freezed [DoseSchedule] shape is
-/// the only input. Multiple schedules join with " · " so a
-/// "10 mg AM + 5 mg noon" pair renders one line.
-String _summariseSchedules(List<DoseSchedule> schedules) {
-  if (schedules.isEmpty) return '(no schedule)';
-  return schedules.map(_summariseOne).join(' · ');
+/// instantiating the exporter. Joins each window's label with the
+/// entry's weekday qualifier when it gates on specific days.
+String _summariseSchedules(
+    List<({DoseWindow window, MedicationWindowEntry entry})> pairs) {
+  if (pairs.isEmpty) return 'As needed';
+  return pairs.map(_summariseOne).join(' · ');
 }
 
-String _summariseOne(DoseSchedule s) {
-  switch (s.frequencyKind) {
-    case FrequencyKind.asNeeded:
-      return 'As needed';
-    case FrequencyKind.daily:
-      return '${_renderTimes(s)} daily';
-    case FrequencyKind.twiceDaily:
-      return '${_renderTimes(s)} twice daily';
-    case FrequencyKind.weekly:
-      final List<int> days = s.daysOfWeek.toList()..sort();
-      const List<String> weekdayNames = <String>[
-        'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
-      ];
-      final String label = days
-          .map((int d) {
-            final int idx = (d - 1) < 0 ? 0 : (d - 1 > 6 ? 6 : d - 1);
-            return weekdayNames[idx];
-          })
-          .join('/');
-      return '$label ${_renderTimes(s)} weekly';
-  }
+String _summariseOne(({DoseWindow window, MedicationWindowEntry entry}) p) {
+  final DoseWindow w = p.window;
+  final MedicationWindowEntry e = p.entry;
+  final String anchorPart = w.anchorTime == null
+      ? w.label
+      : '${w.label} (${_renderTime(w.anchorTime!)})';
+  if (e.daysOfWeek.isEmpty) return anchorPart;
+  final List<int> days = e.daysOfWeek.toList()..sort();
+  const List<String> weekdayNames = <String>[
+    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
+  ];
+  final String dayLabel = days
+      .map((int d) {
+        final int idx = (d - 1) < 0 ? 0 : (d - 1 > 6 ? 6 : d - 1);
+        return weekdayNames[idx];
+      })
+      .join('/');
+  return '$dayLabel $anchorPart';
 }
 
-String _renderTimes(DoseSchedule s) {
-  if (s.timesOfDay.isEmpty) return '(no time)';
-  return s.timesOfDay.map((t) {
-    final int rawHour = t.hour % 12;
-    final int hour = rawHour == 0 ? 12 : rawHour;
-    final String minute = t.minute.toString().padLeft(2, '0');
-    final String suffix = t.hour < 12 ? 'AM' : 'PM';
-    return '$hour:$minute $suffix';
-  }).join(', ');
+String _renderTime(TimeOfDay t) {
+  final int rawHour = t.hour % 12;
+  final int hour = rawHour == 0 ? 12 : rawHour;
+  final String minute = t.minute.toString().padLeft(2, '0');
+  final String suffix = t.hour < 12 ? 'AM' : 'PM';
+  return '$hour:$minute $suffix';
 }
 
 String _routeLabel(MedicationRoute route) {

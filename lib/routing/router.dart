@@ -23,20 +23,17 @@ import '../screens/home_screen.dart';
 import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
 import '../screens/journal/journal_wizard_screen.dart';
-import '../screens/medical/cards_documents_hub_screen.dart';
-import '../screens/medical/care_plan_screen.dart';
-import '../screens/medical/care_plan_section_form.dart';
+import '../screens/medical/care_plan_routine_form.dart';
+import '../screens/medical/care_plan_routines_screen.dart';
 import '../screens/medical/emergency_card_screen.dart';
 import '../screens/medical/health_log_entry_form.dart';
 import '../screens/medical/health_log_screen.dart';
-import '../screens/medical/ids_screen.dart';
-import '../screens/medical/med_schedule_screen.dart';
 import '../screens/medical/medical_hub_screen.dart';
-import '../screens/medical/poa_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
 import '../screens/appointment/appointment_list_screen.dart';
 import '../screens/medication/dose_log_screen.dart';
+import '../screens/medication/dose_window_list_screen.dart';
 import '../screens/medication/medication_form_screen.dart';
 import '../screens/medication/medication_list_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
@@ -78,6 +75,9 @@ class CareblazersRoutes {
   static const String medicationForm = 'medication-form';
   static const String medicationEdit = 'medication-edit';
   static const String medicationDoseLog = 'medication-dose-log';
+  static const String medicationWindowList = 'medication-window-list';
+  static const String medicationWindowNew = 'medication-window-new';
+  static const String medicationWindowEdit = 'medication-window-edit';
   static const String appointmentList = 'appointment-list';
   static const String appointmentDetail = 'appointment-detail';
   static const String appointmentForm = 'appointment-form';
@@ -103,20 +103,12 @@ class CareblazersRoutes {
   static const String medicalHealthLog = 'medical-health-log';
   static const String medicalHealthLogNew = 'medical-health-log-new';
   static const String medicalHealthLogEdit = 'medical-health-log-edit';
-  static const String medicalCarePlan = 'medical-care-plan';
-  static const String medicalCarePlanNew = 'medical-care-plan-new';
-  static const String medicalCarePlanEdit = 'medical-care-plan-edit';
-  static const String medicalSchedule = 'medical-schedule';
-  static const String medicalCardsHub = 'medical-cards-hub';
+  static const String medicalRoutines = 'medical-routines';
+  static const String medicalRoutineNew = 'medical-routine-new';
+  static const String medicalRoutineEdit = 'medical-routine-edit';
   static const String medicalCardsEmergency = 'medical-cards-emergency';
   static const String medicalCardsEmergencyEdit =
       'medical-cards-emergency-edit';
-  static const String medicalCardsPoa = 'medical-cards-poa';
-  static const String medicalCardsPoaEdit = 'medical-cards-poa-edit';
-  static const String medicalCardsIds = 'medical-cards-ids';
-  static const String medicalCardsIdsNew = 'medical-cards-ids-new';
-  static const String medicalCardsIdDetail = 'medical-cards-id-detail';
-  static const String medicalCardsIdEdit = 'medical-cards-id-edit';
 
   // Phase 14 IA — Care Team hub + its feature pages. Same forward-
   // declaration contract as the Medical names: `teamHub` → `/team`
@@ -335,6 +327,35 @@ GoRouter buildRouter({
               medicationId: state.pathParameters['id'],
             ),
           ),
+          // Dose-window management (v14 windows pivot). The list lives
+          // under /medications so the back stack reads
+          // Home › Medical › Medications › Windows; the form pushes on
+          // top of the list for add + edit.
+          GoRoute(
+            path: 'windows',
+            name: CareblazersRoutes.medicationWindowList,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                const DoseWindowListScreen(),
+            routes: <RouteBase>[
+              GoRoute(
+                path: 'new',
+                name: CareblazersRoutes.medicationWindowNew,
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const DoseWindowFormScreen(),
+              ),
+              GoRoute(
+                path: ':id',
+                name: CareblazersRoutes.medicationWindowEdit,
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (BuildContext context, GoRouterState state) =>
+                    DoseWindowFormScreen(
+                  windowId: state.pathParameters['id'],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       GoRoute(
@@ -491,23 +512,13 @@ GoRouter buildRouter({
                 builder: (BuildContext context, GoRouterState state) =>
                     const MedicalHubScreen(),
                 routes: <RouteBase>[
-                  // Cards & Documents sub-hub (Phase 14.22) — the 3-tile
-                  // landing for Emergency Card, Power of Attorney, and
-                  // Identification. Pushed onto the root navigator so the
-                  // hub covers the tab bar, matching the other Medical
-                  // feature pages.
-                  GoRoute(
-                    path: 'cards',
-                    name: CareblazersRoutes.medicalCardsHub,
-                    parentNavigatorKey: rootNavigatorKey,
-                    builder: (BuildContext context, GoRouterState state) =>
-                        const CardsDocumentsHubScreen(),
-                  ),
-                  // Emergency Card (Phase 14.23) — the read-only ICE card
-                  // first responders see, replacing the old CrisisCardScreen.
-                  // Pushed onto the root navigator so it covers the tab bar
-                  // like the other Medical feature pages. It's the `/crisis`
-                  // redirect target + the Home pinned-card destination.
+                  // Emergency Card — the read-only ICE card first
+                  // responders see. Promoted to a top-level Medical hub
+                  // tile (the Cards & Documents sub-hub + POA + IDs
+                  // surfaces were removed). Pushed onto the root
+                  // navigator so it covers the tab bar like the other
+                  // Medical feature pages. It's also the `/crisis`
+                  // redirect target.
                   GoRoute(
                     path: 'cards/emergency',
                     name: CareblazersRoutes.medicalCardsEmergency,
@@ -532,78 +543,6 @@ GoRouter buildRouter({
                         ),
                       ),
                     ],
-                  ),
-                  // Power of Attorney (Phase 14.24) — the single POA
-                  // document on file + its edit form. Pushed onto the root
-                  // navigator so the feature pages cover the tab bar, like
-                  // the other Cards & Documents pages.
-                  GoRoute(
-                    path: 'cards/poa',
-                    name: CareblazersRoutes.medicalCardsPoa,
-                    parentNavigatorKey: rootNavigatorKey,
-                    builder: (BuildContext context, GoRouterState state) =>
-                        const PoaScreen(),
-                    routes: <RouteBase>[
-                      GoRoute(
-                        path: 'edit',
-                        name: CareblazersRoutes.medicalCardsPoaEdit,
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (BuildContext context, GoRouterState state) =>
-                            const PoaEditForm(),
-                      ),
-                    ],
-                  ),
-                  // Identification (Phase 14.24) — the list of ID documents,
-                  // a per-ID detail page, and the add/edit form. `ids/new`
-                  // is registered before `ids/:id` so the literal `new`
-                  // segment isn't swallowed by the `:id` parameter.
-                  GoRoute(
-                    path: 'cards/ids',
-                    name: CareblazersRoutes.medicalCardsIds,
-                    parentNavigatorKey: rootNavigatorKey,
-                    builder: (BuildContext context, GoRouterState state) =>
-                        const IdsScreen(),
-                    routes: <RouteBase>[
-                      GoRoute(
-                        path: 'new',
-                        name: CareblazersRoutes.medicalCardsIdsNew,
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (BuildContext context, GoRouterState state) =>
-                            const IdEditForm(),
-                      ),
-                      GoRoute(
-                        path: ':id',
-                        name: CareblazersRoutes.medicalCardsIdDetail,
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (BuildContext context, GoRouterState state) =>
-                            IdDetailScreen(
-                          docId: state.pathParameters['id'] ?? '',
-                        ),
-                        routes: <RouteBase>[
-                          GoRoute(
-                            path: 'edit',
-                            name: CareblazersRoutes.medicalCardsIdEdit,
-                            parentNavigatorKey: rootNavigatorKey,
-                            builder:
-                                (BuildContext context, GoRouterState state) =>
-                                    IdEditForm(
-                              docId: state.pathParameters['id'],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  // Med Schedule (Phase 14.20) — a 24-hour daily timeline
-                  // of today's doses. Pushed onto the root navigator so
-                  // the feature page covers the tab bar, matching the
-                  // other Medical feature pages.
-                  GoRoute(
-                    path: 'schedule',
-                    name: CareblazersRoutes.medicalSchedule,
-                    parentNavigatorKey: rootNavigatorKey,
-                    builder: (BuildContext context, GoRouterState state) =>
-                        const MedScheduleScreen(),
                   ),
                   // Health Log (Phase 14.17) — list + add/edit form.
                   // Pushed onto the root navigator so the feature pages
@@ -640,27 +579,31 @@ GoRouter buildRouter({
                   // tab bar; `care-plan/new` is registered before
                   // `care-plan/:id/edit` so the literal `new` segment isn't
                   // swallowed by the `:id` parameter.
+                  // Routines (v2 Care Plan — BUILD_SPEC.md §5.13). The v1
+                  // slot/stage CarePlanScreen + CarePlanSectionForm were
+                  // deleted in favour of scheduled tasks projecting into
+                  // the unified patient timeline.
                   GoRoute(
-                    path: 'care-plan',
-                    name: CareblazersRoutes.medicalCarePlan,
+                    path: 'routines',
+                    name: CareblazersRoutes.medicalRoutines,
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (BuildContext context, GoRouterState state) =>
-                        const CarePlanScreen(),
+                        const CarePlanRoutinesScreen(),
                     routes: <RouteBase>[
                       GoRoute(
                         path: 'new',
-                        name: CareblazersRoutes.medicalCarePlanNew,
+                        name: CareblazersRoutes.medicalRoutineNew,
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (BuildContext context, GoRouterState state) =>
-                            const CarePlanSectionForm(),
+                            const CarePlanRoutineForm(),
                       ),
                       GoRoute(
-                        path: ':id/edit',
-                        name: CareblazersRoutes.medicalCarePlanEdit,
+                        path: ':id',
+                        name: CareblazersRoutes.medicalRoutineEdit,
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (BuildContext context, GoRouterState state) =>
-                            CarePlanSectionForm(
-                          sectionId: state.pathParameters['id'],
+                            CarePlanRoutineForm(
+                          routineId: state.pathParameters['id'],
                         ),
                       ),
                     ],

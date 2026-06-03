@@ -10,6 +10,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/appointment.dart';
 import '../../providers/notifications_provider.dart';
+import '../../providers/patient_timeline_provider.dart' show invalidatePatientTimeline;
 import '../../services/appointment_repository.dart';
 import '../../services/notification_scheduler.dart';
 import '../../services/provider_repository.dart';
@@ -419,6 +420,11 @@ class _AppointmentFormScreenState
     if (widget.appointmentId != null) {
       ref.invalidate(appointmentDetailProvider(widget.appointmentId!));
     }
+    // Home dashboard cards (Next Appointment, Recent Activity, Catch
+    // Me Up) cache the appointment list at watch time and don't see
+    // the new row otherwise — see [invalidatePatientTimeline]'s doc
+    // for why a `ref.watch` cascade doesn't cover them.
+    invalidatePatientTimeline(ref);
 
     // Permission ask on first appointment add (idempotent across
     // re-runs) + schedule 24h + 1h reminders.

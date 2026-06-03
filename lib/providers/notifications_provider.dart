@@ -256,43 +256,54 @@ int appointmentNotificationId(String appointmentId, int hoursBefore) {
   return (base << 4) | (hoursBefore == 24 ? 0xA : 0xB);
 }
 
-/// Compute the set of [ScheduledNotification]s to register for a
-/// single [Medication]'s schedules (BUILD_SPEC.md Phase 12.8).
+/// One (window, entry) pair handed to [doseRemindersForWindows]. The
+/// scheduler resolves each medication's entries into this shape so the
+/// reminder helper doesn't need to re-query the repository.
+@immutable
+class WindowedEntry {
+  const WindowedEntry({required this.window, required this.entry});
+  final DoseWindow window;
+  final MedicationWindowEntry entry;
+}
+
+/// Compute [ScheduledNotification]s for a single [Medication]'s
+/// (window, entry) pairs (BUILD_SPEC.md Phase 12.8, v14 windows pivot).
 ///
-/// Walks each [DoseSchedule]'s [DoseSchedule.timesOfDay] and produces
-/// one ScheduledNotification per per-day-time slot, anchored at the
-/// next future occurrence relative to [now]. `asNeeded` schedules
-/// yield nothing — they don't have a deterministic time to fire on.
-/// Weekly schedules walk forward until the next valid weekday lands
-/// in the future; out-of-window schedules (paused, `endsOn` already
-/// in the past) yield nothing.
+/// Walks each entry, anchors it on the window's [DoseWindow.anchorTime],
+/// and emits one ScheduledNotification per pair at the next future
+/// occurrence relative to [now]. As-needed windows (anchorTime == null)
+/// are skipped. Weekly entries walk forward until the next valid
+/// weekday lands in the future; out-of-window entries (paused, endsOn
+/// already past) yield nothing.
 ///
-/// The deep link is `/medications/today` so the tap drops the
-/// caregiver into the dose-log screen ready to check the dose off.
-List<ScheduledNotification> doseReminders({
+/// The deep link is `/medications/today` so the tap drops the caregiver
+/// into the dose-log screen ready to check the dose off.
+List<ScheduledNotification> doseRemindersForWindows({
   required Medication medication,
-  required List<DoseSchedule> schedules,
+  required List<WindowedEntry> windowed,
   required DateTime now,
 }) {
   final List<ScheduledNotification> out = <ScheduledNotification>[];
-  for (final DoseSchedule sched in schedules) {
-    if (sched.frequencyKind == FrequencyKind.asNeeded) continue;
-    if (sched.timesOfDay.isEmpty) continue;
-    final DateTime? endsOn = sched.endsOn;
-    for (int i = 0; i < sched.timesOfDay.length; i++) {
-      final TimeOfDay tod = sched.timesOfDay[i];
-      final DateTime? next =
-          _nextOccurrence(sched: sched, tod: tod, now: now);
-      if (next == null) continue;
-      if (endsOn != null && next.isAfter(endsOn)) continue;
-      out.add(ScheduledNotification(
-        id: doseNotificationId(medication.id, i),
-        title: 'Time for ${medication.name}',
-        body: '${medication.dosage} — tap to mark it taken.',
-        scheduledFor: next,
-        deepLink: '/medications/today',
-      ));
-    }
+  for (int i = 0; i < windowed.length; i++) {
+    final WindowedEntry pair = windowed[i];
+    final TimeOfDay? anchor = pair.window.anchorTime;
+    if (anchor == null) continue; // as-needed
+    final DateTime? endsOn = pair.entry.endsOn;
+    final DateTime? next = _nextWindowedOccurrence(
+      window: pair.window,
+      entry: pair.entry,
+      tod: anchor,
+      now: now,
+    );
+    if (next == null) continue;
+    if (endsOn != null && next.isAfter(endsOn)) continue;
+    out.add(ScheduledNotification(
+      id: doseNotificationId(medication.id, i),
+      title: 'Time for ${medication.name}',
+      body: '${medication.dosage} — tap to mark it taken.',
+      scheduledFor: next,
+      deepLink: '/medications/today',
+    ));
   }
   return out;
 }
@@ -338,17 +349,18 @@ List<ScheduledNotification> appointmentReminders({
   return out;
 }
 
-DateTime? _nextOccurrence({
-  required DoseSchedule sched,
+DateTime? _nextWindowedOccurrence({
+  required DoseWindow window,
+  required MedicationWindowEntry entry,
   required TimeOfDay tod,
   required DateTime now,
 }) {
   final DateTime startBase =
-      sched.startsOn.isAfter(now) ? sched.startsOn : now;
+      entry.startsOn.isAfter(now) ? entry.startsOn : now;
   DateTime day = DateTime(startBase.year, startBase.month, startBase.day);
   for (int probe = 0; probe < 14; probe++) {
-    if (sched.frequencyKind == FrequencyKind.weekly &&
-        !sched.daysOfWeek.contains(day.weekday)) {
+    if (entry.daysOfWeek.isNotEmpty &&
+        !entry.daysOfWeek.contains(day.weekday)) {
       day = DateTime(day.year, day.month, day.day + 1);
       continue;
     }

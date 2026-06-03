@@ -61,6 +61,15 @@ abstract class AppSettings with _$AppSettings {
     /// without a deployed Worker still demos cleanly; operator flips
     /// off in Settings once the real backend is wired.
     @Default(true) bool useDemoForum,
+
+    /// Whether the Care Team tab surfaces the full coordination
+    /// hub (Calendar, Tasks, Shifts, Expenses, Circle). Defaults
+    /// to **off** — solo caregivers never see what they don't use.
+    /// Flip on in Settings → Care Team to opt in; the bottom tab
+    /// stays mounted either way so the 5-tab IA invariant holds —
+    /// when off, the tab body swaps to a "Coordinate care" CTA
+    /// that turns the toggle on with one tap.
+    @Default(false) bool teamCoordinationEnabled,
   }) = _AppSettings;
 
   /// Hydrate from persisted JSON. Unknown keys are silently ignored —

@@ -260,20 +260,32 @@ Future<void> seedDashboard(
     );
     await meds.upsertMedication(medication);
 
-    // Distinct times across the morning so each occurrence is its own
-    // ScheduledDose and the logged/unlogged split is unambiguous.
+    // After the v14 windows pivot, seed one window per dose so each
+    // (window, entry) pair produces a distinct occurrence — the
+    // logged/unlogged split is still unambiguous because the wall-clock
+    // anchor varies per window.
     final List<TimeOfDay> times = <TimeOfDay>[
       for (int i = 0; i < totalDoses; i++) TimeOfDay(hour: 7 + i, minute: 0),
     ];
-    await meds.upsertSchedule(DoseSchedule(
-      id: 'dash-sched-donepezil',
-      medicationId: medication.id,
-      frequencyKind: FrequencyKind.daily,
-      timesOfDay: times,
-      daysOfWeek: const <int>{},
-      startsOn: DateTime(now.year, now.month, now.day)
-          .subtract(const Duration(days: 30)),
-    ));
+    for (int i = 0; i < times.length; i++) {
+      final TimeOfDay tod = times[i];
+      final DoseWindow window = DoseWindow(
+        id: 'dash-window-$i',
+        patientId: 'demo-patient-mary',
+        label: 'Slot $i',
+        anchorTime: tod,
+        sortOrder: i,
+      );
+      await meds.upsertWindow(window);
+      await meds.upsertEntry(MedicationWindowEntry(
+        id: 'dash-entry-$i',
+        medicationId: medication.id,
+        windowId: window.id,
+        daysOfWeek: const <int>{},
+        startsOn: DateTime(now.year, now.month, now.day)
+            .subtract(const Duration(days: 30)),
+      ));
+    }
 
     for (int i = 0; i < loggedDoses; i++) {
       final TimeOfDay tod = times[i];

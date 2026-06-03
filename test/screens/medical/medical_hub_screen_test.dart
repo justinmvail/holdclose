@@ -9,11 +9,11 @@ import 'package:go_router/go_router.dart';
 /// TASKS.md Phase 14.15): (label, icon, route).
 const List<(String, IconData, String)> _expected = <(String, IconData, String)>[
   ('Medications', Icons.medication_outlined, '/medications'),
-  ('Med Schedule', Icons.schedule_outlined, '/medical/schedule'),
+  ('Schedule', Icons.schedule_outlined, '/team/calendar'),
   ('Appointments', Icons.event_outlined, '/appointments'),
   ('Health Log', Icons.monitor_heart_outlined, '/medical/health-log'),
-  ('Care Plan', Icons.assignment_outlined, '/medical/care-plan'),
-  ('Cards & Docs', Icons.badge_outlined, '/medical/cards'),
+  ('Routines', Icons.assignment_outlined, '/medical/routines'),
+  ('Emergency Card', Icons.shield_outlined, '/medical/cards/emergency'),
   ('Journal', Icons.book_outlined, '/journal'),
 ];
 

@@ -38,9 +38,9 @@ class MedicalHubScreen extends StatelessWidget {
         ),
         _MedicalTileSpec(
           icon: Icons.schedule_outlined,
-          label: 'Med Schedule',
-          subLabel: 'daily timeline',
-          route: '/medical/schedule',
+          label: 'Schedule',
+          subLabel: 'today, tomorrow, this week',
+          route: '/team/calendar',
           chipColor: careblazersColors.cta,
         ),
         _MedicalTileSpec(
@@ -59,17 +59,17 @@ class MedicalHubScreen extends StatelessWidget {
         ),
         _MedicalTileSpec(
           icon: Icons.assignment_outlined,
-          label: 'Care Plan',
-          subLabel: 'routine & stages',
-          route: '/medical/care-plan',
+          label: 'Routines',
+          subLabel: 'scheduled care tasks',
+          route: '/medical/routines',
           chipColor: careblazersColors.success,
         ),
         _MedicalTileSpec(
-          icon: Icons.badge_outlined,
-          label: 'Cards & Docs',
-          subLabel: 'emergency card, POA, IDs',
-          route: '/medical/cards',
-          chipColor: careblazersColors.primarySoft,
+          icon: Icons.shield_outlined,
+          label: 'Emergency Card',
+          subLabel: 'info for first responders',
+          route: '/medical/cards/emergency',
+          chipColor: careblazersColors.cta,
         ),
         _MedicalTileSpec(
           icon: Icons.book_outlined,

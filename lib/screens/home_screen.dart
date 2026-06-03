@@ -8,10 +8,10 @@ import '../routing/router.dart';
 import '../theme.dart';
 import '../widgets/home/add_action_sheet.dart';
 import '../widgets/home/catch_me_up_card.dart';
-import '../widgets/home/emergency_card_pin.dart';
 import '../widgets/home/medications_today_card.dart';
-import '../widgets/home/next_appointment_card.dart';
 import '../widgets/home/recent_activity_card.dart';
+import '../widgets/home/schedule_card.dart';
+import '../widgets/path_header.dart';
 
 /// Home tab root — the "Today" dashboard (BUILD_SPEC.md §4 Home IA,
 /// Phase 14.7+).
@@ -44,52 +44,98 @@ class HomeScreen extends ConsumerWidget {
       // tab bar.
       floatingActionButton: const AddActionFab(),
       body: SafeArea(
-        child: ListView(
-          key: dashboardListKey,
-          padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             // The signed-in caregiver's name drives the greeting. We
             // read it off the same auth stream Settings → Account uses
             // rather than caching a synchronous copy — the stream
             // replays the current state on subscribe, so there's no
-            // first-frame flash.
-            StreamBuilder<AuthState>(
-              stream: auth.watchAuthState(),
-              builder: (BuildContext context,
-                  AsyncSnapshot<AuthState> snapshot) {
-                final String name = switch (snapshot.data) {
-                  AuthStateSignedIn(:final User user) =>
-                    firstNameOf(user.name),
-                  _ => '',
-                };
-                return _GreetingRow(hour: now.hour, name: name);
-              },
+            // first-frame flash. The greeting becomes the [PathHeader]
+            // title so Home's heading shares the same visual language
+            // as the other four tab landings; the profile affordance
+            // lives in the [PathHeader.trailing] slot.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: KeyedSubtree(
+                key: HomeScreen.greetingKey,
+                child: StreamBuilder<AuthState>(
+                  stream: auth.watchAuthState(),
+                  builder: (BuildContext context,
+                      AsyncSnapshot<AuthState> snapshot) {
+                    final String name = switch (snapshot.data) {
+                      AuthStateSignedIn(:final User user) =>
+                        firstNameOf(user.name),
+                      _ => '',
+                    };
+                    return PathHeader(
+                      breadcrumbs: const <PathHeaderCrumb>[
+                        PathHeaderCrumb(label: 'Home'),
+                      ],
+                      title: greetingLine(now.hour, name),
+                      backLabel: 'Back to Home',
+                      leadingIcon: Icons.home_outlined,
+                      // Force a 24×24 tap target so the IconButton's
+                      // implicit Material/ink-well padding can't expand
+                      // the title row's height. The InkWell inside still
+                      // gives a ripple within the 24-px box; tooltip +
+                      // accessibility label travel through the wrapper.
+                      trailing: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: IconButton(
+                          key: HomeScreen.profileButtonKey,
+                          icon: const Icon(Icons.account_circle_outlined),
+                          iconSize: 24,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 24,
+                            height: 24,
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          color: careblazersColors.primary,
+                          tooltip: 'Profile & settings',
+                          onPressed: () => GoRouter.of(context)
+                              .pushNamed(CareblazersRoutes.settings),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
-            const SizedBox(height: 16),
-            // First dashboard card: the pinned Emergency Card (Phase
-            // 14.8). Further cards (14.10–14.12) and the quick-action FAB
-            // (14.13) land as later children here.
-            const EmergencyCardPin(),
-            const SizedBox(height: 16),
-            // Medications Today (Phase 14.9): today's doses with a status
-            // dot + an X-of-Y count, tapping through to the full dose log.
-            const MedicationsTodayCard(),
-            const SizedBox(height: 16),
-            // Next Appointment (Phase 14.10): the soonest upcoming visit
-            // with a today/future status dot, tapping through to the
-            // appointment detail screen.
-            const NextAppointmentCard(),
-            const SizedBox(height: 16),
-            // Catch me up (Phase 14.12): an optional streamed recap of the
-            // last 24h, cached for 30 min. It owns its own bottom gap and
-            // collapses to nothing on a quiet day, so there's no spacer
-            // around it here — a hidden card leaves the dashboard
-            // pixel-identical to having no card at all.
-            const CatchMeUpCard(),
-            // Recent Activity (Phase 14.11): the latest events across the
-            // journal, dose log, and appointments, each row tapping through
-            // to its own source detail.
-            const RecentActivityCard(),
+            Expanded(
+              child: ListView(
+                key: dashboardListKey,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                children: const <Widget>[
+                  // Medications Today (Phase 14.9): today's doses with
+                  // a status dot + an X-of-Y count, tapping through to
+                  // the full dose log.
+                  MedicationsTodayCard(),
+                  SizedBox(height: 16),
+                  // Schedule: Today + Tomorrow + This Week, drawn from
+                  // the unified patient timeline (appointments, doses,
+                  // health-log entries, journal entries, care-plan
+                  // routines). Replaces the single-row Next
+                  // Appointment card so the caregiver sees the days
+                  // ahead, not just the next item.
+                  ScheduleCard(),
+                  SizedBox(height: 16),
+                  // Catch me up (Phase 14.12): an optional streamed
+                  // recap of the last 24h, cached for 30 min. It owns
+                  // its own bottom gap and collapses to nothing on a
+                  // quiet day, so there's no spacer around it here —
+                  // a hidden card leaves the dashboard pixel-identical
+                  // to having no card at all.
+                  CatchMeUpCard(),
+                  // Recent Activity (Phase 14.11): the latest events
+                  // across the journal, dose log, and appointments,
+                  // each row tapping through to its own source detail.
+                  RecentActivityCard(),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -97,42 +143,14 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-/// Greeting + profile affordance — the dashboard's top row.
-class _GreetingRow extends StatelessWidget {
-  const _GreetingRow({required this.hour, required this.name});
-
-  final int hour;
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final String prefix = greetingForHour(hour);
-    // Fall back to a warm second-person address when the name is empty
-    // (signed-out / pre-hydrate) so the line never trails a bare comma.
-    final String line = name.isEmpty ? '$prefix, there' : '$prefix, $name';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: <Widget>[
-        Expanded(
-          child: Text(
-            line,
-            key: HomeScreen.greetingKey,
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-        ),
-        const SizedBox(width: 12),
-        IconButton(
-          key: HomeScreen.profileButtonKey,
-          icon: const Icon(Icons.account_circle_outlined),
-          iconSize: 32,
-          color: careblazersColors.primary,
-          tooltip: 'Profile & settings',
-          onPressed: () =>
-              GoRouter.of(context).pushNamed(CareblazersRoutes.settings),
-        ),
-      ],
-    );
-  }
+/// "Good morning, Sarah" / "Good evening, there" — the personalized
+/// greeting line that becomes the Home tab's [PathHeader] title. Falls
+/// back to a warm second-person address ("there") when [name] is empty
+/// so the line never trails a bare comma. Exposed so tests can assert
+/// the wording without driving a widget tree.
+String greetingLine(int hour, String name) {
+  final String prefix = greetingForHour(hour);
+  return name.isEmpty ? '$prefix, there' : '$prefix, $name';
 }
 
 /// Time-of-day greeting prefix (BUILD_SPEC.md Phase 14.7).

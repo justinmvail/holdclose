@@ -58,11 +58,24 @@ class NotificationScheduler {
     final Medication? med =
         await medicationRepository.getMedication(medicationId);
     if (med == null) return const <ScheduledNotification>[];
-    final List<DoseSchedule> schedules =
-        await medicationRepository.schedulesFor(medicationId);
-    final List<ScheduledNotification> targets = doseReminders(
+    // After the v14 windows pivot, dose scheduling lives on
+    // (DoseWindow + MedicationWindowEntry) pairs rather than on
+    // per-medication DoseSchedule rows. Walk every entry attached to
+    // this medication, fold in its window's anchor time, and forward
+    // synthetic schedules to [doseReminders] so the notification
+    // shapes stay identical.
+    final List<MedicationWindowEntry> entries =
+        await medicationRepository.entriesForMedication(medicationId);
+    final List<WindowedEntry> windowed = <WindowedEntry>[];
+    for (final MedicationWindowEntry entry in entries) {
+      final DoseWindow? window =
+          await medicationRepository.getWindow(entry.windowId);
+      if (window == null || window.isAsNeeded) continue;
+      windowed.add(WindowedEntry(window: window, entry: entry));
+    }
+    final List<ScheduledNotification> targets = doseRemindersForWindows(
       medication: med,
-      schedules: schedules,
+      windowed: windowed,
       now: _clock(),
     );
     for (final ScheduledNotification n in targets) {

@@ -48,6 +48,9 @@ class SettingsScreen extends ConsumerWidget {
   static const Key trackersSectionKey = Key('settings-trackers-section');
   static const Key useDemoForumToggleKey =
       Key('settings-use-demo-forum-toggle');
+  static const Key careTeamSectionKey = Key('settings-care-team-section');
+  static const Key teamCoordinationToggleKey =
+      Key('settings-team-coordination-toggle');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -68,6 +71,8 @@ class SettingsScreen extends ConsumerWidget {
             _AppearanceSection(settings: settings, notifier: notifier),
             const SizedBox(height: 24),
             _TrackersSection(settings: settings, notifier: notifier),
+            const SizedBox(height: 24),
+            _CareTeamSection(settings: settings, notifier: notifier),
             if (demoModeEnabled) ...<Widget>[
               const SizedBox(height: 24),
               _DemoSection(settings: settings, notifier: notifier),
@@ -475,6 +480,44 @@ class _TrackersSection extends StatelessWidget {
                 onChanged: (bool v) => notifier.setUseDemoForum(v),
               ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Care Team coordination toggle — opts the Team tab into Calendar /
+// Tasks / Shifts / Expenses / Circle. Off by default; the Team tab
+// stays mounted either way so the 5-tab IA invariant holds.
+// ---------------------------------------------------------------------------
+
+class _CareTeamSection extends StatelessWidget {
+  const _CareTeamSection({required this.settings, required this.notifier});
+
+  final AppSettings settings;
+  final Settings notifier;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: SettingsScreen.careTeamSectionKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const _SectionHeader(title: 'Care Team'),
+        _SectionCard(
+          child: SwitchListTile(
+            key: SettingsScreen.teamCoordinationToggleKey,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Coordinate with others'),
+            subtitle: const Text(
+              "Turn on to share the calendar, tasks, shifts, and "
+              "expenses with the people helping you. Off by default "
+              "so the Team tab stays out of the way until you need it.",
+            ),
+            value: settings.teamCoordinationEnabled,
+            onChanged: (bool v) => notifier.setTeamCoordinationEnabled(v),
           ),
         ),
       ],

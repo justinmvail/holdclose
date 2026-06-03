@@ -131,24 +131,55 @@ class MedicationsTable extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
-/// One dosing schedule for a [MedicationsTable] row (TASKS.md Phase
-/// 12.1). FK on [medicationId] references [MedicationsTable.id] with
-/// `ON DELETE CASCADE` — wiping a medication wipes its schedules in
-/// the same statement, so the repository never leaves orphans behind.
+/// One named time-of-day window for a patient's medications (e.g.
+/// "Morning", "Bedtime"). Replaces the legacy `dose_schedules` table —
+/// scheduling pivoted from per-medication times to per-window
+/// time slots when caregivers reported "I think in pillbox slots, not
+/// in medication schedules."
 ///
-/// SQLite only honours that FK action when the per-connection
-/// `PRAGMA foreign_keys = ON` is set; [CareblazersDatabase]'s
-/// `MigrationStrategy.beforeOpen` enables it on every connection.
-///
-/// The freezed `DoseSchedule` (frequencyKind + timesOfDay + daysOfWeek
-/// + startsOn / endsOn) lives in [payload] as JSON.
-class DoseSchedulesTable extends Table {
+/// [anchorMinute] lifts the wall-clock anchor (`hour * 60 + minute`)
+/// out of the JSON [payload] so the dose-expansion query can sort
+/// windows without parsing every row. `-1` is the sentinel for "as
+/// needed" — the seeded as-needed window keeps a row but never
+/// expands. The freezed [DoseWindow] payload also encodes
+/// [DoseWindow.sortOrder] which the windows-list screen sorts by.
+class DoseWindowsTable extends Table {
   @override
-  String get tableName => 'dose_schedules';
+  String get tableName => 'dose_windows';
+
+  TextColumn get id => text()();
+  TextColumn get patientId => text()();
+  IntColumn get anchorMinute => integer()();
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// The membership of a [MedicationsTable] row in a [DoseWindowsTable]
+/// row. One row per (medication, window) pair — a med taken morning +
+/// bedtime gets two entries.
+///
+/// FK on [medicationId] cascades on delete (wiping the medication
+/// wipes its entries); FK on [windowId] cascades too so deleting an
+/// empty window doesn't strand its (now dangling) entries. Both are
+/// gated by the per-connection `PRAGMA foreign_keys = ON` set in
+/// [CareblazersDatabase.migration]'s `beforeOpen`.
+///
+/// The freezed [MedicationWindowEntry] (daysOfWeek, startsOn, endsOn)
+/// lives in [payload] as JSON.
+class MedicationWindowEntriesTable extends Table {
+  @override
+  String get tableName => 'medication_window_entries';
 
   TextColumn get id => text()();
   TextColumn get medicationId => text().references(
         MedicationsTable,
+        #id,
+        onDelete: KeyAction.cascade,
+      )();
+  TextColumn get windowId => text().references(
+        DoseWindowsTable,
         #id,
         onDelete: KeyAction.cascade,
       )();
@@ -272,20 +303,23 @@ class HealthLogEntriesTable extends Table {
 ///
 /// Three keys are lifted out of the blob so the common reads never parse
 /// a payload: [slot] and [orderIndex] (the `bySlot` query filters on the
-/// slot and orders within it by index — the care-plan provider keeps
-/// those indices contiguous and duplicate-free per slot), and
-/// [patientId] (room for a future `byPatient` filter). Like the
-/// health-log table there's no DB-level foreign key onto [PatientsTable]:
-/// that table is single-row ("one loved one per install"), so a cascade
-/// buys nothing and the [patientId] link stays logical.
-class CarePlanSectionsTable extends Table {
+/// Care routines that recur on a wall-clock schedule (BUILD_SPEC.md
+/// §5.13 v2).
+///
+/// Replaced the v1 [CarePlanSectionsTable] (slot + stage). Same blob-
+/// with-lifted-keys pattern as medications: the freezed
+/// [CarePlanRoutine] serialises into [payload]; the wall-clock anchor
+/// minutes [scheduledMinute] and the [patientId] are lifted out so a
+/// "today's routines" query can filter without decoding every row.
+class CarePlanRoutinesTable extends Table {
   @override
-  String get tableName => 'care_plan_sections';
+  String get tableName => 'care_plan_routines';
 
   TextColumn get id => text()();
   TextColumn get patientId => text()();
-  TextColumn get slot => text()();
-  IntColumn get orderIndex => integer()();
+  // Minutes-of-day (0..1439), e.g. 7:30 = 450. Lifted out so a daily
+  // expansion can sort + filter without decoding the blob.
+  IntColumn get scheduledMinute => integer()();
   TextColumn get payload => text()();
 
   @override

@@ -122,6 +122,13 @@ class Settings extends _$Settings {
   Future<void> setUseDemoForum(bool value) =>
       _update(state.copyWith(useDemoForum: value));
 
+  /// Opt the Care Team tab into its full coordination hub. Off by
+  /// default — solo caregivers see a single "Coordinate care" CTA in
+  /// the Team tab instead. Flipping on lights up Calendar / Tasks /
+  /// Shifts / Expenses / Circle without an app restart.
+  Future<void> setTeamCoordinationEnabled(bool value) =>
+      _update(state.copyWith(teamCoordinationEnabled: value));
+
   Future<void> _update(AppSettings next) async {
     _userTouched = true;
     state = next;

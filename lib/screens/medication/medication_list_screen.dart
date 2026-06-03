@@ -4,65 +4,67 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/medication.dart';
+import '../../providers/patient_timeline_provider.dart';
 import '../../services/medication_repository.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 part 'medication_list_screen.g.dart';
 
-/// One row in the medication list — a [Medication] joined with the next
-/// scheduled dose and the trailing 7-day adherence score (TASKS.md Phase
-/// 12.3).
-///
-/// [nextDose] is null when the medication has no upcoming dose in the
-/// next 30 days (paused schedule, as-needed only, or no schedule yet).
-/// [adherenceLast7Days] is `1.0` when no scoreable doses exist in the
-/// trailing window — same fallback as
-/// [MedicationRepository.adherenceRate], so the list chip renders "—"
-/// without a special-case branch.
+const String _calendarPatientId = 'demo-patient-mary';
+
+/// One row in the medication list — a [Medication] joined with the
+/// windows it's attached to and its trailing 7-day adherence score.
 @immutable
 class MedicationListItem {
   const MedicationListItem({
     required this.medication,
-    required this.nextDose,
+    required this.windows,
     required this.adherenceLast7Days,
     required this.hasScoreableHistory,
   });
 
   final Medication medication;
-  final DateTime? nextDose;
-  final double adherenceLast7Days;
 
-  /// True iff the trailing 7-day window had at least one taken/late/missed
-  /// dose. Lets the chip distinguish "100% — perfect" from "no data yet"
-  /// (both return 1.0 from `adherenceRate` per its contract).
+  /// Windows the medication is taken in, sorted by anchor time
+  /// (as-needed last). Empty when the med has no entries — surfaced as
+  /// "No window yet" in the UI so a half-set-up med stays visible.
+  final List<DoseWindow> windows;
+
+  final double adherenceLast7Days;
   final bool hasScoreableHistory;
 }
 
-/// Async list of medications enriched with each med's next upcoming dose
-/// and its trailing 7-day adherence rate (TASKS.md Phase 12.3).
-///
-/// Watched by [MedicationListScreen]. Tests override
-/// [medicationRepositoryBackendProvider] with an in-memory drift-backed
-/// [MedicationRepository] so the future resolves synchronously inside
-/// the test harness. The form (Phase 12.3) invalidates this provider
-/// after a successful insert so the list reflects the new med.
+/// Async list of medications enriched with each med's windows + a
+/// trailing 7-day adherence rate.
 @Riverpod(keepAlive: false)
 Future<List<MedicationListItem>> medicationList(Ref ref) async {
   final MedicationRepository repo =
       ref.watch(medicationRepositoryBackendProvider);
   final List<Medication> meds = await repo.listMedications();
-
-  // Walk upcoming doses once; the first occurrence per med id is the
-  // "next" dose (the repository returns them ascending by scheduledFor).
-  final List<ScheduledDose> upcoming =
-      await repo.upcomingDoses(within: const Duration(days: 30));
-  final Map<String, DateTime> nextByMed = <String, DateTime>{};
-  for (final ScheduledDose d in upcoming) {
-    nextByMed.putIfAbsent(d.medication.id, () => d.scheduledFor);
-  }
+  final List<DoseWindow> allWindows =
+      await repo.windowsForPatient(_calendarPatientId);
+  final Map<String, DoseWindow> windowsById = <String, DoseWindow>{
+    for (final DoseWindow w in allWindows) w.id: w,
+  };
 
   final List<MedicationListItem> out = <MedicationListItem>[];
   for (final Medication m in meds) {
+    final List<MedicationWindowEntry> entries =
+        await repo.entriesForMedication(m.id);
+    final List<DoseWindow> windows = <DoseWindow>[
+      for (final MedicationWindowEntry e in entries)
+        if (windowsById[e.windowId] != null) windowsById[e.windowId]!,
+    ];
+    windows.sort((DoseWindow a, DoseWindow b) {
+      // Anchor-time ascending; as-needed last.
+      if (a.isAsNeeded && !b.isAsNeeded) return 1;
+      if (!a.isAsNeeded && b.isAsNeeded) return -1;
+      if (a.isAsNeeded && b.isAsNeeded) return 0;
+      final int am = a.anchorTime!.hour * 60 + a.anchorTime!.minute;
+      final int bm = b.anchorTime!.hour * 60 + b.anchorTime!.minute;
+      return am.compareTo(bm);
+    });
     final double rate = await repo.adherenceRate(
       forMedication: m.id,
       window: const Duration(days: 7),
@@ -74,7 +76,7 @@ Future<List<MedicationListItem>> medicationList(Ref ref) async {
         l.status == DoseStatus.missed);
     out.add(MedicationListItem(
       medication: m,
-      nextDose: nextByMed[m.id],
+      windows: windows,
       adherenceLast7Days: rate,
       hasScoreableHistory: hasScoreable,
     ));
@@ -82,24 +84,17 @@ Future<List<MedicationListItem>> medicationList(Ref ref) async {
   return out;
 }
 
-/// Wall clock the list screen samples when formatting "Today / Tomorrow"
-/// next-dose subtitles. Overridable so widget tests and goldens stay
-/// stable across host time.
+/// Wall clock the list screen samples. Overridable so widget tests
+/// stay stable across host time.
 @Riverpod(keepAlive: true)
 DateTime Function() medicationListClock(Ref ref) => DateTime.now;
 
-/// Medication list screen at `/medications` (TASKS.md Phase 12.3).
+/// Medication list screen at `/medications`.
 ///
-/// Two states:
-///   - Empty: a soft headline + a single salmon "Add a medication" CTA.
-///   - Populated: one tile per medication showing the name, dosage, the
-///     next scheduled dose, and a 7-day adherence chip. The salmon FAB
-///     in the lower-right pushes the add-med form.
-///
-/// The screen never reaches into the database directly — it reads
-/// through [medicationListProvider] and the form (Phase 12.3) writes
-/// through [medicationRepositoryProvider], same indirection the other
-/// repository-backed surfaces use.
+/// Flat alphabetical list of medications. Each row shows the name,
+/// dosage, the windows it's taken in ("Morning · Bedtime"), and a 7-day
+/// adherence chip. Tap → edit; long-press → soft-delete. The FAB pushes
+/// the add-medication form, which carries a multi-window chip picker.
 class MedicationListScreen extends ConsumerWidget {
   const MedicationListScreen({super.key});
 
@@ -108,52 +103,84 @@ class MedicationListScreen extends ConsumerWidget {
   static const Key emptyCtaKey = Key('medication-list-empty-cta');
   static const Key fabKey = Key('medication-list-fab');
 
-  /// The delete-confirmation dialog raised by a long-press, plus its two
-  /// actions (TASKS.md Phase 15.6).
+  /// The delete-confirmation dialog (a long-press on a med card).
   static const Key deleteDialogKey = Key('medication-list-delete-dialog');
   static const Key deleteConfirmKey = Key('medication-list-delete-confirm');
   static const Key deleteCancelKey = Key('medication-list-delete-cancel');
 
-  /// Stable per-tile key derived from the medication id. Tests tap by
-  /// id rather than by visible name so a copy edit doesn't break them.
   static Key tileKey(String medicationId) =>
       Key('medication-list-tile-$medicationId');
-
-  /// Stable per-tile key for the adherence chip — tests assert the
-  /// percentage label without having to scope through the tile.
-  static Key adherenceChipKey(String medicationId) =>
-      Key('medication-list-adherence-$medicationId');
-
-  /// Stable per-tile key for the "next dose" subtitle.
-  static Key nextDoseKey(String medicationId) =>
-      Key('medication-list-next-$medicationId');
+  static Key windowsKey(String medicationId) =>
+      Key('medication-list-windows-$medicationId');
+  static Key deleteIconKey(String medicationId) =>
+      Key('medication-list-delete-$medicationId');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<List<MedicationListItem>> async =
         ref.watch(medicationListProvider);
-    final DateTime now = ref.watch(medicationListClockProvider)();
 
     return Scaffold(
       backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text('Medications'),
-      ),
       body: SafeArea(
-        child: async.when(
-          loading: () => const SizedBox.shrink(),
-          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-          data: (List<MedicationListItem> items) {
-            if (items.isEmpty) return const _EmptyState();
-            return _PopulatedList(items: items, now: now);
-          },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: PathHeader(
+                breadcrumbs: const <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Medical', route: '/medical'),
+                  PathHeaderCrumb(label: 'Medications'),
+                ],
+                title: 'Medications',
+                backLabel: 'Back to Medical',
+                leadingIcon: Icons.medication_outlined,
+                // Per-screen action — opens the dose-window manager so
+                // caregivers can rename / re-anchor / delete windows
+                // without going through the form picker.
+                trailing: IconButton(
+                  tooltip: 'Manage windows',
+                  iconSize: 24,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 24,
+                    height: 24,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  color: careblazersColors.primary,
+                  icon: const Icon(Icons.schedule_outlined),
+                  onPressed: () =>
+                      context.push('/medications/windows'),
+                ),
+              ),
+            ),
+            Expanded(
+              child: async.when(
+                loading: () => const SizedBox.shrink(),
+                error: (Object e, StackTrace _) =>
+                    _ErrorView(message: '$e'),
+                data: (List<MedicationListItem> items) {
+                  if (items.isEmpty) return const _EmptyState();
+                  return _PopulatedList(items: items);
+                },
+              ),
+            ),
+          ],
         ),
       ),
       floatingActionButton: async.maybeWhen(
         data: (List<MedicationListItem> items) {
           if (items.isEmpty) return null;
-          return _AddMedFab(
+          return FloatingActionButton.extended(
+            key: MedicationListScreen.fabKey,
+            heroTag: 'medications-add-fab',
+            backgroundColor: careblazersColors.cta,
+            foregroundColor: Colors.white,
             onPressed: () => context.push('/medications/new'),
+            icon: const Icon(Icons.add),
+            label: const Text('Add medication'),
           );
         },
         orElse: () => null,
@@ -162,12 +189,159 @@ class MedicationListScreen extends ConsumerWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
+class _PopulatedList extends StatelessWidget {
+  const _PopulatedList({required this.items});
+  final List<MedicationListItem> items;
   @override
   Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
+    return ListView.separated(
+      key: MedicationListScreen.listKey,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (BuildContext context, int i) =>
+          _MedicationCard(item: items[i]),
+    );
+  }
+}
+
+class _MedicationCard extends ConsumerWidget {
+  const _MedicationCard({required this.item});
+  final MedicationListItem item;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final TextTheme tt = Theme.of(context).textTheme;
+    final Medication med = item.medication;
+    final String windowsLabel = _summariseWindows(context, item.windows);
+    return Semantics(
+      button: true,
+      label: '${med.name}, ${med.dosage}. '
+          '${item.windows.isEmpty ? 'No window yet' : windowsLabel}.',
+      child: GestureDetector(
+        onTap: () => context.push('/medications/${med.id}/edit'),
+        onLongPress: () => _confirmAndDelete(context, ref, med),
+        child: Container(
+          key: MedicationListScreen.tileKey(med.id),
+          decoration: BoxDecoration(
+            color: careblazersColors.surfaceWarm,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 8, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              // Top row: name on the left, trash icon top-right. Trash
+              // sits in its own slot so it can't crowd the title even
+              // when the medication name wraps.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        med.name,
+                        style: tt.titleLarge?.copyWith(
+                          color: careblazersColors.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    key: MedicationListScreen.deleteIconKey(med.id),
+                    tooltip: 'Delete medication',
+                    icon: const Icon(Icons.delete_outline),
+                    color: careblazersColors.primarySoft,
+                    onPressed: () => _confirmAndDelete(context, ref, med),
+                  ),
+                ],
+              ),
+              if (med.dosage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 0, top: 2, right: 12),
+                  child: Text(
+                    med.dosage,
+                    style: tt.bodyLarge?.copyWith(
+                      color: careblazersColors.text,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Padding(
+                key: MedicationListScreen.windowsKey(med.id),
+                padding: const EdgeInsets.only(top: 2, right: 12),
+                child: Text(
+                  item.windows.isEmpty
+                      ? 'No window yet — tap to add one.'
+                      : windowsLabel,
+                  style: tt.bodyMedium?.copyWith(
+                    color: careblazersColors.primarySoft,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _summariseWindows(BuildContext context, List<DoseWindow> windows) {
+    return windows
+        .map((DoseWindow w) {
+          if (w.isAsNeeded) return w.label;
+          final String time = MaterialLocalizations.of(context).formatTimeOfDay(
+            w.anchorTime!,
+            alwaysUse24HourFormat:
+                MediaQuery.alwaysUse24HourFormatOf(context),
+          );
+          return '${w.label} · $time';
+        })
+        .join(' · ');
+  }
+
+  Future<void> _confirmAndDelete(
+      BuildContext context, WidgetRef ref, Medication med) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        key: MedicationListScreen.deleteDialogKey,
+        title: const Text('Remove medication?'),
+        content: Text("${med.name} will stop appearing on the schedule. "
+            "The dose history stays on disk so you can recover it later."),
+        actions: <Widget>[
+          TextButton(
+            key: MedicationListScreen.deleteCancelKey,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: MedicationListScreen.deleteConfirmKey,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final MedicationRepository repo =
+        ref.read(medicationRepositoryBackendProvider);
+    await repo.softDeleteMedication(med.id);
+    ref.invalidate(medicationListProvider);
+    invalidatePatientTimeline(ref);
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme tt = Theme.of(context).textTheme;
     return Padding(
       key: MedicationListScreen.emptyStateKey,
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
@@ -183,25 +357,22 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'No medications yet.',
-            style: textTheme.headlineMedium?.copyWith(
+            style: tt.headlineMedium?.copyWith(
               color: careblazersColors.primary,
             ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
           Text(
-            "Add what your loved one takes — name, dosage, when it's "
-            'given. The schedule starts as daily at 8 AM; you can tune '
-            'it from the medication card.',
-            style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.text,
-            ),
+            "Add what your loved one takes — name, dosage, and the time "
+            "windows it's given in.",
+            style: tt.bodyLarge?.copyWith(color: careblazersColors.text),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
           Semantics(
             button: true,
-            label: 'Add a medication. Open the add-medication form.',
+            label: 'Add a medication.',
             child: ElevatedButton.icon(
               key: MedicationListScreen.emptyCtaKey,
               onPressed: () => context.push('/medications/new'),
@@ -226,272 +397,12 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _PopulatedList extends StatelessWidget {
-  const _PopulatedList({required this.items, required this.now});
-
-  final List<MedicationListItem> items;
-  final DateTime now;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      key: MedicationListScreen.listKey,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-      itemCount: items.length,
-      itemBuilder: (BuildContext context, int index) {
-        return _MedicationCard(item: items[index], now: now);
-      },
-    );
-  }
-}
-
-class _MedicationCard extends ConsumerWidget {
-  const _MedicationCard({required this.item, required this.now});
-
-  final MedicationListItem item;
-  final DateTime now;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    final Medication med = item.medication;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Semantics(
-        button: true,
-        label: '${med.name}, ${med.dosage}. '
-            'Adherence ${_adherenceLabel(item)} over the last 7 days. '
-            'Double-tap to edit, long-press to remove.',
-        child: GestureDetector(
-          // Tap opens the edit form pre-filled with this medication;
-          // long-press raises the soft-delete confirmation (Phase 15.6).
-          onTap: () => context.push('/medications/${med.id}/edit'),
-          onLongPress: () => _confirmAndDelete(context, ref, med),
-          child: Container(
-            key: MedicationListScreen.tileKey(med.id),
-            decoration: BoxDecoration(
-              color: careblazersColors.surfaceWarm,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            med.name,
-                            style: textTheme.titleLarge?.copyWith(
-                              color: careblazersColors.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            med.dosage,
-                            style: textTheme.bodyLarge?.copyWith(
-                              color: careblazersColors.text,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    _AdherenceChip(item: item),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Padding(
-                  key: MedicationListScreen.nextDoseKey(med.id),
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    _nextDoseLabel(item.nextDose, now),
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: careblazersColors.primarySoft,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Long-press handler: confirm, then soft-delete (TASKS.md Phase 15.6).
-  /// Tombstones the medication through [MedicationRepository
-  /// .softDeleteMedication] so it leaves the list (and the dose timeline)
-  /// but its dose history survives on disk. Invalidates
-  /// [medicationListProvider] so the tile disappears without a manual
-  /// refresh.
-  Future<void> _confirmAndDelete(
-    BuildContext context,
-    WidgetRef ref,
-    Medication med,
-  ) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        key: MedicationListScreen.deleteDialogKey,
-        title: Text('Remove ${med.name}?'),
-        content: const Text(
-          'This medication leaves your list. Its dose history is kept in '
-          'case you need it later.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            key: MedicationListScreen.deleteCancelKey,
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            key: MedicationListScreen.deleteConfirmKey,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: careblazersColors.accentDeep,
-            ),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final MedicationRepository repo =
-        ref.read(medicationRepositoryBackendProvider);
-    await repo.softDeleteMedication(med.id);
-    ref.invalidate(medicationListProvider);
-  }
-}
-
-class _AdherenceChip extends StatelessWidget {
-  const _AdherenceChip({required this.item});
-
-  final MedicationListItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    final Color fg = _adherenceColor(item);
-    return Container(
-      key: MedicationListScreen.adherenceChipKey(item.medication.id),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: fg.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        _adherenceLabel(item),
-        style: textTheme.bodyMedium?.copyWith(
-          color: fg,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _AddMedFab extends StatelessWidget {
-  const _AddMedFab({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Add a medication. Open the add-medication form.',
-      child: FloatingActionButton.extended(
-        key: MedicationListScreen.fabKey,
-        onPressed: onPressed,
-        backgroundColor: careblazersColors.cta,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: Text(
-          'Add medication',
-          style: Theme.of(context)
-              .textTheme
-              .labelLarge
-              ?.copyWith(color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
 class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.message});
-
   final String message;
-
   @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load the medication list.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Formatting helpers
-// ---------------------------------------------------------------------------
-
-const List<String> _weekdayShort = <String>[
-  'Mon',
-  'Tue',
-  'Wed',
-  'Thu',
-  'Fri',
-  'Sat',
-  'Sun',
-];
-
-String _formatClock(DateTime t) {
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '$hour:$minute $suffix';
-}
-
-/// "Today, 8:00 AM" / "Tomorrow, 8:00 AM" / "Mon, 8:00 AM" / fallback for
-/// a paused or as-needed schedule.
-String _nextDoseLabel(DateTime? next, DateTime now) {
-  if (next == null) return 'No upcoming dose scheduled.';
-  final DateTime today = DateTime(now.year, now.month, now.day);
-  final DateTime tomorrow = today.add(const Duration(days: 1));
-  final DateTime nextDay = DateTime(next.year, next.month, next.day);
-  final String clock = _formatClock(next);
-  if (nextDay == today) return 'Next: Today, $clock';
-  if (nextDay == tomorrow) return 'Next: Tomorrow, $clock';
-  return 'Next: ${_weekdayShort[next.weekday - 1]}, $clock';
-}
-
-String _adherenceLabel(MedicationListItem item) {
-  if (!item.hasScoreableHistory) return '—';
-  final int pct = (item.adherenceLast7Days * 100).round();
-  return '$pct%';
-}
-
-Color _adherenceColor(MedicationListItem item) {
-  if (!item.hasScoreableHistory) return careblazersColors.primarySoft;
-  final double rate = item.adherenceLast7Days;
-  if (rate >= 0.8) return careblazersColors.success;
-  if (rate >= 0.5) return careblazersColors.cta;
-  return careblazersColors.accentDeep;
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text("Couldn't load medications.\n\n$message"),
+      );
 }

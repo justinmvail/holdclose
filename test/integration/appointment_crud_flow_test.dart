@@ -28,11 +28,10 @@
 ///      section, not "Upcoming" (the repository's [AppointmentRepository.past]
 ///      predicate), verified at both the UI and the data layer.
 ///   5. **Home cross-screen sync** — with appointments on the books, the
-///      Home "Next Appointment" card surfaces the soonest upcoming visit
-///      with the right provider name, relative time, and driver. The add
-///      form carries no driver field, so the driver-bearing soonest visit
-///      is seeded through the repository; the card must still pick it over
-///      a later visit.
+///      Home Schedule card surfaces the soonest upcoming visit under the
+///      "Today" section (it falls within today's calendar day against
+///      the pinned harness clock) and a later-week visit under "This
+///      week". Both rows are tappable.
 ///
 /// The harness pins every clock to [kHarnessClock] (2026-06-01 11:00) and
 /// now also shares its in-memory db with the [ProviderRepository] seam so
@@ -52,7 +51,8 @@ import 'package:careblazers/screens/appointment/appointment_list_screen.dart';
 import 'package:careblazers/screens/medical/medical_hub_screen.dart';
 import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/widgets/home/next_appointment_card.dart';
+import 'package:careblazers/providers/patient_timeline_provider.dart';
+import 'package:careblazers/widgets/home/schedule_card.dart';
 import 'package:flutter/material.dart';
 // `Provider` in [models/appointment.dart] collides with riverpod's own
 // `Provider` class — `hide` keeps the model name resolvable here without
@@ -286,17 +286,21 @@ void main() {
   });
 
   group('Appointment CRUD — Home cross-screen sync (Phase 15.7)', () {
-    testWidgets('Next Appointment card surfaces the soonest upcoming visit',
+    testWidgets('Schedule card surfaces today + later-week visits',
         (WidgetTester tester) async {
       final ProviderContainer container =
           await pumpCareblazersApp(tester, extraOverrides: _formOverrides());
       await _seedProvider(container);
-      // A later visit (no driver) + a sooner one with a driver. The card
-      // must pick the sooner driver-bearing visit.
+      // A later visit (no driver) + a sooner one. Both must surface on
+      // the Schedule card — the sooner one under "Today", the later one
+      // under "This week" — rather than the single Next Appointment row
+      // the old card showed.
       await _seedAppointment(
         container,
         const _ApptSeed(
           id: 'appt-later',
+          // 2026-06-05 09:00 — Friday, same Sun-anchored week as the
+          // pinned harness clock (Mon 2026-06-01). Falls in "This week".
           startsAt: _Instant(2026, 6, 5, 9, 0),
           location: 'Marin Neurology',
         ),
@@ -305,32 +309,32 @@ void main() {
         container,
         const _ApptSeed(
           id: 'appt-soon',
-          // 2026-06-01 14:00 → "Today, 2:00 PM" against the pinned clock.
+          // 2026-06-01 14:00 → today against the pinned clock.
           startsAt: _Instant(2026, 6, 1, 14, 0),
           location: 'Marin Neurology',
           driverName: 'Marcus Bell',
         ),
       );
 
-      // Home was built empty at pump; nudge the keep-alive-off provider so
-      // the still-mounted card re-reads the seeded rows (same pattern the
-      // dose-log flow uses for the Medications card).
-      container.invalidate(nextAppointmentProvider);
+      // Home was built empty at pump; invalidate the timeline merger so
+      // the still-mounted Schedule card re-reads the seeded rows.
+      container.invalidate(patientTimelineEventsProvider);
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.byKey(NextAppointmentCard.cardKey));
+      await tester.ensureVisible(find.byKey(ScheduleCard.cardKey));
       await tester.pumpAndSettle();
 
-      // The card shows the soonest visit's relative time + driver line.
-      expect(find.text('Today, 2:00 PM'), findsOneWidget);
-      expect(find.text('Driver: Marcus Bell'), findsOneWidget);
-
-      // …and it resolved the soonest row + the right provider underneath.
-      final NextAppointmentItem? item =
-          await container.read(nextAppointmentProvider.future);
-      expect(item, isNotNull);
-      expect(item!.appointment.id, 'appt-soon');
-      expect(item.provider?.name, 'Dr. Ortega');
+      // Both sections + both rows render.
+      expect(find.byKey(ScheduleCard.todaySectionKey), findsOneWidget);
+      expect(find.byKey(ScheduleCard.thisWeekSectionKey), findsOneWidget);
+      expect(
+        find.byKey(ScheduleCard.rowKey('appt-appt-soon')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ScheduleCard.rowKey('appt-appt-later')),
+        findsOneWidget,
+      );
 
       await _flushTimers(tester);
     });

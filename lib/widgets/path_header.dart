@@ -60,6 +60,7 @@ class PathHeader extends StatelessWidget {
     required this.backLabel,
     this.leadingIcon,
     this.onBack,
+    this.trailing,
   });
 
   /// The full trail, root → current page. The last entry is the
@@ -79,6 +80,11 @@ class PathHeader extends StatelessWidget {
   /// Tap handler for the Back control. When null the widget pops (if the
   /// route is poppable) or `context.go`s to the deepest routed crumb.
   final VoidCallback? onBack;
+
+  /// Optional widget pinned to the right of the title row — typically a
+  /// profile / settings affordance on a tab landing. Sits opposite the
+  /// [leadingIcon] so the title can still expand to fill the middle.
+  final Widget? trailing;
 
   /// A single crumb means this is a top-level landing — suppress the
   /// breadcrumb row and the Back control.
@@ -182,6 +188,10 @@ class PathHeader extends StatelessWidget {
           const SizedBox(width: 8),
         ],
         Expanded(child: Text(title, style: titleStyle)),
+        if (trailing != null) ...<Widget>[
+          const SizedBox(width: 8),
+          trailing!,
+        ],
       ],
     );
   }

@@ -1,7 +1,9 @@
 import 'package:alchemist/alchemist.dart';
 import 'package:careblazers/db/database.dart';
+import 'package:careblazers/models/care_event.dart';
 import 'package:careblazers/providers/auth_provider.dart';
 import 'package:careblazers/providers/home_clock_provider.dart';
+import 'package:careblazers/providers/patient_timeline_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/appointment/appointment_list_screen.dart'
@@ -60,10 +62,19 @@ void main() {
                   ),
                 ),
                 doseLogClockProvider.overrideWithValue(() => _goldenNow),
-                // The Next Appointment card (Phase 14.10) reads the
-                // appointment repository; an empty in-memory repo keeps
-                // the golden deterministic and renders the card's "No
-                // upcoming appointments." empty state.
+                // The Schedule card reads patientTimelineEventsProvider;
+                // override the merger directly with an empty list so the
+                // card renders its "No upcoming items." empty state
+                // without dragging the five source providers into the
+                // golden setup.
+                patientTimelineEventsProvider
+                    .overrideWith((Ref ref) async => const <CareEvent>[]),
+                // The Schedule card also depends on the appointment
+                // repository (via patientTimelineEvents' appointment
+                // projection); the merger override above short-circuits
+                // that, but the card header navigates to /team/calendar
+                // when tapped so we still need an empty repo to keep the
+                // router's calendar route happy in goldens.
                 appointmentRepositoryBackendProvider.overrideWithValue(
                   AppointmentRepository(
                     CareblazersDatabase(NativeDatabase.memory()),

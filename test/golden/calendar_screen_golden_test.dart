@@ -1,6 +1,7 @@
 import 'package:alchemist/alchemist.dart';
 import 'package:careblazers/models/care_event.dart';
 import 'package:careblazers/providers/care_events_provider.dart';
+import 'package:careblazers/providers/patient_timeline_provider.dart';
 import 'package:careblazers/screens/team/calendar_screen.dart';
 import 'package:careblazers/theme.dart';
 import 'package:flutter/material.dart';
@@ -86,6 +87,8 @@ Widget _host(List<CareEvent> events) {
   return ProviderScope(
     overrides: <Override>[
       careEventsProvider.overrideWith((Ref ref) async => events),
+      patientTimelineEventsProvider
+          .overrideWith((Ref ref) async => const <CareEvent>[]),
       calendarClockProvider.overrideWithValue(() => _now),
     ],
     child: SizedBox(

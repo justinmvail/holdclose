@@ -38,6 +38,7 @@ Future<void> main() async {
   // reset state flash through.
   await maybeResetForDemo(container, demoMode: demoModeEnabled);
 
+
   runApp(
     UncontrolledProviderScope(
       container: container,
