@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../services/real_capture.dart';
+import 'photo_attacher_provider.dart' show useRealCapture;
+
 part 'voice_note_recorder_provider.g.dart';
 
 /// Voice-note capture surface for the journal-entry detail screen
@@ -75,7 +78,18 @@ class NoopVoiceNoteRecorder implements VoiceNoteRecorder {
   Future<void> stopPlayback() async {}
 }
 
-/// Riverpod-wired recorder. Widgets read this and get the impl the
-/// host overrode (or the no-op default in production).
+/// Pure impl selector — [RealVoiceNoteRecorder] when [useReal] is set,
+/// else the [NoopVoiceNoteRecorder] fake. Split out from the provider so
+/// both branches are unit-testable without recompiling against the
+/// `USE_REAL_CAPTURE` dart-define.
+VoiceNoteRecorder selectVoiceNoteRecorder(bool useReal) =>
+    useReal ? RealVoiceNoteRecorder() : NoopVoiceNoteRecorder();
+
+/// Riverpod-wired recorder. Widgets read this and get whichever impl the
+/// build mode picked — the real `record`+`audioplayers` recorder when
+/// the `USE_REAL_CAPTURE` flag is set (see [useRealCapture] in
+/// `photo_attacher_provider.dart`), the no-op fake otherwise — or
+/// whatever a test overrode.
 @Riverpod(keepAlive: true)
-VoiceNoteRecorder voiceNoteRecorder(Ref ref) => NoopVoiceNoteRecorder();
+VoiceNoteRecorder voiceNoteRecorder(Ref ref) =>
+    selectVoiceNoteRecorder(useRealCapture);

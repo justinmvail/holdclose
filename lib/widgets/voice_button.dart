@@ -68,7 +68,7 @@ class _VoiceButtonState extends ConsumerState<VoiceButton> {
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : Icon(Icons.mic_none, color: careblazersColors.primarySoft),
+          : Icon(Icons.mic_none, color: context.cb.primarySoft),
     );
   }
 }

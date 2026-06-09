@@ -70,10 +70,16 @@ class JournalScreen extends ConsumerWidget {
     final DateTime now = ref.watch(journalScreenClockProvider)();
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       floatingActionButton: FloatingActionButton.extended(
         key: addEntryFabKey,
-        backgroundColor: careblazersColors.cta,
+        // Each shell branch keeps its FAB mounted (IndexedStack), and a
+        // route pushed over the shell animates its Hero subtree against the
+        // active branch's — default-tagged FABs across branches/routes
+        // collide ("multiple heroes share the same tag"). A per-screen tag
+        // keeps every FAB's Hero unique.
+        heroTag: 'journal-add-fab',
+        backgroundColor: context.cb.cta,
         foregroundColor: Colors.white,
         onPressed: () => showJournalAddSheet(context),
         icon: const Icon(Icons.add),
@@ -88,11 +94,11 @@ class JournalScreen extends ConsumerWidget {
               child: PathHeader(
                 breadcrumbs: <PathHeaderCrumb>[
                   PathHeaderCrumb(label: 'Home', route: '/'),
-                  PathHeaderCrumb(label: 'Medical', route: '/medical'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
                   PathHeaderCrumb(label: 'Journal'),
                 ],
                 title: 'Journal',
-                backLabel: 'Back to Medical',
+                backLabel: 'Back to Care',
                 leadingIcon: Icons.book_outlined,
               ),
             ),
@@ -132,7 +138,7 @@ class JournalScreen extends ConsumerWidget {
 void showJournalAddSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
-    backgroundColor: careblazersColors.background,
+    backgroundColor: context.cb.background,
     showDragHandle: true,
     builder: (BuildContext sheetContext) {
       return SafeArea(
@@ -189,13 +195,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.eco_outlined,
             size: 64,
-            color: careblazersColors.success,
+            color: context.cb.success,
           ),
           const SizedBox(height: 16),
           Text(
             'Your journal fills itself.',
             style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -204,7 +210,7 @@ class _EmptyState extends StatelessWidget {
             'Each time you use the decoder, the moment gets logged here '
             'automatically. Try it once and come back.',
             style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.text,
+              color: context.cb.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -215,7 +221,7 @@ class _EmptyState extends StatelessWidget {
             child: ElevatedButton(
               key: JournalScreen.emptyCtaKey,
               style: ElevatedButton.styleFrom(
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -292,7 +298,7 @@ class _WeekSummaryCard extends StatelessWidget {
     return Container(
       key: JournalScreen.weekSummaryKey,
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
@@ -302,21 +308,21 @@ class _WeekSummaryCard extends StatelessWidget {
           Text(
             'This week',
             style: textTheme.titleLarge?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '📊  ${stats.thisWeek} incidents logged',
             style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.text,
+              color: context.cb.text,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             stats.trendSubline,
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.primarySoft,
+              color: context.cb.primarySoft,
             ),
           ),
           if (stats.topBehaviors.isNotEmpty) ...<Widget>[
@@ -324,7 +330,7 @@ class _WeekSummaryCard extends StatelessWidget {
             Text(
               'Most common:',
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.primarySoft,
+                color: context.cb.primarySoft,
               ),
             ),
             const SizedBox(height: 4),
@@ -334,7 +340,7 @@ class _WeekSummaryCard extends StatelessWidget {
                 child: Text(
                   '${bc.glyph}  ${bc.label} · ${bc.count}',
                   style: textTheme.bodyLarge?.copyWith(
-                    color: careblazersColors.text,
+                    color: context.cb.text,
                   ),
                 ),
               ),
@@ -360,10 +366,10 @@ class _PatternAlertCard extends StatelessWidget {
     return Container(
       key: JournalScreen.patternAlertKey,
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: careblazersColors.accentDeep.withValues(alpha: 0.6),
+          color: context.cb.accentDeep.withValues(alpha: 0.6),
           width: 1.5,
         ),
       ),
@@ -374,7 +380,7 @@ class _PatternAlertCard extends StatelessWidget {
           Text(
             '⚠  Heads up',
             style: textTheme.titleLarge?.copyWith(
-              color: careblazersColors.accentDeep,
+              color: context.cb.accentDeep,
             ),
           ),
           const SizedBox(height: 8),
@@ -384,7 +390,7 @@ class _PatternAlertCard extends StatelessWidget {
               child: Text(
                 alerts[i].text,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: careblazersColors.text,
+                  color: context.cb.text,
                 ),
               ),
             ),
@@ -412,7 +418,7 @@ class _GroupHeader extends StatelessWidget {
       child: Text(
         label,
         style: textTheme.titleLarge?.copyWith(
-          color: careblazersColors.primarySoft,
+          color: context.cb.primarySoft,
         ),
       ),
     );
@@ -436,7 +442,7 @@ class _EntryTile extends StatelessWidget {
       label:
           '${entry.behavior.label} at $time. Double-tap to open this entry.',
       child: Material(
-        color: careblazersColors.background,
+        color: context.cb.background,
         child: InkWell(
           key: JournalScreen.entryTileKey(entry.id),
           onTap: () => context.push('/journal/${entry.id}'),
@@ -457,7 +463,7 @@ class _EntryTile extends StatelessWidget {
                       Text(
                         '$time   ${entry.behavior.label}',
                         style: textTheme.bodyLarge?.copyWith(
-                          color: careblazersColors.primary,
+                          color: context.cb.primary,
                         ),
                       ),
                       if (whatWorked != null) ...<Widget>[
@@ -465,7 +471,7 @@ class _EntryTile extends StatelessWidget {
                         Text(
                           whatWorked,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: careblazersColors.primarySoft,
+                            color: context.cb.primarySoft,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -476,7 +482,7 @@ class _EntryTile extends StatelessWidget {
                 ),
                 Icon(
                   Icons.chevron_right,
-                  color: careblazersColors.primarySoft,
+                  color: context.cb.primarySoft,
                 ),
               ],
             ),
@@ -505,7 +511,7 @@ class _ErrorView extends StatelessWidget {
         child: Text(
           "We couldn't load the journal.\n$message",
           style: textTheme.bodyLarge?.copyWith(
-            color: careblazersColors.text,
+            color: context.cb.text,
           ),
           textAlign: TextAlign.center,
         ),

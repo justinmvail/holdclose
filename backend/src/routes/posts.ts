@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Hono } from 'hono';
 
@@ -48,10 +48,16 @@ function hotScore(voteCount: number, createdAt: Date): number {
   return sign * order + secondsSinceEpoch / HOT_DECAY_SECONDS;
 }
 
-function postResponse(p: Post) {
+// The author's public name fields, denormalized onto each post/comment
+// response so the app can render the real @username (or display_name)
+// without a second round-trip per author. `author` may be undefined for
+// a row whose profile was deleted; both fields then fall to null.
+function postResponse(p: Post, author?: Pick<Profile, 'username' | 'displayName'>) {
   return {
     id: p.id,
     author_id: p.authorId,
+    author_username: author?.username ?? null,
+    author_display_name: author?.displayName ?? null,
     title: p.title,
     body: p.body,
     created_at: p.createdAt.toISOString(),
@@ -63,6 +69,32 @@ function postResponse(p: Post) {
 }
 
 type Db = ReturnType<typeof drizzle>;
+
+// Build a profileId -> {username, displayName} lookup for a batch of
+// posts so the list endpoints can attach author names with a single
+// extra query rather than one per row.
+async function loadAuthors(
+  db: Db,
+  authorIds: string[],
+): Promise<Map<string, Pick<Profile, 'username' | 'displayName'>>> {
+  const map = new Map<string, Pick<Profile, 'username' | 'displayName'>>();
+  const unique = [...new Set(authorIds)];
+  if (unique.length === 0) {
+    return map;
+  }
+  const rows = await db
+    .select({
+      id: profiles.id,
+      username: profiles.username,
+      displayName: profiles.displayName,
+    })
+    .from(profiles)
+    .where(inArray(profiles.id, unique));
+  for (const row of rows) {
+    map.set(row.id, { username: row.username, displayName: row.displayName });
+  }
+  return map;
+}
 
 async function loadProfileByUserId(
   db: Db,
@@ -146,7 +178,11 @@ export const postsRouter = () => {
         )
         .orderBy(desc(posts.createdAt), desc(posts.id))
         .limit(limit);
-      return c.json({ posts: rows.map(postResponse) }, 200);
+      const authors = await loadAuthors(db, rows.map((r) => r.authorId));
+      return c.json(
+        { posts: rows.map((r) => postResponse(r, authors.get(r.authorId))) },
+        200,
+      );
     }
 
     if (sort === 'top') {
@@ -169,7 +205,11 @@ export const postsRouter = () => {
         )
         .orderBy(desc(posts.voteCount), desc(posts.id))
         .limit(limit);
-      return c.json({ posts: rows.map(postResponse) }, 200);
+      const authors = await loadAuthors(db, rows.map((r) => r.authorId));
+      return c.json(
+        { posts: rows.map((r) => postResponse(r, authors.get(r.authorId))) },
+        200,
+      );
     }
 
     // hot
@@ -196,9 +236,9 @@ export const postsRouter = () => {
       const idx = scored.findIndex((s) => s.p.id === cursor.id);
       start = idx >= 0 ? idx + 1 : scored.length;
     }
-    const page = scored
-      .slice(start, start + limit)
-      .map((s) => postResponse(s.p));
+    const pageRows = scored.slice(start, start + limit).map((s) => s.p);
+    const authors = await loadAuthors(db, pageRows.map((p) => p.authorId));
+    const page = pageRows.map((p) => postResponse(p, authors.get(p.authorId)));
     return c.json({ posts: page }, 200);
   });
 
@@ -208,7 +248,8 @@ export const postsRouter = () => {
     if (!post) {
       return c.json({ error: 'post_not_found' }, 404);
     }
-    return c.json(postResponse(post), 200);
+    const authors = await loadAuthors(db, [post.authorId]);
+    return c.json(postResponse(post, authors.get(post.authorId)), 200);
   });
 
   // ---------- Authed writes ----------
@@ -256,7 +297,7 @@ export const postsRouter = () => {
         crisisFlagged: detection.flagged,
       })
       .returning();
-    const payload: Record<string, unknown> = postResponse(created);
+    const payload: Record<string, unknown> = postResponse(created, profile);
     if (detection.flagged) {
       payload.crisis_resources = detection.resources;
     }
@@ -301,7 +342,7 @@ export const postsRouter = () => {
       .set({ body: patch.body, updatedAt: new Date() })
       .where(eq(posts.id, existing.id))
       .returning();
-    return c.json(postResponse(updated), 200);
+    return c.json(postResponse(updated, profile), 200);
   });
 
   router.delete('/:id', auth(), async (c) => {

@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/settings.dart';
+import '../../providers/settings_provider.dart';
 import '../../theme.dart';
 import '../../widgets/hub_tile.dart';
 import '../../widgets/path_header.dart';
 
-/// The Medical tile-hub at `/medical` (BUILD_SPEC.md §5.13, TASKS.md
-/// Phase 14.15) — the single entry point to everything clinical: meds,
-/// schedule, appointments, health log, care plan, documents, and the
-/// re-homed journal.
+/// The Care tile-hub at `/medical` (route path kept internal) — the single
+/// entry point to everything about caring for your person: meds, schedule,
+/// appointments, health log, routines, the emergency card, the journal,
+/// and (when team coordination is on) the Care Circle of helpers.
+///
+/// Renamed from "Medical" (2026-06-06) — the clinical word was off-brand —
+/// and the former separate "Team" tab folded in here as the gated **Care
+/// Circle** tile.
 ///
 /// This is a **landing screen**: the [PathHeader] carries a single crumb
-/// ("Medical") so it renders the title row only — no breadcrumb trail and
-/// no Back control (you reach the hub by tapping the Medical tab, and
-/// re-tapping it pops the branch back here). The body is a [HubGrid] of
-/// seven [HubTile]s in the documented order; each tile pushes its feature
-/// page (the routes that don't exist yet land in Phases 14.16+).
-class MedicalHubScreen extends StatelessWidget {
+/// ("Care") so it renders the title row only — no breadcrumb trail and no
+/// Back control (you reach the hub by tapping the Care tab, and re-tapping
+/// it pops the branch back here). Each tile pushes its feature page.
+class MedicalHubScreen extends ConsumerWidget {
   const MedicalHubScreen({super.key});
 
   /// Stable per-tile key derived from the tile's destination route. Tests
@@ -24,66 +29,82 @@ class MedicalHubScreen extends StatelessWidget {
   /// break them.
   static Key tileKey(String route) => Key('medical-hub-tile-$route');
 
-  /// The seven hub tiles, left-to-right / top-to-bottom (BUILD_SPEC.md
-  /// §5.13). Chip colors are [CareblazersColors] tokens — the HTML
-  /// reference's coral/teal/amber/plum placeholders are discarded per
-  /// docs/MENU_LAYOUT_SPEC.md.
-  static List<_MedicalTileSpec> get _tiles => <_MedicalTileSpec>[
+  /// The Care hub tiles. The trailing **Care Circle** tile only appears
+  /// when [includeCareCircle] (the team-coordination toggle) is on — a
+  /// solo caregiver never sees the coordination hub.
+  static List<_MedicalTileSpec> _tilesFor(
+    BuildContext context, {
+    required bool includeCareCircle,
+  }) =>
+      <_MedicalTileSpec>[
         _MedicalTileSpec(
           icon: Icons.medication_outlined,
           label: 'Medications',
           subLabel: 'doses & reminders',
           route: '/medications',
-          chipColor: careblazersColors.primary,
+          chipColor: context.cb.primary,
         ),
         _MedicalTileSpec(
           icon: Icons.schedule_outlined,
           label: 'Schedule',
           subLabel: 'today, tomorrow, this week',
-          route: '/team/calendar',
-          chipColor: careblazersColors.cta,
+          route: '/team/calendar?from=medical',
+          chipColor: context.cb.cta,
         ),
         _MedicalTileSpec(
           icon: Icons.event_outlined,
           label: 'Appointments',
           subLabel: 'calendar & visits',
           route: '/appointments',
-          chipColor: careblazersColors.accentDeep,
+          chipColor: context.cb.accentDeep,
         ),
         _MedicalTileSpec(
           icon: Icons.monitor_heart_outlined,
           label: 'Health Log',
           subLabel: 'symptoms & vitals',
           route: '/medical/health-log',
-          chipColor: careblazersColors.link,
+          chipColor: context.cb.link,
         ),
         _MedicalTileSpec(
           icon: Icons.assignment_outlined,
           label: 'Routines',
           subLabel: 'scheduled care tasks',
           route: '/medical/routines',
-          chipColor: careblazersColors.success,
+          chipColor: context.cb.success,
         ),
         _MedicalTileSpec(
           icon: Icons.shield_outlined,
           label: 'Emergency Card',
           subLabel: 'info for first responders',
           route: '/medical/cards/emergency',
-          chipColor: careblazersColors.cta,
+          chipColor: context.cb.cta,
         ),
         _MedicalTileSpec(
           icon: Icons.book_outlined,
           label: 'Journal',
           subLabel: 'care notes',
           route: '/journal',
-          chipColor: careblazersColors.text,
+          chipColor: context.cb.text,
         ),
+        if (includeCareCircle)
+          _MedicalTileSpec(
+            icon: Icons.diversity_3_outlined,
+            label: 'Care Circle',
+            subLabel: 'helpers, shifts & tasks',
+            route: '/team',
+            chipColor: context.cb.accentDeep,
+          ),
       ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bool teamOn = ref.watch(
+      settingsProvider.select((AppSettings s) => s.teamCoordinationEnabled),
+    );
+    final List<_MedicalTileSpec> tiles =
+        _tilesFor(context, includeCareCircle: teamOn);
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -91,21 +112,20 @@ class MedicalHubScreen extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
               // Single crumb → PathHeader suppresses the breadcrumb row
-              // and the Back control, rendering the title row only. The
-              // backLabel is required by the widget but unused here.
+              // and the Back control, rendering the title row only.
               child: PathHeader(
                 breadcrumbs: <PathHeaderCrumb>[
-                  PathHeaderCrumb(label: 'Medical'),
+                  PathHeaderCrumb(label: 'Care'),
                 ],
-                title: 'Medical',
+                title: 'Care',
                 backLabel: 'Back to Home',
-                leadingIcon: Icons.medical_services_outlined,
+                leadingIcon: Icons.volunteer_activism_outlined,
               ),
             ),
             Expanded(
               child: HubGrid(
                 tiles: <HubTile>[
-                  for (final _MedicalTileSpec spec in _tiles)
+                  for (final _MedicalTileSpec spec in tiles)
                     HubTile(
                       key: tileKey(spec.route),
                       icon: spec.icon,

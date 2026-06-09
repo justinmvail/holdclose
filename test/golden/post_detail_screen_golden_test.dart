@@ -21,10 +21,12 @@ ForumPost _post({
   int voteCount = 12,
   int commentCount = 3,
   Duration age = const Duration(minutes: 18),
+  String? username = 'sundown_sarah',
 }) =>
     ForumPost(
       id: id,
       authorId: 'profile-$id',
+      authorUsername: username,
       title: title,
       body: body,
       createdAt: _fixedNow.subtract(age),
@@ -84,6 +86,32 @@ class _CannedForumApiClient extends ForumApiClient {
       _comments;
 }
 
+/// Fails the post fetch with a transport error (statusCode 0) so the golden
+/// captures the offline retry surface (#19). No initialPost is handed in, so
+/// the screen must fetch — and that fetch fails.
+class _OfflineForumApiClient extends ForumApiClient {
+  _OfflineForumApiClient()
+      : super(
+          tokenLoader: _stubTokenLoader,
+          baseUrl: 'https://example.test',
+        );
+
+  static Future<String> _stubTokenLoader() async => 'fake-jwt';
+
+  @override
+  Future<ForumPost> getPost(String postId) async {
+    throw ForumApiException(statusCode: 0, error: 'transport_error');
+  }
+
+  @override
+  Future<List<ForumComment>> listComments({
+    required String postId,
+    ForumCommentSort sort = ForumCommentSort.top,
+  }) async {
+    throw ForumApiException(statusCode: 0, error: 'transport_error');
+  }
+}
+
 Widget _wrap({
   required ForumPost post,
   required List<ForumComment> comments,
@@ -124,6 +152,38 @@ void main() {
               post: _post(commentCount: 0),
               comments: const <ForumComment>[],
               size: const Size(420, 900),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'offline — branded retry surface (#19)',
+      fileName: 'post_detail_screen_offline',
+      builder: () => GoldenTestGroup(
+        columns: 1,
+        children: <Widget>[
+          GoldenTestScenario(
+            name: 'transport error (#19)',
+            child: ProviderScope(
+              overrides: <Override>[
+                forumApiClientProvider
+                    .overrideWithValue(_OfflineForumApiClient()),
+                postDetailClockProvider.overrideWithValue(() => _fixedNow),
+              ],
+              child: SizedBox(
+                width: 420,
+                height: 900,
+                child: MaterialApp(
+                  builder: (BuildContext _, Widget? child) => ColoredBox(
+                    color: careblazersColors.background,
+                    child: child ?? const SizedBox.shrink(),
+                  ),
+                  // No initialPost → the screen fetches, and the fetch fails.
+                  home: const PostDetailScreen(postId: 'p'),
+                ),
+              ),
             ),
           ),
         ],

@@ -1,31 +1,12 @@
 import 'package:drift/drift.dart';
-import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../db/database.dart';
 import '../models/care_circle_membership.dart';
 import '../models/caregiver.dart';
+import '../services/sync_sink.dart';
 
 part 'care_circle_provider.g.dart';
-
-/// One care-circle row pairing a [Caregiver] with their
-/// [CareCircleMembership] (TASKS.md Phase 14.25).
-///
-/// The roster (BUILD_SPEC.md §5.14) renders one of these per member — the
-/// caregiver supplies the name / role / contact + avatar, the membership
-/// supplies the permission badge and the pending-invite state. Bundled so
-/// the screen consumes a single joined shape rather than re-joining two
-/// lists itself.
-@immutable
-class CareCircleMember {
-  const CareCircleMember({required this.caregiver, required this.membership});
-
-  final Caregiver caregiver;
-  final CareCircleMembership membership;
-
-  /// True while the invite hasn't been accepted (acceptedAt still null).
-  bool get isPending => membership.acceptedAt == null;
-}
 
 /// Persistence for the care circle — caregivers + their memberships
 /// (TASKS.md Phase 14.25).
@@ -36,7 +17,7 @@ class CareCircleMember {
 /// epoch-ms. The membership table FKs onto the caregiver table with
 /// `ON DELETE CASCADE`, so [deleteCaregiver] also clears that caregiver's
 /// membership rows.
-class CareCircleRepository {
+class CareCircleRepository with SyncSinkHost {
   CareCircleRepository(this._db);
 
   final CareblazersDatabase _db;
@@ -59,6 +40,7 @@ class CareCircleRepository {
             avatarPath: Value<String?>(caregiver.avatarPath),
           ),
         );
+    emitUpsert('caregivers', caregiver.id, caregiver.toJson());
   }
 
   /// Drop the caregiver with this id (cascading to their memberships).
@@ -66,6 +48,7 @@ class CareCircleRepository {
   Future<void> deleteCaregiver(String id) async {
     await (_db.delete(_db.caregiversTable)..where((t) => t.id.equals(id)))
         .go();
+    emitDelete('caregivers', id);
   }
 
   /// One caregiver by id, or null if absent.
@@ -103,6 +86,8 @@ class CareCircleRepository {
             ),
           ),
         );
+    emitUpsert(
+        'care_circle_memberships', membership.id, membership.toJson());
   }
 
   /// Drop the membership with this id. No-op if absent.
@@ -110,6 +95,7 @@ class CareCircleRepository {
     await (_db.delete(_db.careCircleMembershipsTable)
           ..where((t) => t.id.equals(id)))
         .go();
+    emitDelete('care_circle_memberships', id);
   }
 
   /// One membership by id, or null if absent.
@@ -175,131 +161,6 @@ CareCircleRepository careCircleRepositoryBackend(Ref ref) {
 }
 
 /// Alias for consumers — matches the `careCircleRepositoryProvider` name
-/// the Care Circle screens reach for.
+/// the care-circle data exporter + shift/task/expense providers reach for.
 final CareCircleRepositoryBackendProvider careCircleRepositoryProvider =
     careCircleRepositoryBackendProvider;
-
-/// Wall clock used to stamp invite acceptance. Overridable so tests pin a
-/// fixed time and the accept-invite transition stays deterministic.
-@Riverpod(keepAlive: true)
-DateTime Function() careCircleClock(Ref ref) => DateTime.now;
-
-/// The loved one's care circle (TASKS.md Phase 14.25).
-///
-/// `build()` joins every caregiver to their membership, newest-permission
-/// first (owner → editor → viewer) then by display name, so the roster
-/// renders deterministically. The mutators ([addMember] / [acceptInvite]
-/// / [editRole] / [editPermission] / [removeMember]) write through
-/// [careCircleRepositoryProvider] and re-read the join so the screen
-/// reflects the change without a manual invalidate. [pendingInvites]
-/// filters the already-loaded state synchronously.
-@Riverpod(keepAlive: true)
-class CareCircle extends _$CareCircle {
-  @override
-  Future<List<CareCircleMember>> build() async {
-    final CareCircleRepository repo = ref.watch(careCircleRepositoryProvider);
-    return _load(repo);
-  }
-
-  /// Members whose invite hasn't been accepted yet. Empty while the first
-  /// load is still in flight.
-  List<CareCircleMember> get pendingInvites =>
-      (state.asData?.value ?? const <CareCircleMember>[])
-          .where((CareCircleMember m) => m.isPending)
-          .toList();
-
-  /// Add a caregiver and their membership in one step, then refresh.
-  Future<void> addMember({
-    required Caregiver caregiver,
-    required CareCircleMembership membership,
-  }) =>
-      _mutate((CareCircleRepository repo) async {
-        await repo.upsertCaregiver(caregiver);
-        await repo.upsertMembership(membership);
-      });
-
-  /// Flip a pending invite's `acceptedAt` to the current time, then
-  /// refresh. No-op if the membership is gone or already accepted.
-  Future<void> acceptInvite(String membershipId) =>
-      _mutate((CareCircleRepository repo) async {
-        final CareCircleMembership? existing =
-            await repo.getMembership(membershipId);
-        if (existing == null || existing.acceptedAt != null) return;
-        final DateTime now = ref.read(careCircleClockProvider)();
-        await repo.upsertMembership(existing.copyWith(acceptedAt: now));
-      });
-
-  /// Change a caregiver's [role], then refresh. No-op if absent.
-  Future<void> editRole(String caregiverId, CaregiverRole role) =>
-      _mutate((CareCircleRepository repo) async {
-        final Caregiver? existing = await repo.getCaregiver(caregiverId);
-        if (existing == null) return;
-        await repo.upsertCaregiver(existing.copyWith(role: role));
-      });
-
-  /// Change a membership's [permissionLevel], then refresh. No-op if
-  /// absent.
-  Future<void> editPermission(String membershipId, PermissionLevel level) =>
-      _mutate((CareCircleRepository repo) async {
-        final CareCircleMembership? existing =
-            await repo.getMembership(membershipId);
-        if (existing == null) return;
-        await repo.upsertMembership(
-          existing.copyWith(permissionLevel: level),
-        );
-      });
-
-  /// Remove a caregiver from the circle, cascading to their membership,
-  /// then refresh.
-  Future<void> removeMember(String caregiverId) =>
-      _mutate((CareCircleRepository repo) => repo.deleteCaregiver(caregiverId));
-
-  Future<List<CareCircleMember>> _load(CareCircleRepository repo) async {
-    final List<Caregiver> caregivers = await repo.listCaregivers();
-    final List<CareCircleMembership> memberships = await repo.listMemberships();
-    final Map<String, Caregiver> byId = <String, Caregiver>{
-      for (final Caregiver c in caregivers) c.id: c,
-    };
-
-    final List<CareCircleMember> members = <CareCircleMember>[];
-    for (final CareCircleMembership m in memberships) {
-      final Caregiver? caregiver = byId[m.caregiverId];
-      if (caregiver != null) {
-        members.add(CareCircleMember(caregiver: caregiver, membership: m));
-      }
-    }
-
-    members.sort((CareCircleMember a, CareCircleMember b) {
-      final int byPermission = _permissionRank(a.membership.permissionLevel)
-          .compareTo(_permissionRank(b.membership.permissionLevel));
-      if (byPermission != 0) return byPermission;
-      return a.caregiver.displayName
-          .toLowerCase()
-          .compareTo(b.caregiver.displayName.toLowerCase());
-    });
-    return members;
-  }
-
-  Future<void> _mutate(
-    Future<void> Function(CareCircleRepository repo) op,
-  ) async {
-    final CareCircleRepository repo = ref.read(careCircleRepositoryProvider);
-    state = await AsyncValue.guard(() async {
-      await op(repo);
-      return _load(repo);
-    });
-  }
-}
-
-/// Sort rank for [PermissionLevel] so owners surface above editors above
-/// viewers on the roster.
-int _permissionRank(PermissionLevel level) {
-  switch (level) {
-    case PermissionLevel.owner:
-      return 0;
-    case PermissionLevel.editor:
-      return 1;
-    case PermissionLevel.viewer:
-      return 2;
-  }
-}

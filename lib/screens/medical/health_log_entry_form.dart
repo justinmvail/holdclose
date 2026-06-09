@@ -7,18 +7,19 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/health_log_entry.dart';
-import '../../models/patient.dart';
+import '../../providers/active_patient_provider.dart';
 import '../../providers/health_log_provider.dart';
-import '../../providers/storage_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
 
 part 'health_log_entry_form.g.dart';
 
-/// Fallback loved-one id used when no [Patient] is on file yet — e.g. a
-/// fresh real-mode install where the caregiver hasn't filled in the
-/// emergency card. Matches the demo seed's `maryHenderson` id so the
-/// `byPatient` selector lines up with any seeded entries.
+/// Pre-hydration placeholder for the form's `_patientId` field, used until
+/// [healthLogFormHydrationProvider] resolves the active loved one. Matches
+/// the demo seed's `maryHenderson` id (and the fallback
+/// [activePatientIdProvider] itself uses) so the value is stable even on a
+/// fresh real-mode install where no [Patient] is on file yet.
 const String _fallbackPatientId = 'demo-patient-mary';
 
 /// Mint a new id for the health-log row the form inserts. Overridable
@@ -55,8 +56,14 @@ class HealthLogFormData {
 }
 
 /// Async loader for the entry form (TASKS.md Phase 14.17). Resolves the
-/// active loved-one id from [storageProvider] and — on the edit path —
-/// the existing [HealthLogEntry] from [healthLogRepositoryProvider].
+/// active loved-one id from [activePatientIdProvider] and — on the edit
+/// path — the existing [HealthLogEntry] from [healthLogRepositoryProvider].
+///
+/// The id comes from [activePatientIdProvider] now (was a direct
+/// `storage.getPatient()` read) so a freshly-added entry is filed under
+/// whichever loved one is active (multi-patient, Issue #6). That provider
+/// already falls back to 'demo-patient-mary' (== [_fallbackPatientId]) when
+/// no patient is on file, so the add-path id is unchanged with one patient.
 ///
 /// Returns the add-path shape (null entry, resolved patientId) when
 /// [entryId] is null or points at a row that has since been deleted.
@@ -65,9 +72,7 @@ Future<HealthLogFormData> healthLogFormHydration(
   Ref ref,
   String? entryId,
 ) async {
-  final StorageProvider storage = ref.watch(storageProvider);
-  final Patient? patient = await storage.getPatient();
-  final String patientId = patient?.id ?? _fallbackPatientId;
+  final String patientId = await ref.watch(activePatientIdProvider.future);
 
   if (entryId == null) {
     return HealthLogFormData(patientId: patientId);
@@ -109,6 +114,7 @@ class HealthLogEntryForm extends ConsumerStatefulWidget {
   static const Key diastolicFieldKey = Key('health-log-form-diastolic');
   static const Key heartRateFieldKey = Key('health-log-form-heart-rate');
   static const Key temperatureFieldKey = Key('health-log-form-temperature');
+  static const Key glucoseFieldKey = Key('health-log-form-glucose');
   static const Key notesFieldKey = Key('health-log-form-notes');
   static const Key saveButtonKey = Key('health-log-form-save');
   static const Key deleteButtonKey = Key('health-log-form-delete');
@@ -133,6 +139,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
   final TextEditingController _diastolic = TextEditingController();
   final TextEditingController _heartRate = TextEditingController();
   final TextEditingController _temperature = TextEditingController();
+  final TextEditingController _glucose = TextEditingController();
   final TextEditingController _notes = TextEditingController();
 
   HealthLogKind _kind = HealthLogKind.vitals;
@@ -158,6 +165,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
     _diastolic.dispose();
     _heartRate.dispose();
     _temperature.dispose();
+    _glucose.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -177,6 +185,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
     _temperature.text = entry.temperatureF == null
         ? ''
         : _trimDouble(entry.temperatureF!);
+    _glucose.text = entry.glucoseMgDl?.toString() ?? '';
     _notes.text = entry.notes ?? '';
   }
 
@@ -206,8 +215,8 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
 
   Future<void> _submit() async {
     if (_submitting) return;
-    final FormState? form = _formKey.currentState;
-    if (form == null || !form.validate()) return;
+    // Validate on press + scroll to the first invalid field.
+    if (!validateAndScrollToFirstError(_formKey)) return;
 
     // Cross-field rules the per-field validators can't express.
     final String? crossFieldError = _validateCrossFields();
@@ -237,6 +246,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
       diastolic: isVitals ? _parsedInt(_diastolic) : null,
       heartRate: isVitals ? _parsedInt(_heartRate) : null,
       temperatureF: isVitals ? _parsedDouble(_temperature) : null,
+      glucoseMgDl: isVitals ? _parsedInt(_glucose) : null,
       notes: notes.isEmpty ? null : notes,
     );
 
@@ -261,15 +271,17 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
     final int? dia = _parsedInt(_diastolic);
     final int? hr = _parsedInt(_heartRate);
     final double? temp = _parsedDouble(_temperature);
+    final int? glucose = _parsedInt(_glucose);
     final bool hasBpOne = sys != null || dia != null;
     final bool hasBpBoth = sys != null && dia != null;
     if (hasBpOne && !hasBpBoth) {
       return 'Enter both the top and bottom blood-pressure numbers.';
     }
-    final bool hasAnyReading = hasBpBoth || hr != null || temp != null;
+    final bool hasAnyReading =
+        hasBpBoth || hr != null || temp != null || glucose != null;
     if (!hasAnyReading) {
-      return 'Add at least one reading — blood pressure, heart rate, or '
-          'temperature.';
+      return 'Add at least one reading — blood pressure, heart rate, '
+          'temperature, or blood glucose.';
     }
     return null;
   }
@@ -298,34 +310,45 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
     final TextTheme textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       body: SafeArea(
-        child: hydration.when(
-          loading: () => const SizedBox.shrink(),
-          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-          data: (HealthLogFormData data) {
-            _hydrate(data);
-            return Form(
-              key: _formKey,
-              child: ListView(
-                key: HealthLogEntryForm.formKey,
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                children: <Widget>[
-                  PathHeader(
-                    breadcrumbs: const <PathHeaderCrumb>[
-                      PathHeaderCrumb(label: 'Home', route: '/'),
-                      PathHeaderCrumb(label: 'Medical', route: '/medical'),
-                      PathHeaderCrumb(
-                        label: 'Health Log',
-                        route: '/medical/health-log',
-                      ),
-                      PathHeaderCrumb(label: 'Entry'),
-                    ],
-                    title: widget.isEdit ? 'Edit entry' : 'New entry',
-                    backLabel: 'Back to Health Log',
-                    leadingIcon: Icons.monitor_heart_outlined,
+        // The PathHeader sits OUTSIDE the hydration `.when()` so the
+        // breadcrumb back affordance is present on EVERY branch —
+        // including the loading and error states (alpha bug
+        // fb_1780932762335231: those branches were swipe-only with no
+        // header).
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: PathHeader(
+                breadcrumbs: const <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  PathHeaderCrumb(
+                    label: 'Health Log',
+                    route: '/medical/health-log',
                   ),
-                  const SizedBox(height: 20),
+                  PathHeaderCrumb(label: 'Entry'),
+                ],
+                title: widget.isEdit ? 'Edit entry' : 'New entry',
+                backLabel: 'Back to Health Log',
+                leadingIcon: Icons.monitor_heart_outlined,
+              ),
+            ),
+            Expanded(
+              child: hydration.when(
+                loading: () => const SizedBox.shrink(),
+                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                data: (HealthLogFormData data) {
+                  _hydrate(data);
+                  return Form(
+                    key: _formKey,
+                    child: ListView(
+                      key: HealthLogEntryForm.formKey,
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                      children: <Widget>[
                   const _FieldLabel(label: 'What are you logging?'),
                   const SizedBox(height: 8),
                   _KindPicker(selected: _kind, onSelected: _selectKind),
@@ -364,7 +387,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
                       _formError!,
                       key: HealthLogEntryForm.formErrorKey,
                       style: textTheme.bodyMedium?.copyWith(
-                        color: careblazersColors.cta,
+                        color: context.cb.cta,
                       ),
                     ),
                   ],
@@ -379,7 +402,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
                       onPressed: _submitting ? null : _submit,
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size.fromHeight(56),
-                        backgroundColor: careblazersColors.cta,
+                        backgroundColor: context.cb.cta,
                         foregroundColor: Colors.white,
                       ),
                       child: Text(
@@ -401,25 +424,28 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
                         onPressed: _submitting ? null : _delete,
                         icon: Icon(
                           Icons.delete_outline,
-                          color: careblazersColors.accentDeep,
+                          color: context.cb.accentDeep,
                         ),
                         label: Text(
                           'Delete entry',
                           style: textTheme.labelLarge?.copyWith(
-                            color: careblazersColors.accentDeep,
+                            color: context.cb.accentDeep,
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(52),
-                          side: BorderSide(color: careblazersColors.accentDeep),
+                          side: BorderSide(color: context.cb.accentDeep),
                         ),
                       ),
                     ),
                   ],
-                ],
+                      ],
+                    ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
@@ -459,7 +485,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
               child: Text(
                 '/',
                 style: textTheme.headlineSmall?.copyWith(
-                  color: careblazersColors.primarySoft,
+                  color: context.cb.primarySoft,
                 ),
               ),
             ),
@@ -521,6 +547,20 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
             return null;
           },
         ),
+        const SizedBox(height: 16),
+        const _FieldLabel(label: 'Blood glucose (mg/dL)'),
+        const SizedBox(height: 8),
+        TextFormField(
+          key: HealthLogEntryForm.glucoseFieldKey,
+          controller: _glucose,
+          keyboardType: TextInputType.number,
+          inputFormatters: <TextInputFormatter>[
+            FilteringTextInputFormatter.digitsOnly,
+          ],
+          decoration: const InputDecoration(hintText: 'e.g. 110'),
+          validator: (String? v) =>
+              _intRangeValidator(v, min: 20, max: 600, noun: 'blood glucose'),
+        ),
       ],
     );
   }
@@ -535,7 +575,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
         Text(
           '1 is mild, 5 is severe. Tap again to clear.',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
         ),
         const SizedBox(height: 8),
@@ -620,12 +660,12 @@ class _KindChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? careblazersColors.cta : careblazersColors.primarySoft;
+        selected ? context.cb.cta : context.cb.primarySoft;
     final Color fill = selected
-        ? careblazersColors.cta.withValues(alpha: 0.12)
+        ? context.cb.cta.withValues(alpha: 0.12)
         : Colors.transparent;
     final Color fg =
-        selected ? careblazersColors.cta : careblazersColors.text;
+        selected ? context.cb.cta : context.cb.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -676,10 +716,10 @@ class _SeverityChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? careblazersColors.cta : careblazersColors.primarySoft;
+        selected ? context.cb.cta : context.cb.primarySoft;
     final Color fill =
-        selected ? careblazersColors.cta : Colors.transparent;
-    final Color fg = selected ? Colors.white : careblazersColors.text;
+        selected ? context.cb.cta : Colors.transparent;
+    final Color fg = selected ? Colors.white : context.cb.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -721,7 +761,7 @@ class _FieldLabel extends StatelessWidget {
     return Text(
       label,
       style: textTheme.bodyLarge?.copyWith(
-        color: careblazersColors.primary,
+        color: context.cb.primary,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -741,7 +781,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load this entry.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),

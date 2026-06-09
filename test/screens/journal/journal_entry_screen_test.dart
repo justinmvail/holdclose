@@ -412,21 +412,22 @@ void main() {
   });
 
   group('JournalEntryScreen — header', () {
-    testWidgets('AppBar title shows the entry timestamp',
+    testWidgets('PathHeader title shows the entry timestamp',
         (WidgetTester tester) async {
       await _pumpEntry(tester, seedEntry: _entry());
 
-      // Local-time render of the seed's UTC 2026-05-29 19:42 — assert
-      // the month abbreviation + 12-hour suffix without pinning the
-      // host's offset.
-      final Finder appBar = find.byType(AppBar);
-      expect(appBar, findsOneWidget);
-      final AppBar bar = tester.widget<AppBar>(appBar);
-      final Text title = bar.title! as Text;
-      expect(title.data, isNotNull);
+      // The title moved from the AppBar into the body PathHeader.title
+      // (rendered as a Text). Local-time render of the seed's UTC
+      // 2026-05-29 19:42 — assert the month abbreviation + 12-hour
+      // suffix without pinning the host's offset.
+      final RegExp pattern =
+          RegExp(r'^(May|Jun) \d{1,2} · \d{1,2}:\d{2} (AM|PM)$');
+      final Finder titleText = find.byWidgetPredicate(
+        (Widget widget) => widget is Text && pattern.hasMatch(widget.data ?? ''),
+      );
       // Render uses local time; just assert the month + AM/PM suffix
       // shape so DST/timezone of the host doesn't make this flaky.
-      expect(title.data, matches(RegExp(r'(May|Jun) \d{1,2} · \d{1,2}:\d{2} (AM|PM)')));
+      expect(titleText, findsOneWidget);
     });
   });
 }

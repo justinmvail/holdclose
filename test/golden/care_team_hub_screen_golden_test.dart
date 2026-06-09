@@ -8,14 +8,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
-/// Pre-seed a fake storage so [CareTeamHubScreen] hydrates with
-/// `teamCoordinationEnabled = true` and the populated tile grid renders
-/// — the production default is off and would otherwise paint the
-/// "Coordinate care" empty state instead.
-InMemoryStorageProvider _seededStorage() {
+/// Pre-seed a fake storage with an explicit `teamCoordinationEnabled` so
+/// each golden pins the state it depicts rather than relying on the model
+/// default (which is now on — toggle it off in the empty-state scenario).
+InMemoryStorageProvider _storageWith({required bool coordination}) {
   final InMemoryStorageProvider storage = InMemoryStorageProvider();
   storage.updateSettings(
-    AppSettings.defaults().copyWith(teamCoordinationEnabled: true),
+    AppSettings.defaults().copyWith(teamCoordinationEnabled: coordination),
   );
   return storage;
 }
@@ -42,7 +41,8 @@ void main() {
               height: 820,
               child: ProviderScope(
                 overrides: <Override>[
-                  storageProvider.overrideWithValue(_seededStorage()),
+                  storageProvider
+                      .overrideWithValue(_storageWith(coordination: true)),
                 ],
                 child: MaterialApp(
                   builder: (BuildContext context, Widget? child) =>
@@ -72,10 +72,12 @@ void main() {
               height: 820,
               child: ProviderScope(
                 overrides: <Override>[
-                  // Override storage even for the default-state golden so
-                  // the settings provider doesn't try to open drift
-                  // (path_provider is unimplemented in the test host).
-                  storageProvider.overrideWithValue(InMemoryStorageProvider()),
+                  // Explicitly OFF — the model default is now on, so the
+                  // CTA empty state must be pinned here. (Storage is also
+                  // overridden so the settings provider doesn't open drift;
+                  // path_provider is unimplemented in the test host.)
+                  storageProvider
+                      .overrideWithValue(_storageWith(coordination: false)),
                 ],
                 child: MaterialApp(
                   builder: (BuildContext context, Widget? child) =>

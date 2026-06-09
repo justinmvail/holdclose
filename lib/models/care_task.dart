@@ -44,6 +44,13 @@ abstract class CareTask with _$CareTask {
     /// Optional longer description shown on the card / create sheet.
     String? body,
 
+    /// The routine this task belongs to, or null for a standalone one-off.
+    /// A routine "bundles" its tasks the way a dose window bundles
+    /// medications (unified task/routine model, 2026-06-06): a lone task
+    /// rides the schedule on its own; grouped tasks render under their
+    /// routine header. Stored in the JSON payload, so no DB migration.
+    String? routineId,
+
     /// Optional due time. Null tasks sort after dated ones within a
     /// segment.
     DateTime? dueAt,
@@ -78,6 +85,10 @@ extension CareTaskX on CareTask {
   bool get isOpen => status == CareTaskStatus.open;
   bool get isClaimed => status == CareTaskStatus.claimed;
   bool get isDone => status == CareTaskStatus.done;
+
+  /// True when the task isn't bundled under a routine — a one-off that
+  /// rides the schedule on its own (when it has a [dueAt]).
+  bool get isStandalone => routineId == null;
 
   /// True when [caregiverId] is the caregiver who currently holds the task
   /// — the gate the screen uses to show Complete + Unclaim only on a

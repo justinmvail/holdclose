@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/medication.dart';
+import '../../providers/active_patient_provider.dart';
+import '../../providers/patient_timeline_provider.dart';
 import '../../services/medication_repository.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 part 'dose_log_screen.g.dart';
 
@@ -40,12 +43,19 @@ DoseLogIdFactory doseLogIdFactory(Ref ref) => _defaultDoseLogIdFactory;
 /// local-calendar day of [doseLogClockProvider]'s current sample so the
 /// screen never falls off "today" mid-session — a fresh invalidate
 /// after a mutation re-runs against the same day.
+///
+/// The patient id comes from [activePatientIdProvider] now (was the
+/// repo's hard-coded 'demo-patient-mary' default) so the checklist
+/// follows whichever loved one is active (multi-patient, Issue #6). With
+/// one patient on file the provider resolves that sole id, so the
+/// single-patient behaviour is unchanged.
 @riverpod
 Future<List<ScheduledDose>> dosesToday(Ref ref) async {
   final MedicationRepository repo =
       ref.watch(medicationRepositoryBackendProvider);
   final DateTime now = ref.watch(doseLogClockProvider)();
-  return repo.dosesByDay(now);
+  final String patientId = await ref.watch(activePatientIdProvider.future);
+  return repo.dosesByDay(now, patientId: patientId);
 }
 
 /// Cutoff in minutes past a dose's scheduled time after which "Mark
@@ -97,6 +107,11 @@ class DoseLogScreen extends ConsumerStatefulWidget {
   static const Key emptyStateKey = Key('dose-log-empty');
   static const Key bulkMorningButtonKey = Key('dose-log-bulk-morning');
   static const Key noteFieldKey = Key('dose-log-note-field');
+
+  /// Per-window section header ("Morning · 8:00 AM") above that window's
+  /// dose cards. Stable per-window so tests can target a group.
+  static Key windowHeaderKey(String windowId) =>
+      Key('dose-log-window-$windowId');
 
   /// Stable per-row key derived from the (medicationId, scheduledFor)
   /// pair — schedule id alone collides when one med carries multiple
@@ -150,27 +165,49 @@ class _DoseLogScreenState extends ConsumerState<DoseLogScreen> {
         ref.watch(dosesTodayProvider);
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text("Today's doses"),
-      ),
+      backgroundColor: context.cb.background,
       body: SafeArea(
-        child: async.when(
-          loading: () => const SizedBox.shrink(),
-          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-          data: (List<ScheduledDose> doses) {
-            final Widget content = doses.isEmpty
-                ? const _EmptyState()
-                : _PopulatedList(doses: doses, noteResolver: _currentNote);
-            if (!_hasNote) return content;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _VoiceNoteField(controller: _noteController!),
-                Expanded(child: content),
-              ],
-            );
-          },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  PathHeaderCrumb(
+                    label: 'Medications',
+                    route: '/medications',
+                  ),
+                  PathHeaderCrumb(label: "Today's doses"),
+                ],
+                title: "Today's doses",
+                backLabel: 'Back to Medications',
+                leadingIcon: Icons.today_outlined,
+              ),
+            ),
+            Expanded(
+              child: async.when(
+                loading: () => const SizedBox.shrink(),
+                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                data: (List<ScheduledDose> doses) {
+                  final Widget content = doses.isEmpty
+                      ? const _EmptyState()
+                      : _PopulatedList(
+                          doses: doses, noteResolver: _currentNote);
+                  if (!_hasNote) return content;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _VoiceNoteField(controller: _noteController!),
+                      Expanded(child: content),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -196,7 +233,7 @@ class _VoiceNoteField extends StatelessWidget {
           Text(
             'Note for this dose',
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.primarySoft,
+              color: context.cb.primarySoft,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -231,13 +268,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.check_circle_outline,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'Nothing scheduled today.',
             style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -245,7 +282,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             "When a medication's schedule lands on today, doses will "
             'appear here as a checklist.',
-            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -271,13 +308,16 @@ class _PopulatedList extends ConsumerWidget {
         .toList(growable: false);
     final bool showBulk = beforeNoonPending.isNotEmpty;
 
-    return ListView.builder(
+    // One section per window — "Morning · 8:00 AM" over the meds due then
+    // — so the checklist reads like a pillbox instead of a flat list.
+    final List<DoseWindowGroup> groups = groupDosesByWindow(doses);
+
+    return ListView(
       key: DoseLogScreen.listKey,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-      itemCount: doses.length + (showBulk ? 1 : 0),
-      itemBuilder: (BuildContext context, int index) {
-        if (showBulk && index == 0) {
-          return _BulkMorningButton(
+      children: <Widget>[
+        if (showBulk)
+          _BulkMorningButton(
             pendingCount: beforeNoonPending.length,
             onPressed: () => _markMorningTaken(
               context,
@@ -285,11 +325,51 @@ class _PopulatedList extends ConsumerWidget {
               beforeNoonPending,
               note: noteResolver?.call(),
             ),
-          );
-        }
-        final int doseIndex = showBulk ? index - 1 : index;
-        return _DoseRow(dose: doses[doseIndex], noteResolver: noteResolver);
-      },
+          ),
+        for (final DoseWindowGroup group in groups) ...<Widget>[
+          _DoseWindowHeader(window: group.window),
+          for (final ScheduledDose dose in group.doses)
+            _DoseRow(dose: dose, noteResolver: noteResolver),
+        ],
+      ],
+    );
+  }
+}
+
+/// "Morning · 8:00 AM" section header above a window's dose cards on the
+/// dose-log checklist. Mirrors the Home medications card + schedule card
+/// headers so the three medication surfaces read identically.
+class _DoseWindowHeader extends StatelessWidget {
+  const _DoseWindowHeader({required this.window});
+
+  final DoseWindow window;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Padding(
+      key: DoseLogScreen.windowHeaderKey(window.id),
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Text.rich(
+        TextSpan(
+          children: <InlineSpan>[
+            TextSpan(
+              text: window.label,
+              style: textTheme.titleMedium?.copyWith(
+                color: context.cb.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            TextSpan(
+              text: '   ·   ${windowClockLabel(window)}',
+              style: textTheme.bodyMedium?.copyWith(
+                color: context.cb.primarySoft,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -330,6 +410,9 @@ Future<void> _markMorningTaken(
     await repo.upsertDoseLog(log);
   }
   ref.invalidate(dosesTodayProvider);
+  // Also refresh the Home dashboard surfaces (Schedule card + catch-me-up)
+  // so a dose logged here shows as taken without an app restart.
+  invalidatePatientTimeline(ref);
 }
 
 class _BulkMorningButton extends StatelessWidget {
@@ -359,14 +442,14 @@ class _BulkMorningButton extends StatelessWidget {
           label: Text(
             label,
             style: textTheme.labelLarge?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
           ),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size.fromHeight(52),
-            foregroundColor: careblazersColors.primary,
+            foregroundColor: context.cb.primary,
             side: BorderSide(
-              color: careblazersColors.primary.withValues(alpha: 0.4),
+              color: context.cb.primary.withValues(alpha: 0.4),
             ),
           ),
         ),
@@ -395,7 +478,7 @@ class _DoseRow extends ConsumerWidget {
       child: Semantics(
         label: _rowSemanticsLabel(dose),
         child: Material(
-          color: careblazersColors.surfaceWarm,
+          color: context.cb.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: DoseLogScreen.rowKey(med.id, dose.scheduledFor),
@@ -423,7 +506,7 @@ class _DoseRow extends ConsumerWidget {
                             Text(
                               _formatClock(dose.scheduledFor),
                               style: textTheme.bodyMedium?.copyWith(
-                                color: careblazersColors.primarySoft,
+                                color: context.cb.primarySoft,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -438,7 +521,7 @@ class _DoseRow extends ConsumerWidget {
                         Text(
                           med.name,
                           style: textTheme.titleLarge?.copyWith(
-                            color: careblazersColors.primary,
+                            color: context.cb.primary,
                             fontWeight: FontWeight.w700,
                           ),
                           maxLines: 1,
@@ -448,7 +531,7 @@ class _DoseRow extends ConsumerWidget {
                         Text(
                           med.dosage,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: careblazersColors.text,
+                            color: context.cb.text,
                           ),
                         ),
                       ],
@@ -502,6 +585,9 @@ Future<void> _markTaken(
   );
   await repo.upsertDoseLog(log);
   ref.invalidate(dosesTodayProvider);
+  // Also refresh the Home dashboard surfaces (Schedule card + catch-me-up)
+  // so a dose logged here shows as taken without an app restart.
+  invalidatePatientTimeline(ref);
 }
 
 Future<void> _setStatus(
@@ -529,6 +615,9 @@ Future<void> _setStatus(
   );
   await repo.upsertDoseLog(log);
   ref.invalidate(dosesTodayProvider);
+  // Also refresh the Home dashboard surfaces (Schedule card + catch-me-up)
+  // so a dose logged here shows as taken without an app restart.
+  invalidatePatientTimeline(ref);
 }
 
 Future<void> _openStatusSheet(
@@ -540,7 +629,7 @@ Future<void> _openStatusSheet(
   final DoseStatus? next = await showModalBottomSheet<DoseStatus>(
     context: context,
     builder: (BuildContext sheetContext) => _StatusSheet(dose: dose),
-    backgroundColor: careblazersColors.background,
+    backgroundColor: context.cb.background,
   );
   if (next == null) return;
   await _setStatus(ref, dose, next, note: note);
@@ -566,7 +655,7 @@ class _StatusSheet extends StatelessWidget {
               child: Text(
                 'Update ${dose.medication.name}',
                 style: textTheme.titleLarge?.copyWith(
-                  color: careblazersColors.primary,
+                  color: context.cb.primary,
                 ),
               ),
             ),
@@ -602,14 +691,14 @@ class _StatusOptionTile extends StatelessWidget {
       onTap: onTap,
       leading: Icon(
         _iconFor(status),
-        color: _colorFor(status),
+        color: _colorFor(context, status),
       ),
       title: Text(
         _labelFor(status),
-        style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+        style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
       ),
       trailing: selected
-          ? Icon(Icons.check, color: careblazersColors.success)
+          ? Icon(Icons.check, color: context.cb.success)
           : null,
     );
   }
@@ -626,11 +715,11 @@ class _LeadingIndicator extends StatelessWidget {
     if (log == null) {
       return Icon(
         Icons.check_box_outline_blank,
-        color: careblazersColors.primarySoft,
+        color: context.cb.primarySoft,
         size: 28,
       );
     }
-    return Icon(_iconFor(log.status), color: _colorFor(log.status), size: 28);
+    return Icon(_iconFor(log.status), color: _colorFor(context, log.status), size: 28);
   }
 }
 
@@ -645,7 +734,7 @@ class _StatusTrailing extends StatelessWidget {
     return Text(
       _labelFor(status),
       style: textTheme.bodyMedium?.copyWith(
-        color: _colorFor(status),
+        color: _colorFor(context, status),
         fontWeight: FontWeight.w700,
       ),
     );
@@ -671,7 +760,7 @@ class _MarkTakenButton extends StatelessWidget {
         key: buttonKey,
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: careblazersColors.cta,
+          backgroundColor: context.cb.cta,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           minimumSize: const Size(0, 44),
@@ -694,13 +783,13 @@ class _LateBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: careblazersColors.accentDeep.withValues(alpha: 0.14),
+        color: context.cb.accentDeep.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         'Late',
         style: textTheme.bodyMedium?.copyWith(
-          color: careblazersColors.accentDeep,
+          color: context.cb.accentDeep,
           fontWeight: FontWeight.w700,
           fontSize: 12,
         ),
@@ -722,7 +811,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load today's doses.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),
@@ -767,16 +856,16 @@ IconData _iconFor(DoseStatus status) {
   }
 }
 
-Color _colorFor(DoseStatus status) {
+Color _colorFor(BuildContext context, DoseStatus status) {
   switch (status) {
     case DoseStatus.taken:
-      return careblazersColors.success;
+      return context.cb.success;
     case DoseStatus.late:
-      return careblazersColors.accentDeep;
+      return context.cb.accentDeep;
     case DoseStatus.skipped:
-      return careblazersColors.primarySoft;
+      return context.cb.primarySoft;
     case DoseStatus.missed:
-      return careblazersColors.error;
+      return context.cb.error;
   }
 }
 

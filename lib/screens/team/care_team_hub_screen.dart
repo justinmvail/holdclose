@@ -8,21 +8,19 @@ import '../../theme.dart';
 import '../../widgets/hub_tile.dart';
 import '../../widgets/path_header.dart';
 
-/// The Care Team tile-hub at `/team` (BUILD_SPEC.md §5.13, TASKS.md
-/// Phase 14.26) — the single entry point to everything the caregiving
-/// circle shares: the calendar, tasks, shifts, the circle roster, the
-/// activity feed, and shared expenses.
+/// The Care Circle hub at `/team` (route path kept internal) — the
+/// coordination layer for everyone helping: tasks, shifts, the people
+/// roster, the activity feed, and shared expenses.
 ///
-/// This is a **landing screen**: the [PathHeader] carries a single crumb
-/// ("Care Team") so it renders the title row only — no breadcrumb trail
-/// and no Back control (you reach the hub by tapping the Care Team tab,
-/// and re-tapping it pops the branch back here).
+/// Renamed from "Care Circle" and folded under the **Care** tab
+/// (2026-06-06): it's now reached by the Care hub's gated "Care Circle"
+/// tile (a pushed page with a Back-to-Care header), not a top-level tab.
+/// The Calendar tile was removed — the one schedule lives under Care.
 ///
-/// Two visual states, gated by [AppSettings.teamCoordinationEnabled]:
-///   - **Enabled** — the documented six-tile [HubGrid].
-///   - **Disabled (default)** — a single "Coordinate care" CTA that
-///     flips the setting on with one tap. The tab stays mounted either
-///     way so the 5-tab IA invariant holds.
+/// Still gated by [AppSettings.teamCoordinationEnabled]: when off (and a
+/// deep link lands here), it shows the "Coordinate care" CTA instead of
+/// the grid. Reached via the hub tile it's always on, since that tile
+/// only appears when the toggle is on.
 class CareTeamHubScreen extends ConsumerWidget {
   const CareTeamHubScreen({super.key});
 
@@ -44,48 +42,42 @@ class CareTeamHubScreen extends ConsumerWidget {
   /// §5.13). Chip colors are [CareblazersColors] tokens — the HTML
   /// reference's coral/teal/amber/plum placeholders are discarded per
   /// docs/MENU_LAYOUT_SPEC.md.
-  static List<_TeamTileSpec> get _tiles => <_TeamTileSpec>[
-        _TeamTileSpec(
-          icon: Icons.calendar_view_week_outlined,
-          label: 'Calendar',
-          subLabel: 'week at a glance',
-          route: '/team/calendar',
-          chipColor: careblazersColors.cta,
-        ),
+  static List<_TeamTileSpec> _tilesFor(BuildContext context) =>
+      <_TeamTileSpec>[
         _TeamTileSpec(
           icon: Icons.task_alt_outlined,
           label: 'Tasks',
           subLabel: 'to-dos & assignments',
           route: '/team/tasks',
-          chipColor: careblazersColors.accentDeep,
+          chipColor: context.cb.accentDeep,
         ),
         _TeamTileSpec(
           icon: Icons.access_time_outlined,
           label: 'Shifts',
           subLabel: "who's on when",
           route: '/team/shifts',
-          chipColor: careblazersColors.link,
+          chipColor: context.cb.link,
         ),
         _TeamTileSpec(
           icon: Icons.diversity_3_outlined,
-          label: 'Care Circle',
-          subLabel: 'people helping',
+          label: 'People',
+          subLabel: 'who is helping',
           route: '/team/circle',
-          chipColor: careblazersColors.success,
+          chipColor: context.cb.success,
         ),
         _TeamTileSpec(
           icon: Icons.timeline_outlined,
           label: 'Activity',
           subLabel: 'recent updates',
           route: '/team/activity',
-          chipColor: careblazersColors.primarySoft,
+          chipColor: context.cb.primarySoft,
         ),
         _TeamTileSpec(
           icon: Icons.account_balance_wallet_outlined,
           label: 'Expenses',
           subLabel: 'costs & receipts',
           route: '/team/expenses',
-          chipColor: careblazersColors.primary,
+          chipColor: context.cb.primary,
         ),
       ];
 
@@ -94,30 +86,30 @@ class CareTeamHubScreen extends ConsumerWidget {
     final bool enabled =
         ref.watch(settingsProvider).teamCoordinationEnabled;
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-              // Single crumb → PathHeader suppresses the breadcrumb row
-              // and the Back control, rendering the title row only. The
-              // backLabel is required by the widget but unused here.
+              // Pushed under the Care tab now — a full breadcrumb (Care ›
+              // Care Circle) with a Back-to-Care affordance.
               child: PathHeader(
                 breadcrumbs: <PathHeaderCrumb>[
-                  PathHeaderCrumb(label: 'Care Team'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  PathHeaderCrumb(label: 'Care Circle'),
                 ],
-                title: 'Care Team',
-                backLabel: 'Back to Home',
-                leadingIcon: Icons.groups_outlined,
+                title: 'Care Circle',
+                backLabel: 'Back to Care',
+                leadingIcon: Icons.diversity_3_outlined,
               ),
             ),
             Expanded(
               child: enabled
                   ? HubGrid(
                       tiles: <HubTile>[
-                        for (final _TeamTileSpec spec in _tiles)
+                        for (final _TeamTileSpec spec in _tilesFor(context))
                           HubTile(
                             key: tileKey(spec.route),
                             icon: spec.icon,
@@ -161,7 +153,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             'Caring with others?',
             style: tt.headlineSmall?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
           ),
           const SizedBox(height: 8),
@@ -170,7 +162,7 @@ class _EmptyState extends StatelessWidget {
             "tonight, and split the receipts — without bouncing between "
             "five apps. You can turn this back off in Settings any time.",
             style: tt.bodyLarge?.copyWith(
-              color: careblazersColors.text,
+              color: context.cb.text,
             ),
           ),
           const SizedBox(height: 24),
@@ -180,7 +172,7 @@ class _EmptyState extends StatelessWidget {
             icon: const Icon(Icons.groups_outlined),
             label: const Text('Coordinate care'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: careblazersColors.cta,
+              backgroundColor: context.cb.cta,
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(56),
             ),
@@ -189,7 +181,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             "Or keep it just you — the rest of the app works the same.",
             style: tt.bodyMedium?.copyWith(
-              color: careblazersColors.text.withValues(alpha: 0.7),
+              color: context.cb.text.withValues(alpha: 0.7),
             ),
           ),
         ],

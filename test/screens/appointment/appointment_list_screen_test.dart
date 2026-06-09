@@ -4,6 +4,7 @@ import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/appointment.dart' as model;
 import 'package:careblazers/screens/appointment/appointment_list_screen.dart';
 import 'package:careblazers/services/appointment_repository.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
@@ -130,6 +131,10 @@ void main() {
     db = CareblazersDatabase(NativeDatabase.memory());
     repo = AppointmentRepository(db, clock: _fixedNow);
     await _seedProvider(db);
+    // The add-form debounce is a process-wide singleton; clear it so each
+    // case starts with a fresh window (otherwise a prior test's open would
+    // suppress this test's first tap).
+    appointmentAddDebounce.reset();
   });
 
   tearDown(() async {
@@ -157,10 +162,31 @@ void main() {
       expect(p.pushedPaths, <String>['/appointments/new']);
     });
 
-    testWidgets('AppBar title is "Appointments"',
+    testWidgets('PathHeader title is "Appointments"',
         (WidgetTester tester) async {
       await _pumpList(tester, repo: repo, db: db);
-      expect(find.widgetWithText(AppBar, 'Appointments'), findsOneWidget);
+      // The AppBar back-arrow header was replaced by the PathHeader
+      // pattern: the page title now lives in PathHeader.title, rendered
+      // as navy Text inside the header. "Appointments" also appears as
+      // the terminal breadcrumb crumb, so scope the assertion to the
+      // header's `title` property to keep checking the real title.
+      final PathHeader header =
+          tester.widget<PathHeader>(find.byType(PathHeader));
+      expect(header.title, 'Appointments');
+      // The "Back to X" control was removed; the parent breadcrumb crumb
+      // ('Care') is now the back affordance, rendered as a tappable
+      // InkWell in the header's breadcrumb row. (IA rename 2026-06: the
+      // former 'Medical' tab is now 'Care'; the route path stays /medical.)
+      expect(find.widgetWithText(InkWell, 'Care'), findsOneWidget);
+      // ...and the title renders as visible text (crumb + title =>
+      // findsWidgets).
+      expect(
+        find.descendant(
+          of: find.byType(PathHeader),
+          matching: find.text('Appointments'),
+        ),
+        findsWidgets,
+      );
     });
   });
 
@@ -295,6 +321,47 @@ void main() {
       final p = await _pumpList(tester, repo: repo, db: db);
 
       await tester.tap(find.byKey(AppointmentListScreen.fabKey));
+      await tester.pumpAndSettle();
+
+      expect(p.pushedPaths, <String>['/appointments/new']);
+    });
+
+    testWidgets(
+        'double-tapping the FAB pushes the add form exactly ONCE '
+        '(the duplicate-appointment vector)', (WidgetTester tester) async {
+      // Regression (alpha bug "got added twice", 2026-06-07): a fast
+      // double-tap on the add FAB used to push `/appointments/new` twice,
+      // stacking two forms the caregiver then both saved → two identical
+      // rows. The list now guards the push on `ModalRoute.isCurrent`, so
+      // the second tap — fired before the first push settles — is a no-op.
+      await repo.upsertAppointment(_appt(
+        id: 'appt-1',
+        startsAt: DateTime.utc(2026, 6, 15, 9),
+      ));
+
+      final p = await _pumpList(tester, repo: repo, db: db);
+
+      final Finder fab = find.byKey(AppointmentListScreen.fabKey);
+      // First tap kicks off the push; the second fires before the route
+      // transition settles. Only one form push must land.
+      await tester.tap(fab);
+      await tester.tap(fab, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(p.pushedPaths, <String>['/appointments/new'],
+          reason: 'the second tap must be dropped while the form is opening');
+    });
+
+    testWidgets(
+        'double-tapping the empty-state CTA pushes the add form exactly ONCE',
+        (WidgetTester tester) async {
+      // Same guard as the FAB, exercised through the empty-state CTA (the
+      // other entry point into the add form).
+      final p = await _pumpList(tester, repo: repo, db: db);
+
+      final Finder cta = find.byKey(AppointmentListScreen.emptyCtaKey);
+      await tester.tap(cta);
+      await tester.tap(cta, warnIfMissed: false);
       await tester.pumpAndSettle();
 
       expect(p.pushedPaths, <String>['/appointments/new']);

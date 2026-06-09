@@ -4,14 +4,23 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/appointment.dart';
 import '../models/care_event.dart';
 import '../models/care_plan_routine.dart';
+import '../models/care_task.dart';
 import '../models/health_log_entry.dart';
 import '../models/journal_entry.dart';
 import '../models/medication.dart';
-import '../providers/care_events_provider.dart';
+import '../providers/active_patient_provider.dart';
+import '../providers/care_events_provider.dart'
+    show
+        fallbackPatientId,
+        careEventFromAppointment,
+        careEventFromTask,
+        calendarTaskEventsProvider;
 import '../providers/care_plan_provider.dart';
+import '../providers/care_tasks_provider.dart';
 import '../providers/health_log_provider.dart';
 import '../providers/journal_entries_provider.dart';
 import '../services/appointment_repository.dart';
+import '../screens/medication/dose_log_screen.dart' show dosesTodayProvider;
 import '../services/medication_repository.dart'
     show MedicationRepository, ScheduledDose, medicationRepositoryProvider;
 import '../widgets/home/catch_me_up_card.dart' show catchMeUpEventsProvider;
@@ -21,9 +30,13 @@ part 'patient_timeline_provider.g.dart';
 // ---------------------------------------------------------------------------
 // Projection helpers — turn each source domain object into a [CareEvent].
 //
-// Single-patient v1: every projected event uses [calendarPatientId] as its
-// patientId. If/when the multi-patient model lands, these helpers gain a
-// `patientId` parameter and the source rows carry their own.
+// These are pure display projections (no `ref`), so for sources that don't
+// carry their own patientId (doses, journal entries) the event is stamped
+// with [fallbackPatientId] as a stable fallback label. The patient-scoped
+// *queries* that feed them — e.g. `repo.dosesInWindow` in
+// [patientDoseEvents] — now follow the active patient via
+// [activePatientIdProvider] (multi-patient, Issue #6); with one loved one
+// on file that resolves to the sole id, so the projection label matches.
 // ---------------------------------------------------------------------------
 
 /// Project a [ScheduledDose] onto the unified timeline.
@@ -55,8 +68,10 @@ CareEvent careEventFromScheduledDose(ScheduledDose dose) {
       // Activity-feed-style sentence — "Gave Donepezil 10 mg".
       subtitle: '$verb $medName $dosage',
       start: log.takenAt ?? dose.scheduledFor,
-      patientId: calendarPatientId,
+      patientId: fallbackPatientId,
       externalRef: log.id,
+      windowLabel: dose.window.label,
+      windowSlot: dose.scheduledFor,
     );
   }
   // Slot id encodes both the (window, entry) pair and the wall-clock
@@ -70,8 +85,10 @@ CareEvent careEventFromScheduledDose(ScheduledDose dose) {
     title: medName,
     subtitle: '$medName $dosage',
     start: dose.scheduledFor,
-    patientId: calendarPatientId,
+    patientId: fallbackPatientId,
     externalRef: slotId,
+    windowLabel: dose.window.label,
+    windowSlot: dose.scheduledFor,
   );
 }
 
@@ -108,7 +125,7 @@ CareEvent careEventFromHealthLogEntry(HealthLogEntry entry) {
 /// Project a [JournalEntry] onto the timeline.
 ///
 /// JournalEntry doesn't carry a patientId in v1 (single-patient), so the
-/// projection uses [calendarPatientId]. Title uses the behavior's label
+/// projection uses [fallbackPatientId]. Title uses the behavior's label
 /// so the chip reads "Repetitive questions" rather than the enum's
 /// underscored name.
 /// Project a [CarePlanRoutine] occurrence onto the timeline. Each
@@ -152,7 +169,7 @@ CareEvent careEventFromJournalEntry(JournalEntry entry) {
     title: entry.behavior.label,
     subtitle: subtitle,
     start: entry.createdAt,
-    patientId: calendarPatientId,
+    patientId: fallbackPatientId,
     externalRef: entry.id,
   );
 }
@@ -162,14 +179,24 @@ CareEvent careEventFromJournalEntry(JournalEntry entry) {
 // [CareEvent] ready for the merger.
 // ---------------------------------------------------------------------------
 
-/// Scheduled doses across a 7-day window projected onto the timeline.
+/// How far ahead the patient-timeline forecast projects scheduled doses
+/// and care-plan routines. The Schedule calendar's widest view (Upcoming)
+/// spans the next 30 days, and its Day/Week views can page to any day in
+/// that horizon, so the forecast has to cover the whole span — otherwise a
+/// permanent med stops appearing partway through the window (alpha report
+/// fb_1780960227608706: "Upcoming only goes one day past week"). Each
+/// calendar view clips this source to its own visible window, so a
+/// permanent med never renders past what's on screen.
+const Duration _forecastHorizon = Duration(days: 30);
+
+/// Scheduled doses across the forecast horizon projected onto the timeline.
 ///
-/// Walks `[today - 1d, today + 6d]` so the Home Schedule card's
-/// Today / Tomorrow / This Week sections all receive their dose
-/// rows — the prior single-day query was the reason "Medications
-/// only show on one day, never in the future." Past occurrences
-/// carry their [DoseLog] when one exists ([CareEventKind.doseLogged]);
-/// future occurrences carry no log ([CareEventKind.doseScheduled]).
+/// Walks `[today - 1d, today + 30d]` so the Home Schedule card and the
+/// Schedule calendar's Day / Week / Upcoming views all receive their dose
+/// rows for any day they can show. The calendar clips this to each view's
+/// visible window. Past occurrences carry their [DoseLog] when one exists
+/// ([CareEventKind.doseLogged]); future occurrences carry no log
+/// ([CareEventKind.doseScheduled]).
 @riverpod
 Future<List<CareEvent>> patientDoseEvents(Ref ref) async {
   // The wall-clock anchor for the forecast window. Reads via the
@@ -180,11 +207,13 @@ Future<List<CareEvent>> patientDoseEvents(Ref ref) async {
   // already takes — same source of "now" for both.
   final MedicationRepository repo =
       ref.watch(medicationRepositoryProvider);
+  final String patientId = await ref.watch(activePatientIdProvider.future);
   final DateTime now = DateTime.now();
   final DateTime today = DateTime(now.year, now.month, now.day);
   final DateTime from = today.subtract(const Duration(days: 1));
-  final DateTime to = today.add(const Duration(days: 7));
-  final List<ScheduledDose> doses = await repo.dosesInWindow(from, to);
+  final DateTime to = today.add(_forecastHorizon);
+  final List<ScheduledDose> doses =
+      await repo.dosesInWindow(from, to, patientId: patientId);
   return <CareEvent>[
     for (final ScheduledDose dose in doses) careEventFromScheduledDose(dose),
   ];
@@ -209,10 +238,11 @@ Future<List<CareEvent>> patientHealthLogEvents(Ref ref) async {
 /// Reads from [journalEntriesProvider] via `.future` so a decoder
 /// auto-log or a wizard journal entry flows in without explicit
 /// invalidation — same cadence the Home Recent Activity card uses.
-/// Care plan routines expanded into a 7-day forecast window
-/// (-1 day .. +6 days from the clock provider). Mirrors the
+/// Care plan routines expanded across the forecast horizon
+/// (-1 day .. +30 days from the clock provider). Mirrors the
 /// [patientDoseEvents] dose-expansion shape: each occurrence becomes a
-/// `CareEventKind.carePlanItem` event the calendar can render.
+/// `CareEventKind.carePlanItem` event the calendar can render. The
+/// calendar clips this to each view's visible window.
 @riverpod
 Future<List<CareEvent>> patientCarePlanEvents(Ref ref) async {
   final List<CarePlanRoutine> routines =
@@ -220,9 +250,9 @@ Future<List<CareEvent>> patientCarePlanEvents(Ref ref) async {
   if (routines.isEmpty) return const <CareEvent>[];
   final CarePlanRepository repo = ref.watch(carePlanRepositoryProvider);
   final DateTime now = DateTime.now();
-  final DateTime from = DateTime(now.year, now.month, now.day)
-      .subtract(const Duration(days: 1));
-  final DateTime to = from.add(const Duration(days: 7));
+  final DateTime today = DateTime(now.year, now.month, now.day);
+  final DateTime from = today.subtract(const Duration(days: 1));
+  final DateTime to = today.add(_forecastHorizon);
   return <CareEvent>[
     for (final CarePlanRoutine routine in routines)
       for (final DateTime occurrence in repo.expand(routine, from, to))
@@ -236,6 +266,26 @@ Future<List<CareEvent>> patientJournalEvents(Ref ref) async {
       await ref.watch(journalEntriesProvider.future);
   return <CareEvent>[
     for (final JournalEntry entry in entries) careEventFromJournalEntry(entry),
+  ];
+}
+
+/// Standalone tasks projected onto the patient timeline (unified
+/// task/routine model, 2026-06-06).
+///
+/// A task is the atom and a routine is the bundle: only standalone tasks
+/// (`routineId == null`) that carry a due time ride the schedule on their
+/// own. Routine-bound tasks render under their routine, so they're
+/// excluded here. Mirrors [calendarTaskEvents] — same filter, same
+/// projection helper — so a loose task looks identical on Home's Today
+/// schedule and the Schedule calendar.
+@riverpod
+Future<List<CareEvent>> patientTaskEvents(Ref ref) async {
+  final CareTasksRepository repo = ref.watch(careTasksRepositoryProvider);
+  final List<CareTask> tasks = await repo.listTasks();
+  return <CareEvent>[
+    for (final CareTask task in tasks)
+      if (task.routineId == null && task.dueAt != null)
+        careEventFromTask(task),
   ];
 }
 
@@ -268,8 +318,7 @@ Future<List<CareEvent>> patientJournalEvents(Ref ref) async {
 /// then read this merger to assert the merged ordering.
 /// Invalidates every cached provider that reads any time-keyed source
 /// the Home dashboard surfaces — `dosesTodayProvider`,
-/// `patientTimelineEventsProvider` (which cascades to
-/// `recentActivityProvider` and the Schedule card), and
+/// `patientTimelineEventsProvider` (which the Schedule card reads), and
 /// `catchMeUpEventsProvider`.
 ///
 /// Call this from mutation handlers (appointment / medication / health-log
@@ -289,6 +338,16 @@ void invalidatePatientTimeline(WidgetRef ref) {
   ref.invalidate(patientDoseEventsProvider);
   ref.invalidate(patientTimelineEventsProvider);
   ref.invalidate(catchMeUpEventsProvider);
+  // Standalone tasks ride the schedule too (unified task/routine model);
+  // invalidate both their patient-timeline + calendar projections so a
+  // newly-added or reconciled task shows on Home + the Schedule calendar.
+  ref.invalidate(patientTaskEventsProvider);
+  ref.invalidate(calendarTaskEventsProvider);
+  // The "Today's doses" screen + the Home "Medications today" card read
+  // this directly; Home keeps it alive across tab switches, so without an
+  // explicit invalidate a newly-added med never appears there (alpha bug
+  // report: "Medication not showing up in today's doses").
+  ref.invalidate(dosesTodayProvider);
 }
 
 @riverpod
@@ -316,6 +375,7 @@ Future<List<CareEvent>> patientTimelineEvents(Ref ref) async {
   events.addAll(await ref.watch(patientHealthLogEventsProvider.future));
   events.addAll(await ref.watch(patientJournalEventsProvider.future));
   events.addAll(await ref.watch(patientCarePlanEventsProvider.future));
+  events.addAll(await ref.watch(patientTaskEventsProvider.future));
 
   events.sort((CareEvent a, CareEvent b) => a.start.compareTo(b.start));
   return events;

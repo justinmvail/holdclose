@@ -6,6 +6,7 @@ import '../../models/forum.dart';
 import '../../providers/my_forum_profile_provider.dart';
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 part 'admin_reports_screen.g.dart';
 
@@ -101,12 +102,30 @@ class AdminReportsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bool isAdmin = ref.watch(isForumAdminProvider);
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text('Moderation queue'),
-      ),
+      backgroundColor: context.cb.background,
       body: SafeArea(
-        child: isAdmin ? const _AdminReportsBody() : const _ForbiddenStub(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Community', route: '/community'),
+                  PathHeaderCrumb(label: 'Moderation queue'),
+                ],
+                title: 'Moderation queue',
+                backLabel: 'Back to Community',
+                leadingIcon: Icons.shield_outlined,
+              ),
+            ),
+            Expanded(
+              child:
+                  isAdmin ? const _AdminReportsBody() : const _ForbiddenStub(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -195,7 +214,7 @@ class _ReportCard extends ConsumerWidget {
       key: AdminReportsScreen.reportRowKey(report.id),
       width: double.infinity,
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(14),
       ),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -210,7 +229,7 @@ class _ReportCard extends ConsumerWidget {
                 child: Text(
                   'id ${_shorten(report.targetId)}',
                   style: textTheme.bodyMedium?.copyWith(
-                    color: careblazersColors.text.withValues(alpha: 0.55),
+                    color: context.cb.text.withValues(alpha: 0.55),
                     fontSize: 13,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -228,7 +247,7 @@ class _ReportCard extends ConsumerWidget {
             'Reported by ${_shorten(report.reporterId)} '
             '· ${_relativeTime(report.createdAt)}',
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.text.withValues(alpha: 0.55),
+              color: context.cb.text.withValues(alpha: 0.55),
               fontSize: 13,
             ),
           ),
@@ -257,7 +276,7 @@ class _ReportCard extends ConsumerWidget {
                 child: ElevatedButton(
                   key: AdminReportsScreen.actionBanKey(report.id),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: careblazersColors.error,
+                    backgroundColor: context.cb.error,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () =>
@@ -295,8 +314,8 @@ class _TargetChip extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: isPost
-            ? careblazersColors.primary
-            : careblazersColors.accentDeep,
+            ? context.cb.primary
+            : context.cb.accentDeep,
         borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -327,7 +346,7 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(Icons.verified_outlined,
-                size: 56, color: careblazersColors.success),
+                size: 56, color: context.cb.success),
             const SizedBox(height: 12),
             Text(
               'Queue is empty.',
@@ -338,7 +357,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               'No pending reports right now. Nice.',
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.text.withValues(alpha: 0.65),
+                color: context.cb.text.withValues(alpha: 0.65),
               ),
               textAlign: TextAlign.center,
             ),
@@ -366,7 +385,7 @@ class _ErrorState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(Icons.error_outline,
-                size: 56, color: careblazersColors.error),
+                size: 56, color: context.cb.error),
             const SizedBox(height: 12),
             Text(message,
                 style: textTheme.bodyMedium, textAlign: TextAlign.center),
@@ -396,7 +415,7 @@ class _ForbiddenStub extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(Icons.lock_outline,
-                size: 56, color: careblazersColors.text.withValues(alpha: 0.4)),
+                size: 56, color: context.cb.text.withValues(alpha: 0.4)),
             const SizedBox(height: 12),
             Text(
               'Moderation is admin-only.',
@@ -408,7 +427,7 @@ class _ForbiddenStub extends StatelessWidget {
               "This screen is hidden for everyone except the board's "
               'moderator.',
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.text.withValues(alpha: 0.65),
+                color: context.cb.text.withValues(alpha: 0.65),
               ),
               textAlign: TextAlign.center,
             ),

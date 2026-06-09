@@ -26,6 +26,14 @@ void main() {
       expect(s.useBundledVoice, isTrue,
           reason: 'Phase 9.5 — bundled neural TTS is the v1 default');
     });
+
+    test('theme preference defaults to system (follow the phone)', () {
+      final AppSettings s = AppSettings.defaults();
+      expect(s.themePreference, ThemePreference.system,
+          reason: 'fresh install follows the phone appearance setting');
+      expect(s.darkStartHour, 20);
+      expect(s.darkEndHour, 7);
+    });
   });
 
   group('AppSettings JSON round-trip', () {
@@ -44,8 +52,34 @@ void main() {
         allowAudioDuringQuietHours: true,
         darkModeAtNight: false,
         resetOnLaunchDemo: true,
+        themePreference: ThemePreference.scheduled,
+        darkStartHour: 21,
+        darkEndHour: 6,
       );
       expect(AppSettings.fromJson(custom.toJson()), equals(custom));
+    });
+
+    test('round-trips each ThemePreference enum value', () {
+      for (final ThemePreference pref in ThemePreference.values) {
+        final AppSettings s =
+            AppSettings.defaults().copyWith(themePreference: pref);
+        expect(AppSettings.fromJson(s.toJson()).themePreference, pref);
+      }
+    });
+
+    test('legacy JSON without themePreference hydrates to system default',
+        () {
+      // A persisted payload from before the ThemePreference keys existed
+      // (only the old darkModeAtNight bool). Missing keys fall back to the
+      // @Default values rather than throwing.
+      final Map<String, dynamic> legacy = AppSettings.defaults().toJson()
+        ..remove('themePreference')
+        ..remove('darkStartHour')
+        ..remove('darkEndHour');
+      final AppSettings hydrated = AppSettings.fromJson(legacy);
+      expect(hydrated.themePreference, ThemePreference.system);
+      expect(hydrated.darkStartHour, 20);
+      expect(hydrated.darkEndHour, 7);
     });
 
     test('round-trips each FontSizeMultiplier enum value', () {

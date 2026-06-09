@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../seed/community_guidelines.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 /// Locked, scrollable read of [communityGuidelines] (BUILD_SPEC.md §13 /
 /// Phase 13.12).
@@ -34,39 +36,67 @@ class CommunityGuidelinesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget body = _GuidelinesContent();
     if (_embedded) {
-      return body;
+      // Chrome-less body for the first-post acknowledgement modal — no
+      // PathHeader, the modal frame supplies its own chrome.
+      return const _GuidelinesContent();
     }
+    // Full-page route: the PathHeader is the header (no AppBar). The
+    // canonical breadcrumb parent is the Community tab even though the
+    // immediate pusher is the compose screen.
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text('Community guidelines'),
-      ),
-      body: SafeArea(child: body),
+      backgroundColor: context.cb.background,
+      body: const SafeArea(child: _GuidelinesContent(showHeader: true)),
     );
   }
 }
 
 class _GuidelinesContent extends StatelessWidget {
+  const _GuidelinesContent({this.showHeader = false});
+
+  /// Whether to render the [PathHeader] at the top of the scroll. True on
+  /// the full-page route; false in the embedded modal body (the modal
+  /// supplies its own chrome).
+  final bool showHeader;
+
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
+    // Localization / i18n (#18). Screen-local chrome strings (header,
+    // breadcrumbs, headline, subtitle) come from the ARB-backed
+    // AppLocalizations. The four guideline section bodies stay sourced
+    // from `communityGuidelines` — that copy is deliberately treated as
+    // locked content/spec, not config (see seed/community_guidelines.dart),
+    // and is out of scope for this framework-establishing conversion.
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return SingleChildScrollView(
       key: CommunityGuidelinesScreen.scrollViewKey,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          if (showHeader) ...<Widget>[
+            PathHeader(
+              breadcrumbs: <PathHeaderCrumb>[
+                PathHeaderCrumb(label: l10n.navHome, route: '/'),
+                PathHeaderCrumb(label: l10n.navCommunity, route: '/community'),
+                PathHeaderCrumb(label: l10n.communityGuidelinesTitle),
+              ],
+              title: l10n.communityGuidelinesTitle,
+              backLabel: l10n.communityGuidelinesBack,
+              leadingIcon: Icons.menu_book_outlined,
+            ),
+            const SizedBox(height: 20),
+          ],
           Text(
-            'The four agreements.',
+            l10n.communityGuidelinesHeadline,
             style: textTheme.headlineMedium,
           ),
           const SizedBox(height: 4),
           Text(
-            'A two-minute read. These are the lines we hold each other to.',
+            l10n.communityGuidelinesSubtitle,
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.text.withValues(alpha: 0.7),
+              color: context.cb.text.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 20),
@@ -95,7 +125,7 @@ class _GuidelineSectionCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),

@@ -171,12 +171,36 @@ void main() {
       expect(careblazersDarkTheme.colorScheme.onSurface, const Color(0xFFE8E6E2));
     });
 
-    test('CTA orange is unchanged from light mode', () {
-      expect(careblazersDarkTheme.colorScheme.secondary, careblazersColors.cta);
+    test('secondary is the dark-palette CTA (brightened for contrast)', () {
+      // Dark mode brightens the brand orange so the CTA keeps AA contrast
+      // on the dark canvas; it intentionally differs from the light CTA.
+      expect(
+        careblazersDarkTheme.colorScheme.secondary,
+        careblazersColorsDark.cta,
+      );
     });
 
-    test('primary navy carries through to dark mode', () {
-      expect(careblazersDarkTheme.colorScheme.primary, careblazersColors.primary);
+    test('primary is the dark-palette primary (lightened slate-blue)', () {
+      // Navy-on-navy is illegible, so dark mode lifts `primary` to a pale
+      // slate-blue for headings/icons/chips.
+      expect(
+        careblazersDarkTheme.colorScheme.primary,
+        careblazersColorsDark.primary,
+      );
+    });
+
+    test('registers the dark CareblazersColors extension', () {
+      expect(
+        careblazersDarkTheme.extension<CareblazersColors>(),
+        same(careblazersColorsDark),
+      );
+    });
+
+    test('light theme registers the light CareblazersColors extension', () {
+      expect(
+        careblazersLightTheme.extension<CareblazersColors>(),
+        same(careblazersColors),
+      );
     });
 
     test('scaffoldBackgroundColor matches the dark surface', () {

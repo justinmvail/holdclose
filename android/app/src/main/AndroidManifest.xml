@@ -1,7 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Device-capture permissions (#8). Required by the record +
+         speech_to_text plugins (mic) and image_picker (camera + gallery)
+         so the journal photo/voice-note attach + Add-sheet voice button
+         work on device. Inert unless the USE_REAL_CAPTURE build flag
+         selects the real capture impls. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Photo access: scoped media permission on Android 13+ (API 33),
+         legacy storage read capped at API 32 for older devices. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <application
         android:label="careblazers"
         android:name="${applicationName}"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
@@ -24,6 +38,18 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Care Circle invite LINKS (2026-06-08). Opens the app on a
+                 `careblazers://` custom-scheme deep link (e.g.
+                 `careblazers://join/<token>`) tapped from a shared text
+                 link / the backend's public /join/<token> landing page.
+                 The app_links plugin delivers the URI; app.dart redeems
+                 the token. iOS registers the same scheme in Info.plist. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="careblazers"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
@@ -40,6 +66,13 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Lets speech_to_text discover the on-device speech recognizer
+             on Android 11+ (package visibility). Without this the
+             recognizer reports unavailable and RealVoiceCapture yields
+             no transcript. (#8) -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 </manifest>

@@ -57,6 +57,14 @@ class AppSettingsTable extends Table {
 /// are "one user, one install" facts in v1.
 const String appSettingsSingletonId = 'singleton';
 
+/// Fixed primary key for the active-loved-one pointer row in
+/// [AppSettingsTable] (multi-patient, Issue #6). The [AppSettingsTable]
+/// is a generic `id`/`payload` key-value store, so the active patient id
+/// rides as its own row (payload = the patient id string) alongside the
+/// `'singleton'` settings blob — no schema bump, and the existing
+/// settings reset/wipe clears it for free.
+const String activePatientSettingsId = 'active-patient';
+
 /// One persisted dementia-care chat thread (TASKS.md Phase 11.2). Each
 /// row carries the full freezed [Conversation] as a JSON [payload] so
 /// new fields on the model don't require a schema bump; [createdAtMs]
@@ -353,6 +361,9 @@ class EmergencyCardsTable extends Table {
   IntColumn get updatedAtMs => integer()();
   TextColumn get attachmentPath => text().nullable()();
 
+  /// R2 storage key for [attachmentPath]'s uploaded bytes (schemaVersion 17).
+  TextColumn get attachmentKey => text().nullable()();
+
   /// JSON-encoded `List<String>`.
   TextColumn get conditions => text()();
   TextColumn get medications => text()();
@@ -389,6 +400,9 @@ class PowerOfAttorneyDocsTable extends Table {
   IntColumn get updatedAtMs => integer()();
   TextColumn get attachmentPath => text().nullable()();
 
+  /// R2 storage key for [attachmentPath]'s uploaded bytes (schemaVersion 17).
+  TextColumn get attachmentKey => text().nullable()();
+
   TextColumn get agentName => text()();
   TextColumn get alternateName => text().nullable()();
 
@@ -396,6 +410,9 @@ class PowerOfAttorneyDocsTable extends Table {
   TextColumn get scope => text()();
   IntColumn get effectiveDateMs => integer()();
   TextColumn get scanPath => text().nullable()();
+
+  /// R2 storage key for [scanPath]'s uploaded bytes (schemaVersion 17).
+  TextColumn get scanKey => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
@@ -419,12 +436,19 @@ class IdentificationDocsTable extends Table {
   IntColumn get updatedAtMs => integer()();
   TextColumn get attachmentPath => text().nullable()();
 
+  /// R2 storage key for [attachmentPath]'s uploaded bytes (schemaVersion 17).
+  TextColumn get attachmentKey => text().nullable()();
+
   /// [IdKind] enum `.name`.
   TextColumn get kind => text()();
   TextColumn get idNumber => text()();
   IntColumn get expiresOnMs => integer().nullable()();
   TextColumn get photoFrontPath => text().nullable()();
   TextColumn get photoBackPath => text().nullable()();
+
+  /// R2 storage keys for [photoFrontPath] / [photoBackPath] (schemaVersion 17).
+  TextColumn get photoFrontKey => text().nullable()();
+  TextColumn get photoBackKey => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
@@ -580,6 +604,31 @@ class ExpensesTable extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// The durable outbound queue for server-authoritative sync. One row per
+/// pending local write (a model upsert or a tombstone delete) that hasn't
+/// yet been pushed to the backend (server-authoritative sync). The
+/// [SyncController] enqueues here on every local write when a circle is
+/// active, drains it on `push()`, and deletes the rows the server accepts.
+///
+/// [seq] is an auto-incrementing primary key so the drain orders writes
+/// chronologically and can delete an exact batch by seq. To keep the
+/// queue bounded the controller coalesces by (collection, docId) — a
+/// newer enqueue for the same doc replaces the older pending row — so a
+/// chatty screen editing one med a dozen times leaves a single pending
+/// row, not twelve. [payload] is the model's `toJson` encoded as a JSON
+/// string (empty `{}` for a delete); [deleted] is the tombstone flag.
+class SyncOutboxTable extends Table {
+  @override
+  String get tableName => 'sync_outbox';
+
+  IntColumn get seq => integer().autoIncrement()();
+  TextColumn get collection => text()();
+  TextColumn get docId => text()();
+  TextColumn get payload => text()();
+  IntColumn get clientUpdatedAt => integer()();
+  IntColumn get deleted => integer()();
 }
 
 /// One caregiver's membership in a loved one's care circle (TASKS.md

@@ -35,15 +35,61 @@
 		<string>App-Prefs</string>
 		<string>prefs</string>
 	</array>
+	<!-- Google Sign-In callback (google_sign_in_ios). The scheme MUST be
+	     the REVERSED iOS OAuth client id, e.g. if the iOS client id is
+	     `1234567890-abcdef.apps.googleusercontent.com` then the scheme is
+	     `com.googleusercontent.apps.1234567890-abcdef`. OPERATOR: replace
+	     REVERSED_IOS_CLIENT_ID_PLACEHOLDER below with that reversed id
+	     (it pairs with the `--dart-define=GOOGLE_IOS_CLIENT_ID=...` build
+	     flag). Without this the Google sheet can't redirect back into the
+	     app on iOS. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.187697773608-ica8fo1ho8brojse9ai1lq63kbb2nqae</string>
+			</array>
+		</dict>
+		<!-- Care Circle invite LINKS (2026-06-08). Registers the
+		     `careblazers://` custom scheme so a tapped
+		     `careblazers://join/<token>` link opens the app; app_links
+		     delivers the URI to app.dart, which redeems the token. Mirrors
+		     the Android MainActivity intent-filter. -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>app.careblazers.invite</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>careblazers</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<!-- Dev-only: the Dart-side ClaudeCLIProvider POSTs to the
-	     local `tools/claude_shim.py` LLM shim at
-	     http://localhost:8765/generate. iOS App Transport Security
-	     blocks plain HTTP by default; this exception allows
-	     localhost only. The bundled-TTS path no longer hits HTTP —
-	     Phase 10's on-device espeak-ng integration replaced the
-	     pitch-week HttpPhonemizer. -->
+	<!-- Device-capture usage strings (#8). Required by image_picker,
+	     record, and speech_to_text so the journal photo/voice-note
+	     attach + the Add-sheet voice button can request access on iOS.
+	     Copy is caregiver-facing and never names the speech tech (the
+	     LLM/recognizer stays invisible per CLAUDE.md voice rules). -->
+	<key>NSCameraUsageDescription</key>
+	<string>Careblazers uses the camera so you can snap a photo for a journal entry about your loved one.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Careblazers uses the microphone so you can add a voice note or speak an entry instead of typing.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Careblazers needs access to your photos so you can attach one to a journal entry about your loved one.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Careblazers turns what you say into text so you can add an entry by voice instead of typing.</string>
+	<!-- Dev-only plain-HTTP exception (iOS ATS blocks http:// by default).
+	     localhost: the local LLM shim (tools/claude_shim.py), used when the
+	     app points SHIM_URL at http://localhost:8765 for local dev. Remote
+	     testers reach the shim over HTTPS via Tailscale Funnel, so no other
+	     cleartext hosts are needed. REMOVE for an App Store build — a real
+	     backend must be HTTPS. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSExceptionDomains</key>

@@ -123,33 +123,51 @@ class EmergencyCardScreen extends ConsumerWidget {
         ref.watch(emergencyCardViewProvider);
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        // The title lives in the body PathHeader; this bar only hosts the
-        // Edit action (and suppresses the auto back-arrow — the PathHeader
-        // owns the labeled Back control).
-        automaticallyImplyLeading: false,
-        backgroundColor: careblazersColors.background,
-        elevation: 0,
-        actions: <Widget>[
-          Semantics(
-            button: true,
-            label: 'Edit the emergency card.',
-            child: IconButton(
-              key: editActionKey,
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit emergency card',
-              color: careblazersColors.primary,
-              onPressed: () => context.push(editRoute),
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: context.cb.background,
+      // No AppBar: the Edit action lives in the PathHeader's trailing slot
+      // so an empty bar doesn't push the whole card down. The PathHeader
+      // sits OUTSIDE the `.when()` so the breadcrumb back affordance is
+      // present on EVERY branch — including the loading and error states
+      // (alpha bug fb_1780932762335231: those branches were swipe-only
+      // with no header).
       body: SafeArea(
-        child: async.when(
-          loading: () => const SizedBox.shrink(),
-          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-          data: (EmergencyCardView view) => _Body(view: view),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: PathHeader(
+                breadcrumbs: const <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  PathHeaderCrumb(label: 'Emergency Card'),
+                ],
+                title: 'Emergency Card',
+                leadingIcon: Icons.emergency_outlined,
+                // Edit lives here (not an AppBar) so it sits beside the
+                // title instead of adding a bar that pushes the card down.
+                trailing: Semantics(
+                  button: true,
+                  label: 'Edit the emergency card.',
+                  child: IconButton(
+                    key: EmergencyCardScreen.editActionKey,
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Edit emergency card',
+                    color: context.cb.primary,
+                    onPressed: () =>
+                        context.push(EmergencyCardScreen.editRoute),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: async.when(
+                loading: () => const SizedBox.shrink(),
+                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                data: (EmergencyCardView view) => _Body(view: view),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -172,17 +190,6 @@ class _Body extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const PathHeader(
-            breadcrumbs: <PathHeaderCrumb>[
-              PathHeaderCrumb(label: 'Home', route: '/'),
-              PathHeaderCrumb(label: 'Medical', route: '/medical'),
-              PathHeaderCrumb(label: 'Emergency Card'),
-            ],
-            title: 'Emergency Card',
-            backLabel: 'Back to Medical',
-            leadingIcon: Icons.emergency_outlined,
-          ),
-          const SizedBox(height: 12),
           _IceHeadline(),
           const SizedBox(height: 16),
           if (patient == null)
@@ -245,7 +252,7 @@ class _Body extends ConsumerWidget {
               Text(
                 'Updated ${_formatDate(card.updatedAt)}',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: careblazersColors.primarySoft,
+                      color: context.cb.primarySoft,
                     ),
               ),
             ],
@@ -268,7 +275,7 @@ class _IceHeadline extends StatelessWidget {
       'ICE CARD — Show to First Responders',
       key: EmergencyCardScreen.headlineKey,
       style: textTheme.headlineMedium?.copyWith(
-        color: careblazersColors.cta,
+        color: context.cb.cta,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -294,13 +301,13 @@ class _EmptyPlaceholder extends StatelessWidget {
           Icon(
             Icons.emergency_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             "Add your loved one's profile to build the emergency card.",
             style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -308,7 +315,7 @@ class _EmptyPlaceholder extends StatelessWidget {
           Text(
             'Tap edit to record the conditions, allergies, contacts, and '
             'insurance a first responder needs.',
-            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -339,10 +346,10 @@ class _SectionCard extends StatelessWidget {
       key: sectionKey,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: careblazersColors.primary.withValues(alpha: 0.12),
+          color: context.cb.primary.withValues(alpha: 0.12),
           width: 1.5,
         ),
       ),
@@ -353,7 +360,7 @@ class _SectionCard extends StatelessWidget {
           Text(
             label,
             style: textTheme.titleLarge?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -393,7 +400,7 @@ class _PatientBlock extends StatelessWidget {
               Text(
                 patient.name,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: careblazersColors.primary,
+                  color: context.cb.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -401,7 +408,7 @@ class _PatientBlock extends StatelessWidget {
               Text(
                 'Age ${patient.age}',
                 style: textTheme.bodyMedium?.copyWith(
-                  color: careblazersColors.primarySoft,
+                  color: context.cb.primarySoft,
                 ),
               ),
             ],
@@ -437,13 +444,13 @@ class _InitialsAvatar extends StatelessWidget {
       height: 52,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: careblazersColors.primary.withValues(alpha: 0.10),
+        color: context.cb.primary.withValues(alpha: 0.10),
         shape: BoxShape.circle,
       ),
       child: Text(
         _initials,
         style: textTheme.titleLarge?.copyWith(
-          color: careblazersColors.primary,
+          color: context.cb.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -485,13 +492,13 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: careblazersColors.primary.withValues(alpha: 0.08),
+        color: context.cb.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
         style: textTheme.bodyMedium?.copyWith(
-          color: careblazersColors.primary,
+          color: context.cb.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -524,14 +531,14 @@ class _MedicationMirror extends StatelessWidget {
                   TextSpan(
                     text: item.name,
                     style: textTheme.bodyLarge?.copyWith(
-                      color: careblazersColors.primary,
+                      color: context.cb.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   TextSpan(
                     text: '  ${item.dosage}',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: careblazersColors.text,
+                      color: context.cb.text,
                     ),
                   ),
                 ],
@@ -572,7 +579,7 @@ class _ContactList extends ConsumerWidget {
                       Text(
                         '${contacts[i].name} — ${contacts[i].relation}',
                         style: textTheme.bodyLarge?.copyWith(
-                          color: careblazersColors.primary,
+                          color: context.cb.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -580,7 +587,7 @@ class _ContactList extends ConsumerWidget {
                       Text(
                         contacts[i].phone,
                         style: textTheme.bodyMedium?.copyWith(
-                          color: careblazersColors.text,
+                          color: context.cb.text,
                         ),
                       ),
                     ],
@@ -592,7 +599,7 @@ class _ContactList extends ConsumerWidget {
                   child: IconButton(
                     key: EmergencyCardScreen.callButtonKey(i),
                     icon: const Icon(Icons.call),
-                    color: careblazersColors.cta,
+                    color: context.cb.cta,
                     tooltip: 'Call ${contacts[i].name}',
                     onPressed: () => ref
                         .read(linkLauncherProvider)
@@ -659,7 +666,7 @@ class _LabeledValue extends StatelessWidget {
             child: Text(
               label,
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.primarySoft,
+                color: context.cb.primarySoft,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -669,7 +676,7 @@ class _LabeledValue extends StatelessWidget {
             child: Text(
               value.isEmpty ? '—' : value,
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.text,
+                color: context.cb.text,
               ),
             ),
           ),
@@ -694,7 +701,7 @@ class _DonorBlock extends StatelessWidget {
     return Text(
       _donorLabel(status),
       style: textTheme.bodyLarge?.copyWith(
-        color: careblazersColors.text,
+        color: context.cb.text,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -727,7 +734,7 @@ class _EmptyLine extends StatelessWidget {
     return Text(
       label,
       style: textTheme.bodyMedium?.copyWith(
-        color: careblazersColors.primarySoft,
+        color: context.cb.primarySoft,
         fontStyle: FontStyle.italic,
       ),
     );
@@ -747,7 +754,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load the emergency card.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),

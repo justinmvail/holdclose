@@ -192,10 +192,47 @@ Future<({
 Override ttsBackendOverride(TTSProvider impl) =>
     ttsProvider.overrideWith((Ref ref) => impl);
 
+/// Walks every rendered string on screen and fails if any of them looks
+/// like the raw decoder JSON the alpha build briefly flashed (`{"say`,
+/// `"dont_say"`, `"tweak":`). The streaming/loading state must show a
+/// spinner + calm line — never the model's braces.
+void _expectNoRawJson() {
+  const List<String> jsonMarkers = <String>[
+    '{"say',
+    '"dont_say"',
+    '"tweak":',
+    '["',
+  ];
+  final Iterable<String> rendered = <String>[
+    for (final Text t in find
+        .byType(Text)
+        .evaluate()
+        .map((Element e) => e.widget as Text))
+      if (t.data != null) t.data!,
+    for (final RichText t in find
+        .byType(RichText)
+        .evaluate()
+        .map((Element e) => e.widget as RichText))
+      t.text.toPlainText(),
+  ];
+  for (final String s in rendered) {
+    for (final String marker in jsonMarkers) {
+      expect(
+        s.contains(marker),
+        isFalse,
+        reason: 'raw JSON ("$marker") must never be shown — found in: "$s"',
+      );
+    }
+  }
+}
+
 void main() {
   group('DecoderResultScreen — streaming (BUILD_SPEC.md §5.4)', () {
-    testWidgets('shows skeleton + accumulated text before done',
+    testWidgets('shows the loading state and NEVER raw JSON before done',
         (WidgetTester tester) async {
+      // Two raw, structurally-incomplete JSON partials — neither parses
+      // into a DecoderResult, so the screen must stay in the loading
+      // state and never paint the braces (alpha bug: raw JSON flash).
       final _ScriptedLLM llm = _ScriptedLLM(<DecoderChunk>[
         const DecoderChunk.partial(accumulatedJson: '{"say": ["that '),
         const DecoderChunk.partial(
@@ -203,25 +240,53 @@ void main() {
       ]);
       await _pumpScreen(tester, llm: llm);
 
-      // Initial frame: loading state — header + skeleton.
+      // Initial frame: loading state — header + spinner + calm line +
+      // skeleton.
       await tester.pump();
       expect(find.text('Dr. Natali says:'), findsOneWidget);
       expect(find.byKey(DecoderResultScreen.skeletonKey), findsOneWidget);
+      expect(
+        find.byKey(DecoderResultScreen.loadingSpinnerKey),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(DecoderResultScreen.loadingMessageKey),
+        findsOneWidget,
+      );
+      expect(find.text('Putting together what to say…'), findsOneWidget);
 
-      // First partial arrives.
+      // Pump the partials through — the loading state persists and no
+      // result card / raw JSON ever appears.
+      for (int i = 0; i < 3; i++) {
+        await tester.pump();
+        expect(find.byKey(DecoderResultScreen.loadingSpinnerKey),
+            findsOneWidget);
+        expect(find.byKey(DecoderResultScreen.sayLineKey(0)), findsNothing);
+        _expectNoRawJson();
+      }
+    });
+
+    testWidgets('does not surface raw JSON for a clean partial either',
+        (WidgetTester tester) async {
+      // A partial that DOES parse cleanly. The structured say-line is
+      // allowed (it's parsed content), but the raw `{"say"` text must
+      // still never appear on screen.
+      final _ScriptedLLM llm = _ScriptedLLM(<DecoderChunk>[
+        const DecoderChunk.partial(
+          accumulatedJson:
+              '{"say": ["That sounds hard."], "tweak": [], "dont_say": []}',
+        ),
+      ]);
+      await _pumpScreen(tester, llm: llm);
+
       await tester.pump();
-      expect(find.byKey(DecoderResultScreen.skeletonKey), findsOneWidget);
-      // Either the structured partial render landed (sayLineKey(0)) or
-      // the raw streaming text fallback did — the spec says "word-by-
-      // word fade-in of partial content", which both shapes satisfy.
-      final bool gotStructured =
-          find.byKey(DecoderResultScreen.sayLineKey(0)).evaluate().isNotEmpty;
-      final bool gotStreamingFallback = find
-          .byKey(DecoderResultScreen.streamingTextKey)
-          .evaluate()
-          .isNotEmpty;
-      expect(gotStructured || gotStreamingFallback, isTrue,
-          reason: 'streaming should surface SOME partial content');
+      await tester.pump();
+
+      // Parsed say-line surfaced.
+      expect(find.byKey(DecoderResultScreen.sayLineKey(0)), findsOneWidget);
+      expect(find.text('That sounds hard.'), findsOneWidget);
+      // ...but never the raw braces.
+      _expectNoRawJson();
     });
 
     testWidgets('on done renders the full §5.4 layout',
@@ -274,6 +339,12 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(DecoderResultScreen.talkToNataliKey), findsOneWidget);
+
+      // The loading affordances are gone once done, and the raw
+      // `{"say":[` partial that streamed first never leaked onto screen.
+      expect(find.byKey(DecoderResultScreen.loadingSpinnerKey), findsNothing);
+      expect(find.byKey(DecoderResultScreen.skeletonKey), findsNothing);
+      _expectNoRawJson();
     });
 
     testWidgets('auto-logs a JournalEntry on first done',
@@ -360,6 +431,13 @@ void main() {
       final pumped = await _pumpScreen(tester, llm: llm);
       await tester.pumpAndSettle();
 
+      // The PathHeader's breadcrumb + title + back control sit above the
+      // scrolling result body, so the bottom-most outcome button now lands
+      // below the test surface fold — scroll it in before tapping.
+      await tester.ensureVisible(
+        find.byKey(DecoderResultScreen.talkToNataliKey),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(DecoderResultScreen.talkToNataliKey));
       await tester.pumpAndSettle();
 

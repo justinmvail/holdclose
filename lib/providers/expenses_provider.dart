@@ -7,14 +7,16 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../db/database.dart';
 import '../models/caregiver.dart';
 import '../models/expense.dart';
+import '../services/sync_sink.dart';
 import 'care_circle_provider.dart';
+import 'care_events_provider.dart' show fallbackPatientId;
 
 part 'expenses_provider.g.dart';
 
 /// Logical patient id new expenses are stamped with (TASKS.md Phase 14.33)
-/// — the single-install loved one. Same fallback constant the calendar +
-/// task + shift forms use.
-const String expensesPatientId = 'demo-patient-mary';
+/// — the single-install loved one. Aliases the shared neutral
+/// [fallbackPatientId] so there's one source of truth for the value.
+const String expensesPatientId = fallbackPatientId;
 
 /// Persistence for the Care Team expenses ledger (TASKS.md Phase 14.33).
 ///
@@ -24,7 +26,7 @@ const String expensesPatientId = 'demo-patient-mary';
 /// without decoding every blob. Tests build a repository directly against
 /// `CareblazersDatabase(NativeDatabase.memory())` so each test gets an
 /// isolated DB.
-class ExpensesRepository {
+class ExpensesRepository with SyncSinkHost {
   ExpensesRepository(this._db);
 
   final CareblazersDatabase _db;
@@ -43,11 +45,13 @@ class ExpensesRepository {
             payload: jsonEncode(expense.toJson()),
           ),
         );
+    emitUpsert('expenses', expense.id, expense.toJson());
   }
 
   /// Drop the expense with this id. No-op if absent.
   Future<void> deleteExpense(String id) async {
     await (_db.delete(_db.expensesTable)..where((t) => t.id.equals(id))).go();
+    emitDelete('expenses', id);
   }
 
   /// One expense by id, or null if absent.

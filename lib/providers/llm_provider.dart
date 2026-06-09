@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -9,6 +10,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/behavior.dart';
 import '../models/decoder_result.dart';
 import '../models/triage.dart';
+import '../seed/activity_summary_prompt.dart';
 import '../seed/fake_llm_seeds.dart';
 import '../seed/system_prompt.dart';
 
@@ -256,11 +258,31 @@ class FakeLLMProvider implements LLMProvider {
   }
 }
 
-/// The local shim endpoint (BUILD_SPEC.md §8 — `tools/claude_shim.py`
-/// listens on `127.0.0.1:8765`). Hard-coded because the build never
-/// talks to anything else from this provider — production goes through
-/// the deferred [ClaudeAPIProvider].
-const String claudeShimEndpoint = 'http://localhost:8765/generate';
+/// Base URL of the LLM shim (BUILD_SPEC.md §8 — `tools/claude_shim.py`).
+/// Defaults to the local dev shim on `127.0.0.1:8765`; override for a
+/// remote test server (e.g. a No-IP host this Mac forwards to) with
+/// `--dart-define=SHIM_URL=http://<host>:<port>`. Production goes through
+/// the deferred [ClaudeAPIProvider], not this.
+const String shimBaseUrl =
+    String.fromEnvironment('SHIM_URL', defaultValue: 'http://localhost:8765');
+
+/// The `/generate` endpoint, built from [shimBaseUrl].
+const String claudeShimEndpoint = '$shimBaseUrl/generate';
+
+/// Shared secret the shim requires when it's exposed beyond localhost.
+/// Empty (no auth) for local dev. When set via
+/// `--dart-define=SHIM_TOKEN=<secret>`, every shim request carries
+/// `Authorization: Bearer <token>` so a public host isn't an open door to
+/// the operator's Claude subscription. Baked into the build — extractable
+/// from the binary, so it deters drive-by abuse, not a determined attacker.
+const String shimToken = String.fromEnvironment('SHIM_TOKEN', defaultValue: '');
+
+/// `Authorization` header for shim requests, or an empty map when no
+/// [shimToken] is configured. Shared by the decoder + chat backends.
+Map<String, String> shimAuthHeaders() =>
+    shimToken.isEmpty ? const <String, String>{} : <String, String>{
+      'Authorization': 'Bearer $shimToken',
+    };
 
 /// Real, shim-backed provider (BUILD_SPEC.md §6.1 + §7.3).
 ///
@@ -353,6 +375,7 @@ class ClaudeCLIProvider implements LLMProvider {
         options: Options(
           responseType: ResponseType.stream,
           contentType: Headers.jsonContentType,
+          headers: shimAuthHeaders(),
         ),
       );
     } catch (e) {
@@ -453,15 +476,15 @@ class ClaudeCLIProvider implements LLMProvider {
     // Last-ditch parse on whatever we accumulated. Empty buffer → no
     // text ever arrived; otherwise we hand the FormatException's
     // message back so the caller can surface it.
-    final String finalText = accumulated.toString().trim();
-    if (finalText.isEmpty) {
+    final String rawFinal = accumulated.toString().trim();
+    if (rawFinal.isEmpty) {
       yield const DecoderChunk.error(
         message: 'shim stream closed without emitting any script text',
       );
       return;
     }
     try {
-      final dynamic parsed = json.decode(finalText);
+      final dynamic parsed = json.decode(_extractJsonObject(rawFinal));
       if (parsed is! Map<String, dynamic>) {
         yield const DecoderChunk.error(
           message: 'decoder output was not a JSON object',
@@ -479,15 +502,134 @@ class ClaudeCLIProvider implements LLMProvider {
     int lastNHours = 24,
     required List<ActivityEvent> events,
   }) async* {
-    // TODO(phase): wire the shim's summary endpoint. The Home "catch me
-    // up" card is fake-backed in v1 (USE_FAKE_LLM defaults true); the
-    // live shim path lands alongside the deferred production backend, so
-    // a real-shim run surfaces this as a stream error rather than a
-    // silent empty card.
-    throw UnimplementedError(
-      'generateActivitySummary is not wired to the shim in v1 — '
-      'the Home catch-me-up card runs against FakeLLMProvider',
+    // Nothing to recap — don't burn a generation. The Home card already
+    // guards empty days; a direct caller gets the same empty result its
+    // consumers collapse on.
+    if (events.isEmpty) {
+      yield '';
+      return;
+    }
+
+    final Dio dio = _injectedDio ?? Dio();
+    final String userMessage = buildActivityUserMessage(
+      lastNHours: lastNHours,
+      events: events,
     );
+
+    Response<ResponseBody> response;
+    try {
+      response = await dio.post<ResponseBody>(
+        endpoint,
+        data: <String, String>{
+          'system': activitySummarySystemPrompt,
+          'user': userMessage,
+        },
+        options: Options(
+          responseType: ResponseType.stream,
+          contentType: Headers.jsonContentType,
+          headers: shimAuthHeaders(),
+        ),
+      );
+    } catch (e) {
+      // Surfaces through the card's AsyncValue.guard to the muted
+      // "couldn't put together your recap" line — Home never red-boxes.
+      throw Exception('summary request failed: $e');
+    }
+
+    final ResponseBody? body = response.data;
+    if (body == null) {
+      throw Exception('shim returned an empty summary response body');
+    }
+
+    // The recap is plain prose, not JSON — accumulate the text deltas and
+    // yield the growing paragraph, the same word-by-word contract the fake
+    // and the decoder use so the card streams identically in either mode.
+    final StringBuffer accumulated = StringBuffer();
+    await for (final String delta in _streamTextDeltas(body)) {
+      accumulated.write(delta);
+      yield accumulated.toString();
+    }
+  }
+
+  /// Flatten the last [lastNHours] of [events] into the `user` body for
+  /// [generateActivitySummary]. One line per event, oldest first (the card
+  /// pre-sorts ascending), tagged with a coarse part-of-day so the model
+  /// can phrase "this morning / this evening" without raw timestamps.
+  static String buildActivityUserMessage({
+    required int lastNHours,
+    required List<ActivityEvent> events,
+  }) {
+    final StringBuffer sb = StringBuffer()
+      ..writeln('window_hours: $lastNHours')
+      ..writeln('events (oldest first):');
+    for (final ActivityEvent e in events) {
+      sb.writeln(
+          '- ${_timeOfDay(e.occurredAt)} · [${e.kind.name}] ${e.summary}');
+    }
+    return sb.toString().trimRight();
+  }
+
+  /// Coarse part-of-day label for [t] — enough for a recap to read
+  /// naturally without handing the model an exact clock time.
+  static String _timeOfDay(DateTime t) {
+    final int h = t.hour;
+    if (h < 12) return 'morning';
+    if (h < 17) return 'afternoon';
+    if (h < 21) return 'evening';
+    return 'night';
+  }
+
+  /// Stream the text deltas from a shim SSE [body], throwing on a shim
+  /// `{"error": ...}` event. Shared SSE framing for the prose summary
+  /// path; [generateDecoderScript] inlines its own loop because it
+  /// re-parses the accumulated JSON after every delta.
+  static Stream<String> _streamTextDeltas(ResponseBody body) async* {
+    final List<int> rawBuffer = <int>[];
+    await for (final Uint8List bytes in body.stream) {
+      rawBuffer.addAll(bytes);
+      while (true) {
+        final int sep = _indexOfDoubleNewline(rawBuffer);
+        if (sep == -1) break;
+        final List<int> eventBytes = rawBuffer.sublist(0, sep);
+        rawBuffer.removeRange(0, sep + 2);
+        yield* _deltasFromEvent(utf8.decode(eventBytes));
+      }
+    }
+    // Trailing event the shim may flush without the closing `\n\n`.
+    if (rawBuffer.isNotEmpty) {
+      yield* _deltasFromEvent(utf8.decode(rawBuffer));
+    }
+  }
+
+  /// Extract text deltas from one raw SSE event block — skips non-`data:`
+  /// lines and the `[DONE]` terminator, throws on a shim error payload.
+  static Stream<String> _deltasFromEvent(String event) async* {
+    for (final String line in event.split('\n')) {
+      if (!line.startsWith('data:')) continue;
+      final String payload = line.substring(5).startsWith(' ')
+          ? line.substring(6)
+          : line.substring(5);
+      if (payload == '[DONE]') continue;
+      final _EventPayload parsed = _parseEvent(payload);
+      if (parsed.error != null) {
+        throw Exception('summary generation failed: ${parsed.error}');
+      }
+      final String? text = parsed.text;
+      if (text != null && text.isNotEmpty) yield text;
+    }
+  }
+
+  /// Pull the JSON object out of [text], tolerating a Markdown code fence
+  /// (or stray pre/postamble) the live model sometimes wraps the result in
+  /// despite the "ONLY valid JSON" instruction. Returns the substring from
+  /// the first `{` to the last `}`; with no brace pair yet (still
+  /// streaming) the trimmed text is returned unchanged so the tolerant
+  /// parse simply fails and waits for more.
+  static String _extractJsonObject(String text) {
+    final int start = text.indexOf('{');
+    final int end = text.lastIndexOf('}');
+    if (start == -1 || end == -1 || end < start) return text.trim();
+    return text.substring(start, end + 1);
   }
 
   /// Try parsing [text] as a [DecoderResult]. Returns null if the JSON
@@ -495,7 +637,7 @@ class ClaudeCLIProvider implements LLMProvider {
   /// `say`/`tweak`/`dont_say` keys.
   DecoderResult? _tryParse(String text) {
     try {
-      final dynamic parsed = json.decode(text);
+      final dynamic parsed = json.decode(_extractJsonObject(text));
       if (parsed is! Map<String, dynamic>) return null;
       if (parsed['say'] is! List ||
           parsed['tweak'] is! List ||
@@ -636,13 +778,30 @@ String _whatTriedLabel(TriageWhatTried? w) {
 
 /// Build-time flag (BUILD_SPEC.md §1 — `USE_FAKE_LLM`).
 ///
-/// Defaults to true so `flutter test` and `flutter run` without any
-/// dart-define both pick up the canned fake. Flip to false (real shim
-/// mode) with `flutter run --dart-define=USE_FAKE_LLM=false`.
-const bool _useFakeLLM = bool.fromEnvironment(
-  'USE_FAKE_LLM',
-  defaultValue: true,
-);
+/// **Real engine by default.** A shipped/run build uses the live,
+/// shim-backed [ClaudeCLIProvider] for the decoder AND the Home
+/// catch-me-up recap — there is no fake in a real run. The one exception
+/// is `flutter test`, where the default flips to [FakeLLMProvider] so
+/// widget/golden tests never hit the network (a test can still override
+/// `llmProvider`, and most do). An explicit
+/// `--dart-define=USE_FAKE_LLM=true|false` always wins over both.
+bool get _useFakeLLM {
+  if (const bool.hasEnvironment('USE_FAKE_LLM')) {
+    return const bool.fromEnvironment('USE_FAKE_LLM');
+  }
+  return _isUnderFlutterTest;
+}
+
+/// True only when running under `flutter test` (the harness exports
+/// `FLUTTER_TEST`). Any lookup failure falls back to false — the real
+/// engine — so a real device never silently runs the fake.
+bool get _isUnderFlutterTest {
+  try {
+    return Platform.environment.containsKey('FLUTTER_TEST');
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Riverpod-wired backend selection. Widgets and services read
 /// `ref.watch(llmProvider)` and get whichever impl the build mode

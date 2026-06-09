@@ -59,6 +59,7 @@ import 'package:careblazers/screens/journal/journal_entry_screen.dart';
 import 'package:careblazers/screens/journal/journal_screen.dart';
 import 'package:careblazers/screens/journal/journal_wizard_screen.dart';
 import 'package:careblazers/screens/medical/medical_hub_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
@@ -304,6 +305,102 @@ void main() {
 
       await _flushTimers(tester);
     });
+
+    testWidgets(
+        'the Back button at a middle step steps back, it does not pop the '
+        'wizard', (WidgetTester tester) async {
+      final ProviderContainer container =
+          await pumpCareblazersApp(tester, extraOverrides: journalOverrides());
+
+      await _openJournal(tester);
+      unawaited(container.read(careblazersRouterProvider).push('/journal/new'));
+      await tester.pumpAndSettle();
+      expect(find.byType(JournalWizardScreen), findsOneWidget);
+
+      // Step 1 → Step 2 (situation).
+      await tester.tap(find.byKey(JournalWizardScreen.whenPresetJustNowKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(JournalWizardScreen.nextButtonKey));
+      await tester.pumpAndSettle();
+      // On the situation step: its field is present, the when presets are not.
+      expect(find.byKey(JournalWizardScreen.situationFieldKey), findsOneWidget);
+      expect(
+          find.byKey(JournalWizardScreen.whenPresetJustNowKey), findsNothing);
+
+      // Tap Back — from a middle step this returns to the previous step
+      // rather than popping the route, so the wizard stays mounted and the
+      // when presets are back on screen.
+      await tester.tap(find.byKey(JournalWizardScreen.backButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.byType(JournalWizardScreen), findsOneWidget);
+      expect(
+          find.byKey(JournalWizardScreen.whenPresetJustNowKey), findsOneWidget);
+      expect(find.byKey(JournalWizardScreen.situationFieldKey), findsNothing);
+
+      await _flushTimers(tester);
+    });
+
+    testWidgets(
+        'submitting with an empty required field is blocked and writes no '
+        'entry', (WidgetTester tester) async {
+      final ProviderContainer container =
+          await pumpCareblazersApp(tester, extraOverrides: journalOverrides());
+
+      await _openJournal(tester);
+      unawaited(container.read(careblazersRouterProvider).push('/journal/new'));
+      await tester.pumpAndSettle();
+      expect(find.byType(JournalWizardScreen), findsOneWidget);
+
+      // Walk to the final (attempts) step with steps 1 + 2 satisfied but
+      // leave the required attempts field blank.
+      await tester.tap(find.byKey(JournalWizardScreen.whenPresetJustNowKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(JournalWizardScreen.nextButtonKey));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(JournalWizardScreen.situationFieldKey),
+        'She kept asking to call her mother.',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(JournalWizardScreen.nextButtonKey));
+      await tester.pumpAndSettle();
+
+      // On the attempts step the Save button is now always tappable — the
+      // wizard validates on submit (and surfaces an inline reason) instead
+      // of greying the button out, so a caregiver gets feedback rather than
+      // a dead control.
+      expect(find.byKey(JournalWizardScreen.attemptsFieldKey), findsOneWidget);
+      final ElevatedButton save = tester.widget<ElevatedButton>(
+          find.byKey(JournalWizardScreen.submitButtonKey));
+      expect(save.onPressed, isNotNull);
+
+      // No inline error yet — it only appears once the caregiver submits.
+      expect(
+        find.text('Add what you tried — "Nothing yet" works too.'),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(JournalWizardScreen.submitButtonKey));
+      await tester.pumpAndSettle();
+
+      // The empty-field submit is blocked: the wizard stays mounted, the
+      // attempts field shows its inline validation reason, and nothing was
+      // persisted to the journal.
+      expect(find.byType(JournalWizardScreen), findsOneWidget);
+      expect(
+        find.text('Add what you tried — "Nothing yet" works too.'),
+        findsOneWidget,
+      );
+      // Read the storage snapshot outside the fake-async zone — awaiting a
+      // bare stream future inside the test zone deadlocks (no pump turns
+      // the event loop to deliver the `onListen` snapshot).
+      final List<JournalEntry>? entries = await tester.runAsync(
+        () => container.read(storageProvider).watchJournalEntries().first,
+      );
+      expect(entries, isEmpty);
+
+      await _flushTimers(tester);
+    });
   });
 }
 
@@ -311,11 +408,11 @@ void main() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Home → Medical tab → Journal tile → [JournalScreen]. The Journal tile
-/// is the last on the Medical hub grid, so it is scrolled into view
-/// before the tap on the harness's 420×900 surface.
+/// Home → Care tab → Journal tile → [JournalScreen]. The Journal tile is
+/// on the Care hub grid, so it is scrolled into view before the tap on the
+/// harness's 420×900 surface.
 Future<void> _openJournal(WidgetTester tester) async {
-  await tester.tap(tabFor('Medical'));
+  await tester.tap(tabFor('Care'));
   await tester.pumpAndSettle();
   expect(find.byType(MedicalHubScreen), findsOneWidget);
 

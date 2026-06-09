@@ -9,8 +9,43 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../models/appointment.dart';
 import '../../services/appointment_repository.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 part 'appointment_list_screen.g.dart';
+
+/// Re-entrancy guard for the "Add appointment" affordances (the list
+/// FAB / empty-state CTA + the calendar's add FAB). A fast double-tap
+/// used to push `/appointments/new` twice and let the caregiver save two
+/// identical rows ("got added twice" alpha bug, 2026-06-07). Each tap
+/// calls [shouldOpen]; a second call within [_window] of the first is
+/// dropped. Exposed as a single shared instance so the two surfaces
+/// debounce against the same clock — tests reset it via [reset].
+class AppointmentAddDebounce {
+  AppointmentAddDebounce({DateTime Function() clock = DateTime.now})
+      : _clock = clock;
+
+  final DateTime Function() _clock;
+  static const Duration _window = Duration(milliseconds: 700);
+  DateTime? _last;
+
+  /// True if enough time has elapsed since the last accepted open (or
+  /// there was none) — and records this open. A rapid second call returns
+  /// false so the duplicate navigation never happens.
+  bool shouldOpen() {
+    final DateTime now = _clock();
+    final DateTime? last = _last;
+    if (last != null && now.difference(last) < _window) return false;
+    _last = now;
+    return true;
+  }
+
+  /// Clear the debounce so the next [shouldOpen] always passes. Tests
+  /// call this between cases that each expect a fresh open.
+  void reset() => _last = null;
+}
+
+/// Process-wide shared debounce both add affordances consult.
+final AppointmentAddDebounce appointmentAddDebounce = AppointmentAddDebounce();
 
 /// One row in the appointment list — an [Appointment] paired with the
 /// already-resolved [Provider] so each card can render the provider's
@@ -107,6 +142,24 @@ class AppointmentListScreen extends ConsumerWidget {
   static Key agendaCountKey(String appointmentId) =>
       Key('appointment-list-agenda-$appointmentId');
 
+  /// Push the add form, guarding against a fast double-tap pushing it
+  /// twice. A double-tap on the FAB / empty-state CTA used to push
+  /// `/appointments/new` twice — the caregiver then saved both stacked
+  /// forms and landed two identical appointment rows (alpha bug: "got
+  /// added twice", 2026-06-07).
+  ///
+  /// `ModalRoute.isCurrent` alone doesn't catch a same-frame double-tap
+  /// (it only flips after the route transition starts a frame later), so
+  /// we pair it with a short time-based debounce that drops a second tap
+  /// landing within [_addDebounce] of the first. The debounce is shared
+  /// with the calendar's add affordance via [appointmentAddDebounce].
+  static void _openAddForm(BuildContext context) {
+    if (!appointmentAddDebounce.shouldOpen()) return;
+    if (ModalRoute.of(context)?.isCurrent ?? true) {
+      context.push('/appointments/new');
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<AppointmentListData> async =
@@ -114,25 +167,42 @@ class AppointmentListScreen extends ConsumerWidget {
     final DateTime now = ref.watch(appointmentListClockProvider)();
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text('Appointments'),
-      ),
+      backgroundColor: context.cb.background,
       body: SafeArea(
-        child: async.when(
-          loading: () => const SizedBox.shrink(),
-          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-          data: (AppointmentListData data) {
-            if (data.isEmpty) return const _EmptyState();
-            return _PopulatedList(data: data, now: now);
-          },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  PathHeaderCrumb(label: 'Appointments'),
+                ],
+                title: 'Appointments',
+                backLabel: 'Back to Care',
+                leadingIcon: Icons.event_outlined,
+              ),
+            ),
+            Expanded(
+              child: async.when(
+                loading: () => const SizedBox.shrink(),
+                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                data: (AppointmentListData data) {
+                  if (data.isEmpty) return const _EmptyState();
+                  return _PopulatedList(data: data, now: now);
+                },
+              ),
+            ),
+          ],
         ),
       ),
       floatingActionButton: async.maybeWhen(
         data: (AppointmentListData data) {
           if (data.isEmpty) return null;
           return _AddAppointmentFab(
-            onPressed: () => context.push('/appointments/new'),
+            onPressed: () => _openAddForm(context),
           );
         },
         orElse: () => null,
@@ -157,13 +227,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.event_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'No appointments yet.',
             style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -172,7 +242,7 @@ class _EmptyState extends StatelessWidget {
             'Add the next visit so you can prep the agenda ahead of time '
             'and check items off in the waiting room.',
             style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.text,
+              color: context.cb.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -183,7 +253,7 @@ class _EmptyState extends StatelessWidget {
                 'Add an appointment. Open the add-appointment form.',
             child: ElevatedButton.icon(
               key: AppointmentListScreen.emptyCtaKey,
-              onPressed: () => context.push('/appointments/new'),
+              onPressed: () => AppointmentListScreen._openAddForm(context),
               icon: const Icon(Icons.add, color: Colors.white),
               label: Text(
                 'Add an appointment',
@@ -193,7 +263,7 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -253,7 +323,7 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         label,
         style: textTheme.titleLarge?.copyWith(
-          color: careblazersColors.primary,
+          color: context.cb.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -281,7 +351,7 @@ class _AppointmentCard extends StatelessWidget {
         label: '$providerName, $when. ${_statusLabel(appt.status)}. '
             '${_agendaCountLabel(agendaCount)}. Double-tap to open.',
         child: Material(
-          color: careblazersColors.surfaceWarm,
+          color: context.cb.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: AppointmentListScreen.cardKey(appt.id),
@@ -299,7 +369,7 @@ class _AppointmentCard extends StatelessWidget {
                         child: Text(
                           when,
                           style: textTheme.titleLarge?.copyWith(
-                            color: careblazersColors.primary,
+                            color: context.cb.primary,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -312,7 +382,7 @@ class _AppointmentCard extends StatelessWidget {
                   Text(
                     providerName,
                     style: textTheme.bodyLarge?.copyWith(
-                      color: careblazersColors.text,
+                      color: context.cb.text,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -321,7 +391,7 @@ class _AppointmentCard extends StatelessWidget {
                     Text(
                       appt.location,
                       style: textTheme.bodyMedium?.copyWith(
-                        color: careblazersColors.primarySoft,
+                        color: context.cb.primarySoft,
                       ),
                     ),
                   ],
@@ -332,7 +402,7 @@ class _AppointmentCard extends StatelessWidget {
                     child: Text(
                       _agendaCountLabel(agendaCount),
                       style: textTheme.bodyMedium?.copyWith(
-                        color: careblazersColors.primarySoft,
+                        color: context.cb.primarySoft,
                       ),
                     ),
                   ),
@@ -354,7 +424,7 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final Color fg = _statusColor(status);
+    final Color fg = _statusColor(context, status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -384,8 +454,9 @@ class _AddAppointmentFab extends StatelessWidget {
       label: 'Add an appointment. Open the add-appointment form.',
       child: FloatingActionButton.extended(
         key: AppointmentListScreen.fabKey,
+        heroTag: 'appointments-add-fab',
         onPressed: onPressed,
-        backgroundColor: careblazersColors.cta,
+        backgroundColor: context.cb.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -413,7 +484,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load the appointment list.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),
@@ -470,13 +541,13 @@ String _statusLabel(AppointmentStatus status) {
   }
 }
 
-Color _statusColor(AppointmentStatus status) {
+Color _statusColor(BuildContext context, AppointmentStatus status) {
   switch (status) {
     case AppointmentStatus.upcoming:
-      return careblazersColors.cta;
+      return context.cb.cta;
     case AppointmentStatus.completed:
-      return careblazersColors.success;
+      return context.cb.success;
     case AppointmentStatus.canceled:
-      return careblazersColors.primarySoft;
+      return context.cb.primarySoft;
   }
 }

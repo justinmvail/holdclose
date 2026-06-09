@@ -9,6 +9,7 @@ import 'package:careblazers/providers/onboarding_provider.dart';
 import 'package:careblazers/providers/quiet_hours_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/screens/home_screen.dart';
+import 'package:careblazers/seed/mary_henderson.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -97,6 +98,11 @@ Future<TextScaler> _pumpAndReadScaler(
   await storage.updateSettings(
     AppSettings.defaults().copyWith(fontSize: fontSize),
   );
+  // Satisfy the loved-one setup gate (new-user wizard) so the wired
+  // router lands on Home — these tests sample `MediaQuery` from the
+  // HomeScreen subtree, and an un-configured patient would redirect to
+  // `/setup` instead.
+  await storage.upsertPatient(maryHenderson());
   addTearDown(storage.dispose);
 
   final _SignedInAuthStub auth = _SignedInAuthStub();

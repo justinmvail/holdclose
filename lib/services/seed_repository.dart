@@ -36,6 +36,21 @@ class SeedRepository {
       await _storage.insertJournalEntry(entry);
     }
   }
+
+  /// Idempotently ensure the demo loved one is on file — upserts
+  /// [maryHenderson] only when no patient exists yet, touching nothing
+  /// else.
+  ///
+  /// Demo mode boots as "Mary's caregiver", but a full [populateAll]
+  /// runs only on a reset-on-launch (which wipes the caregiver's
+  /// accumulated data). With reset off, this backfill keeps Mary's
+  /// profile present so patient-dependent screens (Emergency Card, the
+  /// Medical header) aren't empty, while leaving journal + medication
+  /// data untouched.
+  Future<void> ensurePatient() async {
+    if (await _storage.getPatient() != null) return;
+    await _storage.upsertPatient(maryHenderson());
+  }
 }
 
 /// Riverpod-wired singleton.

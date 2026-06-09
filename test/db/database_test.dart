@@ -16,7 +16,7 @@ void main() {
 
     test('opens at the current schema version', () async {
       // The Dart-side constant the migration runs against.
-      expect(db.schemaVersion, 12);
+      expect(db.schemaVersion, 17);
 
       // And the in-memory file itself is stamped to that version once it's
       // actually opened. `user_version` is written by drift after the
@@ -31,7 +31,7 @@ void main() {
       // `onCreate` runs `createAll()` against the blank in-memory file. If
       // any table failed to materialise, selecting from it throws. Sweeping
       // every registered table proves the create migration covered the full
-      // schema (all twenty-one tables) with no orphan definitions.
+      // schema (all registered tables) with no orphan definitions.
       for (final TableInfo<Table, dynamic> table in db.allTables) {
         final List<QueryRow> rows =
             await db.customSelect('SELECT * FROM ${table.actualTableName}')

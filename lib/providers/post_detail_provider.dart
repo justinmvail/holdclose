@@ -324,4 +324,51 @@ class PostDetail extends _$PostDetail {
       return false;
     }
   }
+
+  /// Delete the loaded post (owner-only — the Worker's `DELETE /posts/:id`
+  /// rejects a non-author with 403). Returns true on success so the screen
+  /// can pop back to the feed; false surfaces the error for a retry SnackBar.
+  /// No local state mutation on success — the screen leaves this route, and
+  /// the detail provider disposes with it.
+  Future<bool> deletePost(String postId) async {
+    final ForumApiClient client = ref.read(forumApiClientProvider);
+    try {
+      await client.deletePost(postId);
+      return true;
+    } catch (error) {
+      state = state.copyWith(error: error);
+      return false;
+    }
+  }
+
+  /// Delete one of the caregiver's own comments (owner-only — the Worker's
+  /// `DELETE /comments/:id` rejects a non-author with 403). On success the
+  /// comment is dropped from the local list so the thread re-renders without
+  /// the row; the post's denormalized comment count is decremented to match.
+  /// Returns false (and records the error) on failure so the row stays put.
+  Future<bool> deleteComment(String commentId) async {
+    final ForumApiClient client = ref.read(forumApiClientProvider);
+    try {
+      await client.deleteComment(commentId);
+      final List<ForumComment> next = state.comments
+          .where((ForumComment c) => c.id != commentId)
+          .toList(growable: false);
+      final int removed = state.comments.length - next.length;
+      final ForumPost? post = state.post;
+      state = state.copyWith(
+        comments: next,
+        post: (post != null && removed > 0)
+            ? post.copyWith(
+                commentCount:
+                    (post.commentCount - removed).clamp(0, 1 << 30).toInt(),
+              )
+            : post,
+        clearError: true,
+      );
+      return true;
+    } catch (error) {
+      state = state.copyWith(error: error);
+      return false;
+    }
+  }
 }

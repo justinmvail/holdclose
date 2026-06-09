@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/document.dart';
 import 'package:careblazers/providers/documents_provider.dart';
+import 'package:careblazers/services/document_blob_service.dart';
+import 'package:careblazers/services/fake_forum_api_client.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -296,6 +300,100 @@ void main() {
 
       await notifier.delete('id-1');
       expect(container.read(identificationDocsProvider).requireValue, isEmpty);
+    });
+  });
+
+  // ---- Document scan blobs (R2) via the blob service ---------------------
+
+  group('DocumentsRepository blob upload on save + hydrate on sync-apply', () {
+    late CareblazersDatabase db;
+    late Directory tmp;
+    late FakeForumBackend backend;
+    late FakeForumApiClient client;
+    late DocumentsRepository repo;
+
+    setUp(() {
+      db = CareblazersDatabase(NativeDatabase.memory());
+      tmp = Directory.systemTemp.createTempSync('doc_repo_blob_');
+      backend = FakeForumBackend();
+      client = FakeForumApiClient(backend: backend);
+      repo = DocumentsRepository(
+        db,
+        blobService: HttpDocumentBlobService(
+          client: client,
+          circleId: () async => 'circle-1',
+          cacheDir: () async => tmp,
+        ),
+      );
+    });
+
+    tearDown(() async {
+      await db.close();
+      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    });
+
+    test('upsert uploads the scan bytes and stores the returned key',
+        () async {
+      final File scan = File('${tmp.path}/front.jpg')
+        ..writeAsBytesSync(<int>[1, 2, 3]);
+      await repo.upsertId(_id(id: 'id-1').copyWith(photoFrontPath: scan.path));
+
+      final IdentificationDoc stored = (await repo.getId('id-1'))!;
+      expect(stored.photoFrontKey, 'documents/circle-1/id-1.photoFront');
+      // The bytes actually landed in the (fake) bucket.
+      expect(backend.docBlobs[stored.photoFrontKey], <int>[1, 2, 3]);
+    });
+
+    test('hydrate downloads a blob the row has a key for but no local file',
+        () async {
+      // Simulate the doc arriving from another device: a key is set, the
+      // referenced local file does not exist on THIS device.
+      backend.docBlobs['documents/circle-1/id-2.photoFront'] = <int>[7, 8, 9];
+      final IdentificationDoc pulled = _id(id: 'id-2').copyWith(
+        photoFrontPath: '/some/other/device/front.jpg',
+        photoFrontKey: 'documents/circle-1/id-2.photoFront',
+      );
+      await repo.applyingRemote(() => repo.upsertId(pulled));
+
+      await repo.hydrateIdBlobs(pulled);
+
+      final IdentificationDoc hydrated = (await repo.getId('id-2'))!;
+      expect(hydrated.photoFrontPath, isNot('/some/other/device/front.jpg'));
+      expect(File(hydrated.photoFrontPath!).readAsBytesSync(),
+          <int>[7, 8, 9]);
+    });
+
+    test('save → key stored, then a second device hydrates the same bytes',
+        () async {
+      final File scan = File('${tmp.path}/scan.pdf')
+        ..writeAsBytesSync(<int>[42]);
+      await repo.upsertPoa(_poa(id: 'poa-1').copyWith(scanPath: scan.path));
+      final PowerOfAttorneyDoc saved = (await repo.getPoa('poa-1'))!;
+      expect(saved.scanKey, isNotNull);
+
+      // A second device: separate DB + cache dir, SAME backend.
+      final CareblazersDatabase db2 =
+          CareblazersDatabase(NativeDatabase.memory());
+      addTearDown(() => db2.close());
+      final Directory tmp2 = Directory.systemTemp.createTempSync('doc_b_');
+      addTearDown(() => tmp2.deleteSync(recursive: true));
+      final DocumentsRepository repo2 = DocumentsRepository(
+        db2,
+        blobService: HttpDocumentBlobService(
+          client: FakeForumApiClient(backend: backend),
+          circleId: () async => 'circle-1',
+          cacheDir: () async => tmp2,
+        ),
+      );
+      // The pulled doc carries the key but the path points at device A.
+      final PowerOfAttorneyDoc pulled = saved.copyWith(
+        scanPath: '/device-a/scan.pdf',
+      );
+      await repo2.applyingRemote(() => repo2.upsertPoa(pulled));
+      await repo2.hydratePoaBlobs(pulled);
+
+      final PowerOfAttorneyDoc hydrated = (await repo2.getPoa('poa-1'))!;
+      expect(File(hydrated.scanPath!).readAsBytesSync(), <int>[42]);
     });
   });
 }

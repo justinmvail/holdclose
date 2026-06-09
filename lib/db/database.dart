@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'tables.dart';
 
@@ -54,17 +55,60 @@ part 'database.g.dart';
     CareTasksTable,
     CareShiftsTable,
     ExpensesTable,
+    SyncOutboxTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
-  CareblazersDatabase(super.executor);
+  CareblazersDatabase(super.executor) : _isShared = false;
+
+  /// Private ctor for the app-wide shared singleton ([open]). Its [close]
+  /// is a no-op so one provider's `ref.onDispose(db.close)` can't tear down
+  /// the connection that every other provider + the sync engine share.
+  CareblazersDatabase._shared(super.executor) : _isShared = true;
+
+  /// True only for the process-wide shared instance returned by [open].
+  final bool _isShared;
+
+  /// The one shared on-disk connection (see [open]).
+  static CareblazersDatabase? _sharedInstance;
 
   /// Opens the on-device SQLite file named `careblazers.sqlite` in the
-  /// platform's app-documents directory. Used by production wiring;
-  /// tests bypass this in favour of `NativeDatabase.memory()`.
-  factory CareblazersDatabase.open() => CareblazersDatabase(
-        driftDatabase(name: 'careblazers'),
-      );
+  /// platform's app-documents directory — returning a PROCESS-WIDE SINGLETON
+  /// so every production caller (each repository/provider AND the sync
+  /// engine) shares ONE connection. Drift serialises writes on a single
+  /// connection, which eliminates the `SQLITE_BUSY` "database is locked"
+  /// failures that struck when separate connections wrote concurrently
+  /// (e.g. a chat/setup write racing the sync engine). Tests bypass this in
+  /// favour of `NativeDatabase.memory()`.
+  factory CareblazersDatabase.open() =>
+      openShared(driftDatabase(name: 'careblazers'));
+
+  /// The memoisation behind [open], with an injectable [executor] so the
+  /// singleton + no-op-close behaviour is testable without the platform
+  /// path_provider that the real `driftDatabase(...)` needs. Production
+  /// calls [open]; tests call this with an on-disk `NativeDatabase`.
+  /// Returns the existing shared instance if one was already opened — the
+  /// passed [executor] is then ignored, which is the whole point (one
+  /// connection for the process).
+  @visibleForTesting
+  static CareblazersDatabase openShared(QueryExecutor executor) =>
+      _sharedInstance ??= CareblazersDatabase._shared(executor);
+
+  /// Drop the shared singleton so a test can open a fresh one. No-op in
+  /// production (nothing calls it).
+  @visibleForTesting
+  static void resetSharedForTest() {
+    _sharedInstance = null;
+  }
+
+  @override
+  Future<void> close() {
+    // The shared singleton lives for the whole process; a provider's
+    // `ref.onDispose(db.close)` must NOT close the connection everyone else
+    // is still using. Test/in-memory instances close normally.
+    if (_isShared) return Future<void>.value();
+    return super.close();
+  }
 
   /// Builds a fresh database backed entirely by `NativeDatabase.memory()`
   /// — no on-disk SQLite file, no shared app-documents path. Each call
@@ -79,7 +123,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       CareblazersDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 17;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -223,9 +267,59 @@ class CareblazersDatabase extends _$CareblazersDatabase {
               ")",
             );
           }
+          if (from < 16) {
+            // Server-authoritative sync: create the outbound queue table.
+            // Existing data is untouched; the queue lights up empty and
+            // only fills once the install joins/creates a care circle.
+            await m.createTable(syncOutboxTable);
+          }
+          if (from < 17) {
+            // Document scan blobs: add nullable R2 storage-key columns
+            // paralleling each on-disk image path so the scans survive a
+            // reinstall and sync across the care circle (the path alone is
+            // meaningless on another device). Existing rows get NULL keys
+            // and keep working off their local paths; a key is filled in
+            // best-effort on the next save / sync.
+            await m.addColumn(
+              emergencyCardsTable,
+              emergencyCardsTable.attachmentKey,
+            );
+            await m.addColumn(
+              powerOfAttorneyDocsTable,
+              powerOfAttorneyDocsTable.attachmentKey,
+            );
+            await m.addColumn(
+              powerOfAttorneyDocsTable,
+              powerOfAttorneyDocsTable.scanKey,
+            );
+            await m.addColumn(
+              identificationDocsTable,
+              identificationDocsTable.attachmentKey,
+            );
+            await m.addColumn(
+              identificationDocsTable,
+              identificationDocsTable.photoFrontKey,
+            );
+            await m.addColumn(
+              identificationDocsTable,
+              identificationDocsTable.photoBackKey,
+            );
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
+          // Production now opens exactly ONE on-disk connection — the shared
+          // singleton from [open] — which is the real fix for the
+          // SQLITE_BUSY "database is locked" failures that struck when each
+          // repository + the sync engine opened their OWN connection and
+          // wrote concurrently (a chat/setup write racing the sync engine).
+          // These pragmas are kept as harmless defense-in-depth: WAL lets
+          // readers run alongside the writer, and busy_timeout makes a write
+          // wait-and-retry up to 5s rather than erroring if a second
+          // connection ever exists again. Both are no-ops on the in-memory
+          // test database.
+          await customStatement('PRAGMA journal_mode = WAL');
+          await customStatement('PRAGMA busy_timeout = 5000');
         },
       );
 
@@ -255,6 +349,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(careTasksTable).go();
       await delete(careShiftsTable).go();
       await delete(expensesTable).go();
+      await delete(syncOutboxTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();

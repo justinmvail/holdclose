@@ -32,14 +32,13 @@ import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
 import 'package:careblazers/screens/settings/settings_screen.dart';
 import 'package:careblazers/screens/team/care_circle_screen.dart';
 import 'package:careblazers/screens/team/care_team_hub_screen.dart';
-import 'package:careblazers/screens/team/invite_caregiver_screen.dart';
 import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/chat_repository.dart';
 import 'package:careblazers/services/forum_api_client.dart';
 import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/services/provider_repository.dart';
 import 'package:careblazers/services/seed_repository.dart';
-import 'package:careblazers/widgets/home/medications_today_card.dart';
+import 'package:careblazers/widgets/home/schedule_card.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,10 +53,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// screenshots stay pixel-deterministic across runs regardless of when
 /// the operator records the walkthrough.
 DateTime _fixedNow() => DateTime(2026, 6, 1, 11, 0);
-
-/// One scheduled dose so the Home "Medications Today" card renders a row
-/// the tour can tap through to the dose log (Phase 14.9).
-final DateTime _donepezilDoseAt = DateTime(2026, 6, 1, 8, 0);
 
 /// Scripted pitch walkthrough for the Phase 14 information architecture
 /// (TASKS.md Phase 14.39, BUILD_SPEC.md §10.1).
@@ -242,11 +237,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // ====================================================================
-      // HOME — read the dashboard. Greeting + the pinned Emergency Card +
-      // the Medications Today card all render. Capture the landing.
+      // HOME — read the dashboard. Greeting + the Schedule card (which now
+      // carries the day's medications, grouped by window) render. Capture
+      // the landing.
       // ====================================================================
       expect(find.byKey(HomeScreen.greetingKey), findsOneWidget);
-      expect(find.byKey(MedicationsTodayCard.cardKey), findsOneWidget);
+      expect(find.byKey(ScheduleCard.cardKey), findsOneWidget);
       await _capture(tester, '01_home');
 
       // ---- Profile icon → Settings → close back to Home --------------------
@@ -261,12 +257,12 @@ void main() {
       // later in the tour). The previous Home pin was removed; the
       // Emergency Card screen itself is still exercised below.
 
-      // ---- A Medications Today dose row → dose log → back to Home ----------
-      final Finder doseRow = find.byKey(
-        MedicationsTodayCard.rowKey('med-don', _donepezilDoseAt),
-      );
-      expect(doseRow, findsOneWidget);
-      await tester.tap(doseRow);
+      // ---- A Schedule medication (Donepezil, in the Morning window) →
+      // dose log → back to Home -------------------------------------------
+      final Finder donepezilRow = find.text('Donepezil');
+      expect(donepezilRow, findsWidgets);
+      await tester.ensureVisible(donepezilRow.first);
+      await tester.tap(donepezilRow.first);
       await tester.pumpAndSettle();
       expect(find.byKey(DoseLogScreen.listKey), findsOneWidget);
       await _tapBack(tester); // Dose log has an AppBar back button.
@@ -345,19 +341,15 @@ void main() {
       );
       await _capture(tester, '03_team');
 
-      // ---- Care Circle → start an invite (don't send) → back to Team -------
+      // ---- Care Circle → the People list + connect actions → back to Team --
       await tester.tap(find.byKey(CareTeamHubScreen.tileKey('/team/circle')));
       await tester.pumpAndSettle();
-      expect(find.byKey(CareCircleScreen.inviteActionKey), findsOneWidget);
-      await tester.tap(find.byKey(CareCircleScreen.inviteActionKey));
-      await tester.pumpAndSettle();
-      // The invite form renders; the tour deliberately does NOT send.
-      expect(find.byKey(InviteCaregiverScreen.formKey), findsOneWidget);
-      expect(find.byKey(InviteCaregiverScreen.displayNameFieldKey),
+      // The People list is the backend circle; the connect strip lets you
+      // set a @username, show your QR, scan, or add a caregiver by handle.
+      expect(find.byKey(CareCircleScreen.usernameActionKey), findsOneWidget);
+      expect(find.byKey(CareCircleScreen.addByUsernameActionKey),
           findsOneWidget);
       await _tapPathBack(tester, 'Back to Care Circle');
-      expect(find.byKey(CareCircleScreen.inviteActionKey), findsOneWidget);
-      await _tapPathBack(tester, 'Back to Care Team');
       expect(
         find.byKey(CareTeamHubScreen.tileKey('/team/circle')),
         findsOneWidget,

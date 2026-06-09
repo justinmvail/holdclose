@@ -39,6 +39,13 @@ abstract class CarePlanRoutine with _$CarePlanRoutine {
     required Set<int> daysOfWeek,
     required DateTime startsOn,
     DateTime? endsOn,
+
+    /// Ordered checklist of steps that make up this routine — e.g. a
+    /// "Morning hygiene" routine wraps "brush teeth", "wash face",
+    /// "get dressed", the way a dose window wraps several medications.
+    /// `@Default` keeps routines persisted before this field (the
+    /// payload JSON predates the key) hydrating cleanly to no steps.
+    @Default(<String>[]) List<String> subtasks,
   }) = _CarePlanRoutine;
 
   factory CarePlanRoutine.fromJson(Map<String, dynamic> json) =>

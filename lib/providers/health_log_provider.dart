@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../db/database.dart';
 import '../models/health_log_entry.dart';
+import '../services/sync_sink.dart';
 
 part 'health_log_provider.g.dart';
 
@@ -22,7 +23,7 @@ part 'health_log_provider.g.dart';
 /// There's no provider/FK cascade to worry about — the health-log table
 /// stands alone (see `lib/db/tables.dart` for why the [patientId] link
 /// is logical, not a DB foreign key).
-class HealthLogRepository {
+class HealthLogRepository with SyncSinkHost {
   HealthLogRepository(this._db);
 
   final CareblazersDatabase _db;
@@ -43,6 +44,7 @@ class HealthLogRepository {
             payload: jsonEncode(entry.toJson()),
           ),
         );
+    emitUpsert('health_log_entries', entry.id, entry.toJson());
   }
 
   /// Drop the row with this id. No-op if absent.
@@ -50,6 +52,7 @@ class HealthLogRepository {
     await (_db.delete(_db.healthLogEntriesTable)
           ..where((t) => t.id.equals(id)))
         .go();
+    emitDelete('health_log_entries', id);
   }
 
   /// One entry by id, or null if absent.

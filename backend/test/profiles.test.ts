@@ -267,6 +267,245 @@ describe('PATCH /api/v1/profiles/me', () => {
   });
 });
 
+describe('GET /api/v1/profiles/username-available', () => {
+  beforeEach(async () => {
+    await authedFetch('/api/v1/profiles/bootstrap', {
+      method: 'POST',
+      sub: 'cb-user-avail',
+    });
+  });
+
+  it('returns valid:false available:false for a pattern-invalid handle', async () => {
+    const res = await authedFetch('/api/v1/profiles/username-available?u=ab', {
+      sub: 'cb-user-avail',
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ valid: false, available: false });
+  });
+
+  it('returns valid:false for an uppercase handle (lowercase-only pattern)', async () => {
+    const res = await authedFetch(
+      '/api/v1/profiles/username-available?u=NotLower',
+      { sub: 'cb-user-avail' },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ valid: false, available: false });
+  });
+
+  it('returns valid:false for a profane handle', async () => {
+    const res = await authedFetch(
+      '/api/v1/profiles/username-available?u=shithead',
+      { sub: 'cb-user-avail' },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ valid: false, available: false });
+  });
+
+  it('returns valid:true available:true for an unused valid handle', async () => {
+    const res = await authedFetch(
+      '/api/v1/profiles/username-available?u=open_handle',
+      { sub: 'cb-user-avail' },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ valid: true, available: true });
+  });
+
+  it('returns available:false once another profile owns the handle', async () => {
+    await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-avail',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'taken_one' }),
+    });
+    const res = await authedFetch(
+      '/api/v1/profiles/username-available?u=taken_one',
+      { sub: 'cb-user-avail' },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ valid: true, available: false });
+  });
+});
+
+describe('PATCH /api/v1/profiles/me — username', () => {
+  beforeEach(async () => {
+    await authedFetch('/api/v1/profiles/bootstrap', {
+      method: 'POST',
+      sub: 'cb-user-uname',
+    });
+  });
+
+  it('sets a valid username (stored lowercased)', async () => {
+    const res = await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'caregiver_42' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { username: string };
+    expect(body.username).toBe('caregiver_42');
+  });
+
+  it.each([
+    ['ab', 'too short'],
+    ['a'.repeat(21), 'too long'],
+    ['Upper_Case', 'uppercase not allowed'],
+    ['has space', 'space not allowed'],
+    ['dash-no', 'dash not allowed'],
+  ])('rejects username %j (%s) with 400', async (username) => {
+    const res = await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_username' });
+  });
+
+  it('rejects a profane username', async () => {
+    const res = await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'bitch_boss' }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'profanity_blocked' });
+  });
+
+  it('returns 409 username_taken when another profile owns it', async () => {
+    await authedFetch('/api/v1/profiles/bootstrap', {
+      method: 'POST',
+      sub: 'cb-user-uname-other',
+    });
+    await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname-other',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'shared_handle' }),
+    });
+
+    const res = await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'shared_handle' }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'username_taken' });
+  });
+
+  it('mirrors the username into display_name when it is still the default', async () => {
+    const before = (await (
+      await authedFetch('/api/v1/profiles/me', { sub: 'cb-user-uname' })
+    ).json()) as { display_name: string };
+    // Fresh bootstrap → display_name is the auto-generated Caregiver_<hex>.
+    expect(before.display_name).toMatch(/^Caregiver_[0-9a-f]{6}$/);
+
+    const res = await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'sarah_h' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      username: string;
+      display_name: string;
+    };
+    expect(body.username).toBe('sarah_h');
+    // Username is the canonical identity: the default display_name is
+    // overwritten so every display surface shows the chosen handle.
+    expect(body.display_name).toBe('sarah_h');
+  });
+
+  it('leaves a customized display_name untouched when setting a username', async () => {
+    // The caregiver explicitly customized their display_name first.
+    await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name: 'Sarah_TG' }),
+    });
+
+    const res = await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'sarah_h' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      username: string;
+      display_name: string;
+    };
+    expect(body.username).toBe('sarah_h');
+    // A display_name that does NOT match the default pattern is preserved.
+    expect(body.display_name).toBe('Sarah_TG');
+  });
+
+  it('lets the same user re-set their own username (no false 409)', async () => {
+    await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'mine_now' }),
+    });
+    const res = await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-uname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'mine_now' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { username: string };
+    expect(body.username).toBe('mine_now');
+  });
+});
+
+describe('GET /api/v1/profiles/by-username/:username', () => {
+  it('returns 404 when no profile owns the handle', async () => {
+    const res = await authedFetch('/api/v1/profiles/by-username/ghost_user', {
+      sub: 'cb-user-byname-viewer',
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'profile_not_found' });
+  });
+
+  it('returns the public username shape for a hit (case-insensitive lookup)', async () => {
+    const created = (await (
+      await authedFetch('/api/v1/profiles/bootstrap', {
+        method: 'POST',
+        sub: 'cb-user-byname',
+      })
+    ).json()) as { id: string; display_name: string };
+    await authedFetch('/api/v1/profiles/me', {
+      method: 'PATCH',
+      sub: 'cb-user-byname',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'findable' }),
+    });
+
+    const res = await authedFetch('/api/v1/profiles/by-username/FINDABLE', {
+      sub: 'cb-user-byname-viewer',
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    // Setting a username on a still-default profile mirrors it into
+    // display_name (username is the canonical public identity), so the
+    // public lookup surfaces the handle as the display name too.
+    expect(body).toEqual({
+      id: created.id,
+      username: 'findable',
+      display_name: 'findable',
+      avatar_url: null,
+    });
+    expect(body).not.toHaveProperty('careblazers_user_id');
+    expect(body).not.toHaveProperty('role');
+  });
+});
+
 describe('GET /api/v1/profiles/:id', () => {
   it('returns 401 without a token', async () => {
     const res = await SELF.fetch(`${ORIGIN}/api/v1/profiles/abc-123`);

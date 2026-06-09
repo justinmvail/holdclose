@@ -18,10 +18,14 @@ import 'package:careblazers/models/journal_entry.dart';
 import 'package:careblazers/models/medication.dart';
 import 'package:careblazers/providers/analytics_provider.dart';
 import 'package:careblazers/providers/auth_provider.dart';
+import 'package:careblazers/providers/care_plan_provider.dart';
+import 'package:careblazers/providers/care_tasks_provider.dart';
+import 'package:careblazers/providers/health_log_provider.dart';
 import 'package:careblazers/providers/home_clock_provider.dart';
 import 'package:careblazers/providers/link_launcher_provider.dart';
 import 'package:careblazers/providers/llm_provider.dart';
 import 'package:careblazers/providers/onboarding_provider.dart';
+import 'package:careblazers/providers/patient_configured_provider.dart';
 import 'package:careblazers/providers/quiet_hours_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/providers/tts_provider.dart';
@@ -31,6 +35,7 @@ import 'package:careblazers/screens/appointment/appointment_list_screen.dart'
 import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/medication/dose_log_screen.dart'
     show doseLogClockProvider;
+import 'package:careblazers/screens/team/care_team_hub_screen.dart';
 import 'package:careblazers/seed/mary_henderson.dart';
 import 'package:careblazers/seed/sample_journal.dart';
 import 'package:careblazers/services/appointment_repository.dart';
@@ -147,6 +152,17 @@ Future<ProviderContainer> pumpCareblazersApp(
       InMemoryStorageProvider(clock: fixedClock);
   addTearDown(storage.dispose);
 
+  // The loved-one setup gate (new-user wizard) funnels an authed
+  // caregiver with no [Patient] on file to `/setup`. In demo mode the
+  // app boots as Mary's caregiver — production's `main.dart` backfills
+  // her profile before the first frame — so mirror that here: seed Mary
+  // BEFORE the pump so the gate is satisfied and the shell lands on Home,
+  // not the wizard. Flows that need the full profile still re-seed via
+  // [seedMaryHenderson]; this upsert is idempotent with that.
+  if (demoMode) {
+    await storage.upsertPatient(maryHenderson());
+  }
+
   final MedicationRepository medicationRepository =
       MedicationRepository(db, clock: fixedClock);
   final AppointmentRepository appointmentRepository =
@@ -160,6 +176,22 @@ Future<ProviderContainer> pumpCareblazersApp(
   // `CareblazersDatabase.open()` handle here; in the harness we share the
   // one in-memory db so provider names round-trip (Phase 15.7).
   final ProviderRepository providerRepository = ProviderRepository(db);
+
+  // The chat surface reads the user's data for context on every turn via
+  // `gatherChatContext`, which resolves the care-plan + health-log repos in
+  // addition to storage/medication/appointment. Point those last two seams
+  // at the same in-memory db too — otherwise they fall through to
+  // `CareblazersDatabase.open()` (real on-device SQLite) and throw inside the
+  // test zone the moment a flow sends a chat message (Phase 15.8).
+  final CarePlanRepository carePlanRepository = CarePlanRepository(db);
+  final HealthLogRepository healthLogRepository = HealthLogRepository(db);
+  // The patient-timeline merger (Schedule card, Catch-me-up) now also
+  // projects standalone care tasks (2026-06-06 unified task/routine model).
+  // Its backend opens `CareblazersDatabase.open()` — real on-device SQLite —
+  // so without this override the whole merger future throws in the test zone
+  // and the Schedule card falls into its error state instead of rendering
+  // the seeded appointments.
+  final CareTasksRepository careTasksRepository = CareTasksRepository(db);
 
   final FakeAuthProvider auth = FakeAuthProvider();
   addTearDown(auth.dispose);
@@ -179,6 +211,9 @@ Future<ProviderContainer> pumpCareblazersApp(
     appointmentRepositoryBackendProvider
         .overrideWithValue(appointmentRepository),
     providerRepositoryBackendProvider.overrideWithValue(providerRepository),
+    carePlanRepositoryBackendProvider.overrideWithValue(carePlanRepository),
+    healthLogRepositoryBackendProvider.overrideWithValue(healthLogRepository),
+    careTasksRepositoryBackendProvider.overrideWithValue(careTasksRepository),
     authBackendProvider.overrideWithValue(auth),
     onboardingCompletedProvider.overrideWith(_AlreadyOnboarded.new),
     llmProvider.overrideWithValue(const FakeLLMProvider()),
@@ -212,6 +247,17 @@ Future<ProviderContainer> pumpCareblazersApp(
     tester.element(find.byType(CareblazersApp)),
     listen: false,
   );
+
+  // The loved-one setup gate's provider resolves `getPatient()`
+  // asynchronously; its first value is optimistic-false, so the very
+  // first redirect can transiently target `/setup` before the resolve
+  // lands. Production avoids the flash by populating storage before the
+  // first frame (`main.dart` awaits the demo seed); mirror that
+  // determinism here by forcing the resolve + a re-settle so the shell
+  // is on its final route (Home, since Mary is seeded above) before the
+  // test drives it.
+  await container.read(patientConfiguredProvider.notifier).reload();
+  await tester.pumpAndSettle();
 
   if (initialLocation != '/') {
     container.read(careblazersRouterProvider).go(initialLocation);
@@ -328,18 +374,39 @@ Future<void> seedDashboard(
 /// The Home dashboard greeting line ("Good morning, Sarah").
 final Finder homeGreeting = find.byKey(HomeScreen.greetingKey);
 
-/// The bottom-bar tab whose word label is [label] (e.g. `Medical`,
-/// `Team`). Scoped to the [NavigationBar] so it never matches a hub
-/// tile or screen body that happens to repeat the word.
+/// The bottom-bar tab whose word label is [label] (e.g. `Care`, `Chat`).
+/// Scoped to the [NavigationBar] so it never matches a hub tile or screen
+/// body that happens to repeat the word. After the 2026-06-06 IA refactor
+/// the bar is four tabs — `Home · Care · Chat · Community` — with the old
+/// Team tab folded into Care as a gated Care Circle hub.
 Finder tabFor(String label) => find.descendant(
       of: find.byType(NavigationBar),
       matching: find.text(label),
     );
 
-/// The [PathHeader] word-labeled Back control that returns to [label]
-/// (e.g. `pathHeaderBackTo('Medical')` → the "Back to Medical" chip).
-Finder pathHeaderBackTo(String label) => find.text('Back to $label');
+/// Home → Care tab → Care Circle hub tile → [CareTeamHubScreen].
+///
+/// The Care Circle tile only appears on the Care hub when
+/// `teamCoordinationEnabled` is on; the harness's default settings
+/// (`AppSettings.defaults()`) ship it true, so the tile is present without
+/// any extra seeding. The hub itself is also gated, but reached via the
+/// (only-shown-when-enabled) tile it always renders its tile grid.
+Future<void> openCareCircle(WidgetTester tester) async {
+  await tester.tap(tabFor('Care'));
+  await tester.pumpAndSettle();
+  await tester.tap(findHubTile('Care Circle'));
+  await tester.pumpAndSettle();
+  expect(find.byType(CareTeamHubScreen), findsOneWidget);
+}
+
+/// The breadcrumb crumb that navigates back to [label] (e.g.
+/// `pathHeaderBackTo('Medical')` → the tappable `Medical` crumb in the
+/// [PathHeader] trail). The separate "Back to X" control was removed as
+/// redundant with the breadcrumb, so the parent crumb is the back
+/// affordance now.
+Finder pathHeaderBackTo(String label) =>
+    find.widgetWithText(InkWell, label);
 
 /// The hub tile whose primary label is [label] (e.g. `Medications`,
-/// `Calendar`) on a Medical / Care Team tile hub.
+/// `People`) on the Care or Care Circle tile hub.
 Finder findHubTile(String label) => find.widgetWithText(HubTile, label);

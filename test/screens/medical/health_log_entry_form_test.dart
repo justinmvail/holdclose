@@ -3,6 +3,7 @@ import 'package:careblazers/models/health_log_entry.dart';
 import 'package:careblazers/providers/health_log_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/screens/medical/health_log_entry_form.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +28,7 @@ HealthLogEntry _entry({
   int? diastolic,
   int? heartRate,
   double? temperatureF,
+  int? glucoseMgDl,
   String? notes,
 }) =>
     HealthLogEntry(
@@ -39,6 +41,7 @@ HealthLogEntry _entry({
       diastolic: diastolic,
       heartRate: heartRate,
       temperatureF: temperatureF,
+      glucoseMgDl: glucoseMgDl,
       notes: notes,
     );
 
@@ -128,6 +131,7 @@ void main() {
       expect(find.byKey(HealthLogEntryForm.heartRateFieldKey), findsOneWidget);
       expect(
           find.byKey(HealthLogEntryForm.temperatureFieldKey), findsOneWidget);
+      expect(find.byKey(HealthLogEntryForm.glucoseFieldKey), findsOneWidget);
       expect(find.byKey(HealthLogEntryForm.severitySectionKey), findsNothing);
       // Notes is always present.
       expect(find.byKey(HealthLogEntryForm.notesFieldKey), findsOneWidget);
@@ -248,6 +252,51 @@ void main() {
       expect(find.text('list-stub'), findsOneWidget);
     });
 
+    testWidgets('a blood-glucose-only vitals entry persists the reading',
+        (WidgetTester tester) async {
+      await _pumpForm(tester, repo: repo, idFactory: _counterFactory());
+
+      await tester.enterText(
+          find.byKey(HealthLogEntryForm.glucoseFieldKey), '110');
+      await tester.tap(find.byKey(HealthLogEntryForm.saveButtonKey));
+      await tester.pumpAndSettle();
+
+      final HealthLogEntry saved = (await repo.listAll()).single;
+      expect(saved.kind, HealthLogKind.vitals);
+      expect(saved.glucoseMgDl, 110);
+      // No other reading was entered.
+      expect(saved.systolic, isNull);
+      expect(saved.heartRate, isNull);
+      expect(find.text('list-stub'), findsOneWidget);
+    });
+
+    testWidgets('an out-of-range blood glucose value is rejected inline',
+        (WidgetTester tester) async {
+      await _pumpForm(tester, repo: repo);
+
+      await tester.enterText(
+          find.byKey(HealthLogEntryForm.glucoseFieldKey), '999');
+      await tester.tap(find.byKey(HealthLogEntryForm.saveButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Enter a blood glucose between 20 and 600.'),
+          findsOneWidget);
+      expect(await repo.listAll(), isEmpty);
+    });
+
+    testWidgets('edit path hydrates a stored blood glucose reading',
+        (WidgetTester tester) async {
+      await repo.upsert(_entry(
+        id: 'hl-g',
+        kind: HealthLogKind.vitals,
+        glucoseMgDl: 145,
+      ));
+
+      await _pumpForm(tester, repo: repo, editEntryId: 'hl-g');
+
+      expect(find.text('145'), findsOneWidget);
+    });
+
     testWidgets('saving a symptom entry stores severity + notes',
         (WidgetTester tester) async {
       await _pumpForm(tester, repo: repo);
@@ -315,6 +364,49 @@ void main() {
 
       expect(await repo.getById('hl-9'), isNull);
       expect(find.text('list-stub'), findsOneWidget);
+    });
+  });
+
+  group('HealthLogEntryForm — PathHeader back affordance', () {
+    // Regression for alpha bug fb_1780932762335231: the breadcrumb back
+    // affordance must be present on every branch — including before the
+    // hydration future resolves — so the screen is never swipe-only.
+    testWidgets('renders the PathHeader breadcrumb on the loading branch',
+        (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final GoRouter router = GoRouter(
+        initialLocation: '/medical/health-log/new',
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/medical/health-log/new',
+            builder: (BuildContext context, GoRouterState state) =>
+                const HealthLogEntryForm(),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            healthLogRepositoryProvider.overrideWithValue(repo),
+            storageProvider.overrideWithValue(InMemoryStorageProvider()),
+            healthLogClockProvider.overrideWithValue(_fixedNow),
+            healthLogFormIdFactoryProvider
+                .overrideWithValue(_counterFactory()),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      // A single pump — the hydration future has NOT resolved yet, so this
+      // is the loading branch. The PathHeader must already be on screen.
+      await tester.pump();
+
+      expect(find.byType(PathHeader), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Care'), findsOneWidget);
+      expect(find.text('Health Log'), findsOneWidget);
     });
   });
 }

@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
+import '../services/forum_api_client.dart';
 
 part 'auth_provider.freezed.dart';
 part 'auth_provider.g.dart';
@@ -92,6 +96,42 @@ class OAuthSignInResult {
 /// that return canned results without spinning up real OAuth UI.
 typedef OAuthFlow = Future<OAuthSignInResult?> Function();
 
+/// Drives the Google sign-in sheet and returns the Google **ID token**
+/// (a signed JWT whose `aud` is our backend's Web client id). A null
+/// return means the caregiver cancelled the chooser — the provider
+/// treats that as a benign back-to-signedOut transition. The id token is
+/// the only thing the backend needs: it verifies the token's signature +
+/// audience and returns the account spine, so the provider never trusts
+/// Google's client-side profile fields directly.
+typedef GoogleIdTokenFlow = Future<String?> Function();
+
+/// Exchanges a Google ID token for the backend's verified account spine.
+/// Production wires this to [ForumApiClient.verifyGoogleIdToken]; tests
+/// inject a deterministic fake so the auth path never touches the network
+/// or real Google. Throws on backend rejection (the provider rethrows so
+/// the sign-in screen can surface the error).
+typedef GoogleIdTokenVerifier = Future<GoogleAuthResultLike> Function(
+  String idToken,
+);
+
+/// The two facts [AlphaAuthProvider] needs out of the backend's
+/// `/auth/google` response: the stable [userId] (the forum JWT `sub`
+/// spine) and the [email]/[name] the in-app surfaces render. Mirrors
+/// `GoogleAuthResult` in `forum_api_client.dart`, restated here so this
+/// provider file doesn't depend on the API-client layer (keeps the auth
+/// interface importable by tests that don't pull in Dio).
+class GoogleAuthResultLike {
+  const GoogleAuthResultLike({
+    required this.userId,
+    required this.email,
+    required this.name,
+  });
+
+  final String userId;
+  final String email;
+  final String name;
+}
+
 /// Persistent store for the OAuth bearer/identity token
 /// (BUILD_SPEC.md §6.4 + §13.2).
 ///
@@ -145,6 +185,47 @@ class InMemoryTokenStorage implements TokenStorage {
   }
 }
 
+/// Persistent store for the signed-in [User] so a returning Google tester
+/// is restored straight to Home across launches (no re-tap). The bearer
+/// token already persists via [TokenStorage]; this parks the user spine
+/// (id/email/name) alongside it. Backed by `shared_preferences` (the user
+/// fields are non-secret display data — the secret token stays in the
+/// keychain via [SecureTokenStorage]).
+///
+/// Cleared by `signOut`/`deleteAccount`. Restored at launch by
+/// [readPersistedAlphaUser], which seeds [AlphaAuthProvider]'s initial
+/// state.
+class UserStore {
+  const UserStore();
+
+  static const String userKey = 'careblazers.auth.user';
+
+  /// The persisted user, or null if none is saved (signed out / first run).
+  Future<User?> read() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String? raw = prefs.getString(userKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return User.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      // A malformed value must never brick startup — treat it as absent.
+      return null;
+    }
+  }
+
+  Future<void> write(User user) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString(userKey, jsonEncode(user.toJson()));
+  }
+
+  Future<void> clear() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.remove(userKey);
+  }
+}
+
 /// Real, OAuth-backed [AuthProvider] (BUILD_SPEC.md §6.4).
 ///
 /// The two [OAuthFlow] closures isolate the platform plugin calls from
@@ -166,9 +247,7 @@ class RealAuthProvider implements AuthProvider {
   /// `signIn()` runs — so this factory is safe to call at riverpod
   /// provider init time.
   factory RealAuthProvider.production() {
-    final GoogleSignIn google = GoogleSignIn(
-      scopes: const <String>['email', 'profile'],
-    );
+    final GoogleSignIn google = buildProductionGoogleSignIn();
     return RealAuthProvider(
       tokenStorage: SecureTokenStorage(),
       googleFlow: () async {
@@ -334,6 +413,110 @@ class FakeAuthProvider implements AuthProvider {
   }
 }
 
+/// Alpha-tester [AuthProvider]. Supports BOTH paths:
+///
+///  * [signInWithGoogle] — REAL Google sign-in. Runs the google_sign_in
+///    sheet to get a Google ID token, POSTs it to the backend's
+///    `/auth/google` (via the injected [GoogleIdTokenVerifier]), and
+///    signs in as the backend's VERIFIED account spine. The backend
+///    `user_id` becomes the forum JWT `sub`, so the identity is real and
+///    survives reinstall.
+///
+/// The alpha build is **Google-only** (user decision): there is no local
+/// "just start" bypass. A verified Google [User] is persisted via
+/// [UserStore] so a returning tester is restored to signedIn at launch
+/// (seeded through [initialUser]) without re-tapping. `signOut` /
+/// `deleteAccount` clear that persisted user.
+///
+/// Apple is not wired in the alpha build (deferred); [signInWithApple] is
+/// a benign no-op (the sign-in screen never shows an Apple button in alpha
+/// mode) so the interface stays usable.
+class AlphaAuthProvider implements AuthProvider {
+  AlphaAuthProvider({
+    required GoogleIdTokenFlow googleFlow,
+    required GoogleIdTokenVerifier verifier,
+    User? initialUser,
+    UserStore? userStore,
+  })  : _googleFlow = googleFlow,
+        _verifier = verifier,
+        _userStore = userStore ?? const UserStore(),
+        _state = initialUser == null
+            ? const AuthState.signedOut()
+            : AuthState.signedIn(user: initialUser);
+
+  final GoogleIdTokenFlow _googleFlow;
+  final GoogleIdTokenVerifier _verifier;
+  final UserStore _userStore;
+  AuthState _state;
+  final StreamController<AuthState> _changes =
+      StreamController<AuthState>.broadcast();
+
+  /// Release the broadcast controller. Wired to `ref.onDispose`.
+  Future<void> dispose() => _changes.close();
+
+  @override
+  Stream<AuthState> watchAuthState() =>
+      _replayBroadcast(_changes, () => _state);
+
+  /// Apple isn't wired in alpha — benign no-op (the alpha sign-in screen
+  /// never renders an Apple button) so the interface stays uniform.
+  @override
+  Future<void> signInWithApple() async {
+    _emit(const AuthState.signedOut());
+  }
+
+  /// REAL Google: run the sheet → get the ID token → verify it with the
+  /// backend → persist + sign in as the verified spine. A null id token
+  /// means the caregiver cancelled the chooser (benign back-to-signedOut).
+  /// A backend rejection rethrows so the sign-in screen surfaces the error.
+  @override
+  Future<void> signInWithGoogle() async {
+    _emit(const AuthState.loading());
+    final String? idToken;
+    try {
+      idToken = await _googleFlow();
+    } catch (_) {
+      _emit(const AuthState.signedOut());
+      rethrow;
+    }
+    if (idToken == null || idToken.isEmpty) {
+      // Cancelled the chooser — no error.
+      _emit(const AuthState.signedOut());
+      return;
+    }
+    final GoogleAuthResultLike verified;
+    try {
+      verified = await _verifier(idToken);
+    } catch (_) {
+      _emit(const AuthState.signedOut());
+      rethrow;
+    }
+    final User user = User(
+      id: verified.userId,
+      email: verified.email,
+      name: verified.name,
+    );
+    // Persist the verified user so the next launch restores signedIn
+    // straight to Home (no re-tap) — see [readPersistedAlphaUser].
+    await _userStore.write(user);
+    _emit(AuthState.signedIn(user: user));
+  }
+
+  @override
+  Future<void> signOut() async {
+    await _userStore.clear();
+    _emit(const AuthState.signedOut());
+  }
+
+  @override
+  Future<void> deleteAccount() => signOut();
+
+  void _emit(AuthState next) {
+    _state = next;
+    if (!_changes.isClosed) _changes.add(next);
+  }
+}
+
 /// Bridge a broadcast [source] + a `currentState` getter into a stream
 /// that:
 ///
@@ -398,6 +581,82 @@ const bool _useFakeAuth = bool.fromEnvironment(
 
 const bool _useFake = _demoMode || _useFakeAuth;
 
+/// Build-time flag (`ALPHA_FEEDBACK`). When set, the app runs in
+/// alpha-tester mode: an [AlphaAuthProvider] (REAL Google verified by the
+/// backend, plus a local "just start" name + per-install id fallback)
+/// replaces the canned [FakeAuthProvider], so every tester is a distinct,
+/// persisted, attributable account. Demo-tour and widget-test builds (no
+/// ALPHA_FEEDBACK) keep [FakeAuthProvider].
+// ignore: do_not_use_environment
+const bool _alphaTesterMode =
+    bool.fromEnvironment('ALPHA_FEEDBACK', defaultValue: false);
+
+/// The Web OAuth client id (`--dart-define=GOOGLE_SERVER_CLIENT_ID=...`).
+/// Passed to `GoogleSignIn.serverClientId` so the issued ID token's `aud`
+/// equals the backend's Web client id on BOTH iOS and Android — that's
+/// the audience the backend's `/auth/google` verifier checks. No secret
+/// in source: the operator pipes it in at build time.
+const String googleServerClientId =
+    String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
+
+/// The iOS OAuth client id (`--dart-define=GOOGLE_IOS_CLIENT_ID=...`).
+/// Passed to `GoogleSignIn.clientId`; only meaningful on iOS (google_sign_in
+/// ignores it on Android). Pairs with the reversed-client-id URL scheme in
+/// `ios/Runner/Info.plist`.
+const String googleIosClientId =
+    String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+
+/// True when the Google button should be shown/enabled — i.e. the build
+/// baked in a Web client id. When false the sign-in screen hides the
+/// Google button and the app falls back to the local "just start" path,
+/// so an un-configured build still works. A compile-time `const` (the
+/// define defaults to the empty string) so it can default a `const`
+/// widget constructor.
+const bool googleSignInConfigured = googleServerClientId != '';
+
+/// Build the production [GoogleSignIn] client with the build-time client
+/// ids wired so the issued ID token's `aud` matches the backend on both
+/// platforms. `serverClientId` (Web client id) drives the `aud`; `clientId`
+/// (iOS client id) is required by the iOS plugin and ignored elsewhere.
+/// Empty defines are passed as null so an un-configured build still
+/// constructs a (non-functional) client without throwing.
+GoogleSignIn buildProductionGoogleSignIn() => GoogleSignIn(
+      scopes: const <String>['email', 'profile'],
+      serverClientId:
+          googleServerClientId.trim().isEmpty ? null : googleServerClientId,
+      clientId: googleIosClientId.trim().isEmpty ? null : googleIosClientId,
+    );
+
+/// Drive the production Google sign-in sheet and return the **ID token**
+/// (not the access token) — that's the signed JWT the backend's
+/// `/auth/google` verifier checks. Null on cancel. Built off
+/// [buildProductionGoogleSignIn] so the same client-id config feeds both
+/// the [RealAuthProvider] OAuth path and the alpha Google path.
+Future<String?> productionGoogleIdTokenFlow() async {
+  final GoogleSignIn google = buildProductionGoogleSignIn();
+  final GoogleSignInAccount? account = await google.signIn();
+  if (account == null) return null;
+  final GoogleSignInAuthentication auth = await account.authentication;
+  return auth.idToken;
+}
+
+/// The persisted Google [User], preloaded from [UserStore] in `main()`
+/// before `runApp` so [AlphaAuthProvider] starts signedIn for a returning
+/// Google tester — no sign-in-screen flash, no re-tap. Null means no
+/// persisted Google session (first launch, or signed out) → starts
+/// signedOut → the sign-in screen shows the Google button. Only consulted
+/// in alpha-tester builds. A returning tester who only ever used the
+/// (now-removed) local bypass has no persisted user here, so they land on
+/// sign-in and must use Google.
+User? preloadedAlphaUser;
+
+/// Read the persisted Google [User] for alpha-mode launch restore. Called
+/// from `main()` before `runApp`; the result seeds [preloadedAlphaUser].
+/// Returns null in offline / first-launch / signed-out cases (it only
+/// touches local `shared_preferences`, never the network — so a returning
+/// Google tester is restored even with no connectivity).
+Future<User?> readPersistedAlphaUser() => const UserStore().read();
+
 /// Riverpod-wired backend selection. Widgets and services read
 /// `ref.watch(authProvider)` and get whichever impl the build mode
 /// picked — they never see the concrete class.
@@ -408,6 +667,28 @@ const bool _useFake = _demoMode || _useFakeAuth;
 /// Consumers read through the [authProvider] alias below.
 @Riverpod(keepAlive: true)
 AuthProvider authBackend(Ref ref) {
+  if (_alphaTesterMode) {
+    // Alpha is Google-ONLY (user decision): REAL Google verified by the
+    // backend, no local bypass. The verifier reaches the live forum
+    // client. [preloadedAlphaUser] restores a returning Google tester to
+    // signedIn at launch (persisted via [UserStore]); a stale local
+    // identity is NEVER auto-resumed — testers go through Google.
+    final AlphaAuthProvider alpha = AlphaAuthProvider(
+      initialUser: preloadedAlphaUser,
+      googleFlow: productionGoogleIdTokenFlow,
+      verifier: (String idToken) async {
+        final GoogleAuthResult r =
+            await ref.read(forumApiClientProvider).verifyGoogleIdToken(idToken);
+        return GoogleAuthResultLike(
+          userId: r.userId,
+          email: r.email,
+          name: r.name,
+        );
+      },
+    );
+    ref.onDispose(alpha.dispose);
+    return alpha;
+  }
   if (_useFake) {
     final FakeAuthProvider fake = FakeAuthProvider();
     ref.onDispose(fake.dispose);

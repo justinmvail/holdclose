@@ -60,5 +60,25 @@ bool isForumAdmin(Ref ref) {
   );
 }
 
+/// The signed-in caregiver's own forum [ForumProfile.id], or null while
+/// the profile is loading / errored.
+///
+/// This is the ownership signal the community surfaces gate their edit +
+/// delete affordances on: a post / comment is "mine" when its `author_id`
+/// matches this id. Both sides are profile ids — the Worker stamps
+/// `posts.author_id` / `comments.author_id` with the author's profile id,
+/// the same id `GET /profiles/me` returns. Synthesized from
+/// [myForumProfileProvider] the same way [isForumAdminProvider] is, so a
+/// momentary "who am I?" gap collapses to null (no owner controls shown)
+/// rather than flickering them onto someone else's content.
+@Riverpod(keepAlive: true)
+String? myForumProfileId(Ref ref) {
+  final AsyncValue<ForumProfile> profile = ref.watch(myForumProfileProvider);
+  return profile.maybeWhen(
+    data: (ForumProfile p) => p.id,
+    orElse: () => null,
+  );
+}
+
 @visibleForTesting
 const String forumAdminRole = 'admin';

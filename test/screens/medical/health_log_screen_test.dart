@@ -22,6 +22,7 @@ HealthLogEntry _entry({
   int? diastolic,
   int? heartRate,
   double? temperatureF,
+  int? glucoseMgDl,
   String? notes,
 }) =>
     HealthLogEntry(
@@ -34,6 +35,7 @@ HealthLogEntry _entry({
       diastolic: diastolic,
       heartRate: heartRate,
       temperatureF: temperatureF,
+      glucoseMgDl: glucoseMgDl,
       notes: notes,
     );
 
@@ -171,6 +173,21 @@ void main() {
     expect(find.byKey(HealthLogScreen.rowKey('v1')), findsOneWidget);
     expect(find.byKey(HealthLogScreen.rowKey('s1')), findsOneWidget);
     expect(find.byKey(HealthLogScreen.rowKey('n1')), findsOneWidget);
+  });
+
+  testWidgets('a vitals row summary includes the blood glucose reading',
+      (WidgetTester tester) async {
+    await repo.upsert(_entry(
+      id: 'g1',
+      kind: HealthLogKind.vitals,
+      recordedAt: DateTime(2026, 6, 1, 8),
+      heartRate: 72,
+      glucoseMgDl: 110,
+    ));
+
+    await _pumpScreen(tester, repo: repo);
+
+    expect(find.text('HR 72 · 110 mg/dL'), findsOneWidget);
   });
 
   testWidgets('tapping a row opens the edit form for that entry',

@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../db/database.dart';
 import '../models/appointment.dart';
+import 'sync_sink.dart';
 
 part 'provider_repository.g.dart';
 
@@ -25,7 +26,7 @@ part 'provider_repository.g.dart';
 /// `ON DELETE CASCADE` declared in `lib/db/tables.dart`; the
 /// `PRAGMA foreign_keys = ON` in [CareblazersDatabase]'s `beforeOpen`
 /// is what makes that cascade real.
-class ProviderRepository {
+class ProviderRepository with SyncSinkHost {
   ProviderRepository(this._db);
 
   final CareblazersDatabase _db;
@@ -41,6 +42,7 @@ class ProviderRepository {
             payload: jsonEncode(provider.toJson()),
           ),
         );
+    emitUpsert('providers', provider.id, provider.toJson());
   }
 
   /// Drop the provider row. The FK's `ON DELETE CASCADE` removes every
@@ -49,6 +51,7 @@ class ProviderRepository {
     await (_db.delete(_db.providersTable)
           ..where((t) => t.id.equals(providerId)))
         .go();
+    emitDelete('providers', providerId);
   }
 
   /// One provider by id, or null if absent. The appointment form

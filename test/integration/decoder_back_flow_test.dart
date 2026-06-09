@@ -40,7 +40,6 @@ import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
 import 'package:careblazers/screens/decoder/decoder_result_screen.dart';
 import 'package:careblazers/screens/decoder/triage_screen.dart';
-import 'package:careblazers/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -96,23 +95,35 @@ void main() {
       expect(find.byType(TriageScreen), findsOneWidget);
       expect(find.byKey(TriageScreen.questionKey(0)), findsOneWidget);
 
-      // Back from Q1 (index 0) is a `maybePop` — it leaves triage entirely.
-      await tester.tap(find.byKey(TriageScreen.backButtonKey));
+      // Back from Q1 (index 0) leaves triage entirely. The redundant
+      // "Back to X" control was removed from PathHeader — the breadcrumb's
+      // parent crumb is the back affordance now. The crumb just before the
+      // terminal "Triage" page is "What's happening?" (route
+      // `/decoder/behavior`); tapping it runs `context.go` back to the
+      // behavior picker, the same screen the old `maybePop` landed on.
+      await tester.tap(pathHeaderBackTo("What's happening?"));
       await tester.pumpAndSettle();
 
       // The route returns to the screen that pushed triage: the picker is
-      // shown again and triage is gone. (go_router leaves the address at
-      // the base `/` across imperative pushes, so the screen identity is
-      // the location signal.)
+      // shown again and triage is gone.
       expect(find.byType(BehaviorPickerScreen), findsOneWidget);
       expect(find.byType(TriageScreen), findsNothing);
     });
   });
 
-  group('Decoder back-stack — Back from Q2 reverts to Q1 (Phase 15.4)', () {
+  group('Decoder back-stack — Back from Q2 exits the flow (Phase 15.4)', () {
     testWidgets(
-        'Back on Q2 returns to Q1 with the prior answer still selected',
+        'the Q2 breadcrumb back affordance leaves triage for the picker',
         (WidgetTester tester) async {
+      // Pre-refactor this case checked the in-screen Q2 → Q1 revert: the
+      // removed "Back to X" control was wired to TriageScreen._goBack, which
+      // on Q2 did a `setState(_questionIndex -= 1)` and kept the live
+      // [triageProvider] answer painted. That control is gone — the
+      // breadcrumb's parent crumb is the only back affordance now, and it
+      // `context.go`s out of the whole flow rather than stepping a question.
+      // There is no remaining in-screen Q2 → Q1 affordance to exercise, so
+      // this case now asserts what the parent crumb genuinely does from Q2:
+      // it exits triage to the behavior picker (the same crumb Q1 uses).
       final ProviderContainer container = await pumpCareblazersApp(tester);
       final GoRouter router = container.read(careblazersRouterProvider);
 
@@ -126,42 +137,35 @@ void main() {
       await tester.tap(find.byKey(TriageScreen.nextButtonKey));
       await tester.pumpAndSettle();
       expect(find.byKey(TriageScreen.questionKey(1)), findsOneWidget);
-
-      // Back from Q2 → Q1 (an in-screen setState, not a route pop).
-      await tester.tap(find.byKey(TriageScreen.backButtonKey));
-      await tester.pumpAndSettle();
-      expect(find.byKey(TriageScreen.questionKey(0)), findsOneWidget);
-      expect(find.text('1 of 3'), findsOneWidget);
-
-      // The selected pill paints a check; an unselected one doesn't. This
-      // is the "radio still selected" assertion (the design uses checked
-      // pills, not Material Radios).
-      expect(
-        find.descendant(
-          of: find.byKey(TriageScreen.optionKey(0, 2)),
-          matching: find.byIcon(Icons.check),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byKey(TriageScreen.optionKey(0, 0)),
-          matching: find.byIcon(Icons.check),
-        ),
-        findsNothing,
-      );
-      // Provider state is the source of truth that the pick survived.
+      // The pick is live in the provider while triage is still on screen.
       expect(
         container.read(triageProvider).when,
         TriageWhen.lateAfternoonEvening,
       );
+
+      // The crumb just before the terminal "Triage" page is "What's
+      // happening?" (route `/decoder/behavior`); tapping it runs
+      // `context.go` back to the behavior picker.
+      await tester.tap(pathHeaderBackTo("What's happening?"));
+      await tester.pumpAndSettle();
+
+      // The flow is left entirely: the picker is shown again and triage is
+      // gone (not a Q2 → Q1 step).
+      expect(find.byType(BehaviorPickerScreen), findsOneWidget);
+      expect(find.byType(TriageScreen), findsNothing);
+
+      // [triageProvider] is `@Riverpod(keepAlive: false)`; unmounting the
+      // triage screen drops its last listener, so the autoDispose notifier
+      // resets to a fresh answers object — the next decoder run starts clean
+      // (the provider's own doc spells out this contract).
+      expect(container.read(triageProvider).when, isNull);
     });
   });
 
   group('Decoder back-stack — Back from result is non-persisting (Phase 15.4)',
       () {
     testWidgets(
-        'backing out of a still-streaming result returns Home + writes no row',
+        'backing out of a still-streaming result writes no row',
         (WidgetTester tester) async {
       // The auto-log fires only on the LLM's `done` chunk. The seeded
       // FakeLLMProvider streams the (large) sundowning script in 8-token /
@@ -174,7 +178,7 @@ void main() {
       final GoRouter router = container.read(careblazersRouterProvider);
 
       // Push the result straight onto Home (every /decoder route is a root
-      // push), so popping it lands back on Home.
+      // push) so the streaming result is the topmost page when we back out.
       unawaited(router.push(
         '/decoder/result',
         extra: const DecoderResultArgsExtra(
@@ -193,22 +197,33 @@ void main() {
       // layout yet), otherwise the auto-log would already have run.
       expect(find.text('Try saying:'), findsNothing);
 
-      // Back out via the AppBar's Back button (scoped to the result screen
-      // so Home's chrome can't shadow the match).
+      // Back out via the breadcrumb. The redundant "Back to X" control was
+      // removed from PathHeader, so the parent crumb is the back affordance
+      // now: on the result screen the crumb just before the terminal
+      // "Decoder" page is "Triage" (route `/decoder/triage`). Tapping it
+      // runs `context.go('/decoder/triage')`, which leaves the streaming
+      // result and tears down its skeleton. Scope to the result screen so
+      // the find matches the result's PathHeader, not any other chrome.
       await tester.tap(
         find.descendant(
           of: find.byType(DecoderResultScreen),
-          matching: find.byType(BackButton),
+          matching: pathHeaderBackTo('Triage'),
         ),
       );
-      // The result screen (and its skeleton) is gone after the pop, so the
+      // The result screen (and its skeleton) is gone after the go, so the
       // tree settles now.
       await tester.pumpAndSettle();
 
-      expect(find.byType(HomeScreen), findsOneWidget);
+      // The streaming result is gone — we left it mid-stream, before `done`.
+      // (The crumb `go`s to the parent `/decoder/triage` route, which lands
+      // on that route's arg-less fallback since no [TriageArgs] rides a
+      // breadcrumb tap; the only thing this case asserts about the
+      // destination is that the result screen no longer covers it.)
       expect(find.byType(DecoderResultScreen), findsNothing);
 
-      // Nothing was persisted — the journal stayed empty.
+      // The point of this case: backing out mid-stream persisted nothing —
+      // the auto-log only fires on the LLM's `done` chunk, so the journal
+      // stayed empty.
       final List<JournalEntry> entries = await _readEntries(tester, container);
       expect(entries, isEmpty);
     });

@@ -21,7 +21,8 @@ import '../../providers/journal_entries_provider.dart';
 // `@visibleForTesting`, so they aren't a public API to reuse from here.)
 import '../../screens/medication/dose_log_screen.dart' show dosesTodayProvider;
 import '../../services/appointment_repository.dart';
-import '../../services/medication_repository.dart' show ScheduledDose;
+import '../../services/medication_repository.dart'
+    show DoseWindowGroup, ScheduledDose, groupDosesByWindow;
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
 
@@ -58,7 +59,7 @@ const List<ActivityCategory> activityFilterCategories = <ActivityCategory>[
   ActivityCategory.expense,
 ];
 
-/// One row in the chronological Care Team activity feed (Phase 14.32).
+/// One row in the chronological Care Circle activity feed (Phase 14.32).
 ///
 /// Every source maps its own row shape onto this single shape so the merge
 /// + sort is one pure operation regardless of how many sources feed it.
@@ -72,6 +73,7 @@ class ActivityFeedItem {
     required this.summary,
     required this.createdAt,
     required this.route,
+    this.doseWindow,
   });
 
   /// Source-prefixed so ids stay unique once several sources merge.
@@ -82,6 +84,37 @@ class ActivityFeedItem {
 
   /// The location [ActivityScreen] pushes when the row is tapped.
   final String route;
+
+  /// When set, this row is a folded medication window — the doses acted on
+  /// in one window collapse into a single entry that renders the window
+  /// header + each med with its status, the same way the Calendar and Home
+  /// schedule group doses. [summary] is the plain-text fallback (used for
+  /// the row's accessible label). Null for every non-dose row.
+  final ActivityDoseWindow? doseWindow;
+}
+
+/// A folded medication window for the activity feed — the window's name and
+/// the meds acted on in it, each with the status the caregiver logged.
+@immutable
+class ActivityDoseWindow {
+  const ActivityDoseWindow({required this.windowLabel, required this.meds});
+
+  /// The window's name ("Morning", "Evening", "As needed").
+  final String windowLabel;
+
+  /// The acted-on meds in this window, in the order the repository grouped
+  /// them (sorted by name).
+  final List<ActivityDoseEntry> meds;
+}
+
+/// One medication within an [ActivityDoseWindow] — its display name
+/// ("Donepezil 10 mg") and the status the caregiver logged.
+@immutable
+class ActivityDoseEntry {
+  const ActivityDoseEntry({required this.name, required this.status});
+
+  final String name;
+  final DoseStatus status;
 }
 
 /// The category-dot hue (Phase 14.32). Dose / note / appointment match the
@@ -91,7 +124,7 @@ class ActivityFeedItem {
 /// expense on brand navy. Exposed so tests assert the mapping without
 /// reaching into private state.
 @visibleForTesting
-Color activityCategoryColor(ActivityCategory category) {
+Color activityCategoryColor(BuildContext context, ActivityCategory category) {
   switch (category) {
     case ActivityCategory.dose:
       return ActivityScreen.doseColor; // teal
@@ -100,11 +133,11 @@ Color activityCategoryColor(ActivityCategory category) {
     case ActivityCategory.appointment:
       return ActivityScreen.appointmentColor; // coral
     case ActivityCategory.task:
-      return careblazersColors.link; // cool blue
+      return context.cb.link; // cool blue
     case ActivityCategory.shift:
-      return careblazersColors.success; // green
+      return context.cb.success; // green
     case ActivityCategory.expense:
-      return careblazersColors.primary; // navy
+      return context.cb.primary; // navy
   }
 }
 
@@ -144,18 +177,13 @@ String activityJournalSummary(JournalEntry entry) {
   return entry.behavior.label;
 }
 
-/// Short feed summary for an acted-on dose — "Gave Donepezil 10 mg",
-/// "Skipped …", "Missed …" depending on the logged status.
-@visibleForTesting
-String activityDoseSummary(ScheduledDose dose) {
-  final Medication med = dose.medication;
-  final String verb = switch (dose.log?.status) {
-    DoseStatus.skipped => 'Skipped',
-    DoseStatus.missed => 'Missed',
-    _ => 'Gave',
-  };
-  return '$verb ${med.name} ${med.dosage}';
-}
+/// The word a dose's logged [status] reads as — the verb the old per-dose
+/// summary used, now folded into the window row's accessible label.
+String _doseStatusWord(DoseStatus status) => switch (status) {
+      DoseStatus.skipped => 'Skipped',
+      DoseStatus.missed => 'Missed',
+      DoseStatus.taken || DoseStatus.late => 'Gave',
+    };
 
 /// Short feed summary for an appointment — "Appointment with Dr. Ortega",
 /// or a soft fallback when the provider row is missing (deleted, or not yet
@@ -183,20 +211,47 @@ ActivityFeedItem journalActivityFeedItem(JournalEntry entry) {
   );
 }
 
-/// Map an acted-on dose onto a feed row. [dose.log] is expected non-null
-/// (the aggregator filters unlogged doses out); the timestamp is when the
-/// caregiver acted, falling back to the scheduled time for a logged
-/// skip/miss that never stamped a `takenAt`.
+/// Fold the acted-on doses into one feed row **per medication window** —
+/// "Morning Medication" with each med + its logged status — instead of one
+/// row per dose, matching the Calendar and Home schedule grouping. The
+/// caller passes only doses the caregiver has acted on (`log != null`);
+/// across windows the order follows [groupDosesByWindow] (by anchor time),
+/// and the feed's own newest-first sort then places each window by its most
+/// recent action.
 @visibleForTesting
-ActivityFeedItem doseActivityFeedItem(ScheduledDose dose) {
-  final DoseLog log = dose.log!;
+List<ActivityFeedItem> doseWindowActivityFeedItems(
+  List<ScheduledDose> actedDoses,
+) {
+  return <ActivityFeedItem>[
+    for (final DoseWindowGroup g in groupDosesByWindow(actedDoses))
+      _doseWindowFeedItem(g),
+  ];
+}
+
+ActivityFeedItem _doseWindowFeedItem(DoseWindowGroup group) {
+  final List<ActivityDoseEntry> meds = <ActivityDoseEntry>[
+    for (final ScheduledDose d in group.doses)
+      ActivityDoseEntry(
+        name: '${d.medication.name} ${d.medication.dosage}',
+        status: d.log!.status,
+      ),
+  ];
+  // Anchor the entry to the window's most recent action so it sorts among
+  // the other events by when the caregiver last acted in this window.
+  final DateTime createdAt = group.doses
+      .map((ScheduledDose d) => d.log!.takenAt ?? d.scheduledFor)
+      .reduce((DateTime a, DateTime b) => a.isAfter(b) ? a : b);
   return ActivityFeedItem(
-    id: 'dose-${dose.medication.id}-'
-        '${dose.scheduledFor.millisecondsSinceEpoch}',
+    id: 'dose-window-${group.window.id}-'
+        '${createdAt.millisecondsSinceEpoch}',
     category: ActivityCategory.dose,
-    summary: activityDoseSummary(dose),
-    createdAt: log.takenAt ?? log.scheduledFor,
+    summary: '${group.window.label} medications',
+    createdAt: createdAt,
     route: '/medications/today',
+    doseWindow: ActivityDoseWindow(
+      windowLabel: group.window.label,
+      meds: meds,
+    ),
   );
 }
 
@@ -288,7 +343,7 @@ Future<List<ActivityFeedItem>> activityShiftItems(Ref ref) async =>
 Future<List<ActivityFeedItem>> activityExpenseItems(Ref ref) async =>
     const <ActivityFeedItem>[];
 
-/// The unified Care Team activity feed (TASKS.md Phase 14.32, BUILD_SPEC.md
+/// The unified Care Circle activity feed (TASKS.md Phase 14.32, BUILD_SPEC.md
 /// §5.14).
 ///
 /// Draws from the same source pool as the Home Recent Activity card (Phase
@@ -325,9 +380,12 @@ Future<List<ActivityFeedItem>> teamActivity(Ref ref) async {
   final List<ActivityFeedItem> items = <ActivityFeedItem>[
     for (final JournalEntry e in entries) journalActivityFeedItem(e),
     // Only doses the caregiver has acted on are "activity" — an upcoming,
-    // unlogged dose isn't a handoff-worthy event.
-    for (final ScheduledDose d in doses)
-      if (d.log != null) doseActivityFeedItem(d),
+    // unlogged dose isn't a handoff-worthy event. Acted doses fold into one
+    // row per medication window (the same grouping the Calendar + Home
+    // schedule use) instead of one row each.
+    ...doseWindowActivityFeedItems(
+      doses.where((ScheduledDose d) => d.log != null).toList(),
+    ),
     for (final Appointment a in appointments)
       appointmentActivityFeedItem(a, providerById[a.providerId]),
     // Only completed tasks are activity — an open/claimed task lives on the
@@ -351,10 +409,10 @@ DateTime Function() activityClock(Ref ref) => DateTime.now;
 // Screen
 // ---------------------------------------------------------------------------
 
-/// Care Team → Activity at `/team/activity` (TASKS.md Phase 14.32,
+/// Care Circle → Activity at `/team/activity` (TASKS.md Phase 14.32,
 /// BUILD_SPEC.md §5.14).
 ///
-/// A [PathHeader] (`Home › Care Team › Activity`, back to Care Team) over a
+/// A [PathHeader] (`Home › Care Circle › Activity`, back to Care Circle) over a
 /// multi-select filter-chip row (All / Doses / Notes / Tasks / Shifts /
 /// Expenses) and an unbounded, paginated, chronological feed of every
 /// meaningful care event. Each row carries a category-color dot, a one-line
@@ -464,7 +522,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     final DateTime now = ref.watch(activityClockProvider)();
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -477,11 +535,11 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                   const PathHeader(
                     breadcrumbs: <PathHeaderCrumb>[
                       PathHeaderCrumb(label: 'Home', route: '/'),
-                      PathHeaderCrumb(label: 'Care Team', route: '/team'),
+                      PathHeaderCrumb(label: 'Care Circle', route: '/team'),
                       PathHeaderCrumb(label: 'Activity'),
                     ],
                     title: 'Activity',
-                    backLabel: 'Back to Care Team',
+                    backLabel: 'Back to Care Circle',
                     leadingIcon: Icons.timeline_outlined,
                   ),
                   const SizedBox(height: 12),
@@ -506,7 +564,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                       filterActivity(all, _selected);
                   return RefreshIndicator(
                     onRefresh: _refresh,
-                    color: careblazersColors.cta,
+                    color: context.cb.cta,
                     child: _Feed(
                       items: filtered,
                       now: now,
@@ -584,11 +642,11 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? careblazersColors.cta : careblazersColors.primarySoft;
+        selected ? context.cb.cta : context.cb.primarySoft;
     final Color fill = selected
-        ? careblazersColors.cta.withValues(alpha: 0.12)
+        ? context.cb.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? careblazersColors.cta : careblazersColors.text;
+    final Color fg = selected ? context.cb.cta : context.cb.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -675,17 +733,30 @@ class _ActivityRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final Color dotColor = activityCategoryColor(item.category);
+    final Color dotColor = activityCategoryColor(context, item.category);
     final String relative = activityRelativeTime(item.createdAt, now);
     final String kind = activityCategoryLabel(item.category);
+    final ActivityDoseWindow? window = item.doseWindow;
+    // A dose-window row reads its window + each med's status; every other
+    // row reads its one-line summary.
+    final String semanticLabel = window == null
+        ? '$kind. ${item.summary}. $relative. Double-tap to open.'
+        : <String>[
+            kind,
+            '${window.windowLabel} medications',
+            for (final ActivityDoseEntry m in window.meds)
+              '${_doseStatusWord(m.status)} ${m.name}',
+            relative,
+            'Double-tap to open.',
+          ].join('. ');
 
     return Semantics(
       container: true,
       button: true,
-      label: '$kind. ${item.summary}. $relative. Double-tap to open.',
+      label: semanticLabel,
       child: ExcludeSemantics(
         child: Material(
-          color: careblazersColors.surfaceWarm,
+          color: context.cb.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: ActivityScreen.rowKey(item.id),
@@ -706,21 +777,23 @@ class _ActivityRow extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      item.summary,
-                      style: textTheme.bodyLarge?.copyWith(
-                        color: careblazersColors.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: window == null
+                        ? Text(
+                            item.summary,
+                            style: textTheme.bodyLarge?.copyWith(
+                              color: context.cb.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : _DoseWindowBody(window: window),
                   ),
                   const SizedBox(width: 12),
                   Text(
                     relative,
                     style: textTheme.bodyMedium?.copyWith(
-                      color: careblazersColors.primarySoft,
+                      color: context.cb.primarySoft,
                     ),
                   ),
                 ],
@@ -747,6 +820,87 @@ class _CategoryDot extends StatelessWidget {
       height: 12,
       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
+  }
+}
+
+/// The body of a folded medication-window row — the window header over each
+/// med with the status the caregiver logged. Mirrors the Calendar's window
+/// card so the two surfaces read alike.
+class _DoseWindowBody extends StatelessWidget {
+  const _DoseWindowBody({required this.window});
+
+  final ActivityDoseWindow window;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          '${window.windowLabel} Medication',
+          style: textTheme.bodyLarge?.copyWith(
+            color: context.cb.primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        for (final ActivityDoseEntry m in window.meds)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 2),
+            child: Row(
+              children: <Widget>[
+                _DoseStatusIcon(status: m.status),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    m.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: context.cb.text,
+                      // A given dose reads as "done" (struck through), the
+                      // same as the Calendar; a skip / miss stays upright
+                      // because it's the notable exception.
+                      decoration: (m.status == DoseStatus.taken ||
+                              m.status == DoseStatus.late)
+                          ? TextDecoration.lineThrough
+                          : null,
+                      decorationColor: context.cb.text,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _DoseStatusIcon extends StatelessWidget {
+  const _DoseStatusIcon({required this.status});
+
+  final DoseStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (IconData icon, Color color) = switch (status) {
+      DoseStatus.taken || DoseStatus.late => (
+          Icons.check_circle,
+          context.cb.success,
+        ),
+      DoseStatus.skipped => (
+          Icons.do_not_disturb_on_outlined,
+          context.cb.primarySoft,
+        ),
+      DoseStatus.missed => (
+          Icons.error_outline,
+          context.cb.error,
+        ),
+    };
+    return Icon(icon, size: 18, color: color);
   }
 }
 
@@ -785,13 +939,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.timeline_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'Nothing here yet.',
             style: textTheme.titleLarge?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -799,7 +953,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             'As your care circle logs doses, notes, visits, and tasks, '
             'every moment shows up here.',
-            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -819,7 +973,7 @@ class _ErrorView extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return RefreshIndicator(
       onRefresh: onRetry,
-      color: careblazersColors.cta,
+      color: context.cb.cta,
       child: ListView(
         key: ActivityScreen.errorKey,
         physics: const AlwaysScrollableScrollPhysics(),
@@ -828,7 +982,7 @@ class _ErrorView extends StatelessWidget {
           Text(
             "We couldn't load your care team's activity.\nPull down to try "
             'again.',
-            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
             textAlign: TextAlign.center,
           ),
         ],

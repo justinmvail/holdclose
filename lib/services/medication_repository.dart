@@ -7,6 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../db/database.dart';
 import '../models/medication.dart';
+import 'sync_sink.dart';
 
 part 'medication_repository.g.dart';
 
@@ -58,6 +59,104 @@ class ScheduledDose {
       '${log == null ? '' : ', logged=${log!.status.name}'})';
 }
 
+/// One [DoseWindow]'s worth of [ScheduledDose]s, ready for a
+/// window-grouped UI — the "Morning · 8:00 AM" header over the meds due
+/// then. Produced by [groupDosesByWindow].
+@immutable
+class DoseWindowGroup {
+  const DoseWindowGroup({required this.window, required this.doses});
+
+  final DoseWindow window;
+
+  /// Doses in this window, in the order [groupDosesByWindow] received
+  /// them (the repository hands them over already sorted by med name).
+  final List<ScheduledDose> doses;
+
+  /// The window's wall-clock anchor, shared by every dose in the group;
+  /// null for an as-needed window.
+  TimeOfDay? get anchorTime => window.anchorTime;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DoseWindowGroup &&
+          other.window == window &&
+          listEquals(other.doses, doses));
+
+  @override
+  int get hashCode => Object.hash(window, Object.hashAll(doses));
+
+  @override
+  String toString() =>
+      'DoseWindowGroup(${window.label}, ${doses.length} doses)';
+}
+
+/// Group [doses] by their [DoseWindow], preserving each dose's incoming
+/// order within a group. Groups are ordered by [DoseWindow.anchorTime]
+/// ascending — an as-needed window (null anchor) sorts last — with ties
+/// broken by [DoseWindow.sortOrder] then window id so the order stays
+/// stable across rebuilds.
+///
+/// Pure + widget-free so the Home medications card and the dose-log
+/// screen can share one grouping pass and unit-test it in isolation.
+List<DoseWindowGroup> groupDosesByWindow(List<ScheduledDose> doses) {
+  // LinkedHashMap preserves first-seen window order; the explicit sort
+  // below makes the final order independent of input order anyway, but
+  // keeping insertion order makes the pre-sort state easy to reason about.
+  final Map<String, List<ScheduledDose>> dosesByWindowId =
+      <String, List<ScheduledDose>>{};
+  final Map<String, DoseWindow> windowById = <String, DoseWindow>{};
+  for (final ScheduledDose dose in doses) {
+    dosesByWindowId
+        .putIfAbsent(dose.window.id, () => <ScheduledDose>[])
+        .add(dose);
+    windowById[dose.window.id] = dose.window;
+  }
+  final List<DoseWindowGroup> groups = <DoseWindowGroup>[
+    for (final MapEntry<String, DoseWindow> e in windowById.entries)
+      DoseWindowGroup(window: e.value, doses: dosesByWindowId[e.key]!),
+  ]..sort(_compareWindowGroup);
+  return groups;
+}
+
+int _compareWindowGroup(DoseWindowGroup a, DoseWindowGroup b) {
+  final TimeOfDay? at = a.window.anchorTime;
+  final TimeOfDay? bt = b.window.anchorTime;
+  // As-needed (null anchor) sorts after every clocked window.
+  if (at == null && bt != null) return 1;
+  if (at != null && bt == null) return -1;
+  if (at != null && bt != null) {
+    final int am = at.hour * 60 + at.minute;
+    final int bm = bt.hour * 60 + bt.minute;
+    if (am != bm) return am.compareTo(bm);
+  }
+  if (a.window.sortOrder != b.window.sortOrder) {
+    return a.window.sortOrder.compareTo(b.window.sortOrder);
+  }
+  return a.window.id.compareTo(b.window.id);
+}
+
+/// 12-hour clock label for a window header — "8:00 AM", "9:05 PM", or
+/// "As needed" when the window has no anchor. Mirrors the per-dose
+/// formatter the medication surfaces already use so the two read alike.
+String windowClockLabel(DoseWindow window) {
+  final TimeOfDay? t = window.anchorTime;
+  if (t == null) return 'As needed';
+  final int rawHour = t.hour % 12;
+  final int hour = rawHour == 0 ? 12 : rawHour;
+  final String minute = t.minute.toString().padLeft(2, '0');
+  final String suffix = t.hour < 12 ? 'AM' : 'PM';
+  return '$hour:$minute $suffix';
+}
+
+/// Back-compat alias for the now-shared [SyncSink] (lives in
+/// `sync_sink.dart`). The medication family was the proven template for
+/// server-authoritative sync; the sink it pioneered was generalised into
+/// [SyncSink] so every other repository reuses one class. Kept as a
+/// typedef so existing call sites (and the medication sync tests) that
+/// name `MedicationSyncSink` keep compiling.
+typedef MedicationSyncSink = SyncSink;
+
 /// Persistence + computed helpers for the medication tracker.
 ///
 /// Wraps four drift tables — [MedicationsTable], [DoseWindowsTable],
@@ -83,12 +182,16 @@ class ScheduledDose {
 /// window entries + logs via the FK `ON DELETE CASCADE` declared in
 /// `lib/db/tables.dart`. Deleting a [DoseWindow] cascades to its
 /// entries (so a "delete this window" action doesn't strand orphans).
-class MedicationRepository {
+class MedicationRepository with SyncSinkHost {
   MedicationRepository(this._db, {DateTime Function()? clock})
       : _clock = clock ?? DateTime.now;
 
   final CareblazersDatabase _db;
   final DateTime Function() _clock;
+
+  // The sync-sink wiring (`syncSink`, `applyingRemote`, `emitUpsert`,
+  // `emitDelete`) comes from [SyncSinkHost] — the proven medication
+  // template, generalised so every other repository reuses it.
 
   // ─────────────────────────────────────────── Medication CRUD ──
 
@@ -101,6 +204,7 @@ class MedicationRepository {
             payload: jsonEncode(medication.toJson()),
           ),
         );
+    emitUpsert('medication', medication.id, medication.toJson());
   }
 
   /// Drop the medication row. The FK's `ON DELETE CASCADE` removes its
@@ -109,6 +213,7 @@ class MedicationRepository {
     await (_db.delete(_db.medicationsTable)
           ..where((t) => t.id.equals(medicationId)))
         .go();
+    emitDelete('medication', medicationId);
   }
 
   /// Tombstone [medicationId] — stamp its [Medication.deletedAt] with
@@ -170,6 +275,7 @@ class MedicationRepository {
             payload: jsonEncode(window.toJson()),
           ),
         );
+    emitUpsert('dose_window', window.id, window.toJson());
   }
 
   /// Drop the window. FK cascade removes its entries; orphan logs (if
@@ -178,6 +284,7 @@ class MedicationRepository {
     await (_db.delete(_db.doseWindowsTable)
           ..where((t) => t.id.equals(windowId)))
         .go();
+    emitDelete('dose_window', windowId);
   }
 
   /// Every window for [patientId], ordered by sort then by anchor
@@ -229,6 +336,7 @@ class MedicationRepository {
             payload: jsonEncode(entry.toJson()),
           ),
         );
+    emitUpsert('medication_window_entry', entry.id, entry.toJson());
   }
 
   /// Drop a single entry by id. Used when the caregiver removes a med
@@ -237,6 +345,7 @@ class MedicationRepository {
     await (_db.delete(_db.medicationWindowEntriesTable)
           ..where((t) => t.id.equals(entryId)))
         .go();
+    emitDelete('medication_window_entry', entryId);
   }
 
   /// Every entry attached to [windowId], in insertion order.
@@ -279,11 +388,13 @@ class MedicationRepository {
             payload: jsonEncode(log.toJson()),
           ),
         );
+    emitUpsert('dose_log', log.id, log.toJson());
   }
 
   Future<void> deleteDoseLog(String logId) async {
     await (_db.delete(_db.doseLogsTable)..where((t) => t.id.equals(logId)))
         .go();
+    emitDelete('dose_log', logId);
   }
 
   /// Every log row for [medicationId], chronological by scheduled time.
@@ -306,8 +417,8 @@ class MedicationRepository {
   /// Scheduled doses across `[now, now + within]` that don't yet have a
   /// matching [DoseLog] row.
   Future<List<ScheduledDose>> upcomingDoses({
+    required String patientId,
     Duration within = const Duration(days: 7),
-    String patientId = 'demo-patient-mary',
   }) async {
     final DateTime now = _clock();
     final DateTime to = now.add(within);
@@ -322,7 +433,7 @@ class MedicationRepository {
   Future<List<ScheduledDose>> dosesInWindow(
     DateTime from,
     DateTime to, {
-    String patientId = 'demo-patient-mary',
+    required String patientId,
   }) async {
     return List<ScheduledDose>.unmodifiable(
         await _expandAcross(from: from, to: to, patientId: patientId));
@@ -332,7 +443,7 @@ class MedicationRepository {
   /// [date] with the matching [DoseLog] attached.
   Future<List<ScheduledDose>> dosesByDay(
     DateTime date, {
-    String patientId = 'demo-patient-mary',
+    required String patientId,
   }) async {
     final DateTime startOfDay = DateTime(date.year, date.month, date.day);
     final DateTime endOfDay =
@@ -355,7 +466,7 @@ class MedicationRepository {
   Future<double> adherenceRate({
     required String forMedication,
     required Duration window,
-    String patientId = 'demo-patient-mary',
+    required String patientId,
   }) async {
     final DateTime now = _clock();
     final DateTime from = now.subtract(window);

@@ -7,14 +7,16 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../db/database.dart';
 import '../models/care_shift.dart';
 import '../models/caregiver.dart';
+import '../services/sync_sink.dart';
 import 'care_circle_provider.dart';
+import 'care_events_provider.dart' show fallbackPatientId;
 
 part 'care_shifts_provider.g.dart';
 
 /// Logical patient id new shifts are stamped with (TASKS.md Phase 14.31) —
-/// the single-install loved one. Same fallback constant the calendar +
-/// care-circle + care-task forms use.
-const String careShiftsPatientId = 'demo-patient-mary';
+/// the single-install loved one. Aliases the shared neutral
+/// [fallbackPatientId] so there's one source of truth for the value.
+const String careShiftsPatientId = fallbackPatientId;
 
 /// A half-open interval `[start, end)` on the coverage timeline (TASKS.md
 /// Phase 14.31).
@@ -173,7 +175,7 @@ List<DayInterval> _gaps(
 /// day strip can window without decoding every blob. Tests build a
 /// repository directly against `CareblazersDatabase(NativeDatabase.memory())`
 /// so each test gets an isolated DB.
-class CareShiftsRepository {
+class CareShiftsRepository with SyncSinkHost {
   CareShiftsRepository(this._db);
 
   final CareblazersDatabase _db;
@@ -193,11 +195,13 @@ class CareShiftsRepository {
             payload: jsonEncode(shift.toJson()),
           ),
         );
+    emitUpsert('care_shifts', shift.id, shift.toJson());
   }
 
   /// Drop the shift with this id. No-op if absent.
   Future<void> deleteShift(String id) async {
     await (_db.delete(_db.careShiftsTable)..where((t) => t.id.equals(id))).go();
+    emitDelete('care_shifts', id);
   }
 
   /// One shift by id, or null if absent.

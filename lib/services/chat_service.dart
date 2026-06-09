@@ -4,14 +4,17 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/chat.dart';
-import '../models/journal_entry.dart';
-import '../providers/llm_provider.dart' show claudeShimEndpoint;
-import '../providers/storage_provider.dart';
+import '../providers/llm_provider.dart'
+    show claudeShimEndpoint, shimAuthHeaders;
 import '../seed/chat_system_prompt.dart';
+import 'chat_actions.dart';
+import 'chat_context_builder.dart';
 import 'chat_repository.dart';
+import 'feedback_service.dart' show alphaFeedbackEnabled;
 
 part 'chat_service.g.dart';
 
@@ -53,6 +56,32 @@ final class ChatDeltaError extends ChatDelta {
 
   final String message;
 }
+
+/// Prefix [ChatService] stamps onto the assistant bubble's body when a
+/// reply stream fails (`[chat error: <message>]`). Exposed so the chat
+/// screen can detect a failed turn and surface a retry affordance without
+/// re-deriving the private trailer format. The closing `]` is appended by
+/// the service; this is just the opening sentinel callers match on.
+///
+/// This sentinel — and the raw transport detail it wraps (a `DioException`,
+/// a shim port, a parse failure) — is an INTERNAL marker. It stays in the
+/// stored body so [chatBodyHasError] can light up the inline retry, but it
+/// must NEVER reach the caregiver verbatim: every display path runs the
+/// body through [ChatService.displayBody] first, which swaps the whole
+/// trailer for [chatFriendlyErrorMessage].
+const String chatErrorMarkerPrefix = '[chat error:';
+
+/// Caregiver-facing copy substituted for the raw `[chat error: …]`
+/// trailer at render time. Brand-voiced, mentions no transport/internal
+/// detail (no "AI", no shim, no exception class) — the coach is simply
+/// unreachable for the moment. Used by [ChatService.displayBody].
+const String chatFriendlyErrorMessage =
+    "Couldn't reach the coach just now. Try again in a moment.";
+
+/// True when [body] carries the failed-turn sentinel — i.e. the reply
+/// stream errored and [ChatService] folded `[chat error: …]` into the
+/// assistant message. Drives the chat screen's inline "Try again" action.
+bool chatBodyHasError(String body) => body.contains(chatErrorMarkerPrefix);
 
 /// Streaming-chat backend (TASKS.md Phase 11.3, BUILD_SPEC.md §6
 /// "every backend is an interface").
@@ -145,6 +174,7 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
         options: Options(
           responseType: ResponseType.stream,
           contentType: Headers.jsonContentType,
+          headers: shimAuthHeaders(),
         ),
       );
     } catch (e) {
@@ -280,6 +310,11 @@ String _defaultChatIdFactory() {
   return 'chat-$ms-$rand';
 }
 
+/// Default [ChatService.contextSnapshot] — no data injected. Keeps the
+/// service unit-testable (the prompt equals [chatSystemPrompt] unchanged)
+/// and chat-only surfaces wiring-free.
+Future<String> _emptyContextSnapshot() async => '';
+
 /// Pattern for `[action:<name> key="value" …]` tool-call markers in a
 /// finished assistant reply. v1 surfaces a single action — `log_journal`
 /// — but the parser is generic so a second action only needs an
@@ -291,33 +326,13 @@ final RegExp _actionPattern = RegExp(
   r'\[action:([a-z_]+)\s+([^\]]+)\]',
 );
 
-/// Action name the v1 coach can emit to write a wizard-shape journal
-/// entry on the caregiver's behalf (chat-harness path,
-/// `lib/seed/chat_system_prompt.dart` TOOLS section).
-const String _journalActionName = 'log_journal';
-
-/// Citation prefix the chat surface uses to render an "entry saved"
-/// chip in the assistant bubble. Mirrors the existing chip-renderer
-/// path so the journal-action surface reuses the [Message.citations]
-/// field without a new schema column.
-const String journalCitationPrefix = 'journal:';
-
 /// Action-execution result the orchestrator stamps into the assistant
-/// message's [Message.citations] list. Carries the resolved journal
-/// entry id so the chip renderer can deep-link into the entry.
+/// message's [Message.citations] list. Carries the citation a chip
+/// renderer can deep-link from.
 class _ActionResult {
   const _ActionResult({required this.citation});
   final String citation;
 }
-
-/// Closure that lands a wizard-shape journal entry. Production wires
-/// this to the riverpod [storageProvider] via [chatServiceProvider];
-/// tests pass a stub closure that captures the call args.
-typedef JournalActionExecutor = Future<JournalEntry?> Function({
-  required DateTime occurredAt,
-  required String situation,
-  required String attempts,
-});
 
 /// Multi-turn dementia-care chat orchestrator (TASKS.md Phase 11.3).
 ///
@@ -348,20 +363,36 @@ class ChatService {
   ChatService({
     required this.repository,
     required this.backend,
-    this.journalExecutor,
+    Map<String, ChatActionExecutor>? actions,
+    Future<String> Function()? contextSnapshot,
     ChatIdFactory? idFactory,
     DateTime Function()? clock,
-  })  : idFactory = idFactory ?? _defaultChatIdFactory,
+  })  : actions = actions ?? const <String, ChatActionExecutor>{},
+        contextSnapshot = contextSnapshot ?? _emptyContextSnapshot,
+        idFactory = idFactory ?? _defaultChatIdFactory,
         clock = clock ?? DateTime.now;
 
   final ChatRepository repository;
   final ChatLLMBackend backend;
 
-  /// Executor wired into the chat-harness `[action:log_journal …]`
-  /// path. Null when the build wants a chat-only experience (e.g. the
-  /// onboarding tour) — in that case action markers are stripped from
-  /// the displayed text but the journal entry is NOT written.
-  final JournalActionExecutor? journalExecutor;
+  /// Fetches a compact, plain-text snapshot of the caregiver's CURRENT data
+  /// (loved one, medications, dose windows, upcoming appointments, routines)
+  /// to append to the system prompt so the coach can READ what's already in
+  /// the app — answering "what meds is she on?", "what are my windows
+  /// called?". Called FRESH every turn so the snapshot reflects a write the
+  /// coach itself just made. Defaults to a no-op (empty string) so unit
+  /// tests and chat-only surfaces don't have to wire the repositories;
+  /// production injects [gatherChatContext] via [chatServiceProvider]. A
+  /// failure here must never fail the turn — [sendMessage] swallows it.
+  final Future<String> Function() contextSnapshot;
+
+  /// Tool registry — the `[action:<name> …]` markers the assistant may
+  /// emit, each mapped to an executor that performs the write and returns
+  /// an optional citation. Empty for chat-only surfaces (e.g. the
+  /// onboarding tour) — then markers are stripped from the displayed text
+  /// but nothing is written. Production wires the full CRUD set via
+  /// [buildChatActions] in [chatServiceProvider].
+  final Map<String, ChatActionExecutor> actions;
 
   final ChatIdFactory idFactory;
   final DateTime Function() clock;
@@ -386,15 +417,10 @@ class ChatService {
     await repository.appendMessage(userMessage);
     yield userMessage;
 
-    // The model sees every prior turn plus the just-appended user
-    // message — loadMessages returns them in chronological order so
-    // the latest entry is the one to reply to.
-    final List<Message> history =
-        await repository.loadMessages(conversationId);
-    final List<ChatTurn> turns = history
-        .map((Message m) => ChatTurn(role: m.role, content: m.body))
-        .toList(growable: false);
-
+    // Constructed before loadMessages so the catch below always has an
+    // assistant turn to convert into a visible error bubble — but only
+    // APPENDED after the history read, so `history` is just the prior
+    // turns + the user message, not an empty assistant.
     Message assistant = Message(
       id: idFactory(),
       conversationId: conversationId,
@@ -404,53 +430,98 @@ class ChatService {
       createdAt: clock(),
       streamingDone: false,
     );
-    await repository.appendMessage(assistant);
-    yield assistant;
 
-    final StringBuffer buffer = StringBuffer();
-    bool errored = false;
+    try {
+      // The model sees every prior turn plus the just-appended user
+      // message — loadMessages returns them in chronological order so
+      // the latest entry is the one to reply to.
+      final List<Message> history =
+          await repository.loadMessages(conversationId);
+      final List<ChatTurn> turns = history
+          .map((Message m) => ChatTurn(role: m.role, content: m.body))
+          .toList(growable: false);
 
-    await for (final ChatDelta delta in backend.streamReply(
-      systemPrompt: chatSystemPrompt,
-      history: turns,
-    )) {
-      switch (delta) {
-        case ChatDeltaText(:final String text):
-          buffer.write(text);
-          assistant = assistant.copyWith(body: buffer.toString());
-          await repository.appendMessage(assistant);
-          yield assistant;
-        case ChatDeltaError(:final String message):
-          errored = true;
-          final String trailer = buffer.isEmpty
-              ? '[chat error: $message]'
-              : '$buffer\n\n[chat error: $message]';
-          assistant = assistant.copyWith(
-            body: stripActionMarkers(trailer),
-            citations: const <String>[],
-            streamingDone: true,
-          );
-          await repository.appendMessage(assistant);
-          yield assistant;
-          return;
+      await repository.appendMessage(assistant);
+      yield assistant;
+
+      // Pull a fresh read-only snapshot of the caregiver's current data and
+      // append it under the prompt so the coach can SEE what's in the app
+      // (alpha bug: it could write but not read). Fetched per turn so it
+      // reflects a med/appointment the coach itself just added. A failure
+      // here degrades to no snapshot — it must never sink the turn.
+      String systemPrompt = chatSystemPrompt;
+      try {
+        final String snapshot = await contextSnapshot();
+        if (snapshot.trim().isNotEmpty) {
+          systemPrompt = '$chatSystemPrompt\n\n$snapshot';
+        }
+      } catch (_) {
+        systemPrompt = chatSystemPrompt;
       }
+
+      final StringBuffer buffer = StringBuffer();
+      bool errored = false;
+
+      await for (final ChatDelta delta in backend.streamReply(
+        systemPrompt: systemPrompt,
+        history: turns,
+      )) {
+        switch (delta) {
+          case ChatDeltaText(:final String text):
+            buffer.write(text);
+            assistant = assistant.copyWith(body: buffer.toString());
+            await repository.appendMessage(assistant);
+            yield assistant;
+          case ChatDeltaError(:final String message):
+            errored = true;
+            final String marker = '$chatErrorMarkerPrefix $message]';
+            final String trailer =
+                buffer.isEmpty ? marker : '$buffer\n\n$marker';
+            assistant = assistant.copyWith(
+              body: stripActionMarkers(trailer),
+              citations: const <String>[],
+              streamingDone: true,
+            );
+            await repository.appendMessage(assistant);
+            yield assistant;
+            return;
+        }
+      }
+
+      if (errored) return;
+
+      final String rawBody = buffer.toString();
+      final List<_ActionResult> actionResults = await _executeActions(rawBody);
+      final String cleanBody = stripActionMarkers(rawBody);
+
+      assistant = assistant.copyWith(
+        body: cleanBody,
+        citations: actionResults
+            .map((_ActionResult r) => r.citation)
+            .toList(growable: false),
+        streamingDone: true,
+      );
+      await repository.appendMessage(assistant);
+      yield assistant;
+    } catch (e, st) {
+      // Never let a turn fail SILENTLY (alpha bug: "nothing happens after
+      // I hit send"). Any exception after the user message — loadMessages,
+      // a repo write, the action pass — becomes a visible, retryable error
+      // bubble instead of an empty stream the screen swallows. The cause is
+      // logged so the on-device failure can be diagnosed from a report.
+      debugPrint('Chat sendMessage failed: $e\n$st');
+      final Message errorMessage = assistant.copyWith(
+        body: '$chatErrorMarkerPrefix $e]',
+        citations: const <String>[],
+        streamingDone: true,
+      );
+      try {
+        await repository.appendMessage(errorMessage);
+      } catch (_) {
+        // Best-effort persist; the in-memory yield still surfaces it.
+      }
+      yield errorMessage;
     }
-
-    if (errored) return;
-
-    final String rawBody = buffer.toString();
-    final List<_ActionResult> actionResults = await _executeActions(rawBody);
-    final String cleanBody = stripActionMarkers(rawBody);
-
-    assistant = assistant.copyWith(
-      body: cleanBody,
-      citations: actionResults
-          .map((_ActionResult r) => r.citation)
-          .toList(growable: false),
-      streamingDone: true,
-    );
-    await repository.appendMessage(assistant);
-    yield assistant;
   }
 
   /// Run every recognised `[action:…]` marker the assistant emitted in
@@ -462,33 +533,19 @@ class ChatService {
     final List<_ActionResult> results = <_ActionResult>[];
     for (final RegExpMatch m in _actionPattern.allMatches(body)) {
       final String name = m.group(1)!;
-      final String rawArgs = m.group(2)!;
-      final Map<String, String> args = _parseActionArgs(rawArgs);
-      if (name == _journalActionName && journalExecutor != null) {
-        final DateTime when = _resolveOccurredAt(
-          args['occurred_at'],
-          clock(),
-        );
-        final String situation = args['situation']?.trim() ?? '';
-        final String attempts = args['attempts']?.trim() ?? '';
-        if (situation.isEmpty) continue;
-        try {
-          final JournalEntry? entry = await journalExecutor!(
-            occurredAt: when,
-            situation: situation,
-            attempts: attempts.isEmpty ? 'none yet' : attempts,
-          );
-          if (entry != null) {
-            results.add(_ActionResult(
-              citation: '$journalCitationPrefix${entry.id}',
-            ));
-          }
-        } catch (_) {
-          // Executor failure swallowed deliberately: the assistant's
-          // prose already lives in the bubble; surfacing a "tool
-          // failed" footer would derail the conversation. The action
-          // marker is still stripped below.
+      final ChatActionExecutor? executor = actions[name];
+      if (executor == null) continue; // unknown / unwired tool — skip
+      final Map<String, String> args = _parseActionArgs(m.group(2)!);
+      try {
+        final ChatActionOutcome? outcome = await executor(args);
+        final String? citation = outcome?.citation;
+        if (citation != null) {
+          results.add(_ActionResult(citation: citation));
         }
+      } catch (_) {
+        // Executor failure swallowed deliberately: the assistant's prose
+        // already lives in the bubble; surfacing a "tool failed" footer
+        // would derail the conversation. The marker is still stripped.
       }
     }
     return results;
@@ -504,6 +561,44 @@ class ChatService {
     // Collapse the trailing whitespace + double-newlines the model
     // sometimes leaves when the action is on its own line at the end.
     return stripped.trimRight();
+  }
+
+  /// Render [body] as the caregiver should SEE it — the single chokepoint
+  /// every display surface (conversation-list preview, the chat bubble
+  /// while streaming, the finalised bubble) funnels through so no internal
+  /// marker leaks to the UI:
+  ///
+  ///   - `[action:…]` tool tags are stripped (the action still ran; only
+  ///     the tag is hidden), via [stripActionMarkers].
+  ///   - A `[chat error: <raw transport detail>]` trailer is replaced
+  ///     wholesale by [chatFriendlyErrorMessage]. The raw detail can carry
+  ///     a `]` of its own (e.g. `DioException [connection error]: …`), so
+  ///     we cut from the sentinel to the END of the body rather than to the
+  ///     first bracket — the service always appends this trailer last, so
+  ///     everything from it on is the error payload.
+  ///
+  /// The stored body is untouched: [chatBodyHasError] still matches the raw
+  /// sentinel to drive the inline retry; this transform is render-only.
+  static String displayBody(String body) {
+    final int errIdx = body.indexOf(chatErrorMarkerPrefix);
+    if (errIdx == -1) {
+      return stripActionMarkers(body);
+    }
+    final String prose = stripActionMarkers(body.substring(0, errIdx));
+    String friendly = chatFriendlyErrorMessage;
+    // Alpha builds append the raw cause so a tester can screenshot the exact
+    // failure (production hides it behind the friendly line). Render-only.
+    if (alphaFeedbackEnabled) {
+      String raw = body.substring(errIdx + chatErrorMarkerPrefix.length).trim();
+      if (raw.endsWith(']')) raw = raw.substring(0, raw.length - 1).trim();
+      if (raw.isNotEmpty) {
+        friendly = '$chatFriendlyErrorMessage\n\n(alpha detail: $raw)';
+      }
+    }
+    if (prose.isEmpty) return friendly;
+    // Keep any partial reply that streamed before the failure, then the
+    // friendly line on its own paragraph.
+    return '$prose\n\n$friendly';
   }
 
   /// Parse `key="value" key2="value with \" escape"` into a map. Bare
@@ -525,38 +620,6 @@ class ChatService {
     return out;
   }
 
-  /// Resolve the free-text `occurred_at` (e.g. `"just now"`,
-  /// `"yesterday afternoon"`, `"last night around 9"`) into a wall-
-  /// clock [DateTime] relative to [now]. v1 covers the high-frequency
-  /// phrases the coach is told to use; anything unrecognised collapses
-  /// to [now].
-  static DateTime _resolveOccurredAt(String? raw, DateTime now) {
-    final String text = (raw ?? '').trim().toLowerCase();
-    if (text.isEmpty || text.contains('just now') || text == 'now') {
-      return now;
-    }
-    if (text.contains('yesterday')) {
-      // Default to mid-day yesterday — the prompt is told to use the
-      // caregiver's own phrasing, and that's a closer-than-anything
-      // fallback when no time-of-day is given.
-      final DateTime y = now.subtract(const Duration(days: 1));
-      return DateTime(y.year, y.month, y.day, 14);
-    }
-    if (text.contains('last night') || text.contains('overnight')) {
-      final DateTime y = now.subtract(const Duration(days: 1));
-      return DateTime(y.year, y.month, y.day, 21);
-    }
-    if (text.contains('this morning') || text.contains('earlier today')) {
-      return DateTime(now.year, now.month, now.day, 9);
-    }
-    if (text.contains('this afternoon')) {
-      return DateTime(now.year, now.month, now.day, 15);
-    }
-    if (text.contains('this evening') || text.contains('tonight')) {
-      return DateTime(now.year, now.month, now.day, 19);
-    }
-    return now;
-  }
 }
 
 /// Riverpod-wired chat backend (TASKS.md Phase 11.3). Defaults to the
@@ -572,30 +635,18 @@ ChatLLMBackend chatLLMBackend(Ref ref) => const ClaudeShimChatBackend();
 /// repository are themselves singletons, so the wrapper is cheap to
 /// keep alive.
 ///
-/// The `journalExecutor` closure runs the `[action:log_journal …]`
-/// tool call through [StorageProvider.insertJournalEntry]. Holding
-/// the [Ref] inside the closure (vs. baking the storage instance into
-/// the service constructor) lets a Settings override of [storageProvider]
-/// flow through without rebuilding the chat service.
+/// The action registry comes from [buildChatActions], which holds [ref]
+/// so each tool reaches its repository through the same provider graph the
+/// screens use — a Settings override of any backend flows through without
+/// rebuilding the chat service.
 @Riverpod(keepAlive: true)
 ChatService chatService(Ref ref) => ChatService(
       repository: ref.watch(chatRepositoryProvider),
       backend: ref.watch(chatLLMBackendProvider),
-      journalExecutor: ({
-        required DateTime occurredAt,
-        required String situation,
-        required String attempts,
-      }) async {
-        final DateTime now = DateTime.now();
-        final JournalEntry entry = JournalEntry.wizard(
-          id: 'journal-${now.millisecondsSinceEpoch}-'
-              '${math.Random().nextInt(1 << 32)}',
-          createdAt: now,
-          occurredAt: occurredAt,
-          situationText: situation,
-          attemptsText: attempts,
-        );
-        await ref.read(storageProvider).insertJournalEntry(entry);
-        return entry;
-      },
+      actions: buildChatActions(ref, clock: DateTime.now),
+      // Read the caregiver's current data fresh each turn through the same
+      // provider graph the screens use, then render it to the compact
+      // CURRENT DATA block the coach reads.
+      contextSnapshot: () async =>
+          formatChatContext(await gatherChatContext(ref)),
     );

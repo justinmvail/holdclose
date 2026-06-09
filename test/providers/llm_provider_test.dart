@@ -6,6 +6,7 @@ import 'package:careblazers/models/behavior.dart';
 import 'package:careblazers/models/decoder_result.dart';
 import 'package:careblazers/models/triage.dart';
 import 'package:careblazers/providers/llm_provider.dart';
+import 'package:careblazers/seed/activity_summary_prompt.dart';
 import 'package:careblazers/seed/fake_llm_seeds.dart';
 import 'package:careblazers/seed/system_prompt.dart';
 import 'package:dio/dio.dart';
@@ -252,14 +253,122 @@ void main() {
     });
   });
 
-  group('ClaudeCLIProvider — generateActivitySummary stub (Phase 14.12)', () {
-    test('surfaces a deferred-stub error rather than a silent empty stream',
+  group('ClaudeCLIProvider — generateActivitySummary (live shim)', () {
+    final List<ActivityEvent> events = <ActivityEvent>[
+      ActivityEvent(
+        kind: ActivityEventKind.journal,
+        summary: 'Mom got upset before dinner',
+        occurredAt: DateTime.utc(2026, 6, 1, 17, 30),
+      ),
+      ActivityEvent(
+        kind: ActivityEventKind.dose,
+        summary: 'Gave Donepezil 10 mg',
+        occurredAt: DateTime.utc(2026, 6, 1, 19),
+      ),
+    ];
+
+    test('empty events yield one empty string without calling out',
         () async {
-      const ClaudeCLIProvider provider = ClaudeCLIProvider();
-      final Stream<String> stream = provider.generateActivitySummary(
-        events: const <ActivityEvent>[],
+      // The throwing adapter proves no request is attempted on an empty day.
+      final _ThrowingAdapter adapter = _ThrowingAdapter();
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(dio: dio);
+      final List<String> out = await provider
+          .generateActivitySummary(events: const <ActivityEvent>[])
+          .toList();
+      expect(out, <String>['']);
+    });
+
+    test('streams growing accumulations ending in the full paragraph',
+        () async {
+      const String a = 'Over the last day, things were steady.';
+      const String b = ' The evening dose went down without a fuss.';
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _assistantEvent(a),
+        _assistantEvent(b),
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(dio: dio);
+
+      final List<String> out = await provider
+          .generateActivitySummary(lastNHours: 24, events: events)
+          .toList();
+
+      expect(out, <String>[a, a + b]);
+      for (int i = 1; i < out.length; i++) {
+        expect(out[i].startsWith(out[i - 1]), isTrue);
+        expect(out[i].length, greaterThan(out[i - 1].length));
+      }
+    });
+
+    test('POST body carries the activity system prompt + flattened events',
+        () async {
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _assistantEvent('A calm recap.'),
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(dio: dio);
+
+      await provider
+          .generateActivitySummary(lastNHours: 24, events: events)
+          .toList();
+
+      expect(adapter.lastRequest!.uri.toString(), claudeShimEndpoint);
+      final Map<String, dynamic> sent = adapter.lastRequestBody!;
+      expect(sent['system'], equals(activitySummarySystemPrompt));
+      final String user = sent['user'] as String;
+      expect(user, contains('window_hours: 24'));
+      expect(user, contains('[journal] Mom got upset before dinner'));
+      expect(user, contains('[dose] Gave Donepezil 10 mg'));
+      // Oldest first — the journal note precedes the later dose.
+      expect(user.indexOf('Mom got upset'), lessThan(user.indexOf('Donepezil')));
+    });
+
+    test('buildActivityUserMessage tags part-of-day, oldest first', () {
+      final String msg = ClaudeCLIProvider.buildActivityUserMessage(
+        lastNHours: 24,
+        events: <ActivityEvent>[
+          ActivityEvent(
+            kind: ActivityEventKind.journal,
+            summary: 'Morning walk',
+            occurredAt: DateTime.utc(2026, 6, 1, 9),
+          ),
+          ActivityEvent(
+            kind: ActivityEventKind.appointment,
+            summary: 'Appointment with Dr. Reyes',
+            occurredAt: DateTime.utc(2026, 6, 1, 22),
+          ),
+        ],
       );
-      await expectLater(stream.toList(), throwsUnimplementedError);
+      expect(msg, startsWith('window_hours: 24\n'));
+      expect(msg, contains('morning · [journal] Morning walk'));
+      expect(msg,
+          contains('night · [appointment] Appointment with Dr. Reyes'));
+    });
+
+    test('a shim error event surfaces as a stream error', () async {
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        'data: ${json.encode(<String, String>{'error': 'claude binary not found on PATH'})}\n\n',
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(dio: dio);
+      await expectLater(
+        provider.generateActivitySummary(events: events).toList(),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('transport failure surfaces as a stream error', () async {
+      final _ThrowingAdapter adapter = _ThrowingAdapter();
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(dio: dio);
+      await expectLater(
+        provider.generateActivitySummary(events: events).toList(),
+        throwsA(isA<Exception>()),
+      );
     });
   });
 
@@ -640,6 +749,38 @@ void main() {
         expect(done.result.generatedAt, DateTime.utc(2026, 6, 1));
       },
     );
+
+    test('fenced JSON output is unwrapped and parsed to done', () async {
+      // The live model sometimes wraps the object in a Markdown ```json
+      // fence despite the "ONLY valid JSON" instruction (observed with
+      // sonnet over the shim). The provider must unwrap it, not error.
+      const String fenced =
+          '```json\n{"say": ["x", "y"], "tweak": ["z"], "dont_say": ["q"]}\n```';
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _assistantEvent(fenced),
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeCLIProvider provider = ClaudeCLIProvider(
+        dio: dio,
+        clock: () => DateTime.utc(2026, 6, 1),
+      );
+
+      final List<DecoderChunk> chunks = await provider
+          .generateDecoderScript(
+            behavior: callBehavior,
+            triage: callTriage,
+            patient: callPatient,
+            attempt: 1,
+          )
+          .toList();
+
+      expect(chunks.last, isA<DecoderChunkDone>());
+      final DecoderChunkDone done = chunks.last as DecoderChunkDone;
+      expect(done.result.say, equals(<String>['x', 'y']));
+      expect(done.result.tweak, equals(<String>['z']));
+      expect(done.result.dontSay, equals(<String>['q']));
+    });
   });
 }
 

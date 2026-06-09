@@ -113,6 +113,11 @@ abstract class EmergencyCard with _$EmergencyCard {
 
     /// Optional on-disk pointer to a scanned or printed copy of the card.
     String? attachmentPath,
+
+    /// Optional R2 storage key for [attachmentPath]'s uploaded bytes, so the
+    /// scan survives a reinstall and syncs across the care circle. Null until
+    /// the image has been uploaded (best-effort; see [DocumentBlobService]).
+    String? attachmentKey,
   }) = _EmergencyCard;
 
   factory EmergencyCard.fromJson(Map<String, dynamic> json) =>
@@ -148,9 +153,15 @@ abstract class PowerOfAttorneyDoc with _$PowerOfAttorneyDoc {
     /// Optional on-disk pointer to a scan of the signed document.
     String? scanPath,
 
+    /// Optional R2 storage key for [scanPath]'s uploaded bytes.
+    String? scanKey,
+
     /// Optional shared on-disk attachment pointer (mirrors the other
     /// document kinds' [EmergencyCard.attachmentPath]).
     String? attachmentPath,
+
+    /// Optional R2 storage key for [attachmentPath]'s uploaded bytes.
+    String? attachmentKey,
   }) = _PowerOfAttorneyDoc;
 
   factory PowerOfAttorneyDoc.fromJson(Map<String, dynamic> json) =>
@@ -185,9 +196,17 @@ abstract class IdentificationDoc with _$IdentificationDoc {
     String? photoFrontPath,
     String? photoBackPath,
 
+    /// Optional R2 storage keys for [photoFrontPath] / [photoBackPath]'s
+    /// uploaded bytes.
+    String? photoFrontKey,
+    String? photoBackKey,
+
     /// Optional shared on-disk attachment pointer (mirrors the other
     /// document kinds' [EmergencyCard.attachmentPath]).
     String? attachmentPath,
+
+    /// Optional R2 storage key for [attachmentPath]'s uploaded bytes.
+    String? attachmentKey,
   }) = _IdentificationDoc;
 
   factory IdentificationDoc.fromJson(Map<String, dynamic> json) =>

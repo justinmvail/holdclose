@@ -31,7 +31,8 @@ enum HealthLogKind {
 ///
 /// Every measurement field is nullable so each [kind] only fills what it
 /// needs: a [HealthLogKind.vitals] row carries [systolic] / [diastolic]
-/// / [heartRate] / [temperatureF]; a [HealthLogKind.symptom] row carries
+/// / [heartRate] / [temperatureF] / [glucoseMgDl]; a
+/// [HealthLogKind.symptom] row carries
 /// [severity] (1–5) + [notes]; a [HealthLogKind.note] row carries just
 /// [notes]. The model does not enforce which fields go with which kind —
 /// that's the add-form's job — so an unusual combination still round-
@@ -63,6 +64,9 @@ abstract class HealthLogEntry with _$HealthLogEntry {
 
     /// Body temperature in degrees Fahrenheit. Null when not measured.
     double? temperatureF,
+
+    /// Blood glucose (mg/dL). Null when not measured.
+    int? glucoseMgDl,
 
     /// Free-text observation. The whole payload for a [HealthLogKind.note]
     /// row; an optional annotation on vitals + symptom rows.

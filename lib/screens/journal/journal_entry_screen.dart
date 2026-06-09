@@ -12,6 +12,7 @@ import '../../providers/photo_attacher_provider.dart';
 import '../../providers/storage_provider.dart';
 import '../../providers/voice_note_recorder_provider.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 /// Journal entry detail (BUILD_SPEC.md §5.6).
 ///
@@ -132,7 +133,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
           TextButton(
             key: JournalEntryScreen.deleteConfirmKey,
             style: TextButton.styleFrom(
-              foregroundColor: careblazersColors.error,
+              foregroundColor: context.cb.error,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Delete'),
@@ -158,38 +159,54 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
 
     return entryAsync.when(
       loading: () => Scaffold(
-        backgroundColor: careblazersColors.background,
-        appBar: AppBar(title: const Text('Journal entry')),
-        body: const SizedBox.shrink(),
+        backgroundColor: context.cb.background,
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            children: const <Widget>[
+              _EntryPathHeader(),
+            ],
+          ),
+        ),
       ),
       error: (Object error, StackTrace _) => Scaffold(
-        backgroundColor: careblazersColors.background,
-        appBar: AppBar(title: const Text('Journal entry')),
-        body: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: Text(
-              "We couldn't load this entry.\n$error",
-              style: Theme.of(context).textTheme.bodyLarge,
-              textAlign: TextAlign.center,
-            ),
+        backgroundColor: context.cb.background,
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            children: <Widget>[
+              const _EntryPathHeader(),
+              const SizedBox(height: 24),
+              Center(
+                child: Text(
+                  "We couldn't load this entry.\n$error",
+                  style: Theme.of(context).textTheme.bodyLarge,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
           ),
         ),
       ),
       data: (JournalEntry? entry) {
         if (entry == null) {
           return Scaffold(
-            backgroundColor: careblazersColors.background,
-            appBar: AppBar(title: const Text('Journal entry')),
-            body: Center(
-              key: JournalEntryScreen.notFoundKey,
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  "This entry isn't here anymore.",
-                  style: Theme.of(context).textTheme.bodyLarge,
-                  textAlign: TextAlign.center,
-                ),
+            backgroundColor: context.cb.background,
+            body: SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                children: <Widget>[
+                  const _EntryPathHeader(),
+                  const SizedBox(height: 24),
+                  Center(
+                    key: JournalEntryScreen.notFoundKey,
+                    child: Text(
+                      "This entry isn't here anymore.",
+                      style: Theme.of(context).textTheme.bodyLarge,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -203,9 +220,14 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
   Widget _buildContent(BuildContext context, JournalEntry entry) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       appBar: AppBar(
-        title: Text(_formatHeaderDateTime(entry.createdAt)),
+        // The title + labeled Back control live in the body PathHeader;
+        // this bar only hosts the kebab action (and suppresses the auto
+        // back-arrow).
+        automaticallyImplyLeading: false,
+        backgroundColor: context.cb.background,
+        elevation: 0,
         actions: <Widget>[
           PopupMenuButton<String>(
             key: JournalEntryScreen.kebabMenuKey,
@@ -222,12 +244,12 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
                   children: <Widget>[
                     Icon(
                       Icons.delete_outline,
-                      color: careblazersColors.error,
+                      color: context.cb.error,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'Delete',
-                      style: TextStyle(color: careblazersColors.error),
+                      style: TextStyle(color: context.cb.error),
                     ),
                   ],
                 ),
@@ -240,6 +262,8 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           children: <Widget>[
+            _EntryPathHeader(title: _formatHeaderDateTime(entry.createdAt)),
+            const SizedBox(height: 20),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -261,12 +285,12 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
               minLines: 3,
               maxLines: 6,
               style: textTheme.bodyLarge?.copyWith(
-                color: careblazersColors.text,
+                color: context.cb.text,
               ),
               decoration: InputDecoration(
                 hintText: 'What happened? What helped?',
                 filled: true,
-                fillColor: careblazersColors.surfaceWarm,
+                fillColor: context.cb.surfaceWarm,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -291,7 +315,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
             ElevatedButton(
               key: JournalEntryScreen.saveButtonKey,
               style: ElevatedButton.styleFrom(
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -312,6 +336,32 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
 // Section pieces
 // ---------------------------------------------------------------------------
 
+/// Shared [PathHeader] for every async branch of the entry detail. The
+/// `Home › Medical › Journal › Entry` trail runs through the Medical hub
+/// (Journal is a top-level route reached from the Medical hub's Journal
+/// tile). The [title] is the formatted entry date/time on the data path
+/// and a plain "Entry" on the loading / error / not-found branches.
+class _EntryPathHeader extends StatelessWidget {
+  const _EntryPathHeader({this.title = 'Entry'});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return PathHeader(
+      breadcrumbs: const <PathHeaderCrumb>[
+        PathHeaderCrumb(label: 'Home', route: '/'),
+        PathHeaderCrumb(label: 'Care', route: '/medical'),
+        PathHeaderCrumb(label: 'Journal', route: '/journal'),
+        PathHeaderCrumb(label: 'Entry'),
+      ],
+      title: title,
+      backLabel: 'Back to Journal',
+      leadingIcon: Icons.book_outlined,
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.label});
 
@@ -323,7 +373,7 @@ class _SectionHeader extends StatelessWidget {
     return Text(
       label,
       style: textTheme.titleLarge?.copyWith(
-        color: careblazersColors.primary,
+        color: context.cb.primary,
       ),
     );
   }
@@ -340,7 +390,7 @@ class _BehaviorChip extends StatelessWidget {
     return Container(
       key: JournalEntryScreen.behaviorChipKey,
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(20),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -352,7 +402,7 @@ class _BehaviorChip extends StatelessWidget {
           Text(
             behavior.label,
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
           ),
         ],
@@ -372,22 +422,22 @@ class _OutcomeChip extends StatelessWidget {
     final ({String label, Color color, IconData icon}) shape = switch (outcome) {
       JournalOutcome.positive => (
           label: 'That helped',
-          color: careblazersColors.success,
+          color: context.cb.success,
           icon: Icons.check_circle_outline,
         ),
       JournalOutcome.triedDifferent => (
           label: 'Tried a different approach',
-          color: careblazersColors.primarySoft,
+          color: context.cb.primarySoft,
           icon: Icons.swap_horiz,
         ),
       JournalOutcome.error => (
           label: "Coach couldn't be reached",
-          color: careblazersColors.accentDeep,
+          color: context.cb.accentDeep,
           icon: Icons.error_outline,
         ),
       JournalOutcome.pending => (
           label: 'No outcome yet',
-          color: careblazersColors.primarySoft,
+          color: context.cb.primarySoft,
           icon: Icons.schedule,
         ),
     };
@@ -429,7 +479,7 @@ class _ScriptsSection extends StatelessWidget {
     return Container(
       key: JournalEntryScreen.scriptsSectionKey,
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.all(16),
@@ -440,7 +490,7 @@ class _ScriptsSection extends StatelessWidget {
             Text(
               'Try saying:',
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.primarySoft,
+                color: context.cb.primarySoft,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -451,7 +501,7 @@ class _ScriptsSection extends StatelessWidget {
                 child: Text(
                   '"$line"',
                   style: textTheme.bodyLarge?.copyWith(
-                    color: careblazersColors.text,
+                    color: context.cb.text,
                   ),
                 ),
               ),
@@ -461,7 +511,7 @@ class _ScriptsSection extends StatelessWidget {
             Text(
               'In the room:',
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.primarySoft,
+                color: context.cb.primarySoft,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -472,7 +522,7 @@ class _ScriptsSection extends StatelessWidget {
                 child: Text(
                   '•  $line',
                   style: textTheme.bodyLarge?.copyWith(
-                    color: careblazersColors.text,
+                    color: context.cb.text,
                   ),
                 ),
               ),
@@ -482,7 +532,7 @@ class _ScriptsSection extends StatelessWidget {
             Text(
               "Don't say:",
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.accentDeep,
+                color: context.cb.accentDeep,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -493,7 +543,7 @@ class _ScriptsSection extends StatelessWidget {
                 child: Text(
                   '✗  $line',
                   style: textTheme.bodyLarge?.copyWith(
-                    color: careblazersColors.text,
+                    color: context.cb.text,
                   ),
                 ),
               ),
@@ -528,22 +578,22 @@ class _VoiceNoteRow extends StatelessWidget {
           icon: Icon(
             recording ? Icons.stop_circle_outlined : Icons.mic_none,
             color: recording
-                ? careblazersColors.accentDeep
-                : careblazersColors.primary,
+                ? context.cb.accentDeep
+                : context.cb.primary,
           ),
           label: Text(
             recording ? 'Stop recording' : 'Record voice note',
             style: textTheme.labelLarge?.copyWith(
               color: recording
-                  ? careblazersColors.accentDeep
-                  : careblazersColors.primary,
+                  ? context.cb.accentDeep
+                  : context.cb.primary,
             ),
           ),
           style: OutlinedButton.styleFrom(
             side: BorderSide(
               color: recording
-                  ? careblazersColors.accentDeep
-                  : careblazersColors.primary,
+                  ? context.cb.accentDeep
+                  : context.cb.primary,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
@@ -552,7 +602,7 @@ class _VoiceNoteRow extends StatelessWidget {
           const SizedBox(width: 12),
           IconButton(
             key: JournalEntryScreen.playVoiceButtonKey,
-            icon: Icon(Icons.play_arrow, color: careblazersColors.cta),
+            icon: Icon(Icons.play_arrow, color: context.cb.cta),
             tooltip: 'Play voice note',
             onPressed: onPlay,
           ),
@@ -563,7 +613,7 @@ class _VoiceNoteRow extends StatelessWidget {
               child: Text(
                 '🔊 attached',
                 style: textTheme.bodyMedium?.copyWith(
-                  color: careblazersColors.primarySoft,
+                  color: context.cb.primarySoft,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -592,16 +642,16 @@ class _PhotoRow extends StatelessWidget {
           onPressed: onPick,
           icon: Icon(
             Icons.photo_camera_outlined,
-            color: careblazersColors.primary,
+            color: context.cb.primary,
           ),
           label: Text(
             path == null ? 'Attach photo' : 'Replace photo',
             style: textTheme.labelLarge?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
           ),
           style: OutlinedButton.styleFrom(
-            side: BorderSide(color: careblazersColors.primary),
+            side: BorderSide(color: context.cb.primary),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
         ),
@@ -612,15 +662,15 @@ class _PhotoRow extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: careblazersColors.surfaceWarm,
+              color: context.cb.surfaceWarm,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: careblazersColors.primarySoft.withValues(alpha: 0.3),
+                color: context.cb.primarySoft.withValues(alpha: 0.3),
               ),
             ),
             child: Icon(
               Icons.image_outlined,
-              color: careblazersColors.primarySoft,
+              color: context.cb.primarySoft,
             ),
           ),
         ],

@@ -6,6 +6,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/care_shift.dart';
 import '../../models/caregiver.dart';
+import '../../providers/active_patient_provider.dart';
 import '../../providers/care_shifts_provider.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
@@ -32,6 +33,8 @@ ShiftIdFactory shiftIdFactory(Ref ref) => _defaultShiftIdFactory;
 /// Assigned by the caregiver's index in the week's roster so a caregiver
 /// keeps one color across all seven days. Drawn from the brand tokens
 /// (BUILD_SPEC.md §3.1) — the most visually distinct ones first.
+// Top-level (no BuildContext) — uses the light const fallback. The band
+// colors are brand-fixed hues, so they read acceptably on both canvases.
 final List<Color> _bandPalette = <Color>[
   careblazersColors.link,
   careblazersColors.success,
@@ -41,10 +44,10 @@ final List<Color> _bandPalette = <Color>[
   careblazersColors.primarySoft,
 ];
 
-/// Care Team → Shifts at `/team/shifts` (TASKS.md Phase 14.31, BUILD_SPEC.md
+/// Care Circle → Shifts at `/team/shifts` (TASKS.md Phase 14.31, BUILD_SPEC.md
 /// §5.14).
 ///
-/// A [PathHeader] (`Home › Care Team › Shifts`, back to Care Team) over a
+/// A [PathHeader] (`Home › Care Circle › Shifts`, back to Care Circle) over a
 /// 7-day strip starting today. Each day row lays the day's shifts onto a
 /// 24-hour bar — a colored band per covering caregiver, red striped bands
 /// where nobody's on — and captions it with the caregiver count and the
@@ -66,16 +69,25 @@ class ShiftsScreen extends ConsumerWidget {
   static Key barKey(int dayIndex) => Key('shifts-bar-$dayIndex');
   static Key captionKey(int dayIndex) => Key('shifts-caption-$dayIndex');
 
+  /// Stable per-band key so tests can tap a specific shift's band to edit it.
+  static Key bandKey(String shiftId) => Key('shifts-band-$shiftId');
+
   // Schedule-shift sheet.
   static const Key scheduleSheetKey = Key('shifts-schedule-sheet');
   static const Key startButtonKey = Key('shifts-schedule-start');
   static const Key endButtonKey = Key('shifts-schedule-end');
   static const Key notesFieldKey = Key('shifts-schedule-notes');
   static const Key saveButtonKey = Key('shifts-schedule-save');
+  static const Key deleteButtonKey = Key('shifts-schedule-delete');
   static const Key caregiverErrorKey = Key('shifts-schedule-caregiver-error');
   static const Key timeErrorKey = Key('shifts-schedule-time-error');
   static Key caregiverOptionKey(String caregiverId) =>
       Key('shifts-schedule-caregiver-$caregiverId');
+
+  // Delete-confirmation dialog (the schedule sheet's Remove shift action).
+  static const Key deleteDialogKey = Key('shifts-delete-dialog');
+  static const Key deleteConfirmKey = Key('shifts-delete-confirm');
+  static const Key deleteCancelKey = Key('shifts-delete-cancel');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -83,7 +95,7 @@ class ShiftsScreen extends ConsumerWidget {
     final Map<String, Caregiver> caregivers = _caregiversById(ref);
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       floatingActionButton:
           _AddShiftFab(onPressed: () => _openScheduleSheet(context)),
       body: SafeArea(
@@ -95,11 +107,11 @@ class ShiftsScreen extends ConsumerWidget {
               child: PathHeader(
                 breadcrumbs: <PathHeaderCrumb>[
                   PathHeaderCrumb(label: 'Home', route: '/'),
-                  PathHeaderCrumb(label: 'Care Team', route: '/team'),
+                  PathHeaderCrumb(label: 'Care Circle', route: '/team'),
                   PathHeaderCrumb(label: 'Shifts'),
                 ],
                 title: 'Shifts',
-                backLabel: 'Back to Care Team',
+                backLabel: 'Back to Care Circle',
                 leadingIcon: Icons.access_time_outlined,
               ),
             ),
@@ -148,7 +160,7 @@ class ShiftsScreen extends ConsumerWidget {
   Future<void> _openScheduleSheet(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -171,8 +183,9 @@ class _AddShiftFab extends StatelessWidget {
       label: 'Schedule a shift. Open the new-shift form.',
       child: FloatingActionButton.extended(
         key: ShiftsScreen.fabKey,
+        heroTag: 'shifts-add-fab',
         onPressed: onPressed,
-        backgroundColor: careblazersColors.cta,
+        backgroundColor: context.cb.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -238,7 +251,7 @@ class _DayRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color labelColor =
-        isToday ? careblazersColors.cta : careblazersColors.primary;
+        isToday ? context.cb.cta : context.cb.primary;
     return Padding(
       key: ShiftsScreen.dayRowKey(dayIndex),
       padding: const EdgeInsets.only(bottom: 18),
@@ -269,8 +282,8 @@ class _DayRow extends StatelessWidget {
             key: ShiftsScreen.captionKey(dayIndex),
             style: textTheme.bodyMedium?.copyWith(
               color: coverage.isFullyCovered || coverage.shifts.isEmpty
-                  ? careblazersColors.text
-                  : careblazersColors.accentDeep,
+                  ? context.cb.text
+                  : context.cb.accentDeep,
             ),
           ),
         ],
@@ -314,7 +327,7 @@ class _CoverageBar extends StatelessWidget {
               Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: careblazersColors.surfaceWarm,
+                    color: context.cb.surfaceWarm,
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
@@ -328,7 +341,9 @@ class _CoverageBar extends StatelessWidget {
                   child: Semantics(
                     label: 'No coverage '
                         '${_clockLabel(gap.start)} to ${_clockLabel(gap.end)}',
-                    child: CustomPaint(painter: _GapStripePainter()),
+                    child: CustomPaint(
+                      painter: _GapStripePainter(errorColor: context.cb.error),
+                    ),
                   ),
                 ),
               for (final CareShift shift in coverage.shifts)
@@ -338,9 +353,11 @@ class _CoverageBar extends StatelessWidget {
                   top: 3,
                   bottom: 3,
                   child: _Band(
+                    bandKey: ShiftsScreen.bandKey(shift.id),
                     color: bandColors[shift.caregiverId] ??
-                        careblazersColors.primarySoft,
+                        context.cb.primarySoft,
                     label: _bandSemantics(shift),
+                    onTap: () => _editShift(context, shift),
                   ),
                 ),
             ],
@@ -353,25 +370,55 @@ class _CoverageBar extends StatelessWidget {
   String _bandSemantics(CareShift shift) {
     final String name = caregivers[shift.caregiverId]?.displayName ?? 'Someone';
     return '$name covering '
-        '${_clockLabel(shift.start)} to ${_clockLabel(shift.end)}';
+        '${_clockLabel(shift.start)} to ${_clockLabel(shift.end)}. '
+        'Tap to edit or delete.';
+  }
+
+  /// Tap a band to reopen the schedule sheet seeded with [shift] — a save
+  /// replaces it in place (same id) and the sheet also carries a Remove
+  /// action that drops it through the [CareShifts] notifier.
+  Future<void> _editShift(BuildContext context, CareShift shift) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.cb.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext sheetContext) =>
+          _ScheduleShiftSheet(existing: shift),
+    );
   }
 }
 
-/// One caregiver's colored coverage band.
+/// One caregiver's colored coverage band. Tapping it reopens the schedule
+/// sheet to edit or remove the shift.
 class _Band extends StatelessWidget {
-  const _Band({required this.color, required this.label});
+  const _Band({
+    required this.bandKey,
+    required this.color,
+    required this.label,
+    required this.onTap,
+  });
 
+  final Key bandKey;
   final Color color;
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
+      button: true,
       label: label,
-      child: Container(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(4),
+      child: GestureDetector(
+        key: bandKey,
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
         ),
       ),
     );
@@ -382,6 +429,10 @@ class _Band extends StatelessWidget {
 /// for a gap band (BUILD_SPEC.md §5.14). Uses the brand error token rather
 /// than a default Material red.
 class _GapStripePainter extends CustomPainter {
+  const _GapStripePainter({required this.errorColor});
+
+  final Color errorColor;
+
   @override
   void paint(Canvas canvas, Size size) {
     final RRect rrect = RRect.fromRectAndRadius(
@@ -389,13 +440,13 @@ class _GapStripePainter extends CustomPainter {
       const Radius.circular(4),
     );
     final Paint wash = Paint()
-      ..color = careblazersColors.error.withValues(alpha: 0.10);
+      ..color = errorColor.withValues(alpha: 0.10);
     canvas.drawRRect(rrect, wash);
 
     canvas.save();
     canvas.clipRRect(rrect);
     final Paint stroke = Paint()
-      ..color = careblazersColors.error.withValues(alpha: 0.45)
+      ..color = errorColor.withValues(alpha: 0.45)
       ..strokeWidth = 2;
     const double step = 7;
     for (double sx = -size.height; sx < size.width; sx += step) {
@@ -409,7 +460,8 @@ class _GapStripePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GapStripePainter oldDelegate) => false;
+  bool shouldRepaint(covariant _GapStripePainter oldDelegate) =>
+      oldDelegate.errorColor != errorColor;
 }
 
 class _EmptyState extends StatelessWidget {
@@ -428,13 +480,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.access_time_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             "No shifts scheduled yet. Tap Schedule shift to say who's "
             'covering and when.',
-            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -447,12 +499,18 @@ class _EmptyState extends StatelessWidget {
 // Schedule-shift sheet
 // ---------------------------------------------------------------------------
 
-/// Bottom sheet that schedules a shift (TASKS.md Phase 14.31). Collects a
-/// caregiver (required), a start + end time (end must be after start), and
-/// an optional handoff note. Save writes through the [CareShifts] notifier
-/// — which refreshes the strip — then pops.
+/// Bottom sheet that schedules *or edits* a shift (TASKS.md Phase 14.31).
+/// Collects a caregiver (required), a start + end time (end must be after
+/// start), and an optional handoff note. Save writes through the
+/// [CareShifts] notifier — which refreshes the strip — then pops. When
+/// [existing] is passed the fields seed from it, the save replaces it in
+/// place (same id) via the notifier's upsert path, and a Remove action drops
+/// it through the notifier.
 class _ScheduleShiftSheet extends ConsumerStatefulWidget {
-  const _ScheduleShiftSheet();
+  const _ScheduleShiftSheet({this.existing});
+
+  /// The shift being edited, or null when scheduling a new one.
+  final CareShift? existing;
 
   @override
   ConsumerState<_ScheduleShiftSheet> createState() =>
@@ -460,21 +518,30 @@ class _ScheduleShiftSheet extends ConsumerStatefulWidget {
 }
 
 class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
-  final TextEditingController _notes = TextEditingController();
-  String? _caregiverId;
+  late final TextEditingController _notes =
+      TextEditingController(text: widget.existing?.notes ?? '');
+  late String? _caregiverId = widget.existing?.caregiverId;
   late DateTime _start;
   late DateTime _end;
   String? _caregiverError;
   String? _timeError;
   bool _submitting = false;
 
+  bool get _isEditing => widget.existing != null;
+
   @override
   void initState() {
     super.initState();
-    final DateTime now = ref.read(careShiftsClockProvider)();
-    // Default to a standard 8-hour day shift on today, on the hour.
-    _start = DateTime(now.year, now.month, now.day, 9);
-    _end = _start.add(const Duration(hours: 8));
+    final CareShift? existing = widget.existing;
+    if (existing != null) {
+      _start = existing.start;
+      _end = existing.end;
+    } else {
+      final DateTime now = ref.read(careShiftsClockProvider)();
+      // Default to a standard 8-hour day shift on today, on the hour.
+      _start = DateTime(now.year, now.month, now.day, 9);
+      _end = _start.add(const Duration(hours: 8));
+    }
   }
 
   @override
@@ -538,15 +605,77 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
     });
 
     final String notes = _notes.text.trim();
-    final CareShift shift = CareShift(
-      id: ref.read(shiftIdFactoryProvider)(),
-      caregiverId: caregiverId,
-      start: _start,
-      end: _end,
-      patientId: careShiftsPatientId,
-      notes: notes.isEmpty ? null : notes,
-    );
+    final CareShift? existing = widget.existing;
+    // A new shift is stamped with the active loved one's id (was the
+    // `careShiftsPatientId` const) so it's filed under whichever person is
+    // selected (multi-patient, Issue #6). The edit path leaves the existing
+    // shift's patientId untouched. With one patient on file
+    // [activePatientIdProvider] resolves to that sole id, identical to the
+    // old const.
+    final String patientId = existing != null
+        ? existing.patientId
+        : await ref.read(activePatientIdProvider.future);
+    final CareShift shift = existing != null
+        // Edit: keep the id so the upsert replaces the same shift in place.
+        ? existing.copyWith(
+            caregiverId: caregiverId,
+            start: _start,
+            end: _end,
+            notes: notes.isEmpty ? null : notes,
+          )
+        : CareShift(
+            id: ref.read(shiftIdFactoryProvider)(),
+            caregiverId: caregiverId,
+            start: _start,
+            end: _end,
+            patientId: patientId,
+            notes: notes.isEmpty ? null : notes,
+          );
     await ref.read(careShiftsProvider.notifier).addShift(shift);
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  /// Confirm, then drop the shift through the [CareShifts] notifier (which
+  /// refreshes the strip), then pop the sheet. No-op on cancel. Only reachable
+  /// when editing an existing shift.
+  Future<void> _remove() async {
+    if (_submitting) return;
+    final CareShift? existing = widget.existing;
+    if (existing == null) return;
+
+    final bool confirmed = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext dialogContext) => AlertDialog(
+            key: ShiftsScreen.deleteDialogKey,
+            title: const Text('Remove shift?'),
+            content: const Text(
+              'This coverage will be taken off the strip. You can schedule '
+              'it again later.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                key: ShiftsScreen.deleteCancelKey,
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                key: ShiftsScreen.deleteConfirmKey,
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(
+                  'Remove',
+                  style: TextStyle(color: context.cb.accentDeep),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+
+    setState(() => _submitting = true);
+    await ref.read(careShiftsProvider.notifier).removeShift(existing.id);
 
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -572,16 +701,16 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'Schedule a shift',
+              _isEditing ? 'Edit shift' : 'Schedule a shift',
               style: textTheme.titleLarge?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
               ),
             ),
             const SizedBox(height: 20),
             Text(
               "Who's covering",
               style: textTheme.bodyLarge?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -593,7 +722,7 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
                   ? Text(
                       'Add caregivers to your Care Circle first.',
                       style: textTheme.bodyMedium
-                          ?.copyWith(color: careblazersColors.text),
+                          ?.copyWith(color: context.cb.text),
                     )
                   : Wrap(
                       spacing: 8,
@@ -616,7 +745,7 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
                 child: Text(
                   _caregiverError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: careblazersColors.error),
+                      ?.copyWith(color: context.cb.error),
                 ),
               ),
             const SizedBox(height: 20),
@@ -640,7 +769,7 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
                 child: Text(
                   _timeError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: careblazersColors.error),
+                      ?.copyWith(color: context.cb.error),
                 ),
               ),
             const SizedBox(height: 20),
@@ -660,14 +789,38 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
               onPressed: _submitting ? null : _save,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
               ),
               child: Text(
-                _submitting ? 'Saving…' : 'Schedule shift',
+                _submitting
+                    ? 'Saving…'
+                    : (_isEditing ? 'Save changes' : 'Schedule shift'),
                 style: textTheme.labelLarge?.copyWith(color: Colors.white),
               ),
             ),
+            if (_isEditing) ...<Widget>[
+              const SizedBox(height: 8),
+              Center(
+                child: Semantics(
+                  button: true,
+                  label: 'Remove this shift.',
+                  child: TextButton.icon(
+                    key: ShiftsScreen.deleteButtonKey,
+                    onPressed: _submitting ? null : _remove,
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: context.cb.accentDeep,
+                    ),
+                    label: Text(
+                      'Remove shift',
+                      style: textTheme.labelLarge
+                          ?.copyWith(color: context.cb.accentDeep),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -700,7 +853,7 @@ class _TimeRow extends StatelessWidget {
           child: Text(
             label,
             style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -712,14 +865,14 @@ class _TimeRow extends StatelessWidget {
             child: OutlinedButton.icon(
               key: buttonKey,
               onPressed: onPick,
-              icon: Icon(Icons.event_outlined, color: careblazersColors.link),
+              icon: Icon(Icons.event_outlined, color: context.cb.link),
               label: Text(
                 _momentLabel(value),
                 style:
-                    textTheme.labelLarge?.copyWith(color: careblazersColors.link),
+                    textTheme.labelLarge?.copyWith(color: context.cb.link),
               ),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: careblazersColors.primarySoft),
+                side: BorderSide(color: context.cb.primarySoft),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
@@ -746,11 +899,11 @@ class _CaregiverChoice extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? careblazersColors.cta : careblazersColors.primarySoft;
+        selected ? context.cb.cta : context.cb.primarySoft;
     final Color fill = selected
-        ? careblazersColors.cta.withValues(alpha: 0.12)
+        ? context.cb.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? careblazersColors.cta : careblazersColors.text;
+    final Color fg = selected ? context.cb.cta : context.cb.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -791,7 +944,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load the shifts.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),

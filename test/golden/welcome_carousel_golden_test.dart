@@ -1,4 +1,5 @@
 import 'package:alchemist/alchemist.dart';
+import 'package:careblazers/l10n/app_localizations.dart';
 import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
 import 'package:careblazers/theme.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +28,9 @@ void main() {
                 width: 390,
                 height: 780,
                 child: MaterialApp.router(
+                  localizationsDelegates:
+                      AppLocalizations.localizationsDelegates,
+                  supportedLocales: AppLocalizations.supportedLocales,
                   routerConfig: GoRouter(
                     initialLocation: '/onboarding',
                     routes: <RouteBase>[

@@ -63,6 +63,101 @@ pre-staged content beyond the seed-data scaffolding.
   the medication + appointment screens depend on a single seam rather
   than the plugin API; widget + service tests override with a
   recording `NoopNotificationsProvider`.
+- **Device capture** (#8 — real photo / voice-note / speech intake):
+  - `image_picker` 1.1+ — OS camera + gallery picker behind the
+    `PhotoAttacher` seam (`RealPhotoAttacher`).
+  - `record` 6+ (pinned `<7.0.0`; 7.x requires Dart ^3.12 and we ship
+    3.11.5) + `audioplayers` 6.5+ — mic → m4a capture + playback behind
+    the `VoiceNoteRecorder` seam (`RealVoiceNoteRecorder`). `record` is
+    capture-only, so `audioplayers` is the companion that honors the
+    seam's pre-existing `play(path)` method.
+  - `speech_to_text` 7+ — on-device dictation behind the `VoiceCapture`
+    seam (`RealVoiceCapture`), feeding the Home Add-sheet voice button.
+
+  All four are wired ONLY through those three existing interfaces and
+  selected by the `USE_REAL_CAPTURE` build flag, which **defaults to
+  false** (mirrors `USE_FAKE_LLM`): `flutter test` and the demo tour
+  keep the `NoopPhotoAttacher` / `NoopVoiceNoteRecorder` /
+  `UnavailableVoiceCapture` fakes and never touch a real mic / camera.
+  Platform permission strings live in `ios/Runner/Info.plist`
+  (`NSCamera/Microphone/PhotoLibrary/SpeechRecognitionUsageDescription`)
+  and `android/.../AndroidManifest.xml` (`RECORD_AUDIO`, `CAMERA`,
+  `READ_MEDIA_IMAGES`, capped `READ_EXTERNAL_STORAGE`, + the speech
+  recognizer `<queries>` entry). Flipping the flag on requires a fresh
+  `pod install` before the next iOS run.
+- **Localization / i18n** (#18): `flutter_localizations` (SDK) +
+  `intl` (resolved `0.20.2`, pinned by the SDK's `flutter_localizations`
+  constraint — declared as `intl: any`, let `flutter pub get` resolve
+  it). Both are pure-Dart, so adding them needs **no** `pod install`.
+  Strings live in ARB files under `lib/l10n/` (`app_en.arb` is the
+  template / source of truth). Flutter's built-in **gen-l10n** generates
+  `AppLocalizations` from them — enabled by `flutter: generate: true`
+  in `pubspec.yaml`, configured by `l10n.yaml` (`arb-dir: lib/l10n`,
+  `template-arb-file: app_en.arb`, `output-localization-file:
+  app_localizations.dart`, `nullable-getter: false`). On this Flutter
+  (3.41) the generator emits the sources next to the ARB
+  (`lib/l10n/app_localizations*.dart`, tracked — the synthetic-package
+  output mode was removed upstream); `flutter pub get` / `flutter
+  gen-l10n` regenerate them. `lib/app.dart` registers
+  `AppLocalizations.localizationsDelegates` + `supportedLocales` on the
+  `MaterialApp.router`. `en` is the only shipped locale in v1; adding
+  more is translation work (drop `app_<locale>.arb` next to the
+  template + re-run gen-l10n), not an app-code change. Status: the
+  framework + a one-screen reference conversion
+  (`lib/screens/community/community_guidelines_screen.dart`) are in;
+  extracting the rest of the app's hardcoded English is documented
+  follow-up under #18.
+- **Care-circle connect** (2026-06-06 — username + QR connect, §13
+  endpoints below):
+  - `qr_flutter` 4.1+ — renders a circle invite token as a scannable QR
+    on the "Show my QR" screen (`lib/screens/team/circle_qr_screen.dart`)
+    via `QrImageView`. Pure-Dart (CustomPainter) — no `pod install`.
+  - `mobile_scanner` 6.0+ — reads another caregiver's QR on the "Scan to
+    add" screen (`lib/screens/team/circle_scan_screen.dart`). Uses the
+    camera, so it sits behind a `enableCamera` flag (defaults true,
+    overridden false in widget tests) — the same seam shape as the
+    feedback overlay's capture override — and the parse + join path is
+    driven through `debugHandlePayload(...)` in tests so no live camera
+    is instantiated. The camera permission string already lives in
+    `ios/Runner/Info.plist`. QR payloads are namespaced
+    `careblazers:circle:<token>` so the scanner validates the code is
+    one of ours before redeeming it.
+  - `app_links` 6.3+ (2026-06-08 — invite LINKS) — receives the
+    custom-scheme deep link an invited caregiver taps from a shared text
+    link: `careblazers://join/<token>` (plus the QR-style
+    `careblazers:circle:<token>` for symmetry). Handles BOTH cold-start
+    (`getInitialLink`) and warm (`uriLinkStream`) inbound URIs, wired
+    fail-safe in `lib/app.dart`. The parse + join logic is shared with the
+    scanner via `lib/services/circle_invite_link.dart` +
+    `lib/services/circle_deep_link_handler.dart` (signed-out tokens are
+    stashed + replayed after sign-in). iOS already registers the
+    `careblazers` scheme in `ios/Runner/Info.plist`; Android registers it
+    via a VIEW/DEFAULT/BROWSABLE intent-filter on MainActivity
+    (`android/app/src/main/AndroidManifest.xml`). The "Invite by link"
+    action on `care_circle_screen.dart` mints an invite and shares
+    `<FORUM_ORIGIN>/join/<token>` (the `FORUM_API_URL` origin WITHOUT the
+    `/api/v1` suffix) via `share_plus`; the backend serves a public
+    landing page at the Worker root `GET /join/:token` (exempt from the
+    forum JWT, like `/auth/google`) that bounces into the app via the
+    deep link. True https App/Universal Links (direct-open, no landing
+    bounce) need the Apple Developer Program + `assetlinks.json` — a
+    future upgrade.
+  These reuse the existing `ForumApiClient` (Dio + `ForumTokenLoader`
+  JWT auth) — no new client / auth. New endpoints under
+  `<FORUM_API_URL>/api/v1`: `GET /profiles/username-available?u=`,
+  `PATCH /profiles/me {username}` (409 `username_taken` /
+  400 `invalid_username` / `profanity_blocked`),
+  `GET /profiles/by-username/:username` (404 `profile_not_found`),
+  `POST /circles {name}`, `GET /circles`,
+  `POST /circles/:id/invites` (returns `{token, circle_id, expires_at}`),
+  `POST /circles/join {token}` (404 `invite_not_found` /
+  410 `invite_expired`). New DTOs `CircleDto` / `CircleMemberDto` /
+  `CircleInviteDto` live in `lib/models/forum.dart`; `ForumProfile` +
+  `ForumPublicProfile` gained an optional `username`. The
+  `FakeForumApiClient` mirrors every method in-memory (username registry
+  + circles map) so tests + demo mode work offline. Screens hang off
+  the People roster at `/team/circle/{username,qr,scan}` (root-navigator
+  pushes, `PathHeader` breadcrumbs).
 - **No new top-level deps** without updating this file. Don't add
   Bloc, Provider (lowercase, the package), MobX, or any other state
   library. Don't add hand-rolled HTTP. Don't add new font families.
@@ -102,9 +197,10 @@ The audit is a build-step concern (no Dart unit test gates it).
   shim. Production (`ClaudeAPIProvider` calling api.anthropic.com)
   is deferred to a later phase — not in v1.
 - **No "AI" framing in user-facing strings.** The product presents
-  "Dr. Natali's coaching". The LLM is invisible. Only mention of
-  "AI" or "generated" is in Settings → About → Methodology
-  disclosure (small, accurate, not hidden).
+  "Dr. Natali's coaching". The LLM is invisible. The Settings → About
+  Methodology disclosure + brand-credit card were removed (2026-06-06,
+  user call); AI is now mentioned nowhere in the UI. Any future
+  disclosure belongs in a privacy/terms doc, not a Settings card.
 - **No live LLM in `test/`.** Widget + service tests use
   `FakeLLMProvider`. Live LLM only in `integration_test/` and real
   app runs.
@@ -115,6 +211,17 @@ The audit is a build-step concern (no Dart unit test gates it).
 - **Demo mode default = clean state on launch.** A Settings toggle
   ("Reset on launch (demo mode)") flips that for testing. Real-user
   builds never reset.
+- **New user-facing strings go through ARB.** Add the key + an
+  `@key` description to `lib/l10n/app_en.arb`, run `flutter gen-l10n`,
+  and read it via `AppLocalizations.of(context).<key>` (non-null —
+  `nullable-getter: false`). Don't hardcode new English UI copy. Any
+  `MaterialApp` that renders a screen reading `.of(context)` — including
+  the ones pumped in widget/golden tests — must register
+  `AppLocalizations.localizationsDelegates` + `supportedLocales`, or
+  `.of(context)` throws. (The bulk of pre-#18 screens still hold inline
+  English; converting them is tracked follow-up under #18 — the
+  framework + the `community_guidelines_screen` reference conversion
+  are the v1 deliverable.)
 - **`flutter analyze` must be clean** before any task can ship.
   `flutter test` must be green.
 - **Test coverage gate.** The autoloop's test gate runs
@@ -297,8 +404,11 @@ large readable text, high contrast, word labels alongside icons). The
 palette/fonts in the layout spec's companion HTML are placeholders —
 ignore them; the brand tokens in §3 remain load-bearing.
 
-- **Fixed 5-tab bottom bar**, persistent on every screen, in this
-  exact order: `Home` · `Medical` · `Team` · `Chat` · `Community`.
+- **Fixed 4-tab bottom bar** (IA refactor 2026-06-06), persistent on
+  every screen, in this exact order: `Home` · `Care` · `Chat` ·
+  `Community`. ("Medical" was renamed **Care**; the former "Team" tab
+  folded into Care as a gated "Care Circle" hub. Route paths stay
+  `/medical` + `/team/*` internally.)
   ("Care Team" is the full name; the tab label is `Team` so it fits
   the bar.) Built with `go_router`'s `StatefulShellRoute` — one branch
   per tab, each branch keeping its own navigation stack.
@@ -715,8 +825,7 @@ Every screen below must include:
 
 **About**:
 - App version
-- "Methodology" — opens a small disclosure: *"This app generates coaching scripts using a language model trained to follow Dr. Natali Edmonds' teaching framework. Audio playback uses your phone's built-in voice. We never use the words 'AI' in user-facing copy because we present coaching, not technology — but we're transparent about how it works here."*
-- "Brand & framework credit": "Coaching framework adapted from Dr. Natali Edmonds (Dementia Careblazers). Used with permission. [Note for v1 demo: 'Permission pending — this is the pitch build.']"
+- _(Removed 2026-06-06, user call: the "Methodology" disclosure + "Brand & framework credit" cards. The credit's "used with permission" line was inaccurate for the pitch build, and both read as out of place. About now shows only the app version. Any AI disclosure needed later belongs in a privacy/terms doc.)_
 
 ### 5.11 Welcome carousel (`/onboarding`)
 
@@ -1783,18 +1892,23 @@ submission:
   time.
 - HIPAA does NOT attach (no covered entity partnership). But
   data-handling expectations exceed HIPAA — local-only by design.
-- Disclose "uses generative AI" per Apple's 2024+ guidelines (the
-  Methodology page does this).
+- Disclose "uses generative AI" per Apple's 2024+ guidelines.
+  ⚠️ The in-app Methodology page that carried this was **removed
+  (2026-06-06)** — so this disclosure now needs another home before a
+  real App Store submission: App Store Connect metadata and/or a
+  privacy/terms page, NOT a Settings card.
 
 ### 13.4 Brand + framework credit
 
 - App uses the name "Careblazers" — Natali's audience-identifier.
   V1 demo is a pitch artifact; partnership conversation IS the
   authorization vehicle.
-- About → Brand & framework credit page (in Settings) carries the
-  note: *"Coaching framework adapted from Dr. Natali Edmonds
-  (Dementia Careblazers). Used with permission. [For pitch demo:
-  permission pending.]"*
+- The Settings → About "Brand & framework credit" card was **removed
+  (2026-06-06, user call)**: its "used with permission" line was
+  inaccurate for the pitch build (permission is still pending), and
+  showing it in the very build being pitched to Natali read as odd. If
+  attribution is wanted post-partnership, reintroduce it with accurate
+  wording.
 - No verbatim YouTube transcripts, course content, or PDF copy from
   Natali's products is embedded in the v1 build. The system prompt
   is style-and-framework derived (paraphrased + structured), not

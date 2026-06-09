@@ -145,6 +145,86 @@ void main() {
     });
   });
 
+  // ---- Google sign-in bootstrap (/auth/google) -----------------------------
+
+  group('verifyGoogleIdToken — pre-auth bootstrap', () {
+    test('POSTs {id_token} WITHOUT an Authorization header', () async {
+      final _RecordingAdapter adapter =
+          _RecordingAdapter.json(<String, Object?>{
+        'user_id': 'spine-1',
+        'email': 'real@gmail.com',
+        'name': 'Real Caregiver',
+        'username': null,
+      });
+      // Tokens must NEVER be pulled for this bootstrap — fail loudly if so.
+      final ForumApiClient client = buildClient(
+        adapter,
+        tokenLoader: () async =>
+            throw StateError('bootstrap must not pull a JWT'),
+      );
+
+      final GoogleAuthResult r = await client.verifyGoogleIdToken('g-id-token');
+
+      expect(adapter.lastRequest!.method, 'POST');
+      expect(adapter.lastRequest!.uri.toString(),
+          'https://forum-api.workers.dev/api/v1/auth/google');
+      expect(adapter.lastBody, <String, Object?>{'id_token': 'g-id-token'});
+      expect(adapter.lastRequest!.headers.containsKey('Authorization'),
+          isFalse);
+      expect(r.userId, 'spine-1');
+      expect(r.email, 'real@gmail.com');
+      expect(r.name, 'Real Caregiver');
+      expect(r.username, isNull);
+    });
+
+    test('parses a non-null username when the account has claimed one',
+        () async {
+      final _RecordingAdapter adapter =
+          _RecordingAdapter.json(<String, Object?>{
+        'user_id': 'spine-2',
+        'email': 'mei@gmail.com',
+        'name': 'Mei W.',
+        'username': 'mei_w',
+      });
+      final ForumApiClient client = buildClient(adapter);
+
+      final GoogleAuthResult r = await client.verifyGoogleIdToken('tok');
+      expect(r.username, 'mei_w');
+    });
+
+    test('401 invalid_token surfaces a GoogleAuthException', () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{'error': 'invalid_token'},
+        statusCode: 401,
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      await expectLater(
+        client.verifyGoogleIdToken('bad'),
+        throwsA(isA<GoogleAuthException>()
+            .having((GoogleAuthException e) => e.statusCode, 'statusCode', 401)
+            .having(
+                (GoogleAuthException e) => e.code, 'code', 'invalid_token')),
+      );
+    });
+
+    test('400 missing_id_token surfaces a GoogleAuthException', () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{'error': 'missing_id_token'},
+        statusCode: 400,
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      await expectLater(
+        client.verifyGoogleIdToken(''),
+        throwsA(isA<GoogleAuthException>()
+            .having((GoogleAuthException e) => e.statusCode, 'statusCode', 400)
+            .having(
+                (GoogleAuthException e) => e.code, 'code', 'missing_id_token')),
+      );
+    });
+  });
+
   // ---- Request shapes ------------------------------------------------------
 
   group('Request shapes — Phase 13.9', () {
@@ -288,6 +368,9 @@ void main() {
       final List<ForumPost> posts = await client.listPosts();
       expect(posts.map((ForumPost p) => p.id).toList(),
           <String>['p-1', 'p-2']);
+      // The denormalized author-name fields round-trip off the wire.
+      expect(posts.first.authorUsername, 'sarah_h');
+      expect(posts.first.authorDisplayName, 'Sarah_H');
     });
 
     test('listComments parses hidden rows with body=null', () async {
@@ -314,6 +397,9 @@ void main() {
           await client.listComments(postId: 'p-1');
 
       expect(comments, hasLength(2));
+      // Visible row carries the denormalized author-name fields.
+      expect(comments[0].authorUsername, 'sarah_h');
+      expect(comments[0].authorDisplayName, 'Sarah_H');
       expect(comments[1].hidden, isTrue);
       expect(comments[1].body, isNull);
       expect(comments[1].authorId, isNull);
@@ -447,6 +533,199 @@ void main() {
     });
   });
 
+  // ---- Username + circles (care-circle connect, 2026-06-06) ---------------
+
+  group('Username + circles — care-circle connect', () {
+    test('usernameAvailable encodes ?u= and parses {valid, available}',
+        () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{'valid': true, 'available': false},
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      final ({bool valid, bool available}) result =
+          await client.usernameAvailable('sarah_h');
+
+      expect(adapter.lastRequest!.uri.path,
+          '/api/v1/profiles/username-available');
+      expect(adapter.lastRequest!.uri.queryParameters['u'], 'sarah_h');
+      expect(result.valid, isTrue);
+      expect(result.available, isFalse);
+    });
+
+    test('updateMyProfile sends username when supplied', () async {
+      final _RecordingAdapter adapter =
+          _RecordingAdapter.json(<String, Object?>{
+        'id': 'profile-1',
+        'careblazers_user_id': 'user-1',
+        'display_name': 'Caregiver',
+        'avatar_url': null,
+        'joined_at': '2026-05-30T12:00:00.000Z',
+        'role': 'user',
+        'username': 'sarah_h',
+      });
+      final ForumApiClient client = buildClient(adapter);
+
+      final ForumProfile profile =
+          await client.updateMyProfile(username: 'sarah_h');
+
+      expect(adapter.lastBody, <String, Object?>{'username': 'sarah_h'});
+      expect(profile.username, 'sarah_h');
+    });
+
+    test('PATCH username 409 surfaces username_taken', () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{'error': 'username_taken'},
+        statusCode: 409,
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      await expectLater(
+        client.updateMyProfile(username: 'taken'),
+        throwsA(isA<ForumApiException>()
+            .having((ForumApiException e) => e.statusCode, 'statusCode', 409)
+            .having(
+                (ForumApiException e) => e.error, 'error', 'username_taken')),
+      );
+    });
+
+    test('getProfileByUsername parses the lean public profile', () async {
+      final _RecordingAdapter adapter =
+          _RecordingAdapter.json(<String, Object?>{
+        'id': 'profile-9',
+        'username': 'mei_w',
+        'display_name': 'Mei W.',
+        'avatar_url': null,
+      });
+      final ForumApiClient client = buildClient(adapter);
+
+      final ForumPublicProfile p = await client.getProfileByUsername('mei_w');
+
+      expect(adapter.lastRequest!.uri.path,
+          '/api/v1/profiles/by-username/mei_w');
+      expect(p.id, 'profile-9');
+      expect(p.username, 'mei_w');
+      expect(p.displayName, 'Mei W.');
+      // Lean lookup omits joined_at + counts — they default cleanly.
+      expect(p.joinedAt, isNull);
+      expect(p.postCount, 0);
+    });
+
+    test('getProfileByUsername 404 surfaces profile_not_found', () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{'error': 'profile_not_found'},
+        statusCode: 404,
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      await expectLater(
+        client.getProfileByUsername('nobody'),
+        throwsA(isA<ForumApiException>().having(
+            (ForumApiException e) => e.error, 'error', 'profile_not_found')),
+      );
+    });
+
+    test('createCircle sends {name} and parses members', () async {
+      final _RecordingAdapter adapter =
+          _RecordingAdapter.json(<String, Object?>{
+        'id': 'circle-1',
+        'name': "Sarah's circle",
+        'owner_profile_id': 'profile-1',
+        'created_at': '2026-06-06T12:00:00.000Z',
+        'members': <Object?>[
+          <String, Object?>{
+            'profile_id': 'profile-1',
+            'username': 'sarah_h',
+            'display_name': 'Sarah',
+            'role': 'owner',
+          },
+        ],
+      });
+      final ForumApiClient client = buildClient(adapter);
+
+      final CircleDto circle = await client.createCircle("Sarah's circle");
+
+      expect(adapter.lastBody, <String, Object?>{'name': "Sarah's circle"});
+      expect(circle.id, 'circle-1');
+      expect(circle.ownerProfileId, 'profile-1');
+      expect(circle.members.single.role, 'owner');
+      expect(circle.members.single.username, 'sarah_h');
+    });
+
+    test('listCircles unwraps the {circles:[]} envelope', () async {
+      final _RecordingAdapter adapter =
+          _RecordingAdapter.json(<String, Object?>{
+        'circles': <Object?>[
+          <String, Object?>{
+            'id': 'circle-1',
+            'name': 'C1',
+            'owner_profile_id': 'profile-1',
+            'created_at': '2026-06-06T12:00:00.000Z',
+            'members': <Object?>[],
+          },
+        ],
+      });
+      final ForumApiClient client = buildClient(adapter);
+
+      final List<CircleDto> circles = await client.listCircles();
+
+      expect(adapter.lastRequest!.uri.path, '/api/v1/circles');
+      expect(circles, hasLength(1));
+      expect(circles.single.id, 'circle-1');
+    });
+
+    test('createInvite parses {token, circle_id, expires_at}', () async {
+      final _RecordingAdapter adapter =
+          _RecordingAdapter.json(<String, Object?>{
+        'token': 'inv-abc',
+        'circle_id': 'circle-1',
+        'expires_at': '2026-06-13T12:00:00.000Z',
+      });
+      final ForumApiClient client = buildClient(adapter);
+
+      final CircleInviteDto invite = await client.createInvite('circle-1');
+
+      expect(adapter.lastRequest!.uri.path,
+          '/api/v1/circles/circle-1/invites');
+      expect(invite.token, 'inv-abc');
+      expect(invite.circleId, 'circle-1');
+    });
+
+    test('joinCircle sends {token} and parses the circle', () async {
+      final _RecordingAdapter adapter =
+          _RecordingAdapter.json(<String, Object?>{
+        'id': 'circle-1',
+        'name': 'C1',
+        'owner_profile_id': 'profile-1',
+        'created_at': '2026-06-06T12:00:00.000Z',
+        'members': <Object?>[],
+      });
+      final ForumApiClient client = buildClient(adapter);
+
+      final CircleDto circle = await client.joinCircle('inv-abc');
+
+      expect(adapter.lastRequest!.uri.path, '/api/v1/circles/join');
+      expect(adapter.lastBody, <String, Object?>{'token': 'inv-abc'});
+      expect(circle.id, 'circle-1');
+    });
+
+    test('joinCircle 410 surfaces invite_expired', () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{'error': 'invite_expired'},
+        statusCode: 410,
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      await expectLater(
+        client.joinCircle('stale'),
+        throwsA(isA<ForumApiException>()
+            .having((ForumApiException e) => e.statusCode, 'statusCode', 410)
+            .having(
+                (ForumApiException e) => e.error, 'error', 'invite_expired')),
+      );
+    });
+  });
+
   // ---- Enum wire encodings -------------------------------------------------
 
   group('wire-value enums', () {
@@ -478,6 +757,8 @@ Map<String, Object?> _samplePostJson({required String id}) =>
     <String, Object?>{
       'id': id,
       'author_id': 'profile-1',
+      'author_username': 'sarah_h',
+      'author_display_name': 'Sarah_H',
       'title': 'Some title',
       'body': 'Some body',
       'created_at': '2026-05-30T12:00:00.000Z',
@@ -497,6 +778,8 @@ Map<String, Object?> _sampleCommentJson({
       'post_id': postId,
       'parent_comment_id': parentCommentId,
       'author_id': 'profile-1',
+      'author_username': 'sarah_h',
+      'author_display_name': 'Sarah_H',
       'body': 'A comment',
       'created_at': '2026-05-30T12:00:00.000Z',
       'vote_count': 0,

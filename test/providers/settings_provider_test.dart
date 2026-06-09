@@ -104,6 +104,8 @@ void main() {
       await n.setAllowAudioDuringQuietHours(true);
       await n.setDarkModeAtNight(false);
       await n.setResetOnLaunchDemo(true);
+      await n.setThemePreference(ThemePreference.scheduled);
+      await n.setDarkWindow(startHour: 21, endHour: 6);
 
       final AppSettings stored = await built.storage.getSettings();
       expect(stored.voiceId, 'Daniel|en-GB');
@@ -112,6 +114,22 @@ void main() {
       expect(stored.allowAudioDuringQuietHours, isTrue);
       expect(stored.darkModeAtNight, isFalse);
       expect(stored.resetOnLaunchDemo, isTrue);
+      expect(stored.themePreference, ThemePreference.scheduled);
+      expect(stored.darkStartHour, 21);
+      expect(stored.darkEndHour, 6);
+    });
+
+    test('setDarkWindow normalises out-of-range hours into 0–23', () async {
+      final ({ProviderContainer container, InMemoryStorageProvider storage})
+          built = _build();
+      await Future<void>.delayed(Duration.zero);
+      final Settings n = built.container.read(settingsProvider.notifier);
+
+      await n.setDarkWindow(startHour: 24, endHour: 31);
+
+      final AppSettings stored = await built.storage.getSettings();
+      expect(stored.darkStartHour, 0);
+      expect(stored.darkEndHour, 7);
     });
 
     test('notificationsEnabled setter persists through storage', () async {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:alchemist/alchemist.dart';
+import 'package:careblazers/l10n/app_localizations.dart';
 import 'package:careblazers/providers/auth_provider.dart';
 import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
 import 'package:careblazers/theme.dart';
@@ -60,6 +61,9 @@ void main() {
                 height: 780,
                 child: MaterialApp.router(
                   theme: ThemeData(platform: TargetPlatform.iOS),
+                  localizationsDelegates:
+                      AppLocalizations.localizationsDelegates,
+                  supportedLocales: AppLocalizations.supportedLocales,
                   routerConfig: GoRouter(
                     initialLocation: '/sign-in',
                     routes: <RouteBase>[

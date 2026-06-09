@@ -77,16 +77,27 @@ Future<({
   final RecordingLinkLauncher launcher = RecordingLinkLauncher();
   final GlobalKey<NavigatorState> rootKey = GlobalKey<NavigatorState>();
   final GoRouter router = GoRouter(
+    // Land on the list, then push the detail so the detail's
+    // `context.canPop()` is true and a delete pops cleanly back to a
+    // real list stub the test can assert on.
     initialLocation: '/appointments/$appointmentId',
     navigatorKey: rootKey,
     routes: <RouteBase>[
       GoRoute(
-        path: '/appointments/:id',
+        path: '/appointments',
         parentNavigatorKey: rootKey,
         builder: (BuildContext context, GoRouterState state) =>
-            AppointmentDetailScreen(
-          appointmentId: state.pathParameters['id'] ?? '',
-        ),
+            const Scaffold(body: Text('appointment-list-stub')),
+        routes: <RouteBase>[
+          GoRoute(
+            path: ':id',
+            parentNavigatorKey: rootKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                AppointmentDetailScreen(
+              appointmentId: state.pathParameters['id'] ?? '',
+            ),
+          ),
+        ],
       ),
     ],
   );
@@ -315,6 +326,70 @@ void main() {
       expect(find.byKey(AppointmentDetailScreen.emptyAgendaKey),
           findsOneWidget);
       expect(find.byKey(AppointmentDetailScreen.agendaListKey), findsNothing);
+    });
+  });
+
+  group('AppointmentDetailScreen — hard delete', () {
+    testWidgets('delete button shows on the detail screen',
+        (WidgetTester tester) async {
+      await repo.upsertAppointment(_appt(
+        id: 'appt-1',
+        startsAt: DateTime.utc(2026, 6, 15, 14, 30),
+      ));
+
+      await _pumpDetail(tester, repo: repo, db: db, appointmentId: 'appt-1');
+
+      expect(find.byKey(AppointmentDetailScreen.deleteButtonKey),
+          findsOneWidget);
+    });
+
+    testWidgets(
+        'confirming the delete dialog removes the appointment from the repo '
+        'and pops back to the list', (WidgetTester tester) async {
+      await repo.upsertAppointment(_appt(
+        id: 'appt-1',
+        startsAt: DateTime.utc(2026, 6, 15, 14, 30),
+      ));
+
+      await _pumpDetail(tester, repo: repo, db: db, appointmentId: 'appt-1');
+
+      // Precondition: the appointment is on file.
+      expect(await repo.listAppointments(), hasLength(1));
+
+      await tester.tap(find.byKey(AppointmentDetailScreen.deleteButtonKey));
+      await tester.pumpAndSettle();
+
+      // Confirm dialog is up; confirm it.
+      expect(find.text('Delete appointment?'), findsOneWidget);
+      await tester
+          .tap(find.byKey(AppointmentDetailScreen.confirmDeleteButtonKey));
+      await tester.pumpAndSettle();
+
+      // Gone from the repository entirely (hard delete, not a soft-cancel).
+      expect(await repo.listAppointments(), isEmpty);
+      expect(await repo.getAppointment('appt-1'), isNull);
+
+      // Popped back to the list stub.
+      expect(find.text('appointment-list-stub'), findsOneWidget);
+    });
+
+    testWidgets('cancelling the delete dialog keeps the appointment',
+        (WidgetTester tester) async {
+      await repo.upsertAppointment(_appt(
+        id: 'appt-1',
+        startsAt: DateTime.utc(2026, 6, 15, 14, 30),
+      ));
+
+      await _pumpDetail(tester, repo: repo, db: db, appointmentId: 'appt-1');
+
+      await tester.tap(find.byKey(AppointmentDetailScreen.deleteButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      // Still on file, still on the detail screen.
+      expect(await repo.listAppointments(), hasLength(1));
+      expect(find.byKey(AppointmentDetailScreen.scaffoldKey), findsOneWidget);
     });
   });
 

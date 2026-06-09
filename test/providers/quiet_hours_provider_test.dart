@@ -143,52 +143,104 @@ void main() {
     });
   });
 
-  group('nightThemeModeProvider — BUILD_SPEC.md §11.4', () {
-    test('after 6pm flips to ThemeMode.dark', () async {
-      final ProviderContainer container = _build(
-        now: DateTime(2026, 5, 29, 19, 30),
-      );
-      await Future<void>.delayed(Duration.zero);
-      expect(container.read(nightThemeModeProvider), ThemeMode.dark);
-    });
+  group('nightThemeModeProvider — themePreference (BUILD_SPEC.md §11.4)', () {
+    // The scheduled window used across these cases: dark 8pm → 7am.
+    AppSettings scheduled() => AppSettings.defaults().copyWith(
+          themePreference: ThemePreference.scheduled,
+          darkStartHour: 20,
+          darkEndHour: 7,
+        );
 
-    test('before 6pm stays on ThemeMode.light', () async {
-      final ProviderContainer container = _build(
-        now: DateTime(2026, 5, 29, 14, 0),
-      );
-      await Future<void>.delayed(Duration.zero);
-      expect(container.read(nightThemeModeProvider), ThemeMode.light);
-    });
-
-    test('darkModeAtNight=false: ThemeMode.light regardless of hour',
-        () async {
-      final ProviderContainer container = _build(
-        now: DateTime(2026, 5, 29, 23, 0),
-        seeded: AppSettings.defaults().copyWith(darkModeAtNight: false),
-      );
-      // Kick the watch chain so the hydrate microtask is scheduled,
-      // then drain microtasks before reading the resolved value.
+    Future<ThemeMode> read(ProviderContainer container) async {
+      // Kick the watch chain, then drain the hydrate microtask hops so
+      // the compute sees the persisted (seeded) settings.
       container.read(nightThemeModeProvider);
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
       await container.pump();
-      expect(container.read(nightThemeModeProvider), ThemeMode.light,
-          reason: 'User override should suppress the auto-flip');
-    });
+      return container.read(nightThemeModeProvider);
+    }
 
-    test('flipping darkModeAtNight off re-evaluates without a timer tick',
-        () async {
+    test('system → ThemeMode.system (follow the phone), default', () async {
       final ProviderContainer container = _build(
-        now: DateTime(2026, 5, 29, 20, 0),
+        now: DateTime(2026, 5, 29, 23, 0),
       );
       await Future<void>.delayed(Duration.zero);
+      expect(container.read(nightThemeModeProvider), ThemeMode.system,
+          reason: 'default preference follows the phone regardless of hour');
+    });
+
+    test('on → ThemeMode.dark regardless of hour', () async {
+      final ProviderContainer container = _build(
+        now: DateTime(2026, 5, 29, 9, 0),
+        seeded: AppSettings.defaults()
+            .copyWith(themePreference: ThemePreference.on),
+      );
+      expect(await read(container), ThemeMode.dark);
+    });
+
+    test('off → ThemeMode.light regardless of hour', () async {
+      final ProviderContainer container = _build(
+        now: DateTime(2026, 5, 29, 23, 0),
+        seeded: AppSettings.defaults()
+            .copyWith(themePreference: ThemePreference.off),
+      );
+      expect(await read(container), ThemeMode.light);
+    });
+
+    test('scheduled → dark inside the window', () async {
+      final ProviderContainer container = _build(
+        now: DateTime(2026, 5, 29, 22, 0),
+        seeded: scheduled(),
+      );
+      expect(await read(container), ThemeMode.dark,
+          reason: '10pm is inside the 8pm–7am dark window');
+    });
+
+    test('scheduled → light outside the window', () async {
+      final ProviderContainer container = _build(
+        now: DateTime(2026, 5, 29, 14, 0),
+        seeded: scheduled(),
+      );
+      expect(await read(container), ThemeMode.light,
+          reason: '2pm is outside the 8pm–7am dark window');
+    });
+
+    test('scheduled → boundary: start hour IS dark, end hour is NOT',
+        () async {
+      final ProviderContainer atStart = _build(
+        now: DateTime(2026, 5, 29, 20, 0),
+        seeded: scheduled(),
+      );
+      expect(await read(atStart), ThemeMode.dark,
+          reason: '8:00pm is the first dark hour');
+
+      final ProviderContainer atEnd = _build(
+        now: DateTime(2026, 5, 30, 7, 0),
+        seeded: scheduled(),
+      );
+      expect(await read(atEnd), ThemeMode.light,
+          reason: '7:00am is the first light hour');
+    });
+
+    test('changing the preference re-evaluates without a timer tick',
+        () async {
+      final ProviderContainer container = _build(
+        now: DateTime(2026, 5, 29, 23, 0),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(nightThemeModeProvider), ThemeMode.system);
+
+      await container
+          .read(settingsProvider.notifier)
+          .setThemePreference(ThemePreference.on);
+      await container.pump();
       expect(container.read(nightThemeModeProvider), ThemeMode.dark);
 
       await container
           .read(settingsProvider.notifier)
-          .setDarkModeAtNight(false);
+          .setThemePreference(ThemePreference.off);
       await container.pump();
-
       expect(container.read(nightThemeModeProvider), ThemeMode.light);
     });
   });
@@ -231,8 +283,16 @@ void main() {
 
     test('nightThemeModeProvider re-polls the clock every minute', () {
       fakeAsync((FakeAsync async) {
+        // Seed a scheduled window (dark 6pm → 7am) so the timer-driven
+        // flip is observable — the default `system` preference never
+        // flips off the clock.
         DateTime now = DateTime(2026, 5, 29, 17, 59);
         final InMemoryStorageProvider storage = InMemoryStorageProvider();
+        storage.updateSettings(AppSettings.defaults().copyWith(
+          themePreference: ThemePreference.scheduled,
+          darkStartHour: 18,
+          darkEndHour: 7,
+        ));
         final ProviderContainer container = ProviderContainer(
           overrides: <Override>[
             storageBackendProvider.overrideWithValue(storage),
@@ -271,7 +331,9 @@ void main() {
           (_, __) {},
         );
         async.flushMicrotasks();
-        expect(container.read(nightThemeModeProvider), ThemeMode.light);
+        // Default preference is `system`; the timer-cancellation contract
+        // is what's under test here, not the resolved mode.
+        expect(container.read(nightThemeModeProvider), ThemeMode.system);
 
         container.dispose();
         // After dispose, advancing the clock past 6pm must not throw

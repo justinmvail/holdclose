@@ -14,10 +14,9 @@ export '../../services/voice_intake.dart'
     show AddSheetKind, AddSheetTranscript;
 
 /// The Add-sheet's teal accent. The brand palette (BUILD_SPEC.md §3.1)
-/// carries no teal token, but the dashboard cards already use this exact
-/// teal for the "done/taken" status dot
-/// (`MedicationsTodayCard.takenColor`); the quick-add FAB reuses it so
-/// "add something" reads as the same calm, affirmative color family.
+/// carries no teal token; this teal reads as a calm, affirmative
+/// "done/taken" color, and the quick-add FAB reuses it so "add something"
+/// stays in that same affirmative color family.
 const Color addSheetTeal = Color(0xFF1F8A70);
 
 /// Static description of one Add-sheet row: its label, leading glyph, and
@@ -93,7 +92,7 @@ class AddActionFab extends StatelessWidget {
       child: FloatingActionButton(
         key: fabKey,
         backgroundColor: addSheetTeal,
-        foregroundColor: careblazersColors.background,
+        foregroundColor: context.cb.background,
         shape: const CircleBorder(),
         tooltip: 'Add',
         elevation: 3,
@@ -109,7 +108,7 @@ class AddActionFab extends StatelessWidget {
 Future<void> showAddActionSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: careblazersColors.background,
+    backgroundColor: context.cb.background,
     showDragHandle: true,
     builder: (BuildContext sheetContext) => const AddActionSheet(),
   );
@@ -149,7 +148,7 @@ class AddActionSheet extends StatelessWidget {
     final TextStyle labelStyle =
         (textTheme.titleLarge ?? const TextStyle()).copyWith(
       fontSize: 18,
-      color: careblazersColors.primary,
+      color: context.cb.primary,
     );
 
     return SafeArea(
@@ -161,7 +160,7 @@ class AddActionSheet extends StatelessWidget {
           for (final _AddRowSpec spec in _rowSpecs)
             ListTile(
               key: Key('add-row-${spec.id}'),
-              leading: Icon(spec.icon, color: careblazersColors.primarySoft),
+              leading: Icon(spec.icon, color: context.cb.primarySoft),
               title: Text(spec.label, style: labelStyle),
               trailing: VoiceButton(
                 key: Key('add-row-voice-${spec.id}'),

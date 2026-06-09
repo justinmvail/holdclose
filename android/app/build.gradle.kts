@@ -11,6 +11,10 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications requires core library desugaring so its
+        // java.time usage resolves on minSdk 26 (and older). See
+        // https://developer.android.com/studio/write/java8-support.html
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -78,6 +82,11 @@ dependencies {
     // fall back to CPU transparently. Mirrors the iOS
     // `onnxruntime-objc` Pod added in Phase 9.3.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
+
+    // Required by flutter_local_notifications' core library desugaring
+    // (isCoreLibraryDesugaringEnabled above). Backports java.time etc. to
+    // the app's minSdk.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
     // Phase 9.4 — instrumented test wiring for TTSBridge.
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

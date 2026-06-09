@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../db/database.dart';
 import '../models/chat.dart';
+import 'sync_sink.dart';
 
 part 'chat_repository.g.dart';
 
@@ -31,7 +32,7 @@ part 'chat_repository.g.dart';
 /// the row's `payload` column — same blob-with-lifted-keys pattern
 /// [DriftStorageProvider] uses for [JournalEntry], so new fields on
 /// [Conversation] / [Message] persist without a schema bump.
-class ChatRepository {
+class ChatRepository with SyncSinkHost {
   ChatRepository(this._db);
 
   final CareblazersDatabase _db;
@@ -59,6 +60,7 @@ class ChatRepository {
             payload: jsonEncode(convo.toJson()),
           ),
         );
+    emitUpsert('chat_conversations', convo.id, convo.toJson());
     return convo;
   }
 
@@ -70,6 +72,7 @@ class ChatRepository {
   /// keeps that path cheap (one row, repeatedly overwritten) without
   /// the caller having to track insert-vs-update state.
   Future<void> appendMessage(Message message) async {
+    Conversation? bumpedConvo;
     await _db.transaction(() async {
       await _db.into(_db.chatMessagesTable).insertOnConflictUpdate(
             ChatMessagesTableCompanion.insert(
@@ -98,8 +101,18 @@ class ChatRepository {
             payload: Value<String>(jsonEncode(bumped.toJson())),
           ),
         );
+        bumpedConvo = bumped;
       }
     });
+    // Emit after the transaction commits so a sync push can never observe
+    // a half-applied write. Both the message and the bumped parent
+    // conversation are synced so the other device sees the same thread
+    // ordering.
+    emitUpsert('chat_messages', message.id, message.toJson());
+    if (bumpedConvo != null) {
+      emitUpsert(
+          'chat_conversations', bumpedConvo!.id, bumpedConvo!.toJson());
+    }
   }
 
   /// Every conversation, freshest activity first. Tiles in the
@@ -139,6 +152,33 @@ class ChatRepository {
         .toList();
   }
 
+  /// Insert-or-replace a whole [convo] by id, preserving its timestamps.
+  /// Used by the sync apply dispatcher to land a *pulled* conversation
+  /// (the public [createConversation] resets `updatedAt` to `createdAt`,
+  /// which would clobber the remote's activity ordering). Emits an upsert
+  /// like any other write — suppressed under [applyingRemote] so it
+  /// doesn't bounce back to the server.
+  Future<void> applyConversation(Conversation convo) async {
+    await _db.into(_db.chatConversationsTable).insertOnConflictUpdate(
+          ChatConversationsTableCompanion.insert(
+            id: convo.id,
+            createdAtMs: convo.createdAt.millisecondsSinceEpoch,
+            updatedAtMs: convo.updatedAt.millisecondsSinceEpoch,
+            payload: jsonEncode(convo.toJson()),
+          ),
+        );
+    emitUpsert('chat_conversations', convo.id, convo.toJson());
+  }
+
+  /// Drop a single message row by id (no cascade). Used by the sync apply
+  /// dispatcher for a pulled message tombstone.
+  Future<void> deleteMessage(String messageId) async {
+    await (_db.delete(_db.chatMessagesTable)
+          ..where((t) => t.id.equals(messageId)))
+        .go();
+    emitDelete('chat_messages', messageId);
+  }
+
   /// Drop the thread row. The FK's `ON DELETE CASCADE` removes the
   /// thread's messages in the same statement, so the repository
   /// never has to chase them down explicitly — and a partial failure
@@ -147,6 +187,9 @@ class ChatRepository {
     await (_db.delete(_db.chatConversationsTable)
           ..where((t) => t.id.equals(conversationId)))
         .go();
+    // Tombstone the conversation. Its messages cascade-delete locally;
+    // the remote conversation tombstone hides the thread on every device.
+    emitDelete('chat_conversations', conversationId);
   }
 }
 

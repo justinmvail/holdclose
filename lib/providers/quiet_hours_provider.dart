@@ -74,23 +74,29 @@ class QuietHoursActive extends _$QuietHoursActive {
     final AppSettings settings = ref.read(settingsProvider);
     final DateTime now = ref.read(quietHoursClockProvider)();
     if (!settings.quietHoursEnabled) return false;
-    return isQuietHoursActive(now);
+    return isQuietHoursActive(
+      now,
+      startHour: settings.quietHoursStartHour,
+      endHour: settings.quietHoursEndHour,
+    );
   }
 }
 
 /// The `MaterialApp.themeMode` value the app root applies
 /// (BUILD_SPEC.md §11.4).
 ///
-/// When `darkModeAtNight` is on AND the wall clock is at-or-past 6pm
-/// local, returns [ThemeMode.dark]; otherwise [ThemeMode.light]. Polls
-/// the same one-minute cadence as [QuietHoursActive] so the 6pm flip
-/// happens without app interaction.
+/// Honors [AppSettings.themePreference]:
+///   - [ThemePreference.system]    → [ThemeMode.system] (follow the phone)
+///   - [ThemePreference.on]        → [ThemeMode.dark]   (always dark)
+///   - [ThemePreference.off]       → [ThemeMode.light]  (always light)
+///   - [ThemePreference.scheduled] → dark inside the user-set
+///     [darkStartHour, darkEndHour) window (wrapping midnight like the
+///     quiet-hours window), light outside it.
 ///
-/// The caregiver "overrides" by toggling `darkModeAtNight` OFF in
-/// Settings — once off, the notifier stays on [ThemeMode.light]
-/// regardless of the hour. We don't return [ThemeMode.system] here
-/// because the v1 spec calls for an explicit, time-of-day-driven flip,
-/// not OS-preference inheritance.
+/// Polls the same one-minute cadence as [QuietHoursActive] so the
+/// scheduled flip happens without app interaction. The listener on
+/// [settingsProvider] re-evaluates immediately when the caregiver
+/// changes the preference or window in Settings.
 @Riverpod(keepAlive: true)
 class NightThemeMode extends _$NightThemeMode {
   Timer? _timer;
@@ -111,7 +117,21 @@ class NightThemeMode extends _$NightThemeMode {
   ThemeMode _compute() {
     final AppSettings settings = ref.read(settingsProvider);
     final DateTime now = ref.read(quietHoursClockProvider)();
-    if (!settings.darkModeAtNight) return ThemeMode.light;
-    return isAfterDarkModeStart(now) ? ThemeMode.dark : ThemeMode.light;
+    switch (settings.themePreference) {
+      case ThemePreference.system:
+        return ThemeMode.system;
+      case ThemePreference.on:
+        return ThemeMode.dark;
+      case ThemePreference.off:
+        return ThemeMode.light;
+      case ThemePreference.scheduled:
+        return isQuietHoursActive(
+          now,
+          startHour: settings.darkStartHour,
+          endHour: settings.darkEndHour,
+        )
+            ? ThemeMode.dark
+            : ThemeMode.light;
+    }
   }
 }

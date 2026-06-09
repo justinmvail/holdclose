@@ -50,7 +50,7 @@ ForumComment _c(
     );
 
 class _FakeForumApiClient extends ForumApiClient {
-  _FakeForumApiClient()
+  _FakeForumApiClient({this.myProfileId = 'profile-someone-else'})
       : super(
           tokenLoader: _stubTokenLoader,
           baseUrl: 'https://example.test',
@@ -58,20 +58,71 @@ class _FakeForumApiClient extends ForumApiClient {
 
   static Future<String> _stubTokenLoader() async => 'fake-jwt';
 
+  /// The signed-in caregiver's profile id `GET /profiles/me` returns. The
+  /// default does NOT match the seeded `profile-p` author, so ownership
+  /// controls stay hidden unless a test points this at the post's author.
+  final String myProfileId;
+
   ForumPost postToReturn = _post();
   List<ForumComment> commentsToReturn = const <ForumComment>[];
   ForumVoteResponse Function(int) voteResponse =
       (int v) => ForumVoteResponse(voteCount: 99, value: v);
   Object? nextListCommentsError;
 
+  /// One-shot error thrown by the next [getPost] call, then cleared — lets a
+  /// test model the whole-load transport failure (no post lands at all).
+  Object? nextGetPostError;
+  int getPostCalls = 0;
+
   int listCommentsCalls = 0;
   int voteCalls = 0;
   int createCommentCalls = 0;
   int reportCalls = 0;
   String? lastReportReason;
+  int updatePostCalls = 0;
+  String? lastUpdatePostBody;
+  int deletePostCalls = 0;
+  final List<String> deletedCommentIds = <String>[];
 
   @override
-  Future<ForumPost> getPost(String postId) async => postToReturn;
+  Future<ForumProfile> getMyProfile() async => ForumProfile(
+        id: myProfileId,
+        careblazersUserId: 'cb-me',
+        displayName: 'Me',
+        joinedAt: _fixedNow.subtract(const Duration(days: 30)),
+        role: 'user',
+      );
+
+  @override
+  Future<ForumPost> getPost(String postId) async {
+    getPostCalls++;
+    if (nextGetPostError != null) {
+      final Object err = nextGetPostError!;
+      nextGetPostError = null;
+      throw err;
+    }
+    return postToReturn;
+  }
+
+  @override
+  Future<ForumPost> updatePost({
+    required String postId,
+    required String body,
+  }) async {
+    updatePostCalls++;
+    lastUpdatePostBody = body;
+    return postToReturn = postToReturn.copyWith(body: body);
+  }
+
+  @override
+  Future<void> deletePost(String postId) async {
+    deletePostCalls++;
+  }
+
+  @override
+  Future<void> deleteComment(String commentId) async {
+    deletedCommentIds.add(commentId);
+  }
 
   @override
   Future<List<ForumComment>> listComments({
@@ -294,5 +345,158 @@ void main() {
       expect(find.byKey(PostDetailScreen.errorKey), findsOneWidget);
       expect(find.text('Try again'), findsOneWidget);
     });
+
+    testWidgets(
+        'a transport error (statusCode 0) shows the branded "check your '
+        'connection" view; Retry re-fetches and renders the post (#19)',
+        (WidgetTester tester) async {
+      // getPost itself fails transport-style (statusCode 0) so the whole
+      // load fails with no post in hand — the blank-screen case #19 targets.
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..postToReturn = _post(title: 'Recovered post')
+        ..nextGetPostError = ForumApiException(
+          statusCode: 0,
+          error: 'transport_error',
+        );
+      // No initialPost handoff → the screen must fetch, and that fetch fails.
+      await _pump(tester, client: client);
+
+      expect(find.byKey(PostDetailScreen.errorKey), findsOneWidget);
+      expect(find.text("We couldn't load this post."), findsOneWidget);
+      expect(find.text('Check your connection and try again.'), findsOneWidget);
+      expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+      // The post never rendered.
+      expect(find.text('Recovered post'), findsNothing);
+
+      final int getsBefore = client.getPostCalls;
+
+      // Retry → the next getPost resolves (error was one-shot) → post renders.
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(client.getPostCalls, greaterThan(getsBefore));
+      expect(find.byKey(PostDetailScreen.errorKey), findsNothing);
+      expect(find.text('Recovered post'), findsOneWidget);
+    });
+  });
+
+  group('PostDetailScreen — owner edit/delete gating', () {
+    testWidgets(
+      "another caregiver's post shows the report flag, no owner menu",
+      (WidgetTester tester) async {
+        // Default fake profile id ('profile-someone-else') != the post
+        // author ('profile-p'), so this is NOT the caregiver's own post.
+        final _FakeForumApiClient client = _FakeForumApiClient()
+          ..postToReturn = _post();
+        await _pump(tester, client: client);
+
+        expect(find.byKey(PostDetailScreen.postReportKey), findsOneWidget);
+        expect(find.byKey(PostDetailScreen.postOwnerMenuKey), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'own post shows the owner menu (Edit + Delete), not the report flag',
+      (WidgetTester tester) async {
+        // Point the signed-in profile at the post's author → owned.
+        final _FakeForumApiClient client =
+            _FakeForumApiClient(myProfileId: 'profile-p')
+              ..postToReturn = _post();
+        await _pump(tester, client: client);
+
+        expect(find.byKey(PostDetailScreen.postOwnerMenuKey), findsOneWidget);
+        expect(find.byKey(PostDetailScreen.postReportKey), findsNothing);
+
+        await tester.tap(find.byKey(PostDetailScreen.postOwnerMenuKey));
+        await tester.pumpAndSettle();
+        expect(find.byKey(PostDetailScreen.postEditKey), findsOneWidget);
+        expect(find.byKey(PostDetailScreen.postDeleteKey), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Delete post → confirm dialog → "Keep it" leaves the post in place',
+      (WidgetTester tester) async {
+        final _FakeForumApiClient client =
+            _FakeForumApiClient(myProfileId: 'profile-p')
+              ..postToReturn = _post();
+        await _pump(tester, client: client);
+
+        await tester.tap(find.byKey(PostDetailScreen.postOwnerMenuKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(PostDetailScreen.postDeleteKey));
+        await tester.pumpAndSettle();
+
+        // The confirm dialog is up.
+        expect(find.text('Delete this post?'), findsOneWidget);
+
+        // Backing out keeps the post — no delete call.
+        await tester.tap(find.byKey(PostDetailScreen.postDeleteCancelKey));
+        await tester.pumpAndSettle();
+        expect(client.deletePostCalls, 0);
+      },
+    );
+
+    testWidgets(
+      'own comment exposes a delete trigger; another caregiver\'s shows '
+      'the report flag',
+      (WidgetTester tester) async {
+        // The signed-in profile authored 'mine'; 'theirs' belongs to someone
+        // else (author 'profile-theirs').
+        final _FakeForumApiClient client =
+            _FakeForumApiClient(myProfileId: 'profile-mine')
+              ..postToReturn = _post()
+              ..commentsToReturn = <ForumComment>[
+                _c('mine', body: 'my reply'),
+                _c('theirs', body: 'their reply'),
+              ];
+        await _pump(tester, client: client);
+
+        // Own comment → delete trigger, no report flag.
+        expect(
+          find.byKey(CommentThread.deleteTriggerKey('mine')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('comment-report-mine')), findsNothing);
+
+        // Other's comment → report flag, no delete trigger.
+        expect(
+          find.byKey(CommentThread.deleteTriggerKey('theirs')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const Key('comment-report-theirs')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'long-press own comment → delete sheet → Delete reply removes it',
+      (WidgetTester tester) async {
+        final _FakeForumApiClient client =
+            _FakeForumApiClient(myProfileId: 'profile-mine')
+              ..postToReturn = _post()
+              ..commentsToReturn = <ForumComment>[
+                _c('mine', body: 'my reply'),
+              ];
+        await _pump(tester, client: client);
+
+        await tester.longPress(find.byKey(CommentThread.rowKey('mine')));
+        await tester.pumpAndSettle();
+
+        // The own-comment sheet (not the report sheet) is up.
+        expect(find.text('Your reply'), findsOneWidget);
+        expect(find.text('Report this comment'), findsNothing);
+
+        await tester.tap(find.byKey(CommentThread.deleteKey('mine')));
+        await tester.pumpAndSettle();
+
+        // The backend received the delete and the row left the thread.
+        expect(client.deletedCommentIds, <String>['mine']);
+        expect(find.byKey(CommentThread.rowKey('mine')), findsNothing);
+        expect(find.text('Reply deleted.'), findsOneWidget);
+      },
+    );
   });
 }

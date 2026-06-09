@@ -1,5 +1,6 @@
 import 'package:alchemist/alchemist.dart';
 import 'package:careblazers/db/database.dart';
+import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/screens/medication/medication_form_screen.dart';
 import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/theme.dart';
@@ -33,6 +34,13 @@ void main() {
                 medicationFormClockProvider.overrideWithValue(_fixedNow),
                 medicationFormIdFactoryProvider
                     .overrideWithValue(() => 'golden-id'),
+                // The window multi-select reads doseWindowListProvider,
+                // which resolves its patient id via activePatientIdProvider
+                // → storageProvider; an empty in-memory store keeps the
+                // golden off on-device sqlite. The repo has no windows so
+                // the rendered form is unchanged.
+                storageBackendProvider
+                    .overrideWithValue(InMemoryStorageProvider()),
               ],
               child: SizedBox(
                 width: 420,

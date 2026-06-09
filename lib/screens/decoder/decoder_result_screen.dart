@@ -15,6 +15,7 @@ import '../../providers/link_launcher_provider.dart';
 import '../../providers/storage_provider.dart';
 import '../../providers/tts_provider.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 /// Arguments handed from the triage screen (BUILD_SPEC.md §5.3) into the
 /// decoder result screen (§5.4) via `GoRouterState.extra`. Carries the
@@ -49,6 +50,12 @@ class DecoderResultArgsExtra {
 const String careCollectiveUrl =
     'https://careblazers.com/care-collective?utm_source=app&utm_medium=decoder';
 
+/// Calm, caregiver-voice line shown under the spinner while Dr. Natali's
+/// script is still being put together (BUILD_SPEC.md §5.4). Deliberately
+/// frames the wait as Natali thinking it through — no "loading", and the
+/// LLM stays invisible.
+const String decoderLoadingMessage = 'Putting together what to say…';
+
 /// The medical-advice disclaimer footer (BUILD_SPEC.md §13.1). Rendered
 /// at the bottom of every result; the LLM also includes it verbatim in
 /// the prompt's forbidden-output guard.
@@ -82,7 +89,15 @@ class DecoderResultScreen extends ConsumerStatefulWidget {
   static const Key talkToNataliKey = Key('decoder-result-talk-to-natali');
   static const Key retryKey = Key('decoder-result-retry');
   static const Key skeletonKey = Key('decoder-result-skeleton');
-  static const Key streamingTextKey = Key('decoder-result-streaming-text');
+
+  /// Spinner shown while the script is still being put together (before
+  /// the first clean parse). Part of the loading state that replaced the
+  /// raw-JSON flash.
+  static const Key loadingSpinnerKey = Key('decoder-result-loading-spinner');
+
+  /// The calm "Putting together what to say…" line under the spinner.
+  static const Key loadingMessageKey = Key('decoder-result-loading-message');
+
   static const Key footerKey = Key('decoder-result-footer');
 
   static Key sayLinePlayKey(int index) =>
@@ -141,26 +156,48 @@ class _DecoderResultScreenState
     }
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text('Decoder'),
-        actions: <Widget>[
-          Semantics(
-            button: true,
-            enabled: canPlayAll,
-            label: 'Read the full script aloud.',
-            child: IconButton(
-              key: DecoderResultScreen.playAllKey,
-              icon: const Icon(Icons.volume_up_outlined),
-              tooltip: 'Read all sections aloud',
-              onPressed: canPlayAll
-                  ? () => _playAll(progress.requireValue.partial!)
-                  : null,
+      backgroundColor: context.cb.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: PathHeader(
+                breadcrumbs: const <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  PathHeaderCrumb(label: 'Journal', route: '/journal'),
+                  PathHeaderCrumb(
+                    label: "What's happening?",
+                    route: '/decoder/behavior',
+                  ),
+                  PathHeaderCrumb(label: 'Triage', route: '/decoder/triage'),
+                  PathHeaderCrumb(label: 'Decoder'),
+                ],
+                title: 'Decoder',
+                backLabel: 'Back to Triage',
+                leadingIcon: Icons.auto_awesome_outlined,
+                trailing: Semantics(
+                  button: true,
+                  enabled: canPlayAll,
+                  label: 'Read the full script aloud.',
+                  child: IconButton(
+                    key: DecoderResultScreen.playAllKey,
+                    icon: const Icon(Icons.volume_up_outlined),
+                    tooltip: 'Read all sections aloud',
+                    color: context.cb.primary,
+                    onPressed: canPlayAll
+                        ? () => _playAll(progress.requireValue.partial!)
+                        : null,
+                  ),
+                ),
+              ),
             ),
-          ),
-        ],
+            Expanded(child: body),
+          ],
+        ),
       ),
-      body: SafeArea(child: body),
     );
   }
 
@@ -168,31 +205,29 @@ class _DecoderResultScreenState
 
   Widget _loadingView() {
     return const _StreamingShell(
-      child: _PulsingSkeleton(key: DecoderResultScreen.skeletonKey),
+      child: _LoadingBody(),
     );
   }
 
   Widget _streamingView(DecoderProgress p) {
-    // Prefer the structured partial parse when it's available — even
-    // partial-but-structured content reads cleaner than the raw JSON
-    // braces. Fall back to the accumulated text when nothing has parsed
-    // yet so the caregiver sees motion, not a frozen skeleton.
-    final Widget body = p.partial != null
-        ? _PartialContent(result: p.partial!)
-        : Text(
-            p.accumulatedJson,
-            key: DecoderResultScreen.streamingTextKey,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: careblazersColors.text,
-                ),
-          );
+    // Until the accumulated JSON first parses cleanly, [p.partial] is
+    // null and we're still receiving raw, structurally-incomplete JSON.
+    // NEVER surface that buffer — show the same calm loading state the
+    // initial frame uses so the caregiver sees motion and a reassuring
+    // line, not `{"say": ["…` braces (alpha bug: raw JSON flash).
+    if (p.partial == null) {
+      return _loadingView();
+    }
+    // A clean partial parse landed — reveal the structured say-lines
+    // (word-by-word) above the still-pulsing skeleton. This is parsed
+    // content, not raw JSON.
     return _StreamingShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           const _PulsingSkeleton(key: DecoderResultScreen.skeletonKey),
           const SizedBox(height: 16),
-          body,
+          _PartialContent(result: p.partial!),
         ],
       ),
     );
@@ -212,7 +247,7 @@ class _DecoderResultScreenState
             child: Text(
               'Dr. Natali says:',
               style: textTheme.headlineLarge?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
               ),
             ),
           ),
@@ -272,7 +307,7 @@ class _DecoderResultScreenState
           Text(
             "We couldn't reach the coach.",
             style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -280,7 +315,7 @@ class _DecoderResultScreenState
           Text(
             message,
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.text,
+              color: context.cb.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -291,7 +326,7 @@ class _DecoderResultScreenState
             child: ElevatedButton(
               key: DecoderResultScreen.retryKey,
               style: ElevatedButton.styleFrom(
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -387,13 +422,66 @@ class _StreamingShell extends StatelessWidget {
           Text(
             'Dr. Natali says:',
             style: textTheme.headlineLarge?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
           ),
           const SizedBox(height: 16),
           child,
         ],
       ),
+    );
+  }
+}
+
+/// The loading state shown before the first clean parse (BUILD_SPEC.md
+/// §5.4). A brand-tinted spinner + a calm "Putting together what to
+/// say…" line sit above the pulsing skeleton so the caregiver always
+/// sees that something is happening — and the raw streaming JSON is
+/// never surfaced while it accumulates.
+class _LoadingBody extends StatelessWidget {
+  const _LoadingBody();
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    // Reduce-motion (and every widget test, which forces it on) pins the
+    // spinner to a single static frame so its repeating ticker can't
+    // wedge `pumpAndSettle` — same guard the skeleton uses.
+    final bool reduceMotion = MediaQuery.of(context).disableAnimations;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Semantics(
+              label: decoderLoadingMessage,
+              liveRegion: true,
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  key: DecoderResultScreen.loadingSpinnerKey,
+                  strokeWidth: 2.5,
+                  color: context.cb.primarySoft,
+                  value: reduceMotion ? 0.25 : null,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                decoderLoadingMessage,
+                key: DecoderResultScreen.loadingMessageKey,
+                style: textTheme.bodyLarge?.copyWith(
+                  color: context.cb.primarySoft,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const _PulsingSkeleton(key: DecoderResultScreen.skeletonKey),
+      ],
     );
   }
 }
@@ -484,7 +572,7 @@ class _PulsingSkeletonState extends State<_PulsingSkeleton>
       child: Container(
         height: height,
         decoration: BoxDecoration(
-          color: careblazersColors.surfaceWarm,
+          color: context.cb.surfaceWarm,
           borderRadius: BorderRadius.circular(8),
         ),
       ),
@@ -515,7 +603,7 @@ class _PartialContent extends StatelessWidget {
                 result.say[i],
                 key: DecoderResultScreen.sayLineKey(i),
                 style: textTheme.bodyLarge?.copyWith(
-                  color: careblazersColors.primary,
+                  color: context.cb.primary,
                 ),
               ),
             ),
@@ -543,7 +631,7 @@ class _SaySection extends StatelessWidget {
         Text(
           'Try saying:',
           style: textTheme.titleLarge?.copyWith(
-            color: careblazersColors.primary,
+            color: context.cb.primary,
           ),
         ),
         const SizedBox(height: 12),
@@ -579,7 +667,7 @@ class _SayLine extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Container(
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.fromLTRB(8, 12, 12, 12),
@@ -592,7 +680,7 @@ class _SayLine extends StatelessWidget {
             child: IconButton(
               key: DecoderResultScreen.sayLinePlayKey(index),
               icon: const Icon(Icons.play_arrow),
-              color: careblazersColors.cta,
+              color: context.cb.cta,
               onPressed: onPlay,
               tooltip: 'Read this line aloud',
             ),
@@ -604,7 +692,7 @@ class _SayLine extends StatelessWidget {
               child: Text(
                 '"$line"',
                 style: textTheme.bodyLarge?.copyWith(
-                  color: careblazersColors.text,
+                  color: context.cb.text,
                 ),
               ),
             ),
@@ -629,7 +717,7 @@ class _TweakSection extends StatelessWidget {
         Text(
           'Try this in the room:',
           style: textTheme.titleLarge?.copyWith(
-            color: careblazersColors.primary,
+            color: context.cb.primary,
           ),
         ),
         const SizedBox(height: 8),
@@ -642,7 +730,7 @@ class _TweakSection extends StatelessWidget {
                 Text(
                   '•  ',
                   style: textTheme.bodyLarge?.copyWith(
-                    color: careblazersColors.primarySoft,
+                    color: context.cb.primarySoft,
                   ),
                 ),
                 Expanded(
@@ -650,7 +738,7 @@ class _TweakSection extends StatelessWidget {
                     entries[i],
                     key: DecoderResultScreen.tweakLineKey(i),
                     style: textTheme.bodyLarge?.copyWith(
-                      color: careblazersColors.text,
+                      color: context.cb.text,
                     ),
                   ),
                 ),
@@ -676,7 +764,7 @@ class _DontSaySection extends StatelessWidget {
         Text(
           "Don't say:",
           style: textTheme.titleLarge?.copyWith(
-            color: careblazersColors.accentDeep,
+            color: context.cb.accentDeep,
           ),
         ),
         const SizedBox(height: 8),
@@ -689,7 +777,7 @@ class _DontSaySection extends StatelessWidget {
                 Text(
                   '✗  ',
                   style: textTheme.bodyLarge?.copyWith(
-                    color: careblazersColors.accentDeep,
+                    color: context.cb.accentDeep,
                   ),
                 ),
                 Expanded(
@@ -697,7 +785,7 @@ class _DontSaySection extends StatelessWidget {
                     entries[i],
                     key: DecoderResultScreen.dontSayLineKey(i),
                     style: textTheme.bodyLarge?.copyWith(
-                      color: careblazersColors.text,
+                      color: context.cb.text,
                     ),
                   ),
                 ),
@@ -721,7 +809,7 @@ class _FooterDisclaimer extends StatelessWidget {
       child: Text(
         decoderFooterDisclaimer,
         style: textTheme.bodyMedium?.copyWith(
-          color: careblazersColors.primarySoft,
+          color: context.cb.primarySoft,
           fontStyle: FontStyle.italic,
         ),
         textAlign: TextAlign.center,
@@ -754,10 +842,10 @@ class _OutcomeButtons extends StatelessWidget {
           child: ElevatedButton(
             key: DecoderResultScreen.thatHelpedKey,
             style: ElevatedButton.styleFrom(
-              backgroundColor: careblazersColors.cta,
+              backgroundColor: context.cb.cta,
               foregroundColor: Colors.white,
               disabledBackgroundColor:
-                  careblazersColors.cta.withValues(alpha: 0.4),
+                  context.cb.cta.withValues(alpha: 0.4),
               minimumSize: const Size.fromHeight(56),
             ),
             onPressed: onThatHelped,
@@ -774,15 +862,15 @@ class _OutcomeButtons extends StatelessWidget {
           child: OutlinedButton(
             key: DecoderResultScreen.differentApproachKey,
             style: OutlinedButton.styleFrom(
-              foregroundColor: careblazersColors.primary,
-              side: BorderSide(color: careblazersColors.primary, width: 1.5),
+              foregroundColor: context.cb.primary,
+              side: BorderSide(color: context.cb.primary, width: 1.5),
               minimumSize: const Size.fromHeight(56),
             ),
             onPressed: onDifferentApproach,
             child: Text(
               '→  Try a different approach',
               style: textTheme.labelLarge?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
               ),
             ),
           ),
@@ -794,14 +882,14 @@ class _OutcomeButtons extends StatelessWidget {
           child: TextButton(
             key: DecoderResultScreen.talkToNataliKey,
             style: TextButton.styleFrom(
-              foregroundColor: careblazersColors.link,
+              foregroundColor: context.cb.link,
               minimumSize: const Size.fromHeight(48),
             ),
             onPressed: onTalkToNatali,
             child: Text(
               '💬  I need to talk to Natali',
               style: textTheme.labelLarge?.copyWith(
-                color: careblazersColors.link,
+                color: context.cb.link,
               ),
             ),
           ),

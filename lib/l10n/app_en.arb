@@ -1,0 +1,266 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "Careblazers",
+  "@appTitle": {
+    "description": "The application's name, shown as the MaterialApp title."
+  },
+
+  "commonSave": "Save",
+  "@commonSave": {
+    "description": "Generic confirm/save button label, reused across forms."
+  },
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "Generic dismiss/cancel button label, reused across forms and dialogs."
+  },
+  "commonBack": "Back",
+  "@commonBack": {
+    "description": "Generic back navigation label."
+  },
+  "commonNext": "Next",
+  "@commonNext": {
+    "description": "Generic advance/next button label, reused across multi-step flows."
+  },
+  "commonDelete": "Delete",
+  "@commonDelete": {
+    "description": "Generic destructive delete button label, reused across lists and detail screens."
+  },
+  "commonAdd": "Add",
+  "@commonAdd": {
+    "description": "Generic add/create button label, reused across managers and lists."
+  },
+  "commonDone": "Done",
+  "@commonDone": {
+    "description": "Generic completion/dismiss button label, reused across modals and editors."
+  },
+  "commonContinue": "Continue",
+  "@commonContinue": {
+    "description": "Generic continue/proceed button label, reused across flows."
+  },
+  "commonSkip": "Skip",
+  "@commonSkip": {
+    "description": "Generic skip button label, reused across onboarding and optional steps."
+  },
+  "commonEdit": "Edit",
+  "@commonEdit": {
+    "description": "Generic edit button label, reused across detail and manager screens."
+  },
+  "commonRemove": "Remove",
+  "@commonRemove": {
+    "description": "Generic remove button label, reused across editable lists (distinct from Delete)."
+  },
+  "commonTryAgain": "Try again",
+  "@commonTryAgain": {
+    "description": "Generic retry call-to-action shown after a recoverable failure."
+  },
+
+  "navHome": "Home",
+  "@navHome": {
+    "description": "Home destination label, used in breadcrumbs and the bottom tab bar."
+  },
+  "navCommunity": "Community",
+  "@navCommunity": {
+    "description": "Community destination label, used in breadcrumbs and the bottom tab bar."
+  },
+
+  "communityGuidelinesTitle": "Community guidelines",
+  "@communityGuidelinesTitle": {
+    "description": "Title of the community guidelines screen and its terminal breadcrumb crumb."
+  },
+  "communityGuidelinesBack": "Back to Community",
+  "@communityGuidelinesBack": {
+    "description": "Word-labeled back affordance on the community guidelines path header."
+  },
+  "communityGuidelinesHeadline": "The four agreements.",
+  "@communityGuidelinesHeadline": {
+    "description": "Section headline introducing the four community guideline cards."
+  },
+  "communityGuidelinesSubtitle": "A two-minute read. These are the lines we hold each other to.",
+  "@communityGuidelinesSubtitle": {
+    "description": "Supporting subtitle under the community guidelines headline."
+  },
+
+  "welcomeNextCta": "Next →",
+  "@welcomeNextCta": {
+    "description": "Bottom call-to-action on welcome-carousel pages 1-2 that advances to the next page. Carries a trailing arrow glyph, so it is screen-specific rather than the shared commonNext label."
+  },
+  "welcomeGetStartedCta": "Get started",
+  "@welcomeGetStartedCta": {
+    "description": "Bottom call-to-action on the final welcome-carousel page that hands off to sign-in."
+  },
+  "welcomeSkipSemantics": "Skip onboarding and go to sign-in.",
+  "@welcomeSkipSemantics": {
+    "description": "Screen-reader (Semantics) label for the welcome-carousel Skip button."
+  },
+
+  "signInTitle": "Careblazers",
+  "@signInTitle": {
+    "description": "Brand wordmark shown at the top of the sign-in screen."
+  },
+  "signInTagline": "We make caregiving for someone with dementia easier.",
+  "@signInTagline": {
+    "description": "Tagline beneath the wordmark on the sign-in screen; mirrors welcome-carousel page 1."
+  },
+  "signInError": "Couldn't sign in. Try again.",
+  "@signInError": {
+    "description": "Error banner message shown when an OAuth sign-in flow fails or is cancelled."
+  },
+  "signInContinueWithApple": "Continue with Apple",
+  "@signInContinueWithApple": {
+    "description": "Label on the Sign in with Apple button (iOS only)."
+  },
+  "signInContinueWithAppleSemantics": "Continue with Apple.",
+  "@signInContinueWithAppleSemantics": {
+    "description": "Screen-reader (Semantics) label for the Sign in with Apple button."
+  },
+  "signInContinueWithGoogle": "Continue with Google",
+  "@signInContinueWithGoogle": {
+    "description": "Label on the Sign in with Google button (both platforms)."
+  },
+  "signInContinueWithGoogleSemantics": "Continue with Google.",
+  "@signInContinueWithGoogleSemantics": {
+    "description": "Screen-reader (Semantics) label for the Sign in with Google button."
+  },
+  "signInDemoSkip": "Skip — explore as Mary's caregiver",
+  "@signInDemoSkip": {
+    "description": "Label on the DEMO_MODE-only button that bypasses OAuth and lands on Home as the seeded caregiver."
+  },
+  "signInDemoSkipSemantics": "Skip sign-in and explore as Mary's caregiver.",
+  "@signInDemoSkipSemantics": {
+    "description": "Screen-reader (Semantics) label for the DEMO_MODE-only skip-sign-in button."
+  },
+  "signInTermsPrefix": "By continuing, you agree to our ",
+  "@signInTermsPrefix": {
+    "description": "Leading text of the terms-and-privacy consent line on the sign-in screen, before the Terms link."
+  },
+  "signInTermsLink": "Terms",
+  "@signInTermsLink": {
+    "description": "Tappable 'Terms' link text within the sign-in consent line."
+  },
+  "signInTermsConjunction": " and ",
+  "@signInTermsConjunction": {
+    "description": "Connecting text between the Terms and Privacy Policy links on the sign-in consent line."
+  },
+  "signInPrivacyLink": "Privacy Policy",
+  "@signInPrivacyLink": {
+    "description": "Tappable 'Privacy Policy' link text within the sign-in consent line."
+  },
+  "signInTermsSuffix": ".",
+  "@signInTermsSuffix": {
+    "description": "Trailing punctuation that closes the sign-in consent line after the Privacy Policy link."
+  },
+
+  "lovedOneSetupTitle": "Let's set up your person",
+  "@lovedOneSetupTitle": {
+    "description": "Heading on the new-user loved-one setup wizard."
+  },
+  "lovedOneSetupIntro": "Just the essentials for now — the name is all we truly need. You can add or change anything later from the Emergency Card.",
+  "@lovedOneSetupIntro": {
+    "description": "Warm introductory paragraph under the loved-one setup heading."
+  },
+  "lovedOneSetupNameLabel": "Their name",
+  "@lovedOneSetupNameLabel": {
+    "description": "Field label for the required loved-one name input."
+  },
+  "lovedOneSetupNameHint": "e.g. Mom",
+  "@lovedOneSetupNameHint": {
+    "description": "Placeholder hint for the loved-one name field."
+  },
+  "lovedOneSetupNameError": "Please enter their name.",
+  "@lovedOneSetupNameError": {
+    "description": "Validation message shown when the required loved-one name field is left blank."
+  },
+  "lovedOneSetupAgeLabel": "Age (optional)",
+  "@lovedOneSetupAgeLabel": {
+    "description": "Field label for the optional loved-one age input."
+  },
+  "lovedOneSetupAgeHint": "e.g. 78",
+  "@lovedOneSetupAgeHint": {
+    "description": "Placeholder hint for the loved-one age field."
+  },
+  "lovedOneSetupAgeError": "Enter an age between 0 and 130.",
+  "@lovedOneSetupAgeError": {
+    "description": "Validation message shown when the loved-one age is out of the accepted range."
+  },
+  "lovedOneSetupDiagnosisLabel": "Diagnosis (optional)",
+  "@lovedOneSetupDiagnosisLabel": {
+    "description": "Field label for the optional loved-one diagnosis input."
+  },
+  "lovedOneSetupDiagnosisHint": "e.g. Alzheimer's disease",
+  "@lovedOneSetupDiagnosisHint": {
+    "description": "Placeholder hint for the loved-one diagnosis field."
+  },
+  "lovedOneSetupAllergiesLabel": "Allergies (optional)",
+  "@lovedOneSetupAllergiesLabel": {
+    "description": "Field label for the optional loved-one allergies input."
+  },
+  "lovedOneSetupAllergiesHint": "e.g. Penicillin",
+  "@lovedOneSetupAllergiesHint": {
+    "description": "Placeholder hint for the loved-one allergies field."
+  },
+  "lovedOneSetupOnePerLine": "One per line.",
+  "@lovedOneSetupOnePerLine": {
+    "description": "Hint reminding the caregiver to enter one item per line in the allergies field."
+  },
+  "lovedOneSetupCalmsLabel": "What calms them (optional)",
+  "@lovedOneSetupCalmsLabel": {
+    "description": "Field label for the optional 'what calms them' input."
+  },
+  "lovedOneSetupCalmsHintList": "One per line — phrases, people, or things that help.",
+  "@lovedOneSetupCalmsHintList": {
+    "description": "Hint describing the 'what calms them' multiline field."
+  },
+  "lovedOneSetupCalmsHint": "e.g. A photo of their late husband",
+  "@lovedOneSetupCalmsHint": {
+    "description": "Placeholder hint for the 'what calms them' field."
+  },
+  "lovedOneSetupEscalatesLabel": "What escalates them (optional)",
+  "@lovedOneSetupEscalatesLabel": {
+    "description": "Field label for the optional 'what escalates them' input."
+  },
+  "lovedOneSetupEscalatesHintList": "One per line — triggers to avoid.",
+  "@lovedOneSetupEscalatesHintList": {
+    "description": "Hint describing the 'what escalates them' multiline field."
+  },
+  "lovedOneSetupEscalatesHint": "e.g. Loud beeping, being rushed",
+  "@lovedOneSetupEscalatesHint": {
+    "description": "Placeholder hint for the 'what escalates them' field."
+  },
+  "lovedOneSetupCaregiverHeading": "Primary caregiver",
+  "@lovedOneSetupCaregiverHeading": {
+    "description": "Section heading for the primary-caregiver contact fields."
+  },
+  "lovedOneSetupCaregiverHint": "Shown on the Emergency Card for first responders.",
+  "@lovedOneSetupCaregiverHint": {
+    "description": "Hint explaining where the primary-caregiver contact appears."
+  },
+  "lovedOneSetupCaregiverNameLabel": "Name (optional)",
+  "@lovedOneSetupCaregiverNameLabel": {
+    "description": "Field label for the primary-caregiver name input."
+  },
+  "lovedOneSetupCaregiverNameHint": "Your name",
+  "@lovedOneSetupCaregiverNameHint": {
+    "description": "Placeholder hint for the primary-caregiver name field."
+  },
+  "lovedOneSetupCaregiverPhoneLabel": "Phone (optional)",
+  "@lovedOneSetupCaregiverPhoneLabel": {
+    "description": "Field label for the primary-caregiver phone input."
+  },
+  "lovedOneSetupCaregiverPhoneHint": "(555) 123-4567",
+  "@lovedOneSetupCaregiverPhoneHint": {
+    "description": "Placeholder hint for the primary-caregiver phone field."
+  },
+  "lovedOneSetupSave": "Save and continue",
+  "@lovedOneSetupSave": {
+    "description": "Primary submit button label on the loved-one setup wizard."
+  },
+  "lovedOneSetupSaving": "Saving…",
+  "@lovedOneSetupSaving": {
+    "description": "Busy-state label shown on the setup wizard submit button while the save is in flight."
+  },
+  "lovedOneSetupSaveSemantics": "Save your person and continue to the app.",
+  "@lovedOneSetupSaveSemantics": {
+    "description": "Screen-reader (Semantics) label for the loved-one setup submit button."
+  }
+}

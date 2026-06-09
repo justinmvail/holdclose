@@ -6,10 +6,8 @@ import '../providers/auth_provider.dart';
 import '../providers/home_clock_provider.dart';
 import '../routing/router.dart';
 import '../theme.dart';
-import '../widgets/home/add_action_sheet.dart';
 import '../widgets/home/catch_me_up_card.dart';
-import '../widgets/home/medications_today_card.dart';
-import '../widgets/home/recent_activity_card.dart';
+import '../widgets/home/community_recap_card.dart';
 import '../widgets/home/schedule_card.dart';
 import '../widgets/path_header.dart';
 
@@ -37,12 +35,7 @@ class HomeScreen extends ConsumerWidget {
     final AuthProvider auth = ref.watch(authProvider);
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      // Quick-add FAB (Phase 14.13). The scaffold slot keeps it clear of
-      // the safe-area inset; because Home's body ends at the top of the
-      // shell's tab bar, the default end-float position also clears the
-      // tab bar.
-      floatingActionButton: const AddActionFab(),
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,7 +86,7 @@ class HomeScreen extends ConsumerWidget {
                             height: 24,
                           ),
                           visualDensity: VisualDensity.compact,
-                          color: careblazersColors.primary,
+                          color: context.cb.primary,
                           tooltip: 'Profile & settings',
                           onPressed: () => GoRouter.of(context)
                               .pushNamed(CareblazersRoutes.settings),
@@ -109,17 +102,11 @@ class HomeScreen extends ConsumerWidget {
                 key: dashboardListKey,
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                 children: const <Widget>[
-                  // Medications Today (Phase 14.9): today's doses with
-                  // a status dot + an X-of-Y count, tapping through to
-                  // the full dose log.
-                  MedicationsTodayCard(),
-                  SizedBox(height: 16),
-                  // Schedule: Today + Tomorrow + This Week, drawn from
-                  // the unified patient timeline (appointments, doses,
-                  // health-log entries, journal entries, care-plan
-                  // routines). Replaces the single-row Next
-                  // Appointment card so the caregiver sees the days
-                  // ahead, not just the next item.
+                  // Schedule: Today + Tomorrow, drawn from the unified
+                  // patient timeline (appointments, doses, health-log
+                  // entries, journal entries, care-plan routines).
+                  // Replaces the single-row Next Appointment card so the
+                  // caregiver sees the days ahead, not just the next item.
                   ScheduleCard(),
                   SizedBox(height: 16),
                   // Catch me up (Phase 14.12): an optional streamed
@@ -129,10 +116,15 @@ class HomeScreen extends ConsumerWidget {
                   // a hidden card leaves the dashboard pixel-identical
                   // to having no card at all.
                   CatchMeUpCard(),
-                  // Recent Activity (Phase 14.11): the latest events
-                  // across the journal, dose log, and appointments,
-                  // each row tapping through to its own source detail.
-                  RecentActivityCard(),
+                  // From the Community (alpha fb_1780962188695173): a
+                  // compact recap of a few recent community posts at the
+                  // very bottom of the dashboard, tapping through to the
+                  // Community tab. The card above owns its own 16px bottom
+                  // gap, so this sits directly beneath it; the recap card
+                  // collapses to nothing when the community backend isn't
+                  // configured or has no posts, leaving the dashboard
+                  // pixel-identical to having no card at all.
+                  CommunityRecapCard(),
                 ],
               ),
             ),

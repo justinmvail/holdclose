@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../services/chat_service.dart' show journalCitationPrefix;
+import '../services/chat_actions.dart' show journalCitationPrefix;
 import '../theme.dart';
 
 /// Renders an assistant message body — plain prose plus inline
@@ -91,7 +91,7 @@ class _CitationChip extends StatelessWidget {
     final (String label, IconData icon) = _resolveDisplay(citation);
     return Material(
       key: MessageBody.citationChipKey(citation),
-      color: careblazersColors.cta,
+      color: context.cb.cta,
       borderRadius: radius,
       child: InkWell(
         borderRadius: radius,

@@ -12,6 +12,24 @@ enum FontSizeMultiplier {
   xLarge,
 }
 
+/// How the app decides between the light and dark palettes
+/// (BUILD_SPEC.md §11.4). Replaces the single `darkModeAtNight` bool.
+///
+///  - [system]    → follow the phone's appearance setting
+///                  ([ThemeMode.system]). The out-of-the-box default so
+///                  testers see whatever their device is already on.
+///  - [on]        → always dark ([ThemeMode.dark]).
+///  - [off]       → always light ([ThemeMode.light]).
+///  - [scheduled] → dark inside a user-set window (the old "dark at
+///                  night" behavior, now with customizable hours that
+///                  wrap midnight like the quiet-hours window).
+enum ThemePreference {
+  system,
+  on,
+  off,
+  scheduled,
+}
+
 extension FontSizeMultiplierScale on FontSizeMultiplier {
   /// The multiplier value the type ramp scales by. Per BUILD_SPEC.md
   /// §3.2: 0.875× / 1.0× / 1.15× / 1.35×.
@@ -45,6 +63,32 @@ abstract class AppSettings with _$AppSettings {
     required bool allowAudioDuringQuietHours,
     required bool darkModeAtNight,
     required bool resetOnLaunchDemo,
+
+    /// How the app chooses between the light and dark palettes
+    /// (BUILD_SPEC.md §11.4). Defaults to [ThemePreference.system] so a
+    /// fresh install follows the phone's appearance setting — what most
+    /// testers expect. Supersedes the legacy `darkModeAtNight` bool above,
+    /// which is now unused but retained so already-persisted JSON keeps
+    /// hydrating cleanly.
+    @Default(ThemePreference.system) ThemePreference themePreference,
+
+    /// Scheduled dark-mode window, as whole hour-of-day bounds
+    /// [darkStartHour, darkEndHour). Only consulted when
+    /// [themePreference] is [ThemePreference.scheduled]. Wraps midnight
+    /// when start > end (the default 20→7 means 8pm through 7am, the same
+    /// shape as the quiet-hours window). `@Default` keeps pre-existing
+    /// settings JSON (which predates these keys) hydrating to the
+    /// hardcoded defaults.
+    @Default(20) int darkStartHour,
+    @Default(7) int darkEndHour,
+
+    /// Quiet-hours window, as whole-hour-of-day bounds [start, end). The
+    /// window wraps past midnight when start > end (the default 22→7 means
+    /// 10pm through 7am). `@Default` keeps already-persisted settings JSON
+    /// (which predates these keys) hydrating cleanly to the old hardcoded
+    /// 22/7 values. See [defaultQuietHoursStart] / [defaultQuietHoursEnd].
+    @Default(22) int quietHoursStartHour,
+    @Default(7) int quietHoursEndHour,
     @Default(true) bool useBundledVoice,
 
     /// Per-feature toggle for whether the app schedules local
@@ -64,12 +108,11 @@ abstract class AppSettings with _$AppSettings {
 
     /// Whether the Care Team tab surfaces the full coordination
     /// hub (Calendar, Tasks, Shifts, Expenses, Circle). Defaults
-    /// to **off** — solo caregivers never see what they don't use.
-    /// Flip on in Settings → Care Team to opt in; the bottom tab
-    /// stays mounted either way so the 5-tab IA invariant holds —
-    /// when off, the tab body swaps to a "Coordinate care" CTA
-    /// that turns the toggle on with one tap.
-    @Default(false) bool teamCoordinationEnabled,
+    /// to **on** so the coordination features are available out of the
+    /// box. Toggle off in Settings → Care Team and the tab body swaps to
+    /// a "Coordinate care" CTA that turns it back on with one tap; the
+    /// bottom tab stays mounted either way so the 5-tab IA invariant holds.
+    @Default(true) bool teamCoordinationEnabled,
   }) = _AppSettings;
 
   /// Hydrate from persisted JSON. Unknown keys are silently ignored —

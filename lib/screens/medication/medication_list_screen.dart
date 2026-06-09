@@ -4,14 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/medication.dart';
+import '../../providers/active_patient_provider.dart';
 import '../../providers/patient_timeline_provider.dart';
 import '../../services/medication_repository.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
 
 part 'medication_list_screen.g.dart';
-
-const String _calendarPatientId = 'demo-patient-mary';
 
 /// One row in the medication list — a [Medication] joined with the
 /// windows it's attached to and its trailing 7-day adherence score.
@@ -41,9 +40,10 @@ class MedicationListItem {
 Future<List<MedicationListItem>> medicationList(Ref ref) async {
   final MedicationRepository repo =
       ref.watch(medicationRepositoryBackendProvider);
+  final String patientId = await ref.watch(activePatientIdProvider.future);
   final List<Medication> meds = await repo.listMedications();
   final List<DoseWindow> allWindows =
-      await repo.windowsForPatient(_calendarPatientId);
+      await repo.windowsForPatient(patientId);
   final Map<String, DoseWindow> windowsById = <String, DoseWindow>{
     for (final DoseWindow w in allWindows) w.id: w,
   };
@@ -68,6 +68,7 @@ Future<List<MedicationListItem>> medicationList(Ref ref) async {
     final double rate = await repo.adherenceRate(
       forMedication: m.id,
       window: const Duration(days: 7),
+      patientId: patientId,
     );
     final List<DoseLog> logs = await repo.logsFor(m.id);
     final bool hasScoreable = logs.any((DoseLog l) =>
@@ -121,7 +122,7 @@ class MedicationListScreen extends ConsumerWidget {
         ref.watch(medicationListProvider);
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,17 +132,17 @@ class MedicationListScreen extends ConsumerWidget {
               child: PathHeader(
                 breadcrumbs: const <PathHeaderCrumb>[
                   PathHeaderCrumb(label: 'Home', route: '/'),
-                  PathHeaderCrumb(label: 'Medical', route: '/medical'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
                   PathHeaderCrumb(label: 'Medications'),
                 ],
                 title: 'Medications',
-                backLabel: 'Back to Medical',
+                backLabel: 'Back to Care',
                 leadingIcon: Icons.medication_outlined,
                 // Per-screen action — opens the dose-window manager so
                 // caregivers can rename / re-anchor / delete windows
                 // without going through the form picker.
                 trailing: IconButton(
-                  tooltip: 'Manage windows',
+                  tooltip: 'Manage time windows',
                   iconSize: 24,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints.tightFor(
@@ -149,7 +150,7 @@ class MedicationListScreen extends ConsumerWidget {
                     height: 24,
                   ),
                   visualDensity: VisualDensity.compact,
-                  color: careblazersColors.primary,
+                  color: context.cb.primary,
                   icon: const Icon(Icons.schedule_outlined),
                   onPressed: () =>
                       context.push('/medications/windows'),
@@ -176,7 +177,7 @@ class MedicationListScreen extends ConsumerWidget {
           return FloatingActionButton.extended(
             key: MedicationListScreen.fabKey,
             heroTag: 'medications-add-fab',
-            backgroundColor: careblazersColors.cta,
+            backgroundColor: context.cb.cta,
             foregroundColor: Colors.white,
             onPressed: () => context.push('/medications/new'),
             icon: const Icon(Icons.add),
@@ -217,14 +218,14 @@ class _MedicationCard extends ConsumerWidget {
     return Semantics(
       button: true,
       label: '${med.name}, ${med.dosage}. '
-          '${item.windows.isEmpty ? 'No window yet' : windowsLabel}.',
+          '${item.windows.isEmpty ? 'No time window yet' : windowsLabel}.',
       child: GestureDetector(
         onTap: () => context.push('/medications/${med.id}/edit'),
         onLongPress: () => _confirmAndDelete(context, ref, med),
         child: Container(
           key: MedicationListScreen.tileKey(med.id),
           decoration: BoxDecoration(
-            color: careblazersColors.surfaceWarm,
+            color: context.cb.surfaceWarm,
             borderRadius: BorderRadius.circular(16),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 8, 16),
@@ -243,7 +244,7 @@ class _MedicationCard extends ConsumerWidget {
                       child: Text(
                         med.name,
                         style: tt.titleLarge?.copyWith(
-                          color: careblazersColors.primary,
+                          color: context.cb.primary,
                           fontWeight: FontWeight.w700,
                         ),
                         maxLines: 2,
@@ -256,7 +257,7 @@ class _MedicationCard extends ConsumerWidget {
                     key: MedicationListScreen.deleteIconKey(med.id),
                     tooltip: 'Delete medication',
                     icon: const Icon(Icons.delete_outline),
-                    color: careblazersColors.primarySoft,
+                    color: context.cb.primarySoft,
                     onPressed: () => _confirmAndDelete(context, ref, med),
                   ),
                 ],
@@ -267,7 +268,7 @@ class _MedicationCard extends ConsumerWidget {
                   child: Text(
                     med.dosage,
                     style: tt.bodyLarge?.copyWith(
-                      color: careblazersColors.text,
+                      color: context.cb.text,
                     ),
                   ),
                 ),
@@ -277,10 +278,10 @@ class _MedicationCard extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: 2, right: 12),
                 child: Text(
                   item.windows.isEmpty
-                      ? 'No window yet — tap to add one.'
+                      ? 'No time window yet — tap to add one.'
                       : windowsLabel,
                   style: tt.bodyMedium?.copyWith(
-                    color: careblazersColors.primarySoft,
+                    color: context.cb.primarySoft,
                   ),
                 ),
               ),
@@ -352,13 +353,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.medication_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'No medications yet.',
             style: tt.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -366,7 +367,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             "Add what your loved one takes — name, dosage, and the time "
             "windows it's given in.",
-            style: tt.bodyLarge?.copyWith(color: careblazersColors.text),
+            style: tt.bodyLarge?.copyWith(color: context.cb.text),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
@@ -385,7 +386,7 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),

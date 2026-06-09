@@ -1,7 +1,9 @@
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/appointment.dart';
 import 'package:careblazers/models/care_event.dart';
+import 'package:careblazers/models/care_task.dart';
 import 'package:careblazers/providers/care_events_provider.dart';
+import 'package:careblazers/providers/care_tasks_provider.dart';
 import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/provider_repository.dart';
 import 'package:drift/native.dart';
@@ -68,7 +70,7 @@ void main() {
       expect(event.detailRoute, '/appointments/a1');
       // end = start + duration.
       expect(event.end, DateTime(2026, 6, 3, 15, 15));
-      expect(event.patientId, calendarPatientId);
+      expect(event.patientId, fallbackPatientId);
     });
 
     test('falls back to the location, then a bare label, for the title', () {
@@ -108,9 +110,15 @@ void main() {
 
       expect(base(CareEventKind.appointment, ref: 'a1').detailRoute,
           '/appointments/a1');
-      expect(base(CareEventKind.task, ref: 't1').detailRoute, '/team/tasks/t1');
+      // Tasks have no per-id detail page; a tapped block opens the list.
+      expect(base(CareEventKind.task, ref: 't1').detailRoute, '/team/tasks');
       expect(base(CareEventKind.shift, ref: 's1').detailRoute,
           '/team/shifts/s1');
+      // Health-log entries route into the edit form (the only entry-level
+      // route) — there is no bare `health-log/:id`, so a timeline/calendar
+      // tap must not dead-end on "Page Not Found".
+      expect(base(CareEventKind.healthLogEntry, ref: 'hl1').detailRoute,
+          '/medical/health-log/hl1/edit');
       // Notes have no detail page; a missing ref is non-tappable.
       expect(base(CareEventKind.note, ref: 'n1').detailRoute, isNull);
       expect(base(CareEventKind.appointment).detailRoute, isNull);
@@ -199,12 +207,14 @@ void main() {
     late AppointmentRepository appointmentRepo;
     late ProviderRepository providerRepo;
     late CareEventsRepository careEventsRepo;
+    late CareTasksRepository careTasksRepo;
 
     setUp(() {
       db = CareblazersDatabase(NativeDatabase.memory());
       appointmentRepo = AppointmentRepository(db);
       providerRepo = ProviderRepository(db);
       careEventsRepo = CareEventsRepository(db);
+      careTasksRepo = CareTasksRepository(db);
     });
 
     tearDown(() async {
@@ -282,7 +292,7 @@ void main() {
       expect(appt.detailRoute, '/appointments/a1');
     });
 
-    test('the task + shift seams contribute nothing by default', () async {
+    test('the task + shift seams contribute nothing with no tasks', () async {
       await providerRepo.upsertProvider(_provider(id: 'p1', name: 'Dr. Patel'));
       await appointmentRepo.upsertAppointment(_appointment(
         id: 'a1',
@@ -290,11 +300,14 @@ void main() {
         startsAt: DateTime(2026, 6, 3, 14),
       ));
 
-      // No seam overrides — the real (empty) defaults apply.
+      // The shift seam is still empty by default; the task seam now reads
+      // the (empty) tasks repo, so neither contributes — only the
+      // appointment surfaces.
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[
           appointmentRepositoryProvider.overrideWithValue(appointmentRepo),
           careEventsRepositoryProvider.overrideWithValue(careEventsRepo),
+          careTasksRepositoryProvider.overrideWithValue(careTasksRepo),
         ],
       );
       addTearDown(container.dispose);
@@ -303,6 +316,73 @@ void main() {
           await container.read(careEventsProvider.future);
       expect(events, hasLength(1));
       expect(events.single.kind, CareEventKind.appointment);
+    });
+
+    test(
+        'calendarTaskEvents projects standalone-with-dueAt tasks and '
+        'excludes routine-bound tasks', () async {
+      // Standalone with a due time → projects.
+      await careTasksRepo.upsertTask(CareTask(
+        id: 'standalone',
+        title: 'Refill meds',
+        dueAt: DateTime(2026, 6, 3, 11),
+        patientId: _patientId,
+      ));
+      // Standalone with no due time → no schedule block.
+      await careTasksRepo.upsertTask(const CareTask(
+        id: 'no-due',
+        title: 'Someday',
+        patientId: _patientId,
+      ));
+      // Routine-bound (even with a due time) → bundled under its routine,
+      // never a loose calendar block.
+      await careTasksRepo.upsertTask(CareTask(
+        id: 'bundled',
+        title: 'Brush teeth',
+        dueAt: DateTime(2026, 6, 3, 8),
+        routineId: 'r-1',
+        patientId: _patientId,
+      ));
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[
+          careTasksRepositoryProvider.overrideWithValue(careTasksRepo),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final List<CareEvent> events =
+          await container.read(calendarTaskEventsProvider.future);
+      expect(events, hasLength(1));
+      final CareEvent event = events.single;
+      expect(event.kind, CareEventKind.task);
+      expect(event.id, 'task-standalone');
+      expect(event.title, 'Refill meds');
+      expect(event.externalRef, 'standalone');
+      expect(event.start, DateTime(2026, 6, 3, 11));
+      expect(event.detailRoute, '/team/tasks');
+    });
+
+    test('careEventFromTask maps task fields onto the calendar event', () {
+      final CareTask task = CareTask(
+        id: 't1',
+        title: 'Refill meds',
+        body: 'From the pharmacy',
+        dueAt: DateTime(2026, 6, 3, 11),
+        assigneeCaregiverId: 'c1',
+        patientId: _patientId,
+      );
+
+      final CareEvent event = careEventFromTask(task);
+
+      expect(event.id, 'task-t1');
+      expect(event.kind, CareEventKind.task);
+      expect(event.title, 'Refill meds');
+      expect(event.subtitle, 'From the pharmacy');
+      expect(event.start, DateTime(2026, 6, 3, 11));
+      expect(event.ownerCaregiverId, 'c1');
+      expect(event.patientId, _patientId);
+      expect(event.externalRef, 't1');
     });
   });
 }

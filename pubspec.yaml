@@ -1,7 +1,7 @@
 name: careblazers
 description: "In-the-moment coach for dementia caregivers."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.0+2
 
 environment:
   sdk: ^3.5.0
@@ -10,6 +10,19 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Localization / i18n (#18). `flutter_localizations` supplies the
+  # Material/Cupertino/Widgets localization delegates; `intl` backs the
+  # generated AppLocalizations (message lookup, plural/gender, date +
+  # number formatting). Both are pure-Dart — no CocoaPods/Gradle native
+  # deps, so no `pod install` is needed. `intl`'s version is pinned by
+  # the Flutter SDK's `flutter_localizations` constraint; let
+  # `flutter pub get` resolve it rather than hard-pinning here. Code gen
+  # is Flutter's built-in gen-l10n (enabled via `flutter: generate: true`
+  # below); strings live in `lib/l10n/*.arb`, config in `l10n.yaml`. See
+  # BUILD_SPEC.md §1.
+  flutter_localizations:
+    sdk: flutter
+  intl: any
   cupertino_icons: ^1.0.8
 
   # State + routing
@@ -86,6 +99,41 @@ dependencies:
   flutter_local_notifications: ^18.0.0
   timezone: ^0.10.0
 
+  # Real device capture (#8 — journal photo/voice + Add-sheet voice).
+  # Each is wired ONLY behind the existing capture interfaces
+  # (PhotoAttacher / VoiceNoteRecorder / VoiceCapture) and selected by
+  # the `USE_REAL_CAPTURE` build flag, which DEFAULTS to false — so
+  # `flutter test` and the demo tour keep using the Noop/Unavailable
+  # fakes and never touch a real mic/camera. See BUILD_SPEC.md §1.
+  # - image_picker: OS gallery/camera picker → RealPhotoAttacher.
+  # - speech_to_text: on-device dictation → RealVoiceCapture (Add sheet).
+  # - record: mic → m4a file for RealVoiceNoteRecorder (journal note).
+  #   Pinned <7.0.0: record 7.x requires Dart ^3.12 (we ship 3.11.5).
+  # - audioplayers: plays the recorded m4a back. `record` is capture-
+  #   only, but the VoiceNoteRecorder seam's `play(path)` predates this
+  #   work, so a player is required to honor the interface on device.
+  image_picker: ^1.1.0
+  speech_to_text: ^7.0.0
+  record: ">=6.0.0 <7.0.0"
+  audioplayers: ^6.5.0
+
+  # Care Circle connect (2026-06-06): render the caregiver's invite token
+  # as a QR (qr_flutter) and scan another caregiver's QR to join their
+  # circle (mobile_scanner — uses the camera).
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^6.0.2
+
+  # Care Circle invite LINKS (2026-06-08): receive the
+  # `careblazers://join/<token>` custom-scheme deep link an invited
+  # caregiver taps from a shared text link (alpha feedback: "there should
+  # be a text link to link apps"). Handles BOTH cold-start (initialLink)
+  # and warm (uriLinkStream) incoming URIs. Pairs with the backend's
+  # public `GET /join/:token` landing page + the existing QR token
+  # machinery — pure plugin, no per-call cost. iOS already registers the
+  # `careblazers` scheme in Info.plist; Android registers it via an
+  # intent-filter on MainActivity.
+  app_links: ^6.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -119,6 +167,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Enable Flutter's built-in gen-l10n code generation (#18). Reads
+  # l10n.yaml + lib/l10n/*.arb and emits AppLocalizations into
+  # .dart_tool/flutter_gen on `flutter pub get` / `flutter gen-l10n`.
+  generate: true
   assets:
     - assets/images/
     - assets/seed/

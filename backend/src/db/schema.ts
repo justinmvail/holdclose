@@ -21,6 +21,7 @@ export const profiles = sqliteTable(
   {
     id: uuidColumn().primaryKey(),
     displayName: text('display_name').notNull(),
+    username: text('username'),
     avatarUrl: text('avatar_url'),
     joinedAt: timestampColumn('joined_at').notNull(),
     role: text().notNull().default('user'),
@@ -28,7 +29,110 @@ export const profiles = sqliteTable(
   },
   (t) => [
     uniqueIndex('profiles_careblazers_user_id_unique').on(t.careblazersUserId),
+    uniqueIndex('profiles_username_unique').on(t.username),
   ],
+);
+
+export const circles = sqliteTable(
+  'circles',
+  {
+    id: uuidColumn().primaryKey(),
+    name: text().notNull(),
+    ownerProfileId: text('owner_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    createdAt: timestampColumn('created_at').notNull(),
+    // Per-circle monotonic revision source. Every accepted sync write
+    // does rev = ++syncCounter, making rev strictly increasing per
+    // circle and skew-proof (unlike wall-clock) for delta pull.
+    syncCounter: integer('sync_counter').notNull().default(0),
+  },
+  (t) => [index('circles_owner_profile_id_idx').on(t.ownerProfileId)],
+);
+
+// The shared loved one — one per circle. The payload is an opaque JSON
+// blob the server never parses; clientUpdatedAt drives last-write-wins;
+// rev is the server-assigned per-circle delta cursor.
+export const patients = sqliteTable(
+  'patients',
+  {
+    id: uuidColumn().primaryKey(),
+    circleId: text('circle_id')
+      .notNull()
+      .references(() => circles.id, { onDelete: 'cascade' }),
+    payload: text().notNull(),
+    clientUpdatedAt: integer('client_updated_at').notNull(),
+    rev: integer().notNull(),
+    deleted: integer({ mode: 'boolean' }).notNull().default(false),
+  },
+  (t) => [uniqueIndex('patients_circle_unique').on(t.circleId)],
+);
+
+// Every other synced care entity (medications, dose windows, routines,
+// tasks, health logs, appointments, journal, …) stored generically.
+// `id` is the client-generated, globally-unique entity id. `collection`
+// is an opaque taxonomy string the app owns. `payload` is opaque JSON.
+export const careDocs = sqliteTable(
+  'care_docs',
+  {
+    id: text().primaryKey(),
+    circleId: text('circle_id')
+      .notNull()
+      .references(() => circles.id, { onDelete: 'cascade' }),
+    collection: text().notNull(),
+    payload: text().notNull(),
+    clientUpdatedAt: integer('client_updated_at').notNull(),
+    rev: integer().notNull(),
+    deleted: integer({ mode: 'boolean' }).notNull().default(false),
+  },
+  (t) => [
+    index('care_docs_circle_rev_idx').on(t.circleId, t.rev),
+    index('care_docs_circle_collection_idx').on(t.circleId, t.collection),
+  ],
+);
+
+export const circleMembers = sqliteTable(
+  'circle_members',
+  {
+    id: uuidColumn().primaryKey(),
+    circleId: text('circle_id')
+      .notNull()
+      .references(() => circles.id, { onDelete: 'cascade' }),
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    role: text().notNull().default('member'),
+    joinedAt: timestampColumn('joined_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('circle_members_circle_profile_unique').on(
+      t.circleId,
+      t.profileId,
+    ),
+    index('circle_members_circle_id_idx').on(t.circleId),
+    index('circle_members_profile_id_idx').on(t.profileId),
+    check(
+      'circle_members_role_enum',
+      sql`${t.role} IN ('owner', 'member', 'viewer')`,
+    ),
+  ],
+);
+
+export const circleInvites = sqliteTable(
+  'circle_invites',
+  {
+    token: text().primaryKey(),
+    circleId: text('circle_id')
+      .notNull()
+      .references(() => circles.id, { onDelete: 'cascade' }),
+    createdByProfileId: text('created_by_profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    createdAt: timestampColumn('created_at').notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    revoked: integer({ mode: 'boolean' }).notNull().default(false),
+  },
+  (t) => [index('circle_invites_circle_id_idx').on(t.circleId)],
 );
 
 export const posts = sqliteTable(
@@ -153,6 +257,55 @@ export const profilesRelations = relations(profiles, ({ many }) => ({
   comments: many(comments),
   votes: many(votes),
   reports: many(reports),
+  ownedCircles: many(circles),
+  circleMemberships: many(circleMembers),
+}));
+
+export const circlesRelations = relations(circles, ({ one, many }) => ({
+  owner: one(profiles, {
+    fields: [circles.ownerProfileId],
+    references: [profiles.id],
+  }),
+  members: many(circleMembers),
+  invites: many(circleInvites),
+  patient: one(patients),
+  careDocs: many(careDocs),
+}));
+
+export const patientsRelations = relations(patients, ({ one }) => ({
+  circle: one(circles, {
+    fields: [patients.circleId],
+    references: [circles.id],
+  }),
+}));
+
+export const careDocsRelations = relations(careDocs, ({ one }) => ({
+  circle: one(circles, {
+    fields: [careDocs.circleId],
+    references: [circles.id],
+  }),
+}));
+
+export const circleMembersRelations = relations(circleMembers, ({ one }) => ({
+  circle: one(circles, {
+    fields: [circleMembers.circleId],
+    references: [circles.id],
+  }),
+  profile: one(profiles, {
+    fields: [circleMembers.profileId],
+    references: [profiles.id],
+  }),
+}));
+
+export const circleInvitesRelations = relations(circleInvites, ({ one }) => ({
+  circle: one(circles, {
+    fields: [circleInvites.circleId],
+    references: [circles.id],
+  }),
+  createdBy: one(profiles, {
+    fields: [circleInvites.createdByProfileId],
+    references: [profiles.id],
+  }),
 }));
 
 export const postsRelations = relations(posts, ({ one, many }) => ({
@@ -201,3 +354,13 @@ export type Vote = typeof votes.$inferSelect;
 export type NewVote = typeof votes.$inferInsert;
 export type Report = typeof reports.$inferSelect;
 export type NewReport = typeof reports.$inferInsert;
+export type Circle = typeof circles.$inferSelect;
+export type NewCircle = typeof circles.$inferInsert;
+export type CircleMember = typeof circleMembers.$inferSelect;
+export type NewCircleMember = typeof circleMembers.$inferInsert;
+export type CircleInvite = typeof circleInvites.$inferSelect;
+export type NewCircleInvite = typeof circleInvites.$inferInsert;
+export type Patient = typeof patients.$inferSelect;
+export type NewPatient = typeof patients.$inferInsert;
+export type CareDoc = typeof careDocs.$inferSelect;
+export type NewCareDoc = typeof careDocs.$inferInsert;

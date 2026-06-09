@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/journal_entry.dart';
 import '../../providers/storage_provider.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 /// Hand-off shape for the chat coach's `[action:log_journal …]` action
 /// when it bounces the caregiver into the wizard for confirmation.
@@ -103,6 +104,12 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
   final TextEditingController _situationController = TextEditingController();
   final TextEditingController _attemptsController = TextEditingController();
   bool _submitting = false;
+  // Inline errors shown when the caregiver advances/saves with an empty
+  // required field — the Next/Save button stays tappable so they get a
+  // reason ("Add a few words…") instead of a silently greyed-out button.
+  String? _whenError;
+  String? _situationError;
+  String? _attemptsError;
 
   @override
   void initState() {
@@ -171,6 +178,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
     if (!mounted || time == null) return;
     setState(() {
       _whenPreset = JournalWhen.custom;
+      _whenError = null;
       _customOccurredAt = DateTime(
         date.year,
         date.month,
@@ -181,20 +189,32 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
     });
   }
 
-  bool get _canAdvance {
+  /// Validate the current step. On a miss, sets the step's inline error and
+  /// returns false so the caller blocks the advance/save. Clears the error
+  /// when the step is satisfied.
+  bool _validateStep() {
     switch (_step) {
       case 0:
-        return _whenPreset != null &&
+        final bool ok = _whenPreset != null &&
             (_whenPreset != JournalWhen.custom || _customOccurredAt != null);
+        setState(() => _whenError = ok ? null : 'Pick when it happened.');
+        return ok;
       case 1:
-        return _situationController.text.trim().isNotEmpty;
+        final bool ok = _situationController.text.trim().isNotEmpty;
+        setState(() => _situationError =
+            ok ? null : 'Add a few words about what was happening.');
+        return ok;
       case 2:
-        return _attemptsController.text.trim().isNotEmpty;
+        final bool ok = _attemptsController.text.trim().isNotEmpty;
+        setState(() => _attemptsError =
+            ok ? null : 'Add what you tried — "Nothing yet" works too.');
+        return ok;
     }
     return false;
   }
 
   void _onNext() {
+    if (!_validateStep()) return;
     if (_step < JournalWizardScreen.totalSteps - 1) {
       setState(() => _step += 1);
     }
@@ -210,6 +230,18 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
 
   Future<void> _submit() async {
     if (_submitting) return;
+    // Validate before saving so an empty required field shows its inline
+    // reason instead of a no-op tap. Quick-note only needs the situation;
+    // the full wizard's final step validates the attempts field.
+    if (_isQuickNote) {
+      if (_situationController.text.trim().isEmpty) {
+        setState(() => _situationError =
+            'Add a few words about what happened.');
+        return;
+      }
+    } else if (!_validateStep()) {
+      return;
+    }
     setState(() => _submitting = true);
 
     final StorageProvider storage = ref.read(storageProvider);
@@ -251,22 +283,34 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
+    final String terminalLabel = _isQuickNote ? 'Quick note' : 'Log a moment';
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: Text(_isQuickNote ? 'Quick note' : 'Log a moment'),
-        leading: IconButton(
-          key: JournalWizardScreen.backButtonKey,
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _onBack,
-        ),
-      ),
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: _isQuickNote
-              ? _buildQuickNote(textTheme)
-              : _buildWizard(textTheme),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  const PathHeaderCrumb(label: 'Home', route: '/'),
+                  const PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  const PathHeaderCrumb(label: 'Journal', route: '/journal'),
+                  PathHeaderCrumb(label: terminalLabel),
+                ],
+                title: terminalLabel,
+                backLabel: 'Back to Journal',
+                leadingIcon: Icons.edit_note_outlined,
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _isQuickNote
+                    ? _buildQuickNote(textTheme)
+                    : _buildWizard(textTheme),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -284,7 +328,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
         Text(
           'Write it however feels natural. You can add structure later.',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.text.withValues(alpha: 0.7),
+            color: context.cb.text.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 20),
@@ -298,27 +342,31 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
             textAlignVertical: TextAlignVertical.top,
             keyboardType: TextInputType.multiline,
             textInputAction: TextInputAction.newline,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'She kept asking to call her mother. I tried '
                   'redirecting to the photo album…',
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
               alignLabelWithHint: true,
+              errorText: _situationError,
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() {
+              if (_situationError != null &&
+                  _situationController.text.trim().isNotEmpty) {
+                _situationError = null;
+              }
+            }),
           ),
         ),
         const SizedBox(height: 16),
         ElevatedButton(
           key: JournalWizardScreen.submitButtonKey,
           style: ElevatedButton.styleFrom(
-            backgroundColor: careblazersColors.cta,
+            backgroundColor: context.cb.cta,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             minimumSize: const Size.fromHeight(56),
           ),
-          onPressed: (_situationController.text.trim().isEmpty || _submitting)
-              ? null
-              : _submit,
+          onPressed: _submitting ? null : _submit,
           child: Text(
             _submitting ? 'Saving…' : 'Save note',
             style: textTheme.labelLarge,
@@ -346,16 +394,38 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
         ),
         Row(
           children: <Widget>[
+            // In-wizard Back (replaces the removed PathHeader back control):
+            // steps to the previous page, or leaves the wizard from step 0.
+            Expanded(
+              child: OutlinedButton(
+                key: JournalWizardScreen.backButtonKey,
+                onPressed: _onBack,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  foregroundColor: context.cb.primary,
+                  side: BorderSide(
+                    color: context.cb.primary.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Text(
+                  '‹ Back',
+                  style: textTheme.labelLarge
+                      ?.copyWith(color: context.cb.primary),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
             if (_step == JournalWizardScreen.totalSteps - 1)
               Expanded(
+                flex: 2,
                 child: ElevatedButton(
                   key: JournalWizardScreen.submitButtonKey,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: careblazersColors.cta,
+                    backgroundColor: context.cb.cta,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  onPressed: (_canAdvance && !_submitting) ? _submit : null,
+                  onPressed: _submitting ? null : _submit,
                   child: Text(
                     _submitting ? 'Saving…' : 'Save entry',
                     style: textTheme.labelLarge,
@@ -364,14 +434,15 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
               )
             else
               Expanded(
+                flex: 2,
                 child: ElevatedButton(
                   key: JournalWizardScreen.nextButtonKey,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: careblazersColors.cta,
+                    backgroundColor: context.cb.cta,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  onPressed: _canAdvance ? _onNext : null,
+                  onPressed: _onNext,
                   child: Text('Next', style: textTheme.labelLarge),
                 ),
               ),
@@ -403,7 +474,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
         Text(
           'A close-enough answer is fine — the journal is for you.',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.text.withValues(alpha: 0.7),
+            color: context.cb.text.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 20),
@@ -411,21 +482,30 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           tileKey: JournalWizardScreen.whenPresetJustNowKey,
           label: JournalWhen.justNow.label,
           selected: _whenPreset == JournalWhen.justNow,
-          onTap: () => setState(() => _whenPreset = JournalWhen.justNow),
+          onTap: () => setState(() {
+            _whenPreset = JournalWhen.justNow;
+            _whenError = null;
+          }),
         ),
         const SizedBox(height: 10),
         _PresetTile(
           tileKey: JournalWizardScreen.whenPresetEarlierTodayKey,
           label: JournalWhen.earlierToday.label,
           selected: _whenPreset == JournalWhen.earlierToday,
-          onTap: () => setState(() => _whenPreset = JournalWhen.earlierToday),
+          onTap: () => setState(() {
+            _whenPreset = JournalWhen.earlierToday;
+            _whenError = null;
+          }),
         ),
         const SizedBox(height: 10),
         _PresetTile(
           tileKey: JournalWizardScreen.whenPresetYesterdayKey,
           label: JournalWhen.yesterday.label,
           selected: _whenPreset == JournalWhen.yesterday,
-          onTap: () => setState(() => _whenPreset = JournalWhen.yesterday),
+          onTap: () => setState(() {
+            _whenPreset = JournalWhen.yesterday;
+            _whenError = null;
+          }),
         ),
         const SizedBox(height: 10),
         _PresetTile(
@@ -436,6 +516,13 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           selected: _whenPreset == JournalWhen.custom,
           onTap: _pickCustomDateTime,
         ),
+        if (_whenError != null) ...<Widget>[
+          const SizedBox(height: 12),
+          Text(
+            _whenError!,
+            style: textTheme.bodyMedium?.copyWith(color: context.cb.error),
+          ),
+        ],
       ],
     );
   }
@@ -451,7 +538,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           'A few sentences in your own words. The voice you would use '
           'telling a friend about it.',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.text.withValues(alpha: 0.7),
+            color: context.cb.text.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 20),
@@ -461,10 +548,16 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           minLines: 5,
           maxLines: 10,
           maxLength: 2000,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             hintText: 'She kept asking to call her mother…',
+            errorText: _situationError,
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => setState(() {
+            if (_situationError != null &&
+                _situationController.text.trim().isNotEmpty) {
+              _situationError = null;
+            }
+          }),
         ),
       ],
     );
@@ -481,7 +574,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           'Whatever you reached for — words, redirects, walking away to '
           'breathe. "Nothing yet" is a real answer too.',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.text.withValues(alpha: 0.7),
+            color: context.cb.text.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 20),
@@ -491,11 +584,17 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           minLines: 5,
           maxLines: 10,
           maxLength: 2000,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             hintText: 'I told her Mom was at the store and we walked '
                 'to the kitchen for tea.',
+            errorText: _attemptsError,
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => setState(() {
+            if (_attemptsError != null &&
+                _attemptsController.text.trim().isNotEmpty) {
+              _attemptsError = null;
+            }
+          }),
         ),
       ],
     );
@@ -527,8 +626,8 @@ class _ProgressDots extends StatelessWidget {
             height: 5,
             decoration: BoxDecoration(
               color: active
-                  ? careblazersColors.cta
-                  : careblazersColors.text.withValues(alpha: 0.18),
+                  ? context.cb.cta
+                  : context.cb.text.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(3),
             ),
           ),
@@ -557,8 +656,8 @@ class _PresetTile extends StatelessWidget {
     return Material(
       key: tileKey,
       color: selected
-          ? careblazersColors.primary
-          : careblazersColors.surfaceWarm,
+          ? context.cb.primary
+          : context.cb.surfaceWarm,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -573,7 +672,7 @@ class _PresetTile extends StatelessWidget {
                     : Icons.radio_button_unchecked,
                 color: selected
                     ? Colors.white
-                    : careblazersColors.text.withValues(alpha: 0.45),
+                    : context.cb.text.withValues(alpha: 0.45),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -582,7 +681,7 @@ class _PresetTile extends StatelessWidget {
                   style: textTheme.bodyLarge?.copyWith(
                     color: selected
                         ? Colors.white
-                        : careblazersColors.text,
+                        : context.cb.text,
                   ),
                 ),
               ),

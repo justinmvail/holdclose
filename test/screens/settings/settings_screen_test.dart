@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:careblazers/models/settings.dart';
 import 'package:careblazers/providers/bundled_tts_provider.dart';
 import 'package:careblazers/providers/settings_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/providers/tts_provider.dart';
 import 'package:careblazers/screens/settings/settings_screen.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 /// Pump the Settings screen behind a [ProviderScope] that overrides the
@@ -25,7 +29,10 @@ Future<({InMemoryStorageProvider storage, ProviderContainer container})>
   WidgetTester tester, {
   AppSettings? seeded,
 }) async {
-  await tester.binding.setSurfaceSize(const Size(420, 2600));
+  // Tall surface so the whole settings list builds in one pass (the
+  // gating test finds bottom-of-list section keys without scrolling).
+  // Bumped from 2600 when the "Loved ones" section (Issue #6) was added.
+  await tester.binding.setSurfaceSize(const Size(420, 2800));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final InMemoryStorageProvider storage = InMemoryStorageProvider();
   if (seeded != null) {
@@ -70,11 +77,23 @@ bool _switchValue(WidgetTester tester, Key key) {
 
 void main() {
   group('SettingsScreen — BUILD_SPEC.md §5.10', () {
-    testWidgets('renders AppBar title and the top sections',
+    testWidgets('renders PathHeader title and the top sections',
         (WidgetTester tester) async {
       await _pumpSettings(tester);
 
-      expect(find.widgetWithText(AppBar, 'Settings'), findsOneWidget);
+      // The page title now lives in PathHeader.title (the AppBar-based
+      // header was replaced by the breadcrumb PathHeader). 'Settings'
+      // renders twice inside the header — once as the terminal
+      // breadcrumb crumb, once as the title — so scope the lookup to the
+      // PathHeader and assert it carries the title text.
+      expect(find.byType(PathHeader), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(PathHeader),
+          matching: find.text('Settings'),
+        ),
+        findsWidgets,
+      );
       // Section headers anchored near the top of the viewport — visible
       // on the 2000-tall test surface without scrolling.
       expect(find.text('Font size'), findsOneWidget);
@@ -103,6 +122,87 @@ void main() {
         // The flip persisted through storage.
         final AppSettings stored = await built.storage.getSettings();
         expect(stored.notificationsEnabled, isFalse);
+      },
+    );
+
+    testWidgets(
+      'quiet-hours window picker persists a custom start hour',
+      (WidgetTester tester) async {
+        final built = await _pumpSettings(tester);
+
+        // Default window is 10pm–7am — the subtitle spells it out.
+        expect(find.text('Mute audio between 10 PM and 7 AM.'), findsOneWidget);
+
+        // Pick a new start hour (8 PM) from the start dropdown.
+        await tester.ensureVisible(
+            find.byKey(SettingsScreen.quietHoursStartPickerKey));
+        await tester.tap(find.byKey(SettingsScreen.quietHoursStartPickerKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('8 PM').last);
+        await tester.pumpAndSettle();
+
+        // Persisted, and the subtitle now reflects the new window.
+        final AppSettings stored = await built.storage.getSettings();
+        expect(stored.quietHoursStartHour, 20);
+        expect(stored.quietHoursEndHour, 7);
+        expect(find.text('Mute audio between 8 PM and 7 AM.'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'appearance: selecting a mode persists themePreference',
+      (WidgetTester tester) async {
+        final built = await _pumpSettings(tester);
+
+        // Default is "System" (match phone) — the hour pickers are
+        // hidden until "Scheduled" is chosen.
+        expect(find.byKey(SettingsScreen.darkStartPickerKey), findsNothing);
+        expect(find.byKey(SettingsScreen.darkEndPickerKey), findsNothing);
+
+        // Pick always-on dark.
+        await tester.ensureVisible(
+            find.byKey(SettingsScreen.themePreferenceKey));
+        await tester.tap(find.text('On'));
+        await tester.pumpAndSettle();
+
+        final AppSettings stored = await built.storage.getSettings();
+        expect(stored.themePreference, ThemePreference.on);
+        // Pickers still hidden — they're scheduled-only.
+        expect(find.byKey(SettingsScreen.darkStartPickerKey), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'appearance: Scheduled reveals the hour pickers and persists window',
+      (WidgetTester tester) async {
+        final built = await _pumpSettings(tester);
+
+        await tester.ensureVisible(
+            find.byKey(SettingsScreen.themePreferenceKey));
+        await tester.tap(find.text('Scheduled'));
+        await tester.pumpAndSettle();
+
+        // The From/To hour pickers appear once scheduled is selected.
+        expect(
+            find.byKey(SettingsScreen.darkStartPickerKey), findsOneWidget);
+        expect(find.byKey(SettingsScreen.darkEndPickerKey), findsOneWidget);
+        expect((await built.storage.getSettings()).themePreference,
+            ThemePreference.scheduled);
+
+        // Pick a new start hour (9 PM) from the start dropdown.
+        await tester
+            .ensureVisible(find.byKey(SettingsScreen.darkStartPickerKey));
+        await tester.tap(find.byKey(SettingsScreen.darkStartPickerKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('9 PM').last);
+        await tester.pumpAndSettle();
+
+        final AppSettings stored = await built.storage.getSettings();
+        expect(stored.darkStartHour, 21);
+        expect(stored.darkEndHour, 7,
+            reason: 'default end hour is unchanged');
+        // Subtitle reflects the new window.
+        expect(find.text('Dark between 9 PM and 7 AM.'), findsOneWidget);
       },
     );
 
@@ -239,36 +339,16 @@ void main() {
     );
 
     testWidgets(
-      'methodology card explains the LLM transparency carve-out',
+      'About shows only the app version — no methodology / brand-credit cards',
       (WidgetTester tester) async {
         await _pumpSettings(tester);
 
-        await _scrollTo(
-            tester, find.byKey(SettingsScreen.methodologyButtonKey));
-        await tester.tap(find.byKey(SettingsScreen.methodologyButtonKey));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 200));
-
-        expect(
-          find.textContaining("Dr. Natali Edmonds' teaching framework"),
-          findsOneWidget,
-        );
-        // §5.10 — the disclosure must own the only mention of "AI".
-        expect(find.textContaining("words 'AI'"), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'brand credit card carries the permission-pending v1 note',
-      (WidgetTester tester) async {
-        await _pumpSettings(tester);
-
-        await _scrollTo(tester, find.byKey(SettingsScreen.brandCreditKey));
-
-        expect(
-          find.textContaining('permission pending'),
-          findsOneWidget,
-        );
+        await _scrollTo(tester, find.text('App version'));
+        expect(find.text('App version'), findsOneWidget);
+        // The methodology + brand-credit cards were removed (06-06).
+        expect(find.text('Methodology'), findsNothing);
+        expect(find.textContaining('permission pending'), findsNothing);
+        expect(find.textContaining("words 'AI'"), findsNothing);
       },
     );
   });
@@ -383,6 +463,110 @@ void main() {
         expect(FontSizeMultiplier.medium.scale, closeTo(1.0, 0.001));
         expect(FontSizeMultiplier.large.scale, closeTo(1.15, 0.001));
         expect(FontSizeMultiplier.xLarge.scale, closeTo(1.35, 0.001));
+      },
+    );
+  });
+
+  group('SettingsScreen — Android system back routes Home (alpha bug)', () {
+    // Amanda (Android, 2026-06-07): hardware Back from /settings closed the
+    // whole app instead of returning Home. Settings lives on the root
+    // navigator above the tab shell; a system pop there could tear the
+    // whole stack down. The screen's PopScope must block the system pop
+    // and `router.go('/')` instead — deterministically, regardless of how
+    // /settings was entered.
+
+    /// Build a router with a Home landing + a pushed `/settings`, pump it,
+    /// and navigate to Settings. Returns the router so the test can read
+    /// the active location after firing a system back.
+    Future<GoRouter> pumpRouterAtSettings(WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 2800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final GlobalKey<NavigatorState> rootKey =
+          GlobalKey<NavigatorState>();
+      final GoRouter router = GoRouter(
+        initialLocation: '/',
+        navigatorKey: rootKey,
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/',
+            builder: (BuildContext context, GoRouterState state) =>
+                const Scaffold(body: Center(child: Text('home-stub'))),
+          ),
+          GoRoute(
+            path: '/settings',
+            parentNavigatorKey: rootKey,
+            builder: (BuildContext context, GoRouterState state) =>
+                const SettingsScreen(),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            storageBackendProvider
+                .overrideWithValue(InMemoryStorageProvider()),
+            ttsProvider.overrideWith((Ref _) => const NoopTTSProvider()),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Land on Settings the way Home does (push onto the root navigator).
+      unawaited(router.push('/settings'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+      return router;
+    }
+
+    testWidgets(
+      'a hardware/gesture back from Settings lands on Home, not an app exit',
+      (WidgetTester tester) async {
+        final GoRouter router = await pumpRouterAtSettings(tester);
+
+        // Fire the Android system back the way the OS does — through the
+        // app-lifecycle pop-route dispatcher, which drives the PopScope.
+        final bool handled =
+            await WidgetsBinding.instance.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        // The app handled the back (didn't bubble it up to the OS to close
+        // the app) and routed to Home.
+        expect(handled, isTrue,
+            reason: 'the PopScope must consume the system back');
+        expect(router.routerDelegate.currentConfiguration.uri.path, '/',
+            reason: 'Android back from Settings must return Home');
+        expect(find.text('home-stub'), findsOneWidget);
+        expect(find.byType(SettingsScreen), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'the PopScope blocks the pop (canPop false) so the route stack is '
+      'never torn down by the system',
+      (WidgetTester tester) async {
+        await pumpRouterAtSettings(tester);
+
+        // With a router in scope the screen wires canPop=false so the
+        // system pop never reaches the navigator — the redirect Home is
+        // the only way out. Assert the wiring directly. PopScope is
+        // generic (PopScope<T>), so match it by runtime-type name rather
+        // than a typed byType lookup.
+        final Iterable<Widget> popScopes = tester
+            .widgetList(find.byWidgetPredicate(
+                (Widget w) => w.runtimeType.toString().startsWith('PopScope')))
+            .toList();
+        expect(popScopes, isNotEmpty,
+            reason: 'Settings wraps its body in a PopScope');
+        final bool anyBlocks = popScopes.any((Widget w) {
+          final dynamic d = w;
+          return d.canPop == false;
+        });
+        expect(anyBlocks, isTrue,
+            reason: 'a router-backed Settings must intercept the system back '
+                '(canPop == false)');
       },
     );
   });

@@ -7,6 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/chat.dart';
 import '../../services/chat_repository.dart';
+import '../../services/chat_service.dart' show ChatService;
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
 
@@ -79,10 +80,20 @@ Future<List<ConversationListItem>> chatConversationList(Ref ref) async {
           (Message? m) => m?.role == MessageRole.user,
           orElse: () => null,
         );
+    // The preview renders the last turn's body, so it MUST be sanitised
+    // the same way the chat bubble is — strip `[action:…]` tool tags and
+    // swap any raw `[chat error: …]` trailer for the friendly line — or
+    // the internal marker leaks into the list (alpha bug). An all-marker
+    // body sanitises to empty; collapse that back to null so the tile
+    // skips the secondary line instead of showing a blank one.
+    final String? rawLast = msgs.isEmpty ? null : msgs.last.body;
+    final String? cleanLast =
+        rawLast == null ? null : ChatService.displayBody(rawLast);
     items.add(ConversationListItem(
       conversation: c,
       firstUserMessage: firstUser?.body,
-      lastMessage: msgs.isEmpty ? null : msgs.last.body,
+      lastMessage:
+          (cleanLast == null || cleanLast.isEmpty) ? null : cleanLast,
     ));
   }
   return items;
@@ -128,8 +139,15 @@ class ConversationListScreen extends ConsumerWidget {
   static const Key listKey = Key('conversation-list-list');
   static const Key emptyStateKey = Key('conversation-list-empty');
 
+  /// The delete-confirmation dialog (a long-press or trash tap on a tile).
+  static const Key deleteDialogKey = Key('conversation-list-delete-dialog');
+  static const Key deleteConfirmKey = Key('conversation-list-delete-confirm');
+  static const Key deleteCancelKey = Key('conversation-list-delete-cancel');
+
   static Key tileKey(String conversationId) =>
       Key('conversation-list-tile-$conversationId');
+  static Key deleteIconKey(String conversationId) =>
+      Key('conversation-list-delete-$conversationId');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -137,7 +155,7 @@ class ConversationListScreen extends ConsumerWidget {
         ref.watch(chatConversationListProvider);
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,13 +233,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.chat_bubble_outline,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'Ask the coach.',
             style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -231,7 +249,7 @@ class _EmptyState extends StatelessWidget {
             'before, a phrase that keeps coming up — start a chat and '
             "Dr. Natali's framework will meet you there.",
             style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.text,
+              color: context.cb.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -251,7 +269,7 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -282,23 +300,27 @@ class _PopulatedList extends StatelessWidget {
   }
 }
 
-class _ConversationTile extends StatelessWidget {
+class _ConversationTile extends ConsumerWidget {
   const _ConversationTile({required this.item});
 
   final ConversationListItem item;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final String? sub = item.lastMessage;
     return Semantics(
       button: true,
       label: '${item.displayTitle}. Double-tap to open this chat.',
       child: Material(
-        color: careblazersColors.background,
+        color: context.cb.background,
         child: InkWell(
           key: ConversationListScreen.tileKey(item.conversation.id),
           onTap: () => context.push('/chat/${item.conversation.id}'),
+          // Long-press to delete — mirrors the medication list's tile
+          // gesture so the two "list of things you can remove" surfaces
+          // behave the same.
+          onLongPress: () => _confirmAndDelete(context, ref),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             child: Row(
@@ -311,7 +333,7 @@ class _ConversationTile extends StatelessWidget {
                       Text(
                         item.displayTitle,
                         style: textTheme.bodyLarge?.copyWith(
-                          color: careblazersColors.primary,
+                          color: context.cb.primary,
                           fontWeight: FontWeight.w700,
                         ),
                         maxLines: 1,
@@ -322,7 +344,7 @@ class _ConversationTile extends StatelessWidget {
                         Text(
                           sub,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: careblazersColors.primarySoft,
+                            color: context.cb.primarySoft,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -331,10 +353,23 @@ class _ConversationTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.chevron_right,
-                  color: careblazersColors.primarySoft,
+                const SizedBox(width: 4),
+                // Trailing trash affordance — same confirm-then-delete flow
+                // as the long-press, for caregivers who'd rather tap a clear
+                // target than discover the gesture (mirrors the medication
+                // list's per-card trash icon).
+                Semantics(
+                  button: true,
+                  label: 'Delete this chat.',
+                  child: IconButton(
+                    key: ConversationListScreen.deleteIconKey(
+                      item.conversation.id,
+                    ),
+                    tooltip: 'Delete chat',
+                    icon: const Icon(Icons.delete_outline),
+                    color: context.cb.primarySoft,
+                    onPressed: () => _confirmAndDelete(context, ref),
+                  ),
                 ),
               ],
             ),
@@ -342,6 +377,39 @@ class _ConversationTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Confirm, then hard-delete the conversation (its messages cascade via
+  /// the FK). On confirm the list provider is invalidated so the tile drops
+  /// immediately. Cancelling is a no-op — the thread stays put.
+  Future<void> _confirmAndDelete(BuildContext context, WidgetRef ref) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        key: ConversationListScreen.deleteDialogKey,
+        title: const Text('Delete this chat?'),
+        content: const Text(
+          'This conversation and its messages will be removed. '
+          'This can\'t be undone.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: ConversationListScreen.deleteCancelKey,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: ConversationListScreen.deleteConfirmKey,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final ChatRepository repo = ref.read(chatRepositoryProvider);
+    await repo.deleteConversation(item.conversation.id);
+    ref.invalidate(chatConversationListProvider);
   }
 }
 
@@ -357,8 +425,9 @@ class _QuickChatFab extends StatelessWidget {
       label: 'Quick chat. Start a new conversation with the coach.',
       child: FloatingActionButton.extended(
         key: ConversationListScreen.fabQuickChatKey,
+        heroTag: 'conversations-quick-chat-fab',
         onPressed: onPressed,
-        backgroundColor: careblazersColors.cta,
+        backgroundColor: context.cb.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -386,7 +455,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load your chats.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),

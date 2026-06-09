@@ -8,8 +8,10 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/caregiver.dart';
 import '../../models/expense.dart';
+import '../../providers/active_patient_provider.dart';
 import '../../providers/care_tasks_provider.dart' show currentCaregiverIdProvider;
 import '../../providers/expenses_provider.dart';
+import '../../providers/photo_attacher_provider.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
 
@@ -31,10 +33,10 @@ String _defaultExpenseIdFactory() {
 @Riverpod(keepAlive: true)
 ExpenseIdFactory expenseIdFactory(Ref ref) => _defaultExpenseIdFactory;
 
-/// Care Team → Expenses at `/team/expenses` (TASKS.md Phase 14.33,
+/// Care Circle → Expenses at `/team/expenses` (TASKS.md Phase 14.33,
 /// BUILD_SPEC.md §5.14).
 ///
-/// A [PathHeader] (`Home › Care Team › Expenses`, back to Care Team) over a
+/// A [PathHeader] (`Home › Care Circle › Expenses`, back to Care Circle) over a
 /// sticky current-month total card and a list of expenses grouped by month.
 /// Each row shows the amount, a kind chip, the description, and the paying
 /// caregiver's initials. The FAB opens a create form (amount + kind +
@@ -56,6 +58,11 @@ class ExpensesScreen extends ConsumerWidget {
       Key('expenses-month-$monthKey');
   static Key rowKey(String expenseId) => Key('expenses-row-$expenseId');
 
+  // Delete-confirmation dialog (a long-press on an expense row).
+  static const Key deleteDialogKey = Key('expenses-delete-dialog');
+  static const Key deleteConfirmKey = Key('expenses-delete-confirm');
+  static const Key deleteCancelKey = Key('expenses-delete-cancel');
+
   // Create-expense sheet.
   static const Key createSheetKey = Key('expenses-create-sheet');
   static const Key amountFieldKey = Key('expenses-create-amount');
@@ -63,7 +70,8 @@ class ExpensesScreen extends ConsumerWidget {
   static const Key descriptionFieldKey = Key('expenses-create-description');
   static const Key descriptionErrorKey = Key('expenses-create-description-error');
   static const Key paidDateButtonKey = Key('expenses-create-date');
-  static const Key receiptFieldKey = Key('expenses-create-receipt');
+  static const Key receiptButtonKey = Key('expenses-create-receipt');
+  static const Key receiptThumbnailKey = Key('expenses-create-receipt-thumb');
   static const Key saveButtonKey = Key('expenses-create-save');
 
   static Key kindOptionKey(ExpenseKind kind) =>
@@ -80,7 +88,7 @@ class ExpensesScreen extends ConsumerWidget {
     final String currentMonthKey = monthKeyOf(now);
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       floatingActionButton:
           _AddExpenseFab(onPressed: () => _openCreateSheet(context)),
       body: SafeArea(
@@ -104,11 +112,11 @@ class ExpensesScreen extends ConsumerWidget {
                       const PathHeader(
                         breadcrumbs: <PathHeaderCrumb>[
                           PathHeaderCrumb(label: 'Home', route: '/'),
-                          PathHeaderCrumb(label: 'Care Team', route: '/team'),
+                          PathHeaderCrumb(label: 'Care Circle', route: '/team'),
                           PathHeaderCrumb(label: 'Expenses'),
                         ],
                         title: 'Expenses',
-                        backLabel: 'Back to Care Team',
+                        backLabel: 'Back to Care Circle',
                         leadingIcon: Icons.account_balance_wallet_outlined,
                       ),
                       const SizedBox(height: 12),
@@ -137,7 +145,7 @@ class ExpensesScreen extends ConsumerWidget {
   Future<void> _openCreateSheet(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -160,8 +168,9 @@ class _AddExpenseFab extends StatelessWidget {
       label: 'Add expense. Open the new-expense form.',
       child: FloatingActionButton.extended(
         key: ExpensesScreen.fabKey,
+        heroTag: 'expenses-add-fab',
         onPressed: onPressed,
-        backgroundColor: careblazersColors.cta,
+        backgroundColor: context.cb.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -194,7 +203,7 @@ class _MonthlyTotalCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
       decoration: BoxDecoration(
-        color: careblazersColors.primary,
+        color: context.cb.primary,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -260,13 +269,13 @@ class _MonthSection extends StatelessWidget {
                 child: Text(
                   monthLabel(group.monthKey),
                   style: textTheme.titleLarge
-                      ?.copyWith(color: careblazersColors.primary),
+                      ?.copyWith(color: context.cb.primary),
                 ),
               ),
               Text(
                 formatMoney(group.totalCents, currency),
                 style: textTheme.titleLarge?.copyWith(
-                  color: careblazersColors.primarySoft,
+                  color: context.cb.primarySoft,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -280,14 +289,14 @@ class _MonthSection extends StatelessWidget {
   }
 }
 
-class _ExpenseTile extends StatelessWidget {
+class _ExpenseTile extends ConsumerWidget {
   const _ExpenseTile({required this.row, required this.me});
 
   final ExpenseRow row;
   final String me;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Expense expense = row.expense;
     final bool isMe = expense.paidByCaregiverId == me;
@@ -296,58 +305,121 @@ class _ExpenseTile extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        key: ExpensesScreen.rowKey(expense.id),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        decoration: BoxDecoration(
-          color: careblazersColors.surfaceWarm,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    expense.description,
-                    style: textTheme.bodyLarge?.copyWith(
-                      color: careblazersColors.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+      child: Semantics(
+        button: true,
+        label: '${expense.description}, '
+            '${formatMoney(expense.amountCents, expense.currency)}. '
+            'Tap to edit, long-press to delete.',
+        child: GestureDetector(
+          onTap: () => _openEditSheet(context),
+          onLongPress: () => _confirmAndDelete(context, ref),
+          child: Container(
+            key: ExpensesScreen.rowKey(expense.id),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              color: context.cb.surfaceWarm,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      _KindChip(kind: expense.kind),
-                      _PayerChip(
-                        name: payerName,
-                        avatarPath: row.payer?.avatarPath,
+                      Text(
+                        expense.description,
+                        style: textTheme.bodyLarge?.copyWith(
+                          color: context.cb.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      if (expense.receiptPath != null &&
-                          expense.receiptPath!.trim().isNotEmpty)
-                        _ReceiptChip(),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: <Widget>[
+                          _KindChip(kind: expense.kind),
+                          _PayerChip(
+                            name: payerName,
+                            avatarPath: row.payer?.avatarPath,
+                          ),
+                          if (expense.receiptPath != null &&
+                              expense.receiptPath!.trim().isNotEmpty)
+                            _ReceiptChip(),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  formatMoney(expense.amountCents, expense.currency),
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: context.cb.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Text(
-              formatMoney(expense.amountCents, expense.currency),
-              style: textTheme.bodyLarge?.copyWith(
-                color: careblazersColors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Reopen the create sheet seeded with this expense so a save replaces it
+  /// in place (same id) through [Expenses.updateExpense].
+  Future<void> _openEditSheet(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.cb.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext sheetContext) =>
+          _CreateExpenseSheet(existing: row.expense),
+    );
+  }
+
+  /// Confirm, then drop the expense through the [Expenses] notifier (which
+  /// refreshes the ledger). No-op on cancel. Mirrors the medication list's
+  /// long-press soft-delete dialog.
+  Future<void> _confirmAndDelete(BuildContext context, WidgetRef ref) async {
+    final Expense expense = row.expense;
+    final bool confirmed = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext dialogContext) => AlertDialog(
+            key: ExpensesScreen.deleteDialogKey,
+            title: const Text('Delete expense?'),
+            content: Text(
+              '"${expense.description}" '
+              '(${formatMoney(expense.amountCents, expense.currency)}) '
+              "will be removed from the ledger. This can't be undone.",
+            ),
+            actions: <Widget>[
+              TextButton(
+                key: ExpensesScreen.deleteCancelKey,
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                key: ExpensesScreen.deleteConfirmKey,
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(
+                  'Delete',
+                  style: TextStyle(color: context.cb.accentDeep),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+
+    await ref.read(expensesProvider.notifier).removeExpense(expense.id);
   }
 }
 
@@ -362,18 +434,18 @@ class _KindChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: careblazersColors.primarySoft.withValues(alpha: 0.10),
+        color: context.cb.primarySoft.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(kindIcon(kind), size: 15, color: careblazersColors.primarySoft),
+          Icon(kindIcon(kind), size: 15, color: context.cb.primarySoft),
           const SizedBox(width: 5),
           Text(
             kindLabel(kind),
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.primarySoft,
+              color: context.cb.primarySoft,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -400,7 +472,7 @@ class _PayerChip extends StatelessWidget {
         Text(
           name,
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.text,
+            color: context.cb.text,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -417,12 +489,12 @@ class _ReceiptChip extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         Icon(Icons.receipt_long_outlined,
-            size: 15, color: careblazersColors.link),
+            size: 15, color: context.cb.link),
         const SizedBox(width: 4),
         Text(
           'Receipt',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.link,
+            color: context.cb.link,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -444,14 +516,14 @@ class _MiniAvatar extends StatelessWidget {
     final bool hasPhoto = path != null && File(path).existsSync();
     return CircleAvatar(
       radius: 12,
-      backgroundColor: careblazersColors.primarySoft.withValues(alpha: 0.14),
+      backgroundColor: context.cb.primarySoft.withValues(alpha: 0.14),
       backgroundImage: hasPhoto ? FileImage(File(path)) : null,
       child: hasPhoto
           ? null
           : Text(
               initials(name),
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
                 fontWeight: FontWeight.w700,
                 fontSize: 10,
               ),
@@ -476,13 +548,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.account_balance_wallet_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'No expenses logged yet. Tap Add expense to start tracking '
             'what the care circle spends.',
-            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -495,13 +567,18 @@ class _EmptyState extends StatelessWidget {
 // Create-expense sheet
 // ---------------------------------------------------------------------------
 
-/// Bottom sheet that creates an expense (TASKS.md Phase 14.33). Collects an
-/// amount (required, parsed from dollars to cents), a kind, a description
-/// (required), a paid date, a payer drawn from the care circle (or "You"),
-/// and an optional receipt path. Save writes through the [Expenses]
-/// notifier — which refreshes the ledger — then pops.
+/// Bottom sheet that creates *or edits* an expense (TASKS.md Phase 14.33).
+/// Collects an amount (required, parsed from dollars to cents), a kind, a
+/// description (required), a paid date, a payer drawn from the care circle
+/// (or "You"), and an optional receipt path. Save writes through the
+/// [Expenses] notifier — which refreshes the ledger — then pops. When
+/// [existing] is passed the fields seed from it and the save replaces it in
+/// place (same id) via [Expenses.updateExpense].
 class _CreateExpenseSheet extends ConsumerStatefulWidget {
-  const _CreateExpenseSheet();
+  const _CreateExpenseSheet({this.existing});
+
+  /// The expense being edited, or null when creating a new one.
+  final Expense? existing;
 
   @override
   ConsumerState<_CreateExpenseSheet> createState() =>
@@ -509,22 +586,40 @@ class _CreateExpenseSheet extends ConsumerStatefulWidget {
 }
 
 class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
-  final TextEditingController _amount = TextEditingController();
-  final TextEditingController _description = TextEditingController();
-  final TextEditingController _receipt = TextEditingController();
-  ExpenseKind _kind = ExpenseKind.meds;
-  DateTime? _paidAt;
-  String? _payerId;
+  late final TextEditingController _amount = TextEditingController(
+      text: widget.existing == null
+          ? ''
+          : _dollarsFromCents(widget.existing!.amountCents));
+  late final TextEditingController _description =
+      TextEditingController(text: widget.existing?.description ?? '');
+  late ExpenseKind _kind = widget.existing?.kind ?? ExpenseKind.meds;
+  late DateTime? _paidAt = widget.existing?.paidAt;
+  late String? _payerId = widget.existing?.paidByCaregiverId;
+
+  /// On-disk pointer to the attached receipt image, or null when none is
+  /// attached. Seeded from the edited expense; updated by [_pickReceipt].
+  late String? _receiptPath = widget.existing?.receiptPath;
   String? _amountError;
   String? _descriptionError;
   bool _submitting = false;
+
+  bool get _isEditing => widget.existing != null;
 
   @override
   void dispose() {
     _amount.dispose();
     _description.dispose();
-    _receipt.dispose();
     super.dispose();
+  }
+
+  /// Present the OS picker (camera + library) through the shared
+  /// [photoAttacherProvider] — the same seam the journal entry's photo
+  /// attach uses — and store the chosen path. No-op if the user cancels.
+  Future<void> _pickReceipt() async {
+    final PhotoAttacher picker = ref.read(photoAttacherProvider);
+    final String? path = await picker.pickPhoto();
+    if (!mounted || path == null) return;
+    setState(() => _receiptPath = path);
   }
 
   DateTime get _effectivePaidAt =>
@@ -573,18 +668,38 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
       _descriptionError = null;
     });
 
-    final String receipt = _receipt.text.trim();
-    final Expense expense = Expense(
-      id: ref.read(expenseIdFactoryProvider)(),
-      amountCents: cents!,
-      description: description,
-      paidByCaregiverId: _effectivePayerId,
-      paidAt: _effectivePaidAt,
-      kind: _kind,
-      receiptPath: receipt.isEmpty ? null : receipt,
-      patientId: expensesPatientId,
-    );
-    await ref.read(expensesProvider.notifier).addExpense(expense);
+    final String? receipt = _receiptPath?.trim();
+    final Expense? existing = widget.existing;
+    if (existing != null) {
+      // Edit: keep the id (and currency) so the upsert replaces the same row.
+      final Expense updated = existing.copyWith(
+        amountCents: cents!,
+        description: description,
+        paidByCaregiverId: _effectivePayerId,
+        paidAt: _effectivePaidAt,
+        kind: _kind,
+        receiptPath: (receipt == null || receipt.isEmpty) ? null : receipt,
+      );
+      await ref.read(expensesProvider.notifier).updateExpense(updated);
+    } else {
+      // A new expense is filed under the active loved one's id (was the
+      // `expensesPatientId` const) so it follows whichever person is
+      // selected (multi-patient, Issue #6). With one patient on file
+      // [activePatientIdProvider] resolves to that sole id, identical to the
+      // old const.
+      final String patientId = await ref.read(activePatientIdProvider.future);
+      final Expense expense = Expense(
+        id: ref.read(expenseIdFactoryProvider)(),
+        amountCents: cents!,
+        description: description,
+        paidByCaregiverId: _effectivePayerId,
+        paidAt: _effectivePaidAt,
+        kind: _kind,
+        receiptPath: (receipt == null || receipt.isEmpty) ? null : receipt,
+        patientId: patientId,
+      );
+      await ref.read(expensesProvider.notifier).addExpense(expense);
+    }
 
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -611,9 +726,9 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'New expense',
+              _isEditing ? 'Edit expense' : 'New expense',
               style: textTheme.titleLarge
-                  ?.copyWith(color: careblazersColors.primary),
+                  ?.copyWith(color: context.cb.primary),
             ),
             const SizedBox(height: 20),
             TextField(
@@ -638,7 +753,7 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
                 child: Text(
                   _amountError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: careblazersColors.error),
+                      ?.copyWith(color: context.cb.error),
                 ),
               ),
             const SizedBox(height: 16),
@@ -659,14 +774,14 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
                 child: Text(
                   _descriptionError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: careblazersColors.error),
+                      ?.copyWith(color: context.cb.error),
                 ),
               ),
             const SizedBox(height: 20),
             Text(
               'Kind',
               style: textTheme.bodyLarge?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -693,7 +808,7 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
             Text(
               'Paid by',
               style: textTheme.bodyLarge?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -723,26 +838,28 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
               ),
             ),
             const SizedBox(height: 20),
-            TextField(
-              key: ExpensesScreen.receiptFieldKey,
-              controller: _receipt,
-              decoration: const InputDecoration(
-                labelText: 'Receipt path (optional)',
-                helperText: 'Path to a saved receipt image, if you have one.',
-                helperMaxLines: 2,
+            Text(
+              'Receipt (optional)',
+              style: textTheme.bodyLarge?.copyWith(
+                color: context.cb.primary,
+                fontWeight: FontWeight.w700,
               ),
             ),
+            const SizedBox(height: 8),
+            _ReceiptRow(path: _receiptPath, onPick: _pickReceipt),
             const SizedBox(height: 28),
             ElevatedButton(
               key: ExpensesScreen.saveButtonKey,
               onPressed: _submitting ? null : _save,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
               ),
               child: Text(
-                _submitting ? 'Saving…' : 'Add expense',
+                _submitting
+                    ? 'Saving…'
+                    : (_isEditing ? 'Save changes' : 'Add expense'),
                 style: textTheme.labelLarge?.copyWith(color: Colors.white),
               ),
             ),
@@ -751,6 +868,15 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
       ),
     );
   }
+}
+
+/// Render integer [cents] as a plain editable dollar string for the amount
+/// field when seeding the edit sheet — "1299" → "12.99", "1000" → "10.00".
+/// No currency symbol or grouping (the field strips those anyway).
+String _dollarsFromCents(int cents) {
+  final int dollars = cents ~/ 100;
+  final String fraction = (cents % 100).toString().padLeft(2, '0');
+  return '$dollars.$fraction';
 }
 
 class _PaidDateRow extends StatelessWidget {
@@ -768,20 +894,81 @@ class _PaidDateRow extends StatelessWidget {
       child: OutlinedButton.icon(
         key: ExpensesScreen.paidDateButtonKey,
         onPressed: onPick,
-        icon: Icon(Icons.event_outlined, color: careblazersColors.link),
+        icon: Icon(Icons.event_outlined, color: context.cb.link),
         label: Align(
           alignment: Alignment.centerLeft,
           child: Text(
             'Paid ${formatDate(paidAt)}',
-            style: textTheme.labelLarge?.copyWith(color: careblazersColors.link),
+            style: textTheme.labelLarge?.copyWith(color: context.cb.link),
           ),
         ),
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(52),
-          side: BorderSide(color: careblazersColors.primarySoft),
+          side: BorderSide(color: context.cb.primarySoft),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         ),
       ),
+    );
+  }
+}
+
+/// Pick-or-replace affordance for the grocery / care receipt photo. Mirrors
+/// the journal entry's `_PhotoRow`: an outlined "Attach receipt" /
+/// "Replace receipt" button next to a thumbnail once a path is set. The
+/// underlying picker is the shared [photoAttacherProvider] seam.
+class _ReceiptRow extends StatelessWidget {
+  const _ReceiptRow({required this.path, required this.onPick});
+
+  final String? path;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final bool hasPhoto =
+        path != null && File(path!).existsSync();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        OutlinedButton.icon(
+          key: ExpensesScreen.receiptButtonKey,
+          onPressed: onPick,
+          icon: Icon(
+            Icons.photo_camera_outlined,
+            color: context.cb.primary,
+          ),
+          label: Text(
+            path == null ? 'Attach receipt' : 'Replace receipt',
+            style: textTheme.labelLarge?.copyWith(color: context.cb.primary),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: context.cb.primary),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+        if (path != null) ...<Widget>[
+          const SizedBox(width: 12),
+          Container(
+            key: ExpensesScreen.receiptThumbnailKey,
+            width: 56,
+            height: 56,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: context.cb.surfaceWarm,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: context.cb.primarySoft.withValues(alpha: 0.3),
+              ),
+            ),
+            child: hasPhoto
+                ? Image.file(File(path!), fit: BoxFit.cover)
+                : Icon(
+                    Icons.receipt_long_outlined,
+                    color: context.cb.primarySoft,
+                  ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -802,11 +989,11 @@ class _ChoicePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? careblazersColors.cta : careblazersColors.primarySoft;
+        selected ? context.cb.cta : context.cb.primarySoft;
     final Color fill = selected
-        ? careblazersColors.cta.withValues(alpha: 0.12)
+        ? context.cb.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? careblazersColors.cta : careblazersColors.text;
+    final Color fg = selected ? context.cb.cta : context.cb.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -847,7 +1034,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load the expenses.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),

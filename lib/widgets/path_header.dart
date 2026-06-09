@@ -30,34 +30,26 @@ class PathHeaderCrumb {
 ///
 /// 1. A **breadcrumb row** — e.g. `Home › Medical › Medications` — with
 ///    `›` separators. Every non-terminal segment is tappable and calls
-///    `context.go(crumb.route)`.
+///    `context.go(crumb.route)`, so the parent crumb IS the back
+///    affordance — there's no separate "Back" button (that was redundant
+///    with the breadcrumb and was removed).
 /// 2. A **title row** — the page title (`headlineMedium`, navy) with an
 ///    optional 24px leading [leadingIcon].
-/// 3. A word-labeled **Back control** below the title, e.g.
-///    `‹ Back to Medical`. Tapping it runs [onBack], or — when [onBack]
-///    is null — pops if the navigator can pop, otherwise `context.go`s
-///    to the deepest routed crumb. We never rely on the swipe gesture or
-///    the OS back button alone (the audience skews 65+; the explicit
-///    word-labeled control is an accessibility requirement).
 ///
 /// **Hub landings render the title row only.** When [breadcrumbs] has a
 /// single entry the widget is at a top-level landing (Home, Chat,
 /// Community, or the Medical / Care Team hubs themselves), so the
-/// breadcrumb row AND the Back control are suppressed.
+/// breadcrumb row is suppressed.
 ///
 /// Brand tokens (BUILD_SPEC.md §3.1): navy ([CareblazersColors.primary])
 /// for crumb + title text, [CareblazersColors.primarySoft] for the `›`
-/// separators, and the interactive-navigation accent
-/// ([CareblazersColors.link]) on the Back chevron. (The
-/// docs/MENU_LAYOUT_SPEC.md "teal" accent is a placeholder color the spec
-/// explicitly says NOT to adopt — it maps onto the app's existing `link`
-/// token, the only cool interactive accent in the palette.)
+/// separators.
 class PathHeader extends StatelessWidget {
   const PathHeader({
     super.key,
     required this.breadcrumbs,
     required this.title,
-    required this.backLabel,
+    this.backLabel,
     this.leadingIcon,
     this.onBack,
     this.trailing,
@@ -70,15 +62,17 @@ class PathHeader extends StatelessWidget {
   /// Page title, rendered `headlineMedium` in navy.
   final String title;
 
-  /// Word label for the Back control, e.g. `Back to Medical`. The `‹`
-  /// chevron is drawn by the widget; pass just the words.
-  final String backLabel;
+  /// Retained for source compatibility but no longer rendered: the
+  /// "‹ Back to X" control was removed as redundant with the breadcrumb
+  /// (whose parent crumb is the back affordance). Safe to drop from call
+  /// sites in a follow-up cleanup.
+  final String? backLabel;
 
   /// Optional 24px glyph shown left of the [title].
   final IconData? leadingIcon;
 
-  /// Tap handler for the Back control. When null the widget pops (if the
-  /// route is poppable) or `context.go`s to the deepest routed crumb.
+  /// Vestigial — the Back control it overrode was removed. Retained so the
+  /// existing call sites still compile; remove in a follow-up cleanup.
   final VoidCallback? onBack;
 
   /// Optional widget pinned to the right of the title row — typically a
@@ -89,28 +83,6 @@ class PathHeader extends StatelessWidget {
   /// A single crumb means this is a top-level landing — suppress the
   /// breadcrumb row and the Back control.
   bool get _isHubLanding => breadcrumbs.length == 1;
-
-  /// The deepest crumb that still carries a route — the fallback target
-  /// for the Back control when the navigator can't pop.
-  PathHeaderCrumb? get _deepestRoutedCrumb {
-    for (final PathHeaderCrumb crumb in breadcrumbs.reversed) {
-      if (crumb.isTappable) return crumb;
-    }
-    return null;
-  }
-
-  void _handleBack(BuildContext context) {
-    if (onBack != null) {
-      onBack!();
-      return;
-    }
-    if (context.canPop()) {
-      context.pop();
-      return;
-    }
-    final String? route = _deepestRoutedCrumb?.route;
-    if (route != null) context.go(route);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -123,20 +95,16 @@ class PathHeader extends StatelessWidget {
           _buildBreadcrumbs(context, textTheme),
           const SizedBox(height: 8),
         ],
-        _buildTitleRow(textTheme),
-        if (!_isHubLanding) ...<Widget>[
-          const SizedBox(height: 4),
-          _buildBackControl(context, textTheme),
-        ],
+        _buildTitleRow(context, textTheme),
       ],
     );
   }
 
   Widget _buildBreadcrumbs(BuildContext context, TextTheme textTheme) {
     final TextStyle crumbStyle = (textTheme.bodyMedium ?? const TextStyle())
-        .copyWith(color: careblazersColors.primary);
+        .copyWith(color: context.cb.primary);
     final TextStyle separatorStyle = crumbStyle.copyWith(
-      color: careblazersColors.primarySoft,
+      color: context.cb.primarySoft,
     );
 
     final List<Widget> children = <Widget>[];
@@ -175,16 +143,16 @@ class PathHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildTitleRow(TextTheme textTheme) {
+  Widget _buildTitleRow(BuildContext context, TextTheme textTheme) {
     final TextStyle titleStyle =
         (textTheme.headlineMedium ?? const TextStyle()).copyWith(
-      color: careblazersColors.primary,
+      color: context.cb.primary,
     );
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
         if (leadingIcon != null) ...<Widget>[
-          Icon(leadingIcon, size: 24, color: careblazersColors.primary),
+          Icon(leadingIcon, size: 24, color: context.cb.primary),
           const SizedBox(width: 8),
         ],
         Expanded(child: Text(title, style: titleStyle)),
@@ -196,26 +164,4 @@ class PathHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildBackControl(BuildContext context, TextTheme textTheme) {
-    final TextStyle labelStyle = (textTheme.labelLarge ?? const TextStyle())
-        .copyWith(color: careblazersColors.primary);
-    return InkWell(
-      onTap: () => _handleBack(context),
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              '‹',
-              style: labelStyle.copyWith(color: careblazersColors.link),
-            ),
-            const SizedBox(width: 4),
-            Text(backLabel, style: labelStyle),
-          ],
-        ),
-      ),
-    );
-  }
 }

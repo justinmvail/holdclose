@@ -50,13 +50,18 @@ async function clearTables() {
 
 async function makeProfile(
   sub: string,
-  options: { role?: 'user' | 'admin'; displayName?: string } = {},
+  options: {
+    role?: 'user' | 'admin';
+    displayName?: string;
+    username?: string;
+  } = {},
 ): Promise<Profile> {
   const db = drizzle(env.FORUM_DB);
   const [row] = await db
     .insert(profiles)
     .values({
       displayName: options.displayName ?? sub,
+      username: options.username ?? null,
       careblazersUserId: sub,
       role: options.role ?? 'user',
     })
@@ -303,6 +308,8 @@ describe('GET /api/v1/posts/:post_id/comments', () => {
         hidden: boolean;
         body: string | null;
         author_id: string | null;
+        author_username: string | null;
+        author_display_name: string | null;
         depth: number;
         parent_comment_id: string | null;
       }>;
@@ -315,6 +322,9 @@ describe('GET /api/v1/posts/:post_id/comments', () => {
     expect(byId[moderated.id].hidden).toBe(true);
     expect(byId[moderated.id].body).toBeNull();
     expect(byId[moderated.id].author_id).toBeNull();
+    // Moderated rows leak no author identity.
+    expect(byId[moderated.id].author_username).toBeNull();
+    expect(byId[moderated.id].author_display_name).toBeNull();
     expect(byId[moderated.id].depth).toBe(1);
     expect(byId[moderated.id].parent_comment_id).toBe(root.id);
 
@@ -322,6 +332,33 @@ describe('GET /api/v1/posts/:post_id/comments', () => {
     // remains intact.
     expect(byId[child.id].hidden).toBe(false);
     expect(byId[child.id].parent_comment_id).toBe(moderated.id);
+  });
+
+  it("carries each visible comment author's username + display_name", async () => {
+    const author = await makeProfile('cb-cmts-named', {
+      displayName: 'Sarah_H',
+      username: 'sarah_h',
+    });
+    const post = await seedPost({ authorId: author.id });
+    const comment = await seedComment({
+      postId: post.id,
+      authorId: author.id,
+      body: 'hello there',
+    });
+
+    const res = await SELF.fetch(
+      `${ORIGIN}/api/v1/posts/${post.id}/comments`,
+    );
+    const body = (await res.json()) as {
+      comments: Array<{
+        id: string;
+        author_username: string | null;
+        author_display_name: string | null;
+      }>;
+    };
+    const row = body.comments.find((c) => c.id === comment.id)!;
+    expect(row.author_username).toBe('sarah_h');
+    expect(row.author_display_name).toBe('Sarah_H');
   });
 
   it('populates depth on every row in the flat list', async () => {

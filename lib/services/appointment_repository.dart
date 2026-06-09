@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../db/database.dart';
 import '../models/appointment.dart';
+import 'sync_sink.dart';
 
 part 'appointment_repository.g.dart';
 
@@ -34,7 +35,7 @@ part 'appointment_repository.g.dart';
 /// cascades to its appointments via the FK `ON DELETE CASCADE` declared
 /// in `lib/db/tables.dart`; the `PRAGMA foreign_keys = ON` in
 /// [CareblazersDatabase]'s `beforeOpen` is what makes that cascade real.
-class AppointmentRepository {
+class AppointmentRepository with SyncSinkHost {
   AppointmentRepository(this._db, {DateTime Function()? clock})
       : _clock = clock ?? DateTime.now;
 
@@ -55,6 +56,7 @@ class AppointmentRepository {
             payload: jsonEncode(appointment.toJson()),
           ),
         );
+    emitUpsert('appointments', appointment.id, appointment.toJson());
   }
 
   /// Drop the appointment row. Providers are untouched.
@@ -62,6 +64,7 @@ class AppointmentRepository {
     await (_db.delete(_db.appointmentsTable)
           ..where((t) => t.id.equals(appointmentId)))
         .go();
+    emitDelete('appointments', appointmentId);
   }
 
   /// One appointment by id, or null if absent. The detail screen

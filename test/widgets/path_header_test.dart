@@ -57,12 +57,13 @@ void main() {
       );
 
       expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Medical'), findsOneWidget);
+      // The parent 'Medical' crumb is the back affordance (the separate
+      // "Back to X" control was removed) — it renders as a tappable crumb.
+      expect(find.widgetWithText(InkWell, 'Medical'), findsOneWidget);
       // 'Medications' appears as both the terminal crumb and the title.
       expect(find.text('Medications'), findsNWidgets(2));
       // Two separators for three crumbs.
       expect(find.text('›'), findsNWidgets(2));
-      expect(find.text('Back to Medical'), findsOneWidget);
       expect(find.byIcon(Icons.medication_outlined), findsOneWidget);
     });
 
@@ -98,25 +99,10 @@ void main() {
       final Text separator = tester.widget<Text>(find.text('›').first);
       expect(separator.style?.color, careblazersColors.primarySoft);
     });
-
-    testWidgets('Back chevron uses the link accent',
-        (WidgetTester tester) async {
-      await _pumpRouter(
-        tester,
-        _routerHosting(const PathHeader(
-          breadcrumbs: _threeCrumbs,
-          title: 'Medications',
-          backLabel: 'Back to Medical',
-        )),
-      );
-
-      final Text chevron = tester.widget<Text>(find.text('‹'));
-      expect(chevron.style?.color, careblazersColors.link);
-    });
   });
 
   group('PathHeader — hub landing (single crumb)', () {
-    testWidgets('renders the title only — no breadcrumb, no Back',
+    testWidgets('renders the title only — no breadcrumb',
         (WidgetTester tester) async {
       await _pumpRouter(
         tester,
@@ -124,7 +110,6 @@ void main() {
           const PathHeader(
             breadcrumbs: <PathHeaderCrumb>[PathHeaderCrumb(label: 'Medical')],
             title: 'Medical',
-            backLabel: 'Back to Home',
           ),
           initialLocation: '/medical/medications',
         ),
@@ -132,8 +117,6 @@ void main() {
 
       expect(find.text('Medical'), findsOneWidget); // title only
       expect(find.text('›'), findsNothing);
-      expect(find.text('‹'), findsNothing);
-      expect(find.text('Back to Home'), findsNothing);
     });
   });
 
@@ -183,42 +166,6 @@ void main() {
       await tester.tap(find.text('Medications').first);
       await tester.pumpAndSettle();
       expect(_path(router), '/medical/medications');
-    });
-
-    testWidgets('tapping Back invokes the onBack override',
-        (WidgetTester tester) async {
-      int calls = 0;
-      await _pumpRouter(
-        tester,
-        _routerHosting(PathHeader(
-          breadcrumbs: _threeCrumbs,
-          title: 'Medications',
-          backLabel: 'Back to Medical',
-          onBack: () => calls++,
-        )),
-      );
-
-      await tester.tap(find.text('Back to Medical'));
-      await tester.pumpAndSettle();
-      expect(calls, 1);
-    });
-
-    testWidgets(
-        'default Back goes to the deepest routed crumb when not poppable',
-        (WidgetTester tester) async {
-      // Landed directly at the deep location via go() → the navigator
-      // can't pop, so Back falls back to the deepest routed crumb
-      // (Medical).
-      final GoRouter router = _routerHosting(const PathHeader(
-        breadcrumbs: _threeCrumbs,
-        title: 'Medications',
-        backLabel: 'Back to Medical',
-      ));
-      await _pumpRouter(tester, router);
-
-      await tester.tap(find.text('Back to Medical'));
-      await tester.pumpAndSettle();
-      expect(_path(router), '/medical');
     });
   });
 }

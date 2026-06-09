@@ -70,6 +70,40 @@ Future<ChatRepository> _finalisedRepo() async {
   return repo;
 }
 
+/// A thread whose latest assistant turn FAILED — the body carries the
+/// `[chat error: …]` sentinel [ChatService] stamps on a stream failure, so
+/// the bubble renders the inline "Try again" affordance (#19). Seeded as a
+/// finalised message so the golden is a static frame (no live stream).
+Future<ChatRepository> _erroredRepo() async {
+  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final ChatRepository repo = ChatRepository(db);
+  final DateTime now = _fixedNow();
+  await repo.createConversation(
+    id: 'convo-errored',
+    title: 'placeholder',
+    createdAt: now,
+  );
+  await repo.appendMessage(Message(
+    id: 'err-1',
+    conversationId: 'convo-errored',
+    role: MessageRole.user,
+    body: 'Why does she get so anxious at dusk?',
+    citations: const <String>[],
+    createdAt: now.add(const Duration(seconds: 1)),
+    streamingDone: true,
+  ));
+  await repo.appendMessage(Message(
+    id: 'err-2',
+    conversationId: 'convo-errored',
+    role: MessageRole.assistant,
+    body: '$chatErrorMarkerPrefix could not reach the coach]',
+    citations: const <String>[],
+    createdAt: now.add(const Duration(seconds: 2)),
+    streamingDone: true,
+  ));
+  return repo;
+}
+
 ChatService _service(ChatRepository repo) => ChatService(
       repository: repo,
       backend: const _InertBackend(),
@@ -147,6 +181,48 @@ void main() {
                     height: 900,
                     child: MaterialApp.router(
                       routerConfig: _goldenRouter('convo-finalised'),
+                      builder: (BuildContext context, Widget? child) {
+                        return ColoredBox(
+                          color: careblazersColors.background,
+                          child: child ?? const SizedBox.shrink(),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'failed reply — error bubble with inline Try again (#19)',
+      fileName: 'chat_screen_errored',
+      builder: () => GoldenTestGroup(
+        columns: 1,
+        children: <Widget>[
+          GoldenTestScenario(
+            name: 'errored (#19)',
+            child: FutureBuilder<ChatRepository>(
+              future: _erroredRepo(),
+              builder: (BuildContext context,
+                  AsyncSnapshot<ChatRepository> snapshot) {
+                if (!snapshot.hasData) return const SizedBox.shrink();
+                final ChatRepository repo = snapshot.data!;
+                return ProviderScope(
+                  overrides: <Override>[
+                    chatRepositoryBackendProvider.overrideWithValue(repo),
+                    chatServiceProvider.overrideWithValue(_service(repo)),
+                    chatLLMBackendProvider
+                        .overrideWithValue(const _InertBackend()),
+                  ],
+                  child: SizedBox(
+                    width: 420,
+                    height: 900,
+                    child: MaterialApp.router(
+                      routerConfig: _goldenRouter('convo-errored'),
                       builder: (BuildContext context, Widget? child) {
                         return ColoredBox(
                           color: careblazersColors.background,

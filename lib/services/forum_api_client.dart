@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -15,10 +17,21 @@ part 'forum_api_client.g.dart';
 /// `wrangler dev` loop. Defaults to the Cloudflare-style hostname so
 /// the no-define case still produces a recognisably-wrong URL rather
 /// than silently hitting localhost.
+// Empty default = "no backend configured" → the app uses the fake forum
+// client and stays fully local (tests, demo builds). A real URL is only
+// present when an alpha/prod build bakes in
+// `--dart-define=FORUM_API_URL=...`; that's what flips the
+// `forumApiClient` provider to the live client (so testers never have to
+// find the "Use demo forum" toggle).
 const String _compileTimeForumApiUrl = String.fromEnvironment(
   'FORUM_API_URL',
-  defaultValue: 'https://forum-api.workers.dev',
 );
+
+/// True only when a real backend URL was baked into the build (an
+/// alpha/prod `--dart-define=FORUM_API_URL=...`). Callers that hit the
+/// live backend (e.g. the synced circle-members section) gate on this so
+/// tests + local-only/demo builds never instantiate the real auth path.
+final bool forumBackendConfigured = _compileTimeForumApiUrl.trim().isNotEmpty;
 
 /// All Hono routes mount under this prefix (BUILD_SPEC.md §13 / Phase
 /// 13.3 — `app.route('/api/v1', api)`). Centralized so a future v2
@@ -50,6 +63,48 @@ class ForumApiException implements Exception {
   @override
   String toString() =>
       'ForumApiException($statusCode, $error${tokenExpired ? ', token_expired' : ''})';
+}
+
+/// Decoded `POST /api/v1/auth/google` success body (the Google sign-in
+/// bootstrap). The backend verifies the Google ID token, provisions /
+/// finds the account, and returns the stable spine identity the forum
+/// JWT's `sub` is minted from. [username] is null until the caregiver
+/// claims a `@handle`.
+class GoogleAuthResult {
+  const GoogleAuthResult({
+    required this.userId,
+    required this.email,
+    required this.name,
+    this.username,
+  });
+
+  final String userId;
+  final String email;
+  final String name;
+  final String? username;
+
+  factory GoogleAuthResult.fromJson(Map<String, Object?> json) =>
+      GoogleAuthResult(
+        userId: json['user_id'] as String? ?? '',
+        email: json['email'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        username: json['username'] as String?,
+      );
+}
+
+/// Thrown by [ForumApiClient.verifyGoogleIdToken] when the backend
+/// rejects the bootstrap. [code] mirrors the Worker's `{error}` payload
+/// (`invalid_token` on 401, `missing_id_token` on 400, or a synthetic
+/// transport code) so the sign-in screen can branch / log without
+/// reaching for the raw [ForumApiException].
+class GoogleAuthException implements Exception {
+  const GoogleAuthException({required this.statusCode, required this.code});
+
+  final int statusCode;
+  final String code;
+
+  @override
+  String toString() => 'GoogleAuthException($statusCode, $code)';
 }
 
 /// Combined response from `POST /posts` (BUILD_SPEC.md §13 / Phase
@@ -144,6 +199,98 @@ enum ForumReportAction {
       };
 }
 
+// ---------------------------------------------------------------------------
+// Sync write + result DTOs (server-authoritative sync)
+//
+// The pull/return shapes ([SyncDoc] / [SyncPatient] in models/forum.dart)
+// carry [payload] as a JSON *string* — that's the wire shape. The *write*
+// DTOs below take [payload] as a decoded `Map` so call sites enqueue a
+// model's `toJson()` directly; [syncPush] re-encodes to a string at the
+// boundary. The result DTOs ([SyncPullResult] / [SyncPushResult]) are
+// plain (non-freezed) holders because they never round-trip back over the
+// wire — they're the decoded shape callers consume in-process.
+// ---------------------------------------------------------------------------
+
+/// One document a client is pushing up (server-authoritative sync).
+/// [payload] is the model's `toJson` map; [syncPush] encodes it to the
+/// wire's JSON string. [deleted] marks a tombstone the server accepts
+/// under the same LWW rule as a live write.
+class SyncDocWrite {
+  const SyncDocWrite({
+    required this.id,
+    required this.collection,
+    required this.payload,
+    required this.clientUpdatedAt,
+    this.deleted = false,
+  });
+
+  final String id;
+  final String collection;
+  final Map<String, dynamic> payload;
+  final int clientUpdatedAt;
+  final bool deleted;
+
+  Map<String, Object?> toWire() => <String, Object?>{
+        'id': id,
+        'collection': collection,
+        'payload': jsonEncode(payload),
+        'client_updated_at': clientUpdatedAt,
+        'deleted': deleted,
+      };
+}
+
+/// The circle-owned loved one a client is pushing up
+/// (server-authoritative sync). [payload] is the [Patient]'s `toJson`
+/// map; [syncPush] encodes it to the wire's JSON string.
+class SyncPatientWrite {
+  const SyncPatientWrite({
+    required this.payload,
+    required this.clientUpdatedAt,
+    this.deleted = false,
+  });
+
+  final Map<String, dynamic> payload;
+  final int clientUpdatedAt;
+  final bool deleted;
+
+  Map<String, Object?> toWire() => <String, Object?>{
+        'payload': jsonEncode(payload),
+        'client_updated_at': clientUpdatedAt,
+        'deleted': deleted,
+      };
+}
+
+/// Decoded `GET /sync/:circleId` response (server-authoritative sync).
+/// [cursor] is the server rev the caller persists + passes back as
+/// `since` next pull; [patient] / [docs] are present only for rows whose
+/// rev exceeds the requested `since`.
+class SyncPullResult {
+  const SyncPullResult({
+    required this.cursor,
+    required this.patient,
+    required this.docs,
+  });
+
+  final int cursor;
+  final SyncPatient? patient;
+  final List<SyncDoc> docs;
+}
+
+/// Decoded `POST /sync/:circleId` response (server-authoritative sync).
+/// [applied] echoes each pushed doc's id with the server-assigned [rev]
+/// and whether the LWW check [accepted] it.
+class SyncPushResult {
+  const SyncPushResult({
+    required this.cursor,
+    required this.patient,
+    required this.applied,
+  });
+
+  final int cursor;
+  final SyncPatient? patient;
+  final List<({String id, int rev, bool accepted})> applied;
+}
+
 /// Async producer of a bearer token for the Authorization header.
 /// Production wires this to [ForumJwtMinter.currentToken]; tests
 /// inject a constant closure so the API client tests stay independent
@@ -184,6 +331,33 @@ class ForumApiClient {
   /// The base + version prefix the API methods build paths off of.
   String get _apiBase => '$_baseUrl$forumApiVersionPrefix';
 
+  // -------- Auth bootstrap (pre-auth Google sign-in) ----------------------
+
+  /// Exchange a Google ID token for the backend's stable account spine
+  /// (BUILD_SPEC.md §13). This endpoint is UNAUTHENTICATED — it is the
+  /// bootstrap that *establishes* the identity the forum JWT is later
+  /// minted from, so it must NOT attach a Bearer token (sending the
+  /// to-be-issued `sub` would be circular). Posts
+  /// `{id_token: <google id token>}`; returns the verified
+  /// `{user_id, email, name, username}`.
+  ///
+  /// Throws [GoogleAuthException] on the documented failures — 401
+  /// `invalid_token` (Google rejected / audience mismatch) or 400
+  /// `missing_id_token` — so the sign-in screen surfaces a friendly
+  /// message instead of a raw transport error.
+  Future<GoogleAuthResult> verifyGoogleIdToken(String idToken) async {
+    try {
+      final Response<dynamic> r = await _post(
+        '$_apiBase/auth/google',
+        data: <String, Object?>{'id_token': idToken},
+        anonymous: true,
+      );
+      return GoogleAuthResult.fromJson(_asJsonObject(r));
+    } on ForumApiException catch (e) {
+      throw GoogleAuthException(statusCode: e.statusCode, code: e.error);
+    }
+  }
+
   // -------- Profiles ------------------------------------------------------
 
   Future<ForumProfile> bootstrapProfile() async {
@@ -202,10 +376,12 @@ class ForumApiClient {
   Future<ForumProfile> updateMyProfile({
     String? displayName,
     String? avatarUrl,
+    String? username,
   }) async {
     final Map<String, Object?> body = <String, Object?>{};
     if (displayName != null) body['display_name'] = displayName;
     if (avatarUrl != null) body['avatar_url'] = avatarUrl;
+    if (username != null) body['username'] = username;
     final Response<dynamic> r = await _patch(
       '$_apiBase/profiles/me',
       data: body,
@@ -218,6 +394,242 @@ class ForumApiClient {
       '$_apiBase/profiles/$profileId',
     );
     return ForumPublicProfile.fromJson(_asJsonObject(r));
+  }
+
+  // -------- Username + circles (care-circle connect, 2026-06-06) ----------
+
+  /// Check whether [handle] is a syntactically-valid + unclaimed
+  /// `@username`. The Worker returns `{valid, available}` — `valid`
+  /// reflects the `^[a-z0-9_]{3,20}$` rule, `available` whether someone
+  /// already holds it. Drives the live availability check on the
+  /// username-onboarding screen.
+  Future<({bool valid, bool available})> usernameAvailable(
+    String handle,
+  ) async {
+    final Response<dynamic> r = await _get(
+      '$_apiBase/profiles/username-available',
+      query: <String, Object?>{'u': handle},
+    );
+    final Map<String, Object?> body = _asJsonObject(r);
+    return (
+      valid: body['valid'] == true,
+      available: body['available'] == true,
+    );
+  }
+
+  /// Resolve another caregiver's lean public profile by their
+  /// `@username` (`{id, username, display_name, avatar_url}`). Raises a
+  /// 404 [ForumApiException] with `profile_not_found` when no one holds
+  /// the handle.
+  Future<ForumPublicProfile> getProfileByUsername(String username) async {
+    final Response<dynamic> r = await _get(
+      '$_apiBase/profiles/by-username/$username',
+    );
+    return ForumPublicProfile.fromJson(_asJsonObject(r));
+  }
+
+  /// Create a new care circle the caller owns. [name] is 1..60 chars.
+  /// When [patient] is supplied the circle is created owning that loved
+  /// one (server-authoritative sync) — the response carries it back as
+  /// [CircleDto.patient] with a server-assigned rev.
+  Future<CircleDto> createCircle(
+    String name, {
+    SyncPatientWrite? patient,
+  }) async {
+    final Map<String, Object?> body = <String, Object?>{'name': name};
+    if (patient != null) {
+      body['patient'] = <String, Object?>{
+        'payload': jsonEncode(patient.payload),
+        'client_updated_at': patient.clientUpdatedAt,
+      };
+    }
+    final Response<dynamic> r = await _post(
+      '$_apiBase/circles',
+      data: body,
+    );
+    return CircleDto.fromJson(_asJsonObject(r));
+  }
+
+  /// Every circle the caller belongs to, each with its [members] roster.
+  Future<List<CircleDto>> listCircles() async {
+    final Response<dynamic> r = await _get('$_apiBase/circles');
+    final Map<String, Object?> body = _asJsonObject(r);
+    final List<dynamic> rows =
+        (body['circles'] as List<dynamic>?) ?? const <dynamic>[];
+    return rows
+        .map((dynamic e) => CircleDto.fromJson(_asObject(e)))
+        .toList(growable: false);
+  }
+
+  /// Mint a single-use, time-boxed join invite for [circleId]. The
+  /// returned [CircleInviteDto.token] is what the QR encodes.
+  Future<CircleInviteDto> createInvite(String circleId) async {
+    final Response<dynamic> r = await _post(
+      '$_apiBase/circles/$circleId/invites',
+      data: const <String, Object?>{},
+    );
+    return CircleInviteDto.fromJson(_asJsonObject(r));
+  }
+
+  /// Join a circle by redeeming an invite [token] (scanned from a QR).
+  /// Raises `invite_not_found` (404) or `invite_expired` (410) as a
+  /// [ForumApiException] so the scanner can show a friendly message.
+  Future<CircleDto> joinCircle(String token) async {
+    final Response<dynamic> r = await _post(
+      '$_apiBase/circles/join',
+      data: <String, Object?>{'token': token},
+    );
+    return CircleDto.fromJson(_asJsonObject(r));
+  }
+
+  // -------- Sync (server-authoritative) -----------------------------------
+
+  /// Pull every patient/doc change in [circleId] whose rev exceeds
+  /// [since] (server-authoritative sync). The returned [SyncPullResult.cursor]
+  /// is what the caller persists + passes back as [since] next time.
+  /// Docs include tombstones (`deleted: true`).
+  Future<SyncPullResult> syncPull(String circleId, {int since = 0}) async {
+    final Response<dynamic> r = await _get(
+      '$_apiBase/sync/$circleId',
+      query: <String, Object?>{'since': since},
+    );
+    final Map<String, Object?> body = _asJsonObject(r);
+    return SyncPullResult(
+      cursor: (body['cursor'] as num?)?.toInt() ?? since,
+      patient: _parseSyncPatient(body['patient']),
+      docs: _parseSyncDocs(body['docs']),
+    );
+  }
+
+  /// Push local [docs] (and optionally the [patient]) up to [circleId]
+  /// (server-authoritative sync). The server applies LWW — it accepts a
+  /// row iff the incoming `client_updated_at` is >= the stored one — and
+  /// echoes the outcome per id in [SyncPushResult.applied].
+  Future<SyncPushResult> syncPush(
+    String circleId, {
+    SyncPatientWrite? patient,
+    required List<SyncDocWrite> docs,
+  }) async {
+    final Map<String, Object?> body = <String, Object?>{
+      'docs': docs.map((SyncDocWrite d) => d.toWire()).toList(),
+    };
+    if (patient != null) {
+      body['patient'] = patient.toWire();
+    }
+    final Response<dynamic> r = await _post(
+      '$_apiBase/sync/$circleId',
+      data: body,
+    );
+    final Map<String, Object?> resBody = _asJsonObject(r);
+    final List<dynamic> appliedRows =
+        (resBody['applied'] as List<dynamic>?) ?? const <dynamic>[];
+    return SyncPushResult(
+      cursor: (resBody['cursor'] as num?)?.toInt() ?? 0,
+      patient: _parseSyncPatient(resBody['patient']),
+      applied: appliedRows.map((dynamic e) {
+        final Map<String, Object?> m = _asObject(e);
+        return (
+          id: m['id'] as String? ?? '',
+          rev: (m['rev'] as num?)?.toInt() ?? 0,
+          accepted: m['accepted'] == true,
+        );
+      }).toList(growable: false),
+    );
+  }
+
+  static SyncPatient? _parseSyncPatient(dynamic value) {
+    if (value is Map) {
+      return SyncPatient.fromJson(Map<String, dynamic>.from(value));
+    }
+    return null;
+  }
+
+  static List<SyncDoc> _parseSyncDocs(dynamic value) {
+    if (value is! List) return const <SyncDoc>[];
+    return value
+        .whereType<Map>()
+        .map((Map e) => SyncDoc.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
+  }
+
+  // -------- Document scan blobs (R2) --------------------------------------
+
+  /// Upload a document-scan image's raw [bytes] to R2 under [circleId]/[key]
+  /// (so the scan survives a reinstall + syncs across the circle). Returns
+  /// the full storage key the caller persists on the document row. [key] is
+  /// the per-document object name (the circle prefix is added server-side).
+  /// Best-effort callers (the [DocumentBlobService]) catch
+  /// [ForumApiException] and keep the local path working.
+  Future<String> uploadDocumentBlob({
+    required String circleId,
+    required String key,
+    required List<int> bytes,
+    String contentType = 'application/octet-stream',
+  }) async {
+    final String token = await _tokenLoader();
+    try {
+      final Response<dynamic> r = await _dio
+          .request<dynamic>(
+            '$_apiBase/documents/blob/$circleId/$key',
+            data: Stream<List<int>>.fromIterable(<List<int>>[bytes]),
+            options: Options(
+              method: 'PUT',
+              headers: <String, Object>{
+                'Authorization': 'Bearer $token',
+                Headers.contentLengthHeader: bytes.length,
+              },
+              contentType: contentType,
+              validateStatus: (int? _) => true,
+            ),
+          )
+          .then(_throwIfError);
+      final Map<String, Object?> body = _asJsonObject(r);
+      return body['key'] as String? ?? '';
+    } on DioException catch (e) {
+      throw ForumApiException(
+        statusCode: e.response?.statusCode ?? 0,
+        error: e.message ?? 'transport_error',
+        cause: e,
+      );
+    }
+  }
+
+  /// Download a document-scan blob's raw bytes from R2 under [circleId]/[key].
+  /// [key] is the per-document object name (the same value passed to
+  /// [uploadDocumentBlob], NOT the full returned storage key). Raises a 404
+  /// [ForumApiException] when the object is absent.
+  Future<List<int>> downloadDocumentBlob({
+    required String circleId,
+    required String key,
+  }) async {
+    final String token = await _tokenLoader();
+    try {
+      final Response<List<int>> r = await _dio
+          .request<List<int>>(
+            '$_apiBase/documents/blob/$circleId/$key',
+            options: Options(
+              method: 'GET',
+              headers: <String, Object>{'Authorization': 'Bearer $token'},
+              responseType: ResponseType.bytes,
+              validateStatus: (int? _) => true,
+            ),
+          )
+          .then((Response<List<int>> resp) {
+        final int status = resp.statusCode ?? 0;
+        if (status >= 200 && status < 300) return resp;
+        throw ForumApiException(
+          statusCode: status,
+          error: 'http_$status',
+        );
+      });
+      return r.data ?? const <int>[];
+    } on DioException catch (e) {
+      throw ForumApiException(
+        statusCode: e.response?.statusCode ?? 0,
+        error: e.message ?? 'transport_error',
+        cause: e,
+      );
+    }
   }
 
   // -------- Posts ---------------------------------------------------------
@@ -419,8 +831,9 @@ class ForumApiClient {
   Future<Response<dynamic>> _post(
     String url, {
     required Object data,
+    bool anonymous = false,
   }) =>
-      _send(method: 'POST', url: url, data: data);
+      _send(method: 'POST', url: url, data: data, anonymous: anonymous);
 
   Future<Response<dynamic>> _patch(
     String url, {
@@ -560,7 +973,15 @@ class ForumApiClient {
 @Riverpod(keepAlive: true)
 ForumApiClient forumApiClient(Ref ref) {
   final bool useDemo = ref.watch(settingsProvider).useDemoForum;
-  if (useDemo) {
+  // A real backend URL baked into the build (the alpha test builds set
+  // `--dart-define=FORUM_API_URL=...`) OVERRIDES the demo toggle — alpha
+  // testers shouldn't have to find a Settings switch to make care circles
+  // connect across devices (2026-06-06: 3 testers blocked because the
+  // toggle defaulted on → per-device fake client → "invite no longer
+  // valid"). So fall back to the in-memory fake only when demo is on AND
+  // no backend is configured.
+  final bool hasBackend = _compileTimeForumApiUrl.trim().isNotEmpty;
+  if (useDemo && !hasBackend) {
     return FakeForumApiClient();
   }
   final ForumJwtMinter minter = ref.watch(forumJwtMinterProvider);

@@ -1,4 +1,5 @@
 import 'package:alchemist/alchemist.dart';
+import 'package:careblazers/models/medication.dart' show DoseStatus;
 import 'package:careblazers/screens/team/activity_screen.dart';
 import 'package:careblazers/theme.dart';
 import 'package:flutter/material.dart';
@@ -29,11 +30,19 @@ List<ActivityFeedItem> _populated() => <ActivityFeedItem>[
         route: '/journal/1',
       ),
       ActivityFeedItem(
-        id: 'dose-1',
+        id: 'dose-window-morning',
         category: ActivityCategory.dose,
-        summary: 'Gave Donepezil 10 mg',
+        summary: 'Morning medications',
         createdAt: _fixedNow().subtract(const Duration(hours: 2)),
         route: '/medications/today',
+        doseWindow: const ActivityDoseWindow(
+          windowLabel: 'Morning',
+          meds: <ActivityDoseEntry>[
+            ActivityDoseEntry(name: 'Donepezil 10 mg', status: DoseStatus.taken),
+            ActivityDoseEntry(
+                name: 'Metformin 500 mg', status: DoseStatus.skipped),
+          ],
+        ),
       ),
       ActivityFeedItem(
         id: 'task-1',
@@ -66,7 +75,7 @@ Widget _host(List<ActivityFeedItem> items) {
     ],
     child: SizedBox(
       width: 420,
-      height: 860,
+      height: 940,
       child: MaterialApp(
         home: const ActivityScreen(),
         builder: (BuildContext context, Widget? child) => ColoredBox(

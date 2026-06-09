@@ -15,6 +15,20 @@
       "when": 1780128340918,
       "tag": "0001_add_crisis_flagged",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780786456007,
+      "tag": "0002_glorious_senator_kelly",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1780849268435,
+      "tag": "0003_cool_iron_monger",
+      "breakpoints": true
     }
   ]
 }

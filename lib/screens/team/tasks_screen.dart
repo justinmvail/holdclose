@@ -7,6 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/care_task.dart';
 import '../../models/caregiver.dart';
+import '../../providers/active_patient_provider.dart';
 import '../../providers/care_tasks_provider.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
@@ -29,10 +30,10 @@ String _defaultTaskIdFactory() {
 @Riverpod(keepAlive: true)
 TaskIdFactory taskIdFactory(Ref ref) => _defaultTaskIdFactory;
 
-/// Care Team → Tasks at `/team/tasks` (TASKS.md Phase 14.30, BUILD_SPEC.md
+/// Care Circle → Tasks at `/team/tasks` (TASKS.md Phase 14.30, BUILD_SPEC.md
 /// §5.14).
 ///
-/// A [PathHeader] (`Home › Care Team › Tasks`, back to Care Team) over a
+/// A [PathHeader] (`Home › Care Circle › Tasks`, back to Care Circle) over a
 /// segmented filter (Open / Claimed / Done) and the matching task list.
 /// Each card shows the title, due time, and — once claimed — the assignee's
 /// avatar + name; its action buttons swap by lifecycle: an open task shows
@@ -60,6 +61,16 @@ class TasksScreen extends ConsumerStatefulWidget {
   static Key completeButtonKey(String taskId) => Key('tasks-complete-$taskId');
   static Key unclaimButtonKey(String taskId) => Key('tasks-unclaim-$taskId');
 
+  // Long-press card menu (edit + delete).
+  static const Key cardMenuKey = Key('tasks-card-menu');
+  static const Key cardMenuEditKey = Key('tasks-card-menu-edit');
+  static const Key cardMenuDeleteKey = Key('tasks-card-menu-delete');
+
+  // Delete-confirmation dialog (a long-press → Delete on a task card).
+  static const Key deleteDialogKey = Key('tasks-delete-dialog');
+  static const Key deleteConfirmKey = Key('tasks-delete-confirm');
+  static const Key deleteCancelKey = Key('tasks-delete-cancel');
+
   // Create-task sheet.
   static const Key createSheetKey = Key('tasks-create-sheet');
   static const Key titleFieldKey = Key('tasks-create-title');
@@ -86,7 +97,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     final String me = ref.watch(currentCaregiverIdProvider);
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       floatingActionButton: _AddTaskFab(onPressed: () => _openCreateSheet()),
       body: SafeArea(
         child: Column(
@@ -100,11 +111,11 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                   const PathHeader(
                     breadcrumbs: <PathHeaderCrumb>[
                       PathHeaderCrumb(label: 'Home', route: '/'),
-                      PathHeaderCrumb(label: 'Care Team', route: '/team'),
+                      PathHeaderCrumb(label: 'Care Circle', route: '/team'),
                       PathHeaderCrumb(label: 'Tasks'),
                     ],
                     title: 'Tasks',
-                    backLabel: 'Back to Care Team',
+                    backLabel: 'Back to Care Circle',
                     leadingIcon: Icons.checklist_outlined,
                   ),
                   const SizedBox(height: 12),
@@ -138,15 +149,16 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     );
   }
 
-  Future<void> _openCreateSheet() async {
+  Future<void> _openCreateSheet({CareTask? existing}) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (BuildContext sheetContext) => const _CreateTaskSheet(),
+      builder: (BuildContext sheetContext) =>
+          _CreateTaskSheet(existing: existing),
     );
   }
 }
@@ -164,8 +176,9 @@ class _AddTaskFab extends StatelessWidget {
       label: 'Add task. Open the new-task form.',
       child: FloatingActionButton.extended(
         key: TasksScreen.fabKey,
+        heroTag: 'tasks-add-fab',
         onPressed: onPressed,
-        backgroundColor: careblazersColors.cta,
+        backgroundColor: context.cb.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -220,11 +233,11 @@ class _SegmentPill extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final String label = _segmentLabel(status);
     final Color border =
-        selected ? careblazersColors.cta : careblazersColors.primarySoft;
+        selected ? context.cb.cta : context.cb.primarySoft;
     final Color fill = selected
-        ? careblazersColors.cta.withValues(alpha: 0.12)
+        ? context.cb.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? careblazersColors.cta : careblazersColors.text;
+    final Color fg = selected ? context.cb.cta : context.cb.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -286,55 +299,210 @@ class _TaskCard extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        key: TasksScreen.cardKey(task.id),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-        decoration: BoxDecoration(
-          color: careblazersColors.surfaceWarm,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              task.title,
-              style: textTheme.bodyLarge?.copyWith(
-                color: careblazersColors.primary,
-                fontWeight: FontWeight.w700,
-                decoration:
-                    task.isDone ? TextDecoration.lineThrough : null,
-              ),
+      child: Semantics(
+        // The card's own actions stay in the action row; this exposes the
+        // long-press affordance (edit + delete) to assistive tech.
+        label: 'Long-press to edit or delete this task.',
+        child: GestureDetector(
+          onLongPress: () => _openCardMenu(context),
+          child: Container(
+            key: TasksScreen.cardKey(task.id),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            decoration: BoxDecoration(
+              color: context.cb.surfaceWarm,
+              borderRadius: BorderRadius.circular(16),
             ),
-            if (task.body != null && task.body!.trim().isNotEmpty) ...<Widget>[
-              const SizedBox(height: 4),
-              Text(
-                task.body!.trim(),
-                style:
-                    textTheme.bodyMedium?.copyWith(color: careblazersColors.text),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 12,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                if (task.dueAt != null) _DueChip(due: task.dueAt!),
-                if (task.claimedAt != null)
-                  _AssigneeChip(
-                    assignee: card.assignee,
-                    isMe: task.assigneeCaregiverId == me,
+                Text(
+                  task.title,
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: context.cb.primary,
+                    fontWeight: FontWeight.w700,
+                    decoration:
+                        task.isDone ? TextDecoration.lineThrough : null,
                   ),
+                ),
+                if (task.body != null && task.body!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    task.body!.trim(),
+                    style: textTheme.bodyMedium
+                        ?.copyWith(color: context.cb.text),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: <Widget>[
+                    if (task.dueAt != null) _DueChip(due: task.dueAt!),
+                    if (task.claimedAt != null)
+                      _AssigneeChip(
+                        assignee: card.assignee,
+                        isMe: task.assigneeCaregiverId == me,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _Actions(task: task, claimedByMe: claimedByMe, me: me),
               ],
             ),
-            const SizedBox(height: 12),
-            _Actions(task: task, claimedByMe: claimedByMe, me: me),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Long-press menu on a task card: edit (reopens the create sheet
+  /// prefilled, saving through the upsert path) or delete (confirm, then
+  /// drop through the [CareTasks] notifier). Mirrors the care-circle roster's
+  /// long-press action sheet.
+  Future<void> _openCardMenu(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.cb.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext sheetContext) =>
+          _TaskCardMenu(task: card.task),
+    );
+  }
+}
+
+/// The long-press action sheet for a task card — Edit (reopens the create
+/// sheet prefilled) + Delete (confirm → [CareTasks.removeTask]). Kept as its
+/// own consumer so it reads the notifier directly, the way the care-circle
+/// edit sheet does.
+class _TaskCardMenu extends ConsumerWidget {
+  const _TaskCardMenu({required this.task});
+
+  final CareTask task;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Padding(
+      key: TasksScreen.cardMenuKey,
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            task.title,
+            style: textTheme.titleLarge?.copyWith(
+              color: context.cb.primary,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 16),
+          Semantics(
+            button: true,
+            label: 'Edit this task.',
+            child: ListTile(
+              key: TasksScreen.cardMenuEditKey,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.edit_outlined, color: context.cb.link),
+              title: Text(
+                'Edit task',
+                style: textTheme.bodyLarge?.copyWith(
+                  color: context.cb.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _openEditSheet(context);
+              },
+            ),
+          ),
+          Semantics(
+            button: true,
+            label: 'Delete this task.',
+            child: ListTile(
+              key: TasksScreen.cardMenuDeleteKey,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.delete_outline,
+                color: context.cb.accentDeep,
+              ),
+              title: Text(
+                'Delete task',
+                style: textTheme.bodyLarge?.copyWith(
+                  color: context.cb.accentDeep,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              onTap: () => _confirmAndDelete(context, ref),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Reopen the create sheet seeded with this task so a save replaces it in
+  /// place (same id) through the upsert path.
+  Future<void> _openEditSheet(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.cb.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext sheetContext) => _CreateTaskSheet(existing: task),
+    );
+  }
+
+  /// Confirm, then drop the task through the [CareTasks] notifier (which
+  /// refreshes the board), then pop the menu. No-op on cancel.
+  Future<void> _confirmAndDelete(BuildContext context, WidgetRef ref) async {
+    final bool confirmed = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext dialogContext) => AlertDialog(
+            key: TasksScreen.deleteDialogKey,
+            title: const Text('Delete task?'),
+            content: Text(
+              '"${task.title}" will be removed from the board. This can\'t '
+              'be undone.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                key: TasksScreen.deleteCancelKey,
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                key: TasksScreen.deleteConfirmKey,
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(
+                  'Delete',
+                  style: TextStyle(color: context.cb.accentDeep),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+
+    await ref.read(careTasksProvider.notifier).removeTask(task.id);
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
   }
 }
 
@@ -421,7 +589,7 @@ class _PrimaryAction extends StatelessWidget {
           style: textTheme.labelLarge?.copyWith(color: Colors.white),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: careblazersColors.cta,
+          backgroundColor: context.cb.cta,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         ),
@@ -449,12 +617,12 @@ class _SecondaryAction extends StatelessWidget {
       child: TextButton(
         onPressed: onPressed,
         style: TextButton.styleFrom(
-          foregroundColor: careblazersColors.link,
+          foregroundColor: context.cb.link,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         ),
         child: Text(
           label,
-          style: textTheme.labelLarge?.copyWith(color: careblazersColors.link),
+          style: textTheme.labelLarge?.copyWith(color: context.cb.link),
         ),
       ),
     );
@@ -472,12 +640,12 @@ class _DueChip extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Icon(Icons.schedule, size: 16, color: careblazersColors.primarySoft),
+        Icon(Icons.schedule, size: 16, color: context.cb.primarySoft),
         const SizedBox(width: 4),
         Text(
           formatDue(due),
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -504,7 +672,7 @@ class _AssigneeChip extends StatelessWidget {
         Text(
           name,
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.primary,
+            color: context.cb.primary,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -526,14 +694,14 @@ class _MiniAvatar extends StatelessWidget {
     final bool hasPhoto = path != null && File(path).existsSync();
     return CircleAvatar(
       radius: 13,
-      backgroundColor: careblazersColors.primarySoft.withValues(alpha: 0.14),
+      backgroundColor: context.cb.primarySoft.withValues(alpha: 0.14),
       backgroundImage: hasPhoto ? FileImage(File(path)) : null,
       child: hasPhoto
           ? null
           : Text(
               _initials(name),
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
                 fontWeight: FontWeight.w700,
                 fontSize: 11,
               ),
@@ -560,12 +728,12 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.task_alt_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             _emptyMessage(segment),
-            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -578,24 +746,33 @@ class _EmptyState extends StatelessWidget {
 // Create-task sheet
 // ---------------------------------------------------------------------------
 
-/// Bottom sheet that creates a task (TASKS.md Phase 14.30). Collects a
-/// title (required), an optional body + due time, and an optional assignee
-/// drawn from the care circle. Save writes through the [CareTasks] notifier
-/// — which refreshes the board — then pops.
+/// Bottom sheet that creates *or edits* a task (TASKS.md Phase 14.30).
+/// Collects a title (required), an optional body + due time, and an optional
+/// assignee drawn from the care circle. Save writes through the [CareTasks]
+/// notifier — which refreshes the board — then pops. When [existing] is
+/// passed the fields seed from it and the save replaces it in place (same id,
+/// preserving the claim/complete lifecycle) via the notifier's upsert path.
 class _CreateTaskSheet extends ConsumerStatefulWidget {
-  const _CreateTaskSheet();
+  const _CreateTaskSheet({this.existing});
+
+  /// The task being edited, or null when creating a new one.
+  final CareTask? existing;
 
   @override
   ConsumerState<_CreateTaskSheet> createState() => _CreateTaskSheetState();
 }
 
 class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
-  final TextEditingController _title = TextEditingController();
-  final TextEditingController _body = TextEditingController();
-  DateTime? _dueAt;
-  String? _assigneeId;
+  late final TextEditingController _title =
+      TextEditingController(text: widget.existing?.title ?? '');
+  late final TextEditingController _body =
+      TextEditingController(text: widget.existing?.body ?? '');
+  late DateTime? _dueAt = widget.existing?.dueAt;
+  late String? _assigneeId = widget.existing?.assigneeCaregiverId;
   String? _titleError;
   bool _submitting = false;
+
+  bool get _isEditing => widget.existing != null;
 
   @override
   void dispose() {
@@ -643,14 +820,34 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
     });
 
     final String body = _body.text.trim();
-    final CareTask task = CareTask(
-      id: ref.read(taskIdFactoryProvider)(),
-      title: title,
-      body: body.isEmpty ? null : body,
-      dueAt: _dueAt,
-      assigneeCaregiverId: _assigneeId,
-      patientId: careTasksPatientId,
-    );
+    final CareTask? existing = widget.existing;
+    // A new task is filed under the active loved one's id (was the
+    // `careTasksPatientId` const) so it follows whichever person is
+    // selected (multi-patient, Issue #6). This is the patient the task is
+    // *for* — distinct from `currentCaregiverId`, the person who later
+    // claims it. The edit path leaves the existing task's patientId alone.
+    // With one patient on file [activePatientIdProvider] resolves to that
+    // sole id, identical to the old const.
+    final String patientId = existing != null
+        ? existing.patientId
+        : await ref.read(activePatientIdProvider.future);
+    final CareTask task = existing != null
+        // Edit: keep the id + lifecycle stamps so a claimed/done task stays
+        // in its lane after an edit; only the editable fields change.
+        ? existing.copyWith(
+            title: title,
+            body: body.isEmpty ? null : body,
+            dueAt: _dueAt,
+            assigneeCaregiverId: _assigneeId,
+          )
+        : CareTask(
+            id: ref.read(taskIdFactoryProvider)(),
+            title: title,
+            body: body.isEmpty ? null : body,
+            dueAt: _dueAt,
+            assigneeCaregiverId: _assigneeId,
+            patientId: patientId,
+          );
     await ref.read(careTasksProvider.notifier).addTask(task);
 
     if (!mounted) return;
@@ -677,9 +874,9 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'New task',
+              _isEditing ? 'Edit task' : 'New task',
               style: textTheme.titleLarge?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
               ),
             ),
             const SizedBox(height: 20),
@@ -701,7 +898,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
                 child: Text(
                   _titleError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: careblazersColors.error),
+                      ?.copyWith(color: context.cb.error),
                 ),
               ),
             const SizedBox(height: 16),
@@ -725,7 +922,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
             Text(
               'Assign to (optional)',
               style: textTheme.bodyLarge?.copyWith(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -759,11 +956,13 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
               onPressed: _submitting ? null : _save,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
               ),
               child: Text(
-                _submitting ? 'Saving…' : 'Add task',
+                _submitting
+                    ? 'Saving…'
+                    : (_isEditing ? 'Save changes' : 'Add task'),
                 style: textTheme.labelLarge?.copyWith(color: Colors.white),
               ),
             ),
@@ -799,14 +998,14 @@ class _DuePickerRow extends StatelessWidget {
             child: OutlinedButton.icon(
               key: TasksScreen.dueButtonKey,
               onPressed: onPick,
-              icon: Icon(Icons.event_outlined, color: careblazersColors.link),
+              icon: Icon(Icons.event_outlined, color: context.cb.link),
               label: Text(
                 due == null ? 'Set due time' : formatDue(due!),
                 style:
-                    textTheme.labelLarge?.copyWith(color: careblazersColors.link),
+                    textTheme.labelLarge?.copyWith(color: context.cb.link),
               ),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: careblazersColors.primarySoft),
+                side: BorderSide(color: context.cb.primarySoft),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
@@ -819,7 +1018,7 @@ class _DuePickerRow extends StatelessWidget {
             child: IconButton(
               key: TasksScreen.dueClearKey,
               icon: const Icon(Icons.close),
-              color: careblazersColors.primarySoft,
+              color: context.cb.primarySoft,
               tooltip: 'Clear due time',
               onPressed: onClear,
             ),
@@ -845,11 +1044,11 @@ class _AssigneeChoice extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? careblazersColors.cta : careblazersColors.primarySoft;
+        selected ? context.cb.cta : context.cb.primarySoft;
     final Color fill = selected
-        ? careblazersColors.cta.withValues(alpha: 0.12)
+        ? context.cb.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? careblazersColors.cta : careblazersColors.text;
+    final Color fg = selected ? context.cb.cta : context.cb.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -890,7 +1089,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load the tasks.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),

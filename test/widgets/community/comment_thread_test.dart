@@ -26,7 +26,11 @@ ForumComment _c(
     );
 
 /// Default no-op handler bundle so each test only customizes the
-/// callback under test instead of restating the eight-field record.
+/// callback under test instead of restating the full record.
+///
+/// [isOwn] defaults to "nobody's own", so the default long-press fires the
+/// report handler — the existing non-owner behaviour. Tests covering the
+/// owner affordances pass their own [isOwn] + [onDelete].
 CommentThreadHandlers _handlers({
   void Function(ForumComment, int)? onVote,
   void Function(ForumComment)? onReplyTap,
@@ -34,6 +38,8 @@ CommentThreadHandlers _handlers({
   Future<void> Function(ForumComment?, String)? onSubmitReply,
   void Function(ForumComment?)? onCancelReply,
   int Function(ForumComment)? replyValueFor,
+  bool Function(ForumComment)? isOwn,
+  Future<void> Function(ForumComment)? onDelete,
 }) =>
     CommentThreadHandlers(
       onVote: onVote ?? (ForumComment _, int __) {},
@@ -43,6 +49,8 @@ CommentThreadHandlers _handlers({
           onSubmitReply ?? (ForumComment? _, String __) async {},
       onCancelReply: onCancelReply ?? (ForumComment? _) {},
       replyValueFor: replyValueFor ?? (ForumComment _) => 0,
+      isOwn: isOwn ?? (ForumComment _) => false,
+      onDelete: onDelete ?? (ForumComment _) async {},
     );
 
 Future<void> _pump(
@@ -236,6 +244,94 @@ void main() {
       await tester.pumpAndSettle();
       expect(reported?.id, 'c1');
     });
+
+    testWidgets(
+      "OTHER people's comments show the report flag, never a delete trigger",
+      (WidgetTester tester) async {
+        await _pump(
+          tester,
+          nodes: <CommentTreeNode>[
+            CommentTreeNode(
+              comment: _c('c1'),
+              children: const <CommentTreeNode>[],
+            ),
+          ],
+          // isOwn defaults to false.
+          handlers: _handlers(),
+        );
+        expect(find.byKey(const Key('comment-report-c1')), findsOneWidget);
+        expect(
+          find.byKey(CommentThread.deleteTriggerKey('c1')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'own comment swaps the report flag for a delete trigger + long-press '
+      'fires onDelete',
+      (WidgetTester tester) async {
+        ForumComment? deleted;
+        ForumComment? reported;
+        await _pump(
+          tester,
+          nodes: <CommentTreeNode>[
+            CommentTreeNode(
+              comment: _c('mine'),
+              children: const <CommentTreeNode>[],
+            ),
+          ],
+          handlers: _handlers(
+            isOwn: (ForumComment c) => c.id == 'mine',
+            onDelete: (ForumComment c) async => deleted = c,
+            onReport: (ForumComment c) async => reported = c,
+          ),
+        );
+
+        // The trailing slot is the delete trigger, not the report flag.
+        expect(
+          find.byKey(CommentThread.deleteTriggerKey('mine')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('comment-report-mine')), findsNothing);
+
+        // Tapping the trigger opens the owner sheet path (onDelete).
+        await tester.tap(find.byKey(CommentThread.deleteTriggerKey('mine')));
+        await tester.pumpAndSettle();
+        expect(deleted?.id, 'mine');
+        expect(reported, isNull);
+
+        // Long-press on an own comment routes to onDelete, never onReport.
+        deleted = null;
+        await tester.longPress(find.byKey(CommentThread.rowKey('mine')));
+        await tester.pumpAndSettle();
+        expect(deleted?.id, 'mine');
+        expect(reported, isNull);
+      },
+    );
+
+    testWidgets(
+      'a hidden comment is never treated as own (no delete trigger)',
+      (WidgetTester tester) async {
+        await _pump(
+          tester,
+          nodes: <CommentTreeNode>[
+            CommentTreeNode(
+              comment: _c('h', hidden: true),
+              children: const <CommentTreeNode>[],
+            ),
+          ],
+          // Even if isOwn were to say true, a hidden row has no author and
+          // must not expose owner controls.
+          handlers: _handlers(isOwn: (ForumComment _) => true),
+        );
+        expect(
+          find.byKey(CommentThread.deleteTriggerKey('h')),
+          findsNothing,
+        );
+        expect(find.byKey(const Key('comment-report-h')), findsNothing);
+      },
+    );
 
     testWidgets(
       'active reply composer renders below the parent comment',

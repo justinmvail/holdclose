@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Dev-only cleartext (http://) exceptions. Android blocks cleartext by
+  default on API 28+. Permits plain HTTP only for the local LLM shim:
+    - localhost: the shim on the same machine.
+    - 10.0.2.2: the Android emulator's alias for the host's localhost.
+  Remote testers reach the shim over HTTPS via Tailscale Funnel, so no
+  other cleartext hosts are needed. REMOVE for a release build — a real
+  backend must be HTTPS.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

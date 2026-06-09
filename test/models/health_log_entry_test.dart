@@ -43,6 +43,7 @@ void main() {
         diastolic: 82,
         heartRate: 74,
         temperatureF: 98.6,
+        glucoseMgDl: 112,
         notes: 'Resting, post-breakfast',
       );
 
@@ -51,6 +52,7 @@ void main() {
 
       expect(restored, equals(vitals));
       expect(restored.temperatureF, 98.6);
+      expect(restored.glucoseMgDl, 112);
       expect(restored.severity, isNull);
     });
 
@@ -90,6 +92,7 @@ void main() {
       expect(restored.diastolic, isNull);
       expect(restored.heartRate, isNull);
       expect(restored.temperatureF, isNull);
+      expect(restored.glucoseMgDl, isNull);
     });
 
     test('recordedAt preserves its instant across the round-trip', () {

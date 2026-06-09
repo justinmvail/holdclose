@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/chat.dart';
 import 'package:careblazers/providers/home_conversation_provider.dart';
+import 'package:careblazers/providers/voice_capture_provider.dart';
 import 'package:careblazers/routing/router.dart';
+import 'package:careblazers/screens/chat/chat_screen.dart';
 import 'package:careblazers/screens/chat/conversation_list_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/medical/medical_hub_screen.dart';
-import 'package:careblazers/screens/team/care_team_hub_screen.dart';
 import 'package:careblazers/services/chat_repository.dart';
+import 'package:careblazers/services/chat_service.dart';
 import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/tab_scaffold.dart';
 import 'package:drift/native.dart';
@@ -37,7 +39,32 @@ Future<Widget> _pumpBar(
   return bar;
 }
 
-Future<GoRouter> _pumpRouter(WidgetTester tester) async {
+/// A [ChatLLMBackend] that yields a canned reply — keeps the center-button
+/// new-chat test off the live shim.
+class _FakeChatBackend implements ChatLLMBackend {
+  @override
+  Stream<ChatDelta> streamReply({
+    required String systemPrompt,
+    required List<ChatTurn> history,
+  }) async* {
+    yield const ChatDeltaText('A gentle idea.');
+  }
+}
+
+/// A [VoiceCapture] returning a canned transcript — no real mic/STT.
+class _FakeVoiceCapture implements VoiceCapture {
+  const _FakeVoiceCapture(this.transcript);
+
+  final String? transcript;
+
+  @override
+  Future<String?> capture() async => transcript;
+}
+
+Future<({GoRouter router, ChatRepository repo})> _pumpRouter(
+  WidgetTester tester, {
+  List<Override> extraOverrides = const <Override>[],
+}) async {
   await tester.binding.setSurfaceSize(const Size(420, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -45,6 +72,7 @@ Future<GoRouter> _pumpRouter(WidgetTester tester) async {
   final DateTime now = DateTime.utc(2026, 5, 30, 12);
   final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
   addTearDown(db.close);
+  final ChatRepository repo = ChatRepository(db);
   // ProviderScope wraps the router so the branches that watch riverpod
   // providers (Home → homeConversationProvider, Chat →
   // chatRepositoryProvider) can resolve. Without it, switching to those
@@ -60,13 +88,14 @@ Future<GoRouter> _pumpRouter(WidgetTester tester) async {
             updatedAt: now,
           ),
         ),
-        chatRepositoryProvider.overrideWith((_) => ChatRepository(db)),
+        chatRepositoryProvider.overrideWith((_) => repo),
+        ...extraOverrides,
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
   );
   await tester.pumpAndSettle();
-  return router;
+  return (router: router, repo: repo);
 }
 
 String _currentPath(GoRouter router) =>
@@ -74,50 +103,46 @@ String _currentPath(GoRouter router) =>
 
 void main() {
   group('TabScaffoldBar — destinations', () {
-    test('declares the fixed five tabs (Phase 14 IA)', () {
+    test('declares the fixed four tabs (2026-06-06 IA)', () {
       expect(
         TabScaffoldBar.destinations.map((TabScaffoldDestination d) => d.label),
         <String>[
           'Home',
-          'Medical',
-          'Team',
+          'Care',
           'Chat',
           'Community',
         ],
       );
     });
 
-    test('Home + Medical use the calm Cupertino-style icon set', () {
+    test('Home + Care use the calm Cupertino-style icon set', () {
       expect(TabScaffoldBar.destinations[0].icon, Icons.home_outlined);
       expect(TabScaffoldBar.destinations[0].selectedIcon, Icons.home);
       expect(
         TabScaffoldBar.destinations[1].icon,
-        Icons.local_hospital_outlined,
+        Icons.volunteer_activism_outlined,
       );
-      expect(TabScaffoldBar.destinations[1].selectedIcon, Icons.local_hospital);
+      expect(
+        TabScaffoldBar.destinations[1].selectedIcon,
+        Icons.volunteer_activism,
+      );
     });
 
-    test('Team + Chat use the diversity + chat glyphs', () {
-      expect(TabScaffoldBar.destinations[2].icon, Icons.diversity_3_outlined);
-      expect(TabScaffoldBar.destinations[2].selectedIcon, Icons.diversity_3);
-      expect(TabScaffoldBar.destinations[3].icon, Icons.chat_bubble_outline);
-      expect(TabScaffoldBar.destinations[3].selectedIcon, Icons.chat_bubble);
-    });
-
-    test('Community keeps forum_outlined / forum', () {
-      expect(TabScaffoldBar.destinations[4].icon, Icons.forum_outlined);
-      expect(TabScaffoldBar.destinations[4].selectedIcon, Icons.forum);
+    test('Chat + Community keep their glyphs', () {
+      expect(TabScaffoldBar.destinations[2].icon, Icons.chat_bubble_outline);
+      expect(TabScaffoldBar.destinations[2].selectedIcon, Icons.chat_bubble);
+      expect(TabScaffoldBar.destinations[3].icon, Icons.forum_outlined);
+      expect(TabScaffoldBar.destinations[3].selectedIcon, Icons.forum);
     });
   });
 
   group('TabScaffold — branch paths', () {
-    test('branch paths line up with the fixed five-tab order', () {
+    test('branch paths line up with the fixed four-tab order', () {
       expect(
         TabScaffold.tabBranchPaths,
         <String>[
           '/',
           '/medical',
-          '/team',
           '/chat',
           '/community',
         ],
@@ -133,23 +158,24 @@ void main() {
   });
 
   group('TabScaffoldBar — standalone widget', () {
-    testWidgets('always renders all five NavigationDestinations',
+    testWidgets('always renders all four NavigationDestinations',
         (WidgetTester tester) async {
       await _pumpBar(tester, currentIndex: 0);
 
       expect(find.byType(NavigationBar), findsOneWidget);
-      expect(find.byType(NavigationDestination), findsNWidgets(5));
+      expect(find.byType(NavigationDestination), findsNWidgets(4));
       expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Medical'), findsOneWidget);
-      expect(find.text('Team'), findsOneWidget);
+      expect(find.text('Care'), findsOneWidget);
       expect(find.text('Chat'), findsOneWidget);
       expect(find.text('Community'), findsOneWidget);
+      // The old Medical/Team labels are gone.
+      expect(find.text('Medical'), findsNothing);
+      expect(find.text('Team'), findsNothing);
     });
 
     testWidgets('forwards taps to onDestinationSelected by slot index',
         (WidgetTester tester) async {
-      // Bar order: [Home, Medical, Team, Chat, Community] → slots 0..4.
-      // With the fixed bar, the slot index IS the branch index.
+      // Bar order: [Home, Care, Chat, Community] → slots 0..3.
       int? tapped;
       await _pumpBar(
         tester,
@@ -158,9 +184,9 @@ void main() {
       );
 
       await tester.tap(find.byIcon(Icons.forum_outlined));
-      expect(tapped, 4);
+      expect(tapped, 3);
 
-      await tester.tap(find.byIcon(Icons.local_hospital_outlined));
+      await tester.tap(find.byIcon(Icons.volunteer_activism_outlined));
       expect(tapped, 1);
     });
 
@@ -206,23 +232,17 @@ void main() {
     testWidgets(
       'tapping each tab switches the shell branch',
       (WidgetTester tester) async {
-        final GoRouter router = await _pumpRouter(tester);
+        final GoRouter router = (await _pumpRouter(tester)).router;
 
         expect(find.byType(TabScaffold), findsOneWidget);
         expect(find.byType(HomeScreen), findsOneWidget);
         expect(_currentPath(router), '/');
 
-        // Medical — the tile hub (Phase 14.15).
-        await tester.tap(find.byIcon(Icons.local_hospital_outlined));
+        // Care — the tile hub (was "Medical").
+        await tester.tap(find.byIcon(Icons.volunteer_activism_outlined));
         await tester.pumpAndSettle();
         expect(_currentPath(router), '/medical');
         expect(find.byType(MedicalHubScreen), findsOneWidget);
-
-        // Team — the tile hub (Phase 14.26).
-        await tester.tap(find.byIcon(Icons.diversity_3_outlined));
-        await tester.pumpAndSettle();
-        expect(_currentPath(router), '/team');
-        expect(find.byType(CareTeamHubScreen), findsOneWidget);
 
         // Chat — direct landing.
         await tester.tap(find.byIcon(Icons.chat_bubble_outline));
@@ -246,7 +266,7 @@ void main() {
     testWidgets(
       're-tapping the active tab pops its branch back to the hub',
       (WidgetTester tester) async {
-        final GoRouter router = await _pumpRouter(tester);
+        final GoRouter router = (await _pumpRouter(tester)).router;
 
         // Land on the Chat branch and push a thread onto its navigator.
         router.go('/chat');
@@ -266,6 +286,95 @@ void main() {
           findsOneWidget,
           reason: 're-tapping the active tab resets the branch to its hub',
         );
+      },
+    );
+  });
+
+  group('TabScaffold — center voice button (#fb_1780962131440334)', () {
+    testWidgets(
+      'the bar always shows all four tabs AND the center mic',
+      (WidgetTester tester) async {
+        await _pumpRouter(tester);
+
+        // Four-tab invariant intact — no fifth destination.
+        expect(find.byType(NavigationDestination), findsNWidgets(4));
+        expect(find.text('Home'), findsOneWidget);
+        expect(find.text('Care'), findsOneWidget);
+        expect(find.text('Chat'), findsOneWidget);
+        expect(find.text('Community'), findsOneWidget);
+        // The mic is an additive docked center element, not a tab.
+        expect(find.byKey(TabScaffold.centerVoiceButtonKey), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'tapping the center mic starts a new chat and sends the spoken message',
+      (WidgetTester tester) async {
+        final ({GoRouter router, ChatRepository repo}) p = await _pumpRouter(
+          tester,
+          extraOverrides: <Override>[
+            voiceCaptureProvider.overrideWithValue(
+              const _FakeVoiceCapture('why is she pacing at night'),
+            ),
+            chatLLMBackendProvider.overrideWithValue(_FakeChatBackend()),
+            conversationListIdFactoryProvider.overrideWithValue(
+              () => 'voice-convo-1',
+            ),
+            conversationListClockProvider.overrideWithValue(
+              () => DateTime.utc(2026, 5, 30, 12),
+            ),
+          ],
+        );
+
+        await tester.tap(find.byKey(TabScaffold.centerVoiceButtonKey));
+        // Bounded pumps rather than pumpAndSettle — the assistant reply
+        // streams through CaptionFade, whose ticker keeps the frame loop
+        // busy (pumpAndSettle would time out). A handful of frames is
+        // enough for the capture future, navigation, and auto-send.
+        for (int i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+
+        // Navigated into the freshly-minted thread.
+        expect(_currentPath(p.router), '/chat/voice-convo-1');
+        expect(find.byType(ChatScreen), findsOneWidget);
+
+        // The spoken phrase was sent as the first user turn.
+        expect(
+          find.descendant(
+            of: find.byKey(ChatScreen.listKey),
+            matching: find.text('why is she pacing at night'),
+          ),
+          findsOneWidget,
+        );
+        final List<Message> persisted =
+            await p.repo.loadMessages('voice-convo-1');
+        expect(persisted.first.role, MessageRole.user);
+        expect(persisted.first.body, 'why is she pacing at night');
+      },
+    );
+
+    testWidgets(
+      'a blank capture is a no-op — no thread is created or navigated',
+      (WidgetTester tester) async {
+        final ({GoRouter router, ChatRepository repo}) p = await _pumpRouter(
+          tester,
+          extraOverrides: <Override>[
+            voiceCaptureProvider.overrideWithValue(
+              const _FakeVoiceCapture(null),
+            ),
+            conversationListIdFactoryProvider.overrideWithValue(
+              () => 'should-not-exist',
+            ),
+          ],
+        );
+
+        await tester.tap(find.byKey(TabScaffold.centerVoiceButtonKey));
+        await tester.pumpAndSettle();
+
+        // Stayed on Home; no conversation minted.
+        expect(_currentPath(p.router), '/');
+        expect(await p.repo.listConversations(), isEmpty);
       },
     );
   });

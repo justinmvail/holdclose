@@ -12,6 +12,8 @@ import '../../routing/router.dart' show CareblazersRoutes;
 import '../../seed/community_guidelines.dart';
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/form_validation.dart';
+import '../../widgets/path_header.dart';
 import 'community_guidelines_screen.dart';
 
 /// Caps mirror BUILD_SPEC.md §13's Worker-side validation (Phase 13.5
@@ -39,7 +41,14 @@ const int postComposeBodyMaxChars = 4000;
 /// the post detail screen also uses. Errors stay inline so the body
 /// text isn't lost to a tap-out.
 class PostComposeScreen extends ConsumerStatefulWidget {
-  const PostComposeScreen({super.key});
+  const PostComposeScreen({super.key, this.editPost});
+
+  /// When non-null the screen is in EDIT mode: the fields prefill from this
+  /// post, the title field locks (the Worker's `PATCH /posts/:id` only
+  /// accepts a new body), and Submit calls [ForumApiClient.updatePost]
+  /// instead of `createPost`, popping back to the post on success. Null is
+  /// the original new-post compose flow.
+  final ForumPost? editPost;
 
   static const Key titleFieldKey = Key('post-compose-title');
   static const Key bodyFieldKey = Key('post-compose-body');
@@ -64,9 +73,19 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
   bool _submitting = false;
   String? _errorMessage;
 
+  /// True when the screen was opened to edit an existing post.
+  bool get _isEdit => widget.editPost != null;
+
   @override
   void initState() {
     super.initState();
+    // Edit mode: prefill from the post being edited so the caregiver tweaks
+    // the existing text rather than retyping it.
+    final ForumPost? editing = widget.editPost;
+    if (editing != null) {
+      _titleController.text = editing.title;
+      _bodyController.text = editing.body;
+    }
     _titleController.addListener(_onTextChanged);
     _bodyController.addListener(_onTextChanged);
   }
@@ -87,12 +106,21 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
 
   Future<void> _submit() async {
     if (_submitting) return;
-    final FormState? form = _formKey.currentState;
-    if (form == null || !form.validate()) return;
+    // Validate on press (the button is always tappable) and highlight +
+    // scroll to the first empty field so the caregiver sees exactly what's
+    // missing — never a silently disabled "Post" with no explanation.
+    if (!validateAndScrollToFirstError(_formKey)) return;
 
     final String title = _titleController.text.trim();
     final String body = _bodyController.text.trim();
-    if (title.isEmpty || body.isEmpty) return;
+    // The title is locked in edit mode (the Worker only updates the body),
+    // so an edit just needs a non-empty body; a new post needs both.
+    if (body.isEmpty || (!_isEdit && title.isEmpty)) return;
+
+    if (_isEdit) {
+      await _submitEdit(body);
+      return;
+    }
 
     final bool acknowledged = await ref
         .read(guidelinesAcknowledgedProvider.future);
@@ -145,11 +173,51 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
     }
   }
 
+  /// Edit-mode submit: PATCH the post body, refresh the feed so its preview
+  /// updates, then pop back to the post detail (the detail re-fetches on
+  /// return). No guidelines ack — the caregiver is editing content they
+  /// already published.
+  Future<void> _submitEdit(String body) async {
+    final ForumPost editing = widget.editPost!;
+    setState(() {
+      _submitting = true;
+      _errorMessage = null;
+    });
+    try {
+      final ForumApiClient client = ref.read(forumApiClientProvider);
+      await client.updatePost(postId: editing.id, body: body);
+      if (!mounted) return;
+      unawaited(ref.read(communityFeedProvider.notifier).refresh());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post updated.')),
+      );
+      // Pop back to the detail screen the edit was launched from.
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.goNamed(CareblazersRoutes.community);
+      }
+    } on ForumApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _errorMessage = _humanizeError(e);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _errorMessage =
+            "Couldn't save the edit — check your connection and try again.";
+      });
+    }
+  }
+
   Future<bool?> _showAckSheet() {
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -163,7 +231,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
         .join(' · ');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: careblazersColors.accentDeep,
+        backgroundColor: context.cb.accentDeep,
         duration: const Duration(seconds: 8),
         content: Text(
           'You are not alone. $hotlines',
@@ -192,24 +260,33 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
+    final String submitIdle = _isEdit ? 'Save' : 'Post';
+    final String submitBusy = _isEdit ? 'Saving…' : 'Posting…';
+    // The button stays tappable even with empty fields — pressing it runs
+    // validation and surfaces the inline "Add a title" / "Add some detail"
+    // errors. It only goes inert mid-submit so a double-tap can't double-post.
+    final Widget submitAction = TextButton(
+      key: PostComposeScreen.submitButtonKey,
+      onPressed: _submitting ? null : _submit,
+      child: Text(
+        _submitting ? submitBusy : submitIdle,
+        style: textTheme.labelLarge?.copyWith(
+          color: _submitting
+              ? context.cb.text.withValues(alpha: 0.3)
+              : context.cb.cta,
+        ),
+      ),
+    );
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
+      // The title + Back live in the body PathHeader; this minimal bar only
+      // suppresses the auto back-arrow (the PathHeader owns the labeled Back
+      // control, and its trailing slot carries the Post action).
       appBar: AppBar(
-        title: const Text('New post'),
-        actions: <Widget>[
-          TextButton(
-            key: PostComposeScreen.submitButtonKey,
-            onPressed: _canSubmit() ? _submit : null,
-            child: Text(
-              _submitting ? 'Posting…' : 'Post',
-              style: textTheme.labelLarge?.copyWith(
-                color: _canSubmit()
-                    ? careblazersColors.cta
-                    : careblazersColors.text.withValues(alpha: 0.3),
-              ),
-            ),
-          ),
-        ],
+        automaticallyImplyLeading: false,
+        backgroundColor: context.cb.background,
+        elevation: 0,
+        actions: const <Widget>[],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -219,6 +296,19 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
+                PathHeader(
+                  breadcrumbs: <PathHeaderCrumb>[
+                    const PathHeaderCrumb(label: 'Home', route: '/'),
+                    const PathHeaderCrumb(
+                        label: 'Community', route: '/community'),
+                    PathHeaderCrumb(label: _isEdit ? 'Edit post' : 'New post'),
+                  ],
+                  title: _isEdit ? 'Edit post' : 'New post',
+                  backLabel: 'Back to Community',
+                  leadingIcon: Icons.edit_outlined,
+                  trailing: submitAction,
+                ),
+                const SizedBox(height: 20),
                 if (_errorMessage != null) ...<Widget>[
                   _ErrorBanner(message: _errorMessage!),
                   const SizedBox(height: 16),
@@ -228,6 +318,12 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
                   child: TextFormField(
                     key: PostComposeScreen.titleFieldKey,
                     controller: _titleController,
+                    // The title can't change on an edit — the Worker's
+                    // `PATCH /posts/:id` only updates the body. Lock it so the
+                    // caregiver isn't misled into editing a field that won't
+                    // save.
+                    readOnly: _isEdit,
+                    enabled: !_isEdit,
                     maxLength: postComposeTitleMaxChars,
                     maxLengthEnforcement: MaxLengthEnforcement.enforced,
                     decoration: const InputDecoration(
@@ -238,11 +334,23 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
                     textInputAction: TextInputAction.next,
                   ),
                 ),
-                _CounterRow(
-                  counterKey: PostComposeScreen.titleCounterKey,
-                  current: _titleController.text.characters.length,
-                  cap: postComposeTitleMaxChars,
-                ),
+                if (_isEdit)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      "The title stays as posted — edit the body below.",
+                      style: textTheme.bodyMedium?.copyWith(
+                        fontSize: 13,
+                        color: context.cb.text.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  )
+                else
+                  _CounterRow(
+                    counterKey: PostComposeScreen.titleCounterKey,
+                    current: _titleController.text.characters.length,
+                    cap: postComposeTitleMaxChars,
+                  ),
                 const SizedBox(height: 24),
                 _LabeledField(
                   label: 'Body',
@@ -279,17 +387,10 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
     );
   }
 
-  bool _canSubmit() {
-    if (_submitting) return false;
-    final String title = _titleController.text.trim();
-    final String body = _bodyController.text.trim();
-    return title.isNotEmpty && body.isNotEmpty;
-  }
-
   static String? _validateTitle(String? value) {
     final String trimmed = (value ?? '').trim();
     if (trimmed.isEmpty) {
-      return 'Add a short title — even a few words helps.';
+      return 'Add a title — even a few words helps.';
     }
     return null;
   }
@@ -297,7 +398,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
   static String? _validateBody(String? value) {
     final String trimmed = (value ?? '').trim();
     if (trimmed.isEmpty) {
-      return 'Add the moment you want to share.';
+      return 'Add some detail — tell us the moment.';
     }
     return null;
   }
@@ -318,7 +419,7 @@ class _LabeledField extends StatelessWidget {
         Text(
           label,
           style: textTheme.labelLarge?.copyWith(
-            color: careblazersColors.primary,
+            color: context.cb.primary,
           ),
         ),
         const SizedBox(height: 8),
@@ -355,8 +456,8 @@ class _CounterRow extends StatelessWidget {
             style: textTheme.bodyMedium?.copyWith(
               fontSize: 13,
               color: warn
-                  ? careblazersColors.accentDeep
-                  : careblazersColors.text.withValues(alpha: 0.55),
+                  ? context.cb.accentDeep
+                  : context.cb.text.withValues(alpha: 0.55),
             ),
           ),
         ],
@@ -382,13 +483,13 @@ class _GuidelinesLink extends StatelessWidget {
         child: Row(
           children: <Widget>[
             Icon(Icons.menu_book_outlined,
-                size: 20, color: careblazersColors.link),
+                size: 20, color: context.cb.link),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
                 'Read community guidelines',
                 style: textTheme.bodyMedium?.copyWith(
-                  color: careblazersColors.link,
+                  color: context.cb.link,
                   decoration: TextDecoration.underline,
                 ),
               ),
@@ -412,21 +513,21 @@ class _ErrorBanner extends StatelessWidget {
       key: PostComposeScreen.errorBannerKey,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: careblazersColors.error.withValues(alpha: 0.08),
+        color: context.cb.error.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: careblazersColors.error.withValues(alpha: 0.3)),
+        border: Border.all(color: context.cb.error.withValues(alpha: 0.3)),
       ),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(Icons.error_outline, color: careblazersColors.error, size: 20),
+          Icon(Icons.error_outline, color: context.cb.error, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.error,
+                color: context.cb.error,
               ),
             ),
           ),
@@ -458,7 +559,7 @@ class _FirstPostAckSheet extends StatelessWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: careblazersColors.text.withValues(alpha: 0.18),
+                color: context.cb.text.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -494,7 +595,7 @@ class _FirstPostAckSheet extends StatelessWidget {
                 child: ElevatedButton(
                   key: PostComposeScreen.ackAcceptKey,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: careblazersColors.cta,
+                    backgroundColor: context.cb.cta,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () => Navigator.of(context).pop(true),

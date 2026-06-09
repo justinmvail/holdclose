@@ -1,131 +1,118 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:share_plus/share_plus.dart';
 
-import '../../models/care_circle_membership.dart';
-import '../../models/caregiver.dart';
-import '../../providers/care_circle_provider.dart';
-import '../../providers/link_launcher_provider.dart';
+import '../../models/forum.dart';
+import '../../providers/my_forum_profile_provider.dart';
+import '../../providers/sync_state_provider.dart';
+import '../../services/circle_invite_link.dart';
+import '../../services/forum_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
 
-part 'care_circle_screen.g.dart';
+/// Share seam for the "Invite by link" action — pulled out as a top-level
+/// hook so widget tests stub the OS share sheet (which would otherwise
+/// hang the test harness) and assert the built message + link. Production
+/// hands off to `share_plus`.
+@visibleForTesting
+Future<void> Function(String message) shareCircleInvite =
+    (String message) => Share.share(message);
 
-/// Everything the roster renders, bundled so the screen consumes a single
-/// [AsyncValue] (TASKS.md Phase 14.27).
-@immutable
-class CareCircleView {
-  const CareCircleView({required this.members});
+/// The ACTUAL care-circle members from the backend — the synced people who
+/// joined via @username / QR, each with their real handle. This is the one
+/// and only "People" list (2026-06-07: the legacy local caregiver roster +
+/// fake "Invite caregiver" form were removed; the backend circle is now the
+/// single source of truth). Fail-safe: returns empty on any error / offline
+/// / not-in-a-circle / unconfigured backend, so the screen degrades to a
+/// clean empty state with the connect actions rather than crashing.
+final syncedCircleMembersProvider =
+    FutureProvider.autoDispose<List<CircleMemberDto>>((Ref ref) async {
+  // Only reach the live backend when one is actually configured — tests +
+  // local-only/demo builds skip it entirely (never touch the real client).
+  if (!forumBackendConfigured) return const <CircleMemberDto>[];
+  try {
+    final List<CircleDto> circles =
+        await ref.watch(forumApiClientProvider).listCircles();
+    if (circles.isEmpty) return const <CircleMemberDto>[];
+    return circles.first.members;
+  } catch (_) {
+    return const <CircleMemberDto>[];
+  }
+});
 
-  final List<CareCircleMember> members;
-
-  bool get isEmpty => members.isEmpty;
-}
-
-/// Bundles the care-circle members for [CareCircleScreen] (TASKS.md Phase
-/// 14.27).
+/// Care Circle "People" roster at `/team/circle` (BUILD_SPEC.md §5.14).
 ///
-/// Watches the [CareCircle] notifier (not the repository directly) so an
-/// add / accept / edit / remove saved through the notifier refreshes the
-/// view without a manual invalidate. Tests override this provider
-/// wholesale for the display + golden cases, and override
-/// [careCircleRepositoryProvider] with an in-memory repo for the
-/// edit-through-the-notifier cases.
-@riverpod
-Future<CareCircleView> careCircleView(Ref ref) async {
-  final List<CareCircleMember> members =
-      await ref.watch(careCircleProvider.future);
-  return CareCircleView(members: members);
-}
-
-/// Care Circle roster at `/team/circle` (TASKS.md Phase 14.27,
-/// BUILD_SPEC.md §5.14).
-///
-/// A [PathHeader] (`Home › Care Team › Care Circle`, back to Care Team)
-/// with an "Invite caregiver" header action sits above the loved one's
-/// caregivers. Each row carries an avatar (initials fallback), the
-/// display name, a role chip, a permission badge (Owner / Editor /
-/// Viewer), a tap-to-call button when a phone is on file, and a
-/// long-press menu to edit the role + permission. The empty state nudges
-/// the lone caregiver to invite someone to share the load.
+/// A [PathHeader] (`Home › Care Circle › Care Circle`) sits above the
+/// connect strip (set your @username, show your QR, scan to add, add by
+/// @username) and the list of people actually in your backend circle. Each
+/// row shows an avatar initial, the member's `@username` (falling back to
+/// their display name), and an Owner / You badge where the backend exposes
+/// it. There is no "invite pending" concept — a backend join is an
+/// immediate, active membership. The empty state nudges the lone caregiver
+/// to connect someone via the strip above.
 class CareCircleScreen extends ConsumerWidget {
   const CareCircleScreen({super.key});
 
   static const Key listKey = Key('care-circle-list');
   static const Key emptyStateKey = Key('care-circle-empty');
-  static const Key emptyCtaKey = Key('care-circle-empty-cta');
-  static const Key inviteActionKey = Key('care-circle-invite');
 
-  /// Stable per-row keys derived from the caregiver id so tests target a
-  /// node rather than a copy string.
-  static Key rowKey(String caregiverId) => Key('care-circle-row-$caregiverId');
-  static Key callButtonKey(String caregiverId) =>
-      Key('care-circle-call-$caregiverId');
-  static Key emailButtonKey(String caregiverId) =>
-      Key('care-circle-email-$caregiverId');
-  static Key permissionBadgeKey(String caregiverId) =>
-      Key('care-circle-permission-$caregiverId');
+  // Care-circle connect affordances (2026-06-06).
+  static const Key usernameActionKey = Key('care-circle-username');
+  static const Key showQrActionKey = Key('care-circle-show-qr');
+  static const Key scanActionKey = Key('care-circle-scan');
+  static const Key inviteByLinkActionKey = Key('care-circle-invite-by-link');
+  static const Key addByUsernameActionKey = Key('care-circle-add-by-username');
+  static const Key addByUsernameFieldKey = Key('care-circle-add-username-field');
+  static const Key addByUsernameSubmitKey =
+      Key('care-circle-add-by-username-submit');
 
-  // Long-press edit sheet (role + permission + remove).
-  static const Key editSheetKey = Key('care-circle-edit-sheet');
-  static const Key editSaveKey = Key('care-circle-edit-save');
-  static const Key editRemoveKey = Key('care-circle-edit-remove');
-  static const Key removeConfirmKey = Key('care-circle-remove-confirm');
-  static const Key removeCancelKey = Key('care-circle-remove-cancel');
-  static Key editRoleOptionKey(CaregiverRole role) =>
-      Key('care-circle-edit-role-${role.name}');
-  static Key editPermissionOptionKey(PermissionLevel level) =>
-      Key('care-circle-edit-permission-${level.name}');
+  /// Stable per-row key derived from the member's profile id so tests
+  /// target a node rather than a copy string.
+  static Key rowKey(String profileId) => Key('care-circle-row-$profileId');
 
-  static const String _inviteRoute = '/team/circle/invite';
+  static const String _usernameRoute = '/team/circle/username';
+  static const String _qrRoute = '/team/circle/qr';
+  static const String _scanRoute = '/team/circle/scan';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<CareCircleView> async = ref.watch(careCircleViewProvider);
+    final AsyncValue<List<CircleMemberDto>> async =
+        ref.watch(syncedCircleMembersProvider);
+    final List<CircleMemberDto> members =
+        async.asData?.value ?? const <CircleMemberDto>[];
+    final String? myProfileId = ref.watch(myForumProfileIdProvider);
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: ListView(
+          key: CareCircleScreen.listKey,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: _InviteAction(
-                      onPressed: () => context.push(_inviteRoute),
-                    ),
-                  ),
-                  const PathHeader(
-                    breadcrumbs: <PathHeaderCrumb>[
-                      PathHeaderCrumb(label: 'Home', route: '/'),
-                      PathHeaderCrumb(label: 'Care Team', route: '/team'),
-                      PathHeaderCrumb(label: 'Care Circle'),
-                    ],
-                    title: 'Care Circle',
-                    backLabel: 'Back to Care Team',
-                    leadingIcon: Icons.diversity_3_outlined,
-                  ),
-                ],
-              ),
+            const PathHeader(
+              breadcrumbs: <PathHeaderCrumb>[
+                PathHeaderCrumb(label: 'Home', route: '/'),
+                PathHeaderCrumb(label: 'Care Circle', route: '/team'),
+                PathHeaderCrumb(label: 'Care Circle'),
+              ],
+              title: 'Care Circle',
+              backLabel: 'Back to Care Circle',
+              leadingIcon: Icons.diversity_3_outlined,
             ),
-            Expanded(
-              child: async.when(
-                loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-                data: (CareCircleView view) {
-                  if (view.isEmpty) return const _EmptyState();
-                  return _MemberList(members: view.members);
-                },
-              ),
-            ),
+            const SizedBox(height: 8),
+            const _ConnectActions(),
+            const SizedBox(height: 20),
+            if (members.isEmpty)
+              const _EmptyState()
+            else
+              for (final CircleMemberDto m in members)
+                _MemberRow(
+                  member: m,
+                  isSelf: myProfileId != null && m.profileId == myProfileId,
+                ),
           ],
         ),
       ),
@@ -133,209 +120,401 @@ class CareCircleScreen extends ConsumerWidget {
   }
 }
 
-class _InviteAction extends StatelessWidget {
-  const _InviteAction({required this.onPressed});
+/// The care-circle connect strip (2026-06-06): set your @username, show
+/// your invite QR, scan a QR to join, and add a caregiver by their
+/// @handle.
+class _ConnectActions extends ConsumerWidget {
+  const _ConnectActions();
 
-  final VoidCallback onPressed;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: <Widget>[
+        _ConnectChip(
+          key: CareCircleScreen.usernameActionKey,
+          icon: Icons.alternate_email,
+          label: 'Set your @username',
+          onTap: () => context.push(CareCircleScreen._usernameRoute),
+        ),
+        _ConnectChip(
+          key: CareCircleScreen.showQrActionKey,
+          icon: Icons.qr_code_2,
+          label: 'Show my QR',
+          onTap: () => context.push(CareCircleScreen._qrRoute),
+        ),
+        _ConnectChip(
+          key: CareCircleScreen.scanActionKey,
+          icon: Icons.qr_code_scanner,
+          label: 'Scan to add',
+          onTap: () => context.push(CareCircleScreen._scanRoute),
+        ),
+        // Invite by LINK (2026-06-08): mints an invite + shares the
+        // Worker's public /join/<token> link. Always shown alongside the
+        // QR action; the tap handler degrades calmly (a SnackBar) when the
+        // backend is unconfigured / unreachable, matching the QR path
+        // rather than offering a dead link.
+        _ConnectChip(
+          key: CareCircleScreen.inviteByLinkActionKey,
+          icon: Icons.link,
+          label: 'Invite by link',
+          onTap: () => _inviteByLink(context, ref),
+        ),
+        _ConnectChip(
+          key: CareCircleScreen.addByUsernameActionKey,
+          icon: Icons.person_search_outlined,
+          label: 'Add by @username',
+          onTap: () => _openAddByUsername(context, ref),
+        ),
+      ],
+    );
+  }
+
+  /// Mint an invite for the caller's circle (creating one if they have
+  /// none, same as the QR path) and open the OS share sheet with a warm
+  /// message + the `<origin>/join/<token>` link. Fail-safe: a backend /
+  /// network error shows a calm SnackBar, never a crash.
+  Future<void> _inviteByLink(BuildContext context, WidgetRef ref) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ForumApiClient client = ref.read(forumApiClientProvider);
+    // No real backend origin = no shareable link. Degrade calmly rather
+    // than sharing a dead, relative URL (local-only / demo builds).
+    if (client.baseUrl.trim().isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Connect to share an invite link. Use Show my QR for now.',
+          ),
+        ),
+      );
+      return;
+    }
+    try {
+      // Resolve (or create) the caller's circle — mirrors circle_qr_screen.
+      final List<CircleDto> circles = await client.listCircles();
+      final CircleDto circle;
+      if (circles.isEmpty) {
+        final ForumProfile me = await ref.read(myForumProfileProvider.future);
+        circle = await client.createCircle(circleNameForOwner(me));
+      } else {
+        circle = circles.first;
+      }
+      // Bind active circle (best-effort, fire-and-forget) like the QR path.
+      unawaited(_bindCircle(ref, circle.id));
+      final CircleInviteDto invite = await client.createInvite(circle.id);
+      // The shareable origin is the forum base WITHOUT the /api/v1 suffix.
+      final String link = circleInviteLink(
+        origin: client.baseUrl,
+        token: invite.token,
+      );
+      await shareCircleInvite(
+        'Join my care circle on Careblazers: $link',
+      );
+    } on ForumApiException catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            "We couldn't create your invite link. Please try again.",
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _bindCircle(WidgetRef ref, String circleId) async {
+    try {
+      await ref.read(syncStateStoreProvider).setCircleId(circleId);
+    } catch (_) {
+      // Non-fatal — bootstrap re-resolves the active circle next launch.
+    }
+  }
+
+  Future<void> _openAddByUsername(BuildContext context, WidgetRef ref) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.cb.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext sheetContext) => const _AddByUsernameSheet(),
+    );
+  }
+}
+
+class _ConnectChip extends StatelessWidget {
+  const _ConnectChip({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Semantics(
       button: true,
-      label: 'Invite caregiver. Open the invite form.',
-      child: TextButton.icon(
-        key: CareCircleScreen.inviteActionKey,
-        onPressed: onPressed,
-        icon: Icon(Icons.person_add_alt_1_outlined, color: careblazersColors.cta),
-        label: Text(
-          'Invite caregiver',
-          style: textTheme.labelLarge?.copyWith(color: careblazersColors.cta),
-        ),
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: context.cb.surfaceWarm,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: context.cb.primarySoft),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, size: 18, color: context.cb.cta),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: context.cb.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _MemberList extends StatelessWidget {
-  const _MemberList({required this.members});
+/// Bottom sheet that resolves a caregiver by their `@username`
+/// (`GET /profiles/by-username/:username`) and, on a hit, mints a circle
+/// invite they can redeem. Reuses the forum client — no new auth.
+class _AddByUsernameSheet extends ConsumerStatefulWidget {
+  const _AddByUsernameSheet();
 
-  final List<CareCircleMember> members;
+  @override
+  ConsumerState<_AddByUsernameSheet> createState() =>
+      _AddByUsernameSheetState();
+}
+
+class _AddByUsernameSheetState extends ConsumerState<_AddByUsernameSheet> {
+  final TextEditingController _controller = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    final String handle = _controller.text.toLowerCase().trim();
+    if (handle.isEmpty) {
+      setState(() => _error = 'Enter a username.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ForumApiClient client = ref.read(forumApiClientProvider);
+    try {
+      final ForumPublicProfile found =
+          await client.getProfileByUsername(handle);
+      // Ensure the caller has a circle, then mint an invite to share.
+      final List<CircleDto> circles = await client.listCircles();
+      final CircleDto circle;
+      if (circles.isEmpty) {
+        final ForumProfile me = await ref.read(myForumProfileProvider.future);
+        circle = await client.createCircle(circleNameForOwner(me));
+      } else {
+        circle = circles.first;
+      }
+      // Server-authoritative sync: bind this as the active circle id
+      // (best-effort, fire-and-forget) so the app syncs through it without
+      // blocking the invite flow.
+      unawaited(_bindCircle(circle.id));
+      await client.createInvite(circle.id);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Invite ready for @${found.username ?? handle}. '
+            'Share your QR so they can join.',
+          ),
+        ),
+      );
+    } on ForumApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = e.error == 'profile_not_found'
+            ? 'No caregiver found with that username.'
+            : "We couldn't reach the directory. Please try again.";
+      });
+    }
+  }
+
+  Future<void> _bindCircle(String circleId) async {
+    try {
+      await ref.read(syncStateStoreProvider).setCircleId(circleId);
+    } catch (_) {
+      // Non-fatal — bootstrap re-resolves the active circle next launch.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      key: CareCircleScreen.listKey,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      children: <Widget>[
-        for (final CareCircleMember member in members)
-          _MemberRow(member: member),
-      ],
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Add by @username',
+            style: textTheme.titleLarge?.copyWith(
+              color: context.cb.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            key: CareCircleScreen.addByUsernameFieldKey,
+            controller: _controller,
+            autocorrect: false,
+            enableSuggestions: false,
+            onSubmitted: (_) => _submit(),
+            decoration: const InputDecoration(
+              prefixText: '@',
+              labelText: 'Their username',
+              hintText: 'sarah_h',
+            ),
+          ),
+          if (_error != null) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: textTheme.bodyMedium?.copyWith(color: context.cb.cta),
+            ),
+          ],
+          const SizedBox(height: 24),
+          ElevatedButton(
+            key: CareCircleScreen.addByUsernameSubmitKey,
+            onPressed: _busy ? null : _submit,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+              backgroundColor: context.cb.cta,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(
+              _busy ? 'Looking…' : 'Find caregiver',
+              style: textTheme.labelLarge?.copyWith(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _MemberRow extends ConsumerWidget {
-  const _MemberRow({required this.member});
+/// One person in the backend circle. Renders an avatar initial, their
+/// `@username` (fallback display name), and an Owner / You badge.
+class _MemberRow extends StatelessWidget {
+  const _MemberRow({required this.member, required this.isSelf});
 
-  final CareCircleMember member;
+  final CircleMemberDto member;
+  final bool isSelf;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final Caregiver caregiver = member.caregiver;
-    final String? phone = caregiver.phone;
-    final String? email = caregiver.email;
+    final String handle =
+        member.username != null ? '@${member.username}' : member.displayName;
+    final bool isOwner = member.role == 'owner';
 
     return Padding(
+      key: CareCircleScreen.rowKey(member.profileId),
       padding: const EdgeInsets.only(bottom: 12),
       child: Semantics(
-        button: true,
-        label: '${caregiver.displayName}, ${_roleLabel(caregiver.role)}, '
-            '${_permissionLabel(member.membership.permissionLevel)}.'
-            '${member.isPending ? ' Invite pending.' : ''} '
-            'Long-press to edit role and permission.',
+        label: '$handle'
+            '${isOwner ? ', circle owner' : ''}'
+            '${isSelf ? ', you' : ''}.',
         child: Material(
-          color: careblazersColors.surfaceWarm,
+          color: context.cb.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            key: CareCircleScreen.rowKey(caregiver.id),
-            borderRadius: BorderRadius.circular(16),
-            onLongPress: () => _openEditMenu(context, ref),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: <Widget>[
-                  _Avatar(caregiver: caregiver),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          caregiver.displayName,
-                          style: textTheme.bodyLarge?.copyWith(
-                            color: careblazersColors.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                _Avatar(seed: handle),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        handle,
+                        style: textTheme.bodyLarge?.copyWith(
+                          color: context.cb.primary,
+                          fontWeight: FontWeight.w700,
                         ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (isOwner || isSelf) ...<Widget>[
                         const SizedBox(height: 6),
                         Wrap(
                           spacing: 8,
                           runSpacing: 6,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: <Widget>[
-                            _RoleChip(role: caregiver.role),
-                            _PermissionBadge(
-                              caregiverId: caregiver.id,
-                              level: member.membership.permissionLevel,
-                            ),
-                            if (member.isPending) const _PendingTag(),
+                            if (isOwner) const _Tag(label: 'Owner'),
+                            if (isSelf) const _Tag(label: 'You'),
                           ],
                         ),
                       ],
-                    ),
+                    ],
                   ),
-                  if (email != null && email.trim().isNotEmpty)
-                    Semantics(
-                      button: true,
-                      label: 'Email ${caregiver.displayName}.',
-                      child: IconButton(
-                        key: CareCircleScreen.emailButtonKey(caregiver.id),
-                        icon: const Icon(Icons.mail_outline),
-                        color: careblazersColors.link,
-                        tooltip: 'Email ${caregiver.displayName}',
-                        onPressed: () => ref
-                            .read(linkLauncherProvider)
-                            .launch(_mailtoUri(email)),
-                      ),
-                    ),
-                  if (phone != null && phone.trim().isNotEmpty)
-                    Semantics(
-                      button: true,
-                      label: 'Call ${caregiver.displayName}.',
-                      child: IconButton(
-                        key: CareCircleScreen.callButtonKey(caregiver.id),
-                        icon: const Icon(Icons.call),
-                        color: careblazersColors.cta,
-                        tooltip: 'Call ${caregiver.displayName}',
-                        onPressed: () =>
-                            ref.read(linkLauncherProvider).launch(_telUri(phone)),
-                      ),
-                    ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
       ),
     );
   }
-
-  Future<void> _openEditMenu(BuildContext context, WidgetRef ref) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: careblazersColors.background,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext sheetContext) => _EditMemberSheet(member: member),
-    );
-  }
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.caregiver});
+  const _Avatar({required this.seed});
 
-  final Caregiver caregiver;
+  final String seed;
 
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final String? path = caregiver.avatarPath;
-    final bool hasPhoto = path != null && File(path).existsSync();
-
     return CircleAvatar(
       radius: 24,
-      backgroundColor: careblazersColors.primarySoft.withValues(alpha: 0.14),
-      backgroundImage: hasPhoto ? FileImage(File(path)) : null,
-      child: hasPhoto
-          ? null
-          : Text(
-              _initials(caregiver.displayName),
-              style: textTheme.titleLarge?.copyWith(
-                color: careblazersColors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-    );
-  }
-}
-
-class _RoleChip extends StatelessWidget {
-  const _RoleChip({required this.role});
-
-  final CaregiverRole role;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: careblazersColors.primarySoft.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
-      ),
+      backgroundColor: context.cb.primarySoft.withValues(alpha: 0.14),
       child: Text(
-        _roleLabel(role),
-        style: textTheme.bodyMedium?.copyWith(
-          color: careblazersColors.primarySoft,
+        _initial(seed),
+        style: textTheme.titleLarge?.copyWith(
+          color: context.cb.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -343,46 +522,26 @@ class _RoleChip extends StatelessWidget {
   }
 }
 
-class _PermissionBadge extends StatelessWidget {
-  const _PermissionBadge({required this.caregiverId, required this.level});
+class _Tag extends StatelessWidget {
+  const _Tag({required this.label});
 
-  final String caregiverId;
-  final PermissionLevel level;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final Color color = _permissionColor(level);
     return Container(
-      key: CareCircleScreen.permissionBadgeKey(caregiverId),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: context.cb.primarySoft.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color),
       ),
       child: Text(
-        _permissionLabel(level),
+        label,
         style: textTheme.bodyMedium?.copyWith(
-          color: color,
+          color: context.cb.primarySoft,
           fontWeight: FontWeight.w700,
         ),
-      ),
-    );
-  }
-}
-
-class _PendingTag extends StatelessWidget {
-  const _PendingTag();
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Text(
-      'Invite pending',
-      style: textTheme.bodyMedium?.copyWith(
-        color: careblazersColors.text,
-        fontStyle: FontStyle.italic,
       ),
     );
   }
@@ -396,295 +555,23 @@ class _EmptyState extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Padding(
       key: CareCircleScreen.emptyStateKey,
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+      padding: const EdgeInsets.fromLTRB(8, 24, 8, 24),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
           Icon(
             Icons.diversity_3_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
-            'Your care circle is just you right now. Invite someone to '
-            'share the load.',
-            style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+            'No one else in your circle yet. Set your @username, then share '
+            'your QR or add a caregiver by their handle to share the load.',
+            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 32),
-          Semantics(
-            button: true,
-            label: 'Invite caregiver. Open the invite form.',
-            child: ElevatedButton.icon(
-              key: CareCircleScreen.emptyCtaKey,
-              onPressed: () => context.push('/team/circle/invite'),
-              icon: const Icon(Icons.person_add_alt_1, color: Colors.white),
-              label: Text(
-                'Invite caregiver',
-                style: textTheme.labelLarge?.copyWith(color: Colors.white),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: careblazersColors.cta,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(56),
-              ),
-            ),
-          ),
         ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Edit role + permission (long-press menu)
-// ---------------------------------------------------------------------------
-
-/// Bottom sheet that edits a member's role + permission (TASKS.md Phase
-/// 14.27). Opened on long-press of a roster row. Save writes both changes
-/// through the [CareCircle] notifier — which refreshes the roster — then
-/// pops.
-class _EditMemberSheet extends ConsumerStatefulWidget {
-  const _EditMemberSheet({required this.member});
-
-  final CareCircleMember member;
-
-  @override
-  ConsumerState<_EditMemberSheet> createState() => _EditMemberSheetState();
-}
-
-class _EditMemberSheetState extends ConsumerState<_EditMemberSheet> {
-  late CaregiverRole _role = widget.member.caregiver.role;
-  late PermissionLevel _level = widget.member.membership.permissionLevel;
-  bool _submitting = false;
-
-  Future<void> _save() async {
-    if (_submitting) return;
-    setState(() => _submitting = true);
-
-    final CareCircle notifier = ref.read(careCircleProvider.notifier);
-    await notifier.editRole(widget.member.caregiver.id, _role);
-    await notifier.editPermission(widget.member.membership.id, _level);
-
-    if (!mounted) return;
-    Navigator.of(context).pop();
-  }
-
-  /// Confirm, then drop the caregiver from the circle through the
-  /// [CareCircle] notifier (which cascades to their membership and
-  /// refreshes the roster), then pop the sheet. No-op on cancel.
-  Future<void> _remove() async {
-    if (_submitting) return;
-
-    final bool confirmed = await showDialog<bool>(
-          context: context,
-          builder: (BuildContext dialogContext) => AlertDialog(
-            title: Text('Remove ${widget.member.caregiver.displayName}?'),
-            content: const Text(
-              'They will lose access to this care circle. You can invite '
-              'them again later.',
-            ),
-            actions: <Widget>[
-              TextButton(
-                key: CareCircleScreen.removeCancelKey,
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                key: CareCircleScreen.removeConfirmKey,
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(
-                  'Remove',
-                  style: TextStyle(color: careblazersColors.accentDeep),
-                ),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!confirmed) return;
-
-    setState(() => _submitting = true);
-    await ref
-        .read(careCircleProvider.notifier)
-        .removeMember(widget.member.caregiver.id);
-
-    if (!mounted) return;
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      key: CareCircleScreen.editSheetKey,
-      padding: EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        20 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            'Edit ${widget.member.caregiver.displayName}',
-            style: textTheme.titleLarge?.copyWith(
-              color: careblazersColors.primary,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Role',
-            style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.primary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              for (final CaregiverRole role in CaregiverRole.values)
-                _ChoiceChip(
-                  key: CareCircleScreen.editRoleOptionKey(role),
-                  label: _roleLabel(role),
-                  selected: role == _role,
-                  onTap: () => setState(() => _role = role),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Permission',
-            style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.primary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              for (final PermissionLevel level in PermissionLevel.values)
-                _ChoiceChip(
-                  key: CareCircleScreen.editPermissionOptionKey(level),
-                  label: _permissionLabel(level),
-                  selected: level == _level,
-                  onTap: () => setState(() => _level = level),
-                ),
-            ],
-          ),
-          const SizedBox(height: 28),
-          ElevatedButton(
-            key: CareCircleScreen.editSaveKey,
-            onPressed: _submitting ? null : _save,
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size.fromHeight(56),
-              backgroundColor: careblazersColors.cta,
-              foregroundColor: Colors.white,
-            ),
-            child: Text(
-              _submitting ? 'Saving…' : 'Save changes',
-              style: textTheme.labelLarge?.copyWith(color: Colors.white),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: Semantics(
-              button: true,
-              label: 'Remove ${widget.member.caregiver.displayName} from the '
-                  'care circle.',
-              child: TextButton.icon(
-                key: CareCircleScreen.editRemoveKey,
-                onPressed: _submitting ? null : _remove,
-                icon: Icon(
-                  Icons.person_remove_alt_1_outlined,
-                  color: careblazersColors.accentDeep,
-                ),
-                label: Text(
-                  'Remove from circle',
-                  style: textTheme.labelLarge
-                      ?.copyWith(color: careblazersColors.accentDeep),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChoiceChip extends StatelessWidget {
-  const _ChoiceChip({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    final Color border =
-        selected ? careblazersColors.cta : careblazersColors.primarySoft;
-    final Color fill = selected
-        ? careblazersColors.cta.withValues(alpha: 0.12)
-        : Colors.transparent;
-    final Color fg = selected ? careblazersColors.cta : careblazersColors.text;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-          decoration: BoxDecoration(
-            color: fill,
-            border: Border.all(color: border, width: selected ? 2 : 1),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            label,
-            style: textTheme.bodyMedium?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load your care circle.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
-          textAlign: TextAlign.center,
-        ),
       ),
     );
   }
@@ -694,74 +581,10 @@ class _ErrorView extends StatelessWidget {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Up to two uppercase initials from [displayName]; falls back to `?` for
-/// an empty name.
-String _initials(String displayName) {
-  final List<String> parts = displayName
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((String p) => p.isNotEmpty)
-      .toList();
-  if (parts.isEmpty) return '?';
-  if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-  return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
-      .toUpperCase();
+/// Single uppercase initial from a `@handle` or display name; `?` when
+/// empty. Strips a leading `@` so an `@sarah` handle reads `S`.
+String _initial(String value) {
+  final String trimmed = value.replaceFirst('@', '').trim();
+  if (trimmed.isEmpty) return '?';
+  return trimmed.substring(0, 1).toUpperCase();
 }
-
-String _roleLabel(CaregiverRole role) {
-  switch (role) {
-    case CaregiverRole.primary:
-      return 'Primary caregiver';
-    case CaregiverRole.spouse:
-      return 'Spouse';
-    case CaregiverRole.child:
-      return 'Child';
-    case CaregiverRole.sibling:
-      return 'Sibling';
-    case CaregiverRole.aide:
-      return 'Aide';
-    case CaregiverRole.agency:
-      return 'Agency';
-    case CaregiverRole.friend:
-      return 'Friend';
-    case CaregiverRole.other:
-      return 'Other';
-  }
-}
-
-String _permissionLabel(PermissionLevel level) {
-  switch (level) {
-    case PermissionLevel.owner:
-      return 'Owner';
-    case PermissionLevel.editor:
-      return 'Editor';
-    case PermissionLevel.viewer:
-      return 'Viewer';
-  }
-}
-
-Color _permissionColor(PermissionLevel level) {
-  switch (level) {
-    case PermissionLevel.owner:
-      return careblazersColors.cta;
-    case PermissionLevel.editor:
-      return careblazersColors.link;
-    case PermissionLevel.viewer:
-      return careblazersColors.primarySoft;
-  }
-}
-
-/// Build a dialable `tel:` URI from a free-text phone number, stripping
-/// the formatting (spaces, parens, dashes) the caregiver typed but keeping
-/// a leading `+` for international numbers. Mirrors the emergency-card
-/// helper (BUILD_SPEC.md §5.17).
-Uri _telUri(String phone) {
-  final String digits = phone
-      .replaceAll(RegExp(r'[^0-9+]'), '')
-      .replaceAll(RegExp(r'(?!^)\+'), '');
-  return Uri(scheme: 'tel', path: digits);
-}
-
-/// Build a `mailto:` URI from a free-text email address, trimming
-/// surrounding whitespace. Drives the roster's tap-to-email button.
-Uri _mailtoUri(String email) => Uri(scheme: 'mailto', path: email.trim());

@@ -3,6 +3,8 @@ import 'package:careblazers/models/chat.dart';
 import 'package:careblazers/screens/chat/chat_screen.dart';
 import 'package:careblazers/screens/chat/conversation_list_screen.dart';
 import 'package:careblazers/services/chat_repository.dart';
+import 'package:careblazers/services/chat_service.dart'
+    show chatFriendlyErrorMessage;
 import 'package:careblazers/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -405,6 +407,218 @@ void main() {
       );
 
       expect(item.displayTitle, 'New chat');
+    });
+  });
+
+  group('ConversationListScreen — preview sanitisation (alpha bug)', () {
+    testWidgets('an [action:…] marker in the last message is stripped from '
+        'the tile preview', (WidgetTester tester) async {
+      await repo.createConversation(
+        id: 'convo-action',
+        title: 'placeholder',
+        createdAt: _fixedNow(),
+      );
+      await repo.appendMessage(Message(
+        id: 'a-user',
+        conversationId: 'convo-action',
+        role: MessageRole.user,
+        body: 'Open the calendar for next month.',
+        citations: const <String>[],
+        createdAt: _fixedNow(),
+        streamingDone: true,
+      ));
+      // The last turn still carries a raw tool tag on disk.
+      await repo.appendMessage(Message(
+        id: 'a-asst',
+        conversationId: 'convo-action',
+        role: MessageRole.assistant,
+        body: 'I pulled up the calendar for you.\n'
+            '[action:navigate target="calendar" date="2026-07-01"]',
+        citations: const <String>[],
+        createdAt: _fixedNow().add(const Duration(seconds: 1)),
+        streamingDone: true,
+      ));
+
+      await _pump(tester, repo: repo, db: db);
+
+      // The clean prose previews; the marker is nowhere on screen.
+      expect(
+        find.descendant(
+          of: find.byKey(ConversationListScreen.tileKey('convo-action')),
+          matching: find.text('I pulled up the calendar for you.'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('[action:'), findsNothing);
+      expect(find.textContaining('target='), findsNothing);
+    });
+
+    testWidgets('a raw [chat error: DioException …] last message previews as '
+        'the friendly line', (WidgetTester tester) async {
+      await repo.createConversation(
+        id: 'convo-err',
+        title: 'placeholder',
+        createdAt: _fixedNow(),
+      );
+      await repo.appendMessage(Message(
+        id: 'e-user',
+        conversationId: 'convo-err',
+        role: MessageRole.user,
+        body: 'Why is she pacing?',
+        citations: const <String>[],
+        createdAt: _fixedNow(),
+        streamingDone: true,
+      ));
+      // The failed-turn sentinel as ChatService stores it — raw transport
+      // detail and all.
+      await repo.appendMessage(Message(
+        id: 'e-asst',
+        conversationId: 'convo-err',
+        role: MessageRole.assistant,
+        body: '[chat error: shim request failed: DioException '
+            '[connection error]: The connection errored]',
+        citations: const <String>[],
+        createdAt: _fixedNow().add(const Duration(seconds: 1)),
+        streamingDone: true,
+      ));
+
+      await _pump(tester, repo: repo, db: db);
+
+      expect(
+        find.descendant(
+          of: find.byKey(ConversationListScreen.tileKey('convo-err')),
+          matching: find.text(chatFriendlyErrorMessage),
+        ),
+        findsOneWidget,
+      );
+      // No internal/transport vocabulary leaks into the list.
+      expect(find.textContaining('chat error'), findsNothing);
+      expect(find.textContaining('DioException'), findsNothing);
+      expect(find.textContaining('shim'), findsNothing);
+    });
+  });
+
+  group('ConversationListScreen — delete a conversation (alpha bug)', () {
+    testWidgets('the per-tile trash icon confirms + deletes the conversation',
+        (WidgetTester tester) async {
+      await repo.createConversation(
+        id: 'convo-del',
+        title: 'placeholder',
+        createdAt: _fixedNow(),
+      );
+      await repo.appendMessage(Message(
+        id: 'd-1',
+        conversationId: 'convo-del',
+        role: MessageRole.user,
+        body: 'A question I want to remove later.',
+        citations: const <String>[],
+        createdAt: _fixedNow(),
+        streamingDone: true,
+      ));
+
+      await _pump(tester, repo: repo, db: db);
+
+      await tester.tap(
+        find.byKey(ConversationListScreen.deleteIconKey('convo-del')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ConversationListScreen.deleteDialogKey),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(ConversationListScreen.deleteConfirmKey));
+      await tester.pumpAndSettle();
+
+      // Gone from the repo and from the screen (now the empty state).
+      expect(await repo.listConversations(), isEmpty);
+      expect(
+        find.byKey(ConversationListScreen.tileKey('convo-del')),
+        findsNothing,
+      );
+      expect(find.byKey(ConversationListScreen.emptyStateKey), findsOneWidget);
+    });
+
+    testWidgets('long-press → confirm deletes the conversation',
+        (WidgetTester tester) async {
+      await repo.createConversation(
+        id: 'convo-lp',
+        title: 'placeholder',
+        createdAt: _fixedNow(),
+      );
+
+      await _pump(tester, repo: repo, db: db);
+
+      await tester.longPress(
+        find.byKey(ConversationListScreen.tileKey('convo-lp')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ConversationListScreen.deleteDialogKey),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(ConversationListScreen.deleteConfirmKey));
+      await tester.pumpAndSettle();
+
+      expect(await repo.listConversations(), isEmpty);
+    });
+
+    testWidgets('cancelling the delete dialog keeps the conversation',
+        (WidgetTester tester) async {
+      await repo.createConversation(
+        id: 'convo-keep',
+        title: 'placeholder',
+        createdAt: _fixedNow(),
+      );
+
+      await _pump(tester, repo: repo, db: db);
+
+      await tester.tap(
+        find.byKey(ConversationListScreen.deleteIconKey('convo-keep')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ConversationListScreen.deleteCancelKey));
+      await tester.pumpAndSettle();
+
+      expect(await repo.listConversations(), hasLength(1));
+      expect(
+        find.byKey(ConversationListScreen.tileKey('convo-keep')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('deleting one of two conversations leaves the other',
+        (WidgetTester tester) async {
+      await repo.createConversation(
+        id: 'convo-a',
+        title: 'placeholder',
+        createdAt: _fixedNow().subtract(const Duration(hours: 1)),
+      );
+      await repo.createConversation(
+        id: 'convo-b',
+        title: 'placeholder',
+        createdAt: _fixedNow(),
+      );
+
+      await _pump(tester, repo: repo, db: db);
+
+      await tester.tap(
+        find.byKey(ConversationListScreen.deleteIconKey('convo-b')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ConversationListScreen.deleteConfirmKey));
+      await tester.pumpAndSettle();
+
+      final List<Conversation> remaining = await repo.listConversations();
+      expect(remaining.map((Conversation c) => c.id).toList(),
+          <String>['convo-a']);
+      expect(
+        find.byKey(ConversationListScreen.tileKey('convo-a')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ConversationListScreen.tileKey('convo-b')),
+        findsNothing,
+      );
     });
   });
 

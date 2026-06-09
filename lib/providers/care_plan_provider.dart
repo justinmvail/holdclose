@@ -6,6 +6,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../db/database.dart';
 import '../models/care_plan_routine.dart';
 import '../models/medication.dart' show FrequencyKind;
+import '../services/sync_sink.dart';
 
 part 'care_plan_provider.g.dart';
 
@@ -15,7 +16,7 @@ part 'care_plan_provider.g.dart';
 /// [CarePlanRoutinesTable.payload] column; the lifted-out
 /// [CarePlanRoutinesTable.scheduledMinute] keeps the "today's
 /// routines" expansion from decoding every row to know the start time.
-class CarePlanRepository {
+class CarePlanRepository with SyncSinkHost {
   CarePlanRepository(this._db);
 
   final CareblazersDatabase _db;
@@ -51,6 +52,7 @@ class CarePlanRepository {
             payload: Value<String>(jsonEncode(routine.toJson())),
           ),
         );
+    emitUpsert('care_plan_routines', routine.id, routine.toJson());
   }
 
   /// Delete by id. Idempotent; deleting a missing row is a no-op.
@@ -58,6 +60,7 @@ class CarePlanRepository {
     await (_db.delete(_db.carePlanRoutinesTable)
           ..where(($CarePlanRoutinesTableTable t) => t.id.equals(id)))
         .go();
+    emitDelete('care_plan_routines', id);
   }
 
   /// Expand a [CarePlanRoutine] into its individual occurrence

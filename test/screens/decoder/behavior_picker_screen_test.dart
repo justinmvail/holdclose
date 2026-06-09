@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:careblazers/models/behavior.dart';
 import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -51,9 +52,9 @@ Future<({GoRouter router, List<Object?> capturedExtras})>
   await tester.pumpWidget(MaterialApp.router(routerConfig: router));
   await tester.pumpAndSettle();
 
-  // Push the picker onto the root navigator so the AppBar's auto
-  // back arrow renders — matching the real navigation pattern from
-  // Home (BUILD_SPEC.md §5.1 → §5.2).
+  // Push the picker onto the root navigator so the PathHeader's parent
+  // breadcrumb crumb has somewhere to navigate back to — matching the
+  // real navigation pattern from Home (BUILD_SPEC.md §5.1 → §5.2).
   unawaited(router.push('/decoder/behavior'));
   await tester.pumpAndSettle();
 
@@ -62,22 +63,31 @@ Future<({GoRouter router, List<Object?> capturedExtras})>
 
 void main() {
   group('BehaviorPickerScreen — BUILD_SPEC.md §5.2', () {
-    testWidgets('renders the screen with title and AppBar',
+    testWidgets('renders the screen with title in the PathHeader',
         (WidgetTester tester) async {
       await _pumpPicker(tester);
 
       expect(find.byType(BehaviorPickerScreen), findsOneWidget);
-      expect(
-        find.widgetWithText(AppBar, "What's happening?"),
-        findsOneWidget,
-      );
+      // The screen's title now lives in PathHeader.title (no AppBar).
+      // The same string also appears as the terminal breadcrumb crumb,
+      // so assert the PathHeader's title property directly to keep this
+      // specific to the title (not the crumb) rather than counting Text.
+      final PathHeader header =
+          tester.widget<PathHeader>(find.byType(PathHeader));
+      expect(header.title, "What's happening?");
+      // And it is actually painted on screen as Text.
+      expect(find.text("What's happening?"), findsWidgets);
     });
 
-    testWidgets('BackButton visible (screen was pushed)',
+    testWidgets('parent breadcrumb crumb provides the back affordance',
         (WidgetTester tester) async {
       await _pumpPicker(tester);
 
-      expect(find.byType(BackButton), findsOneWidget);
+      // No AppBar BackButton and no separate "Back to X" control anymore
+      // — the back affordance is the parent breadcrumb crumb, rendered as
+      // a tappable InkWell. For this screen (Home › Medical › Journal ›
+      // What's happening?) that parent crumb is "Journal".
+      expect(find.widgetWithText(InkWell, 'Journal'), findsOneWidget);
     });
 
     testWidgets('renders all 8 canonical behavior cards with labels',

@@ -1,3 +1,8 @@
+# Alpha-tester bug reports collected by the shim's POST /feedback
+# endpoint (tools/claude_shim.py). Local-only; never commit testers' notes
+# or screenshots.
+/feedback/
+
 # Flutter / Dart
 .dart_tool/
 .flutter-plugins

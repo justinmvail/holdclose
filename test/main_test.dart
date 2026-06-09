@@ -51,6 +51,7 @@ Patient _preexistingPatient() => Patient(
 
 ({ProviderContainer container, InMemoryStorageProvider storage}) _build({
   required bool resetOnLaunch,
+  bool withPatient = true,
 }) {
   final InMemoryStorageProvider storage = InMemoryStorageProvider();
   addTearDown(storage.dispose);
@@ -60,7 +61,9 @@ Patient _preexistingPatient() => Patient(
   storage.updateSettings(
     AppSettings.defaults().copyWith(resetOnLaunchDemo: resetOnLaunch),
   );
-  storage.upsertPatient(_preexistingPatient());
+  if (withPatient) {
+    storage.upsertPatient(_preexistingPatient());
+  }
   storage.insertJournalEntry(_preexistingEntry());
 
   final ProviderContainer container = ProviderContainer(
@@ -111,6 +114,32 @@ void main() {
       expect(patient, isNotNull);
       expect(patient!.id, 'pre-existing-patient');
 
+      final List<JournalEntry> entries = await built.storage
+          .watchJournalEntries(window: const Duration(days: 30))
+          .first;
+      expect(entries, hasLength(1));
+      expect(entries.single.id, 'pre-existing-entry');
+    });
+
+    test('with demoMode, resetOnLaunchDemo OFF, no loved one on file: '
+        'Mary is backfilled without touching other data', () async {
+      final ({ProviderContainer container, InMemoryStorageProvider storage})
+          built = _build(resetOnLaunch: false, withPatient: false);
+
+      // The bug: with reset off the seed never ran, so a store can hold
+      // the caregiver's journal/medication data but no patient — and the
+      // Emergency Card then gates on a missing loved one.
+      expect(await built.storage.getPatient(), isNull);
+
+      await maybeResetForDemo(built.container, demoMode: true);
+
+      // Mary is now present so patient-dependent screens work...
+      final Patient? patient = await built.storage.getPatient();
+      expect(patient, isNotNull);
+      expect(patient!.id, 'demo-patient-mary');
+
+      // ...but the backfill is non-destructive — the pre-existing journal
+      // entry is left exactly as it was (no reset, no extra seed entries).
       final List<JournalEntry> entries = await built.storage
           .watchJournalEntries(window: const Duration(days: 30))
           .first;

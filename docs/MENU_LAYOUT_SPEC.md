@@ -12,8 +12,8 @@ The users are caregivers, including older spouses (65+). Layout priorities, in o
 
 ## Global navigation model
 
-- A **persistent bottom tab bar** is visible on every screen. Five tabs, always shown, never collapsed into a menu.
-- Tabs, left to right: **Home, Medical, Care Team, Chat, Community**. (Use "Team" as the label if "Care Team" is too wide for the bar.)
+- A **persistent bottom tab bar** is visible on every screen. Four tabs (IA refactor 2026-06-06), always shown, never collapsed into a menu.
+- Tabs, left to right: **Home, Care, Chat, Community**. "Medical" was renamed **Care**; the former "Team" tab folded into Care as a gated **Care Circle** hub (Tasks, Shifts, People, Activity, Expenses). Route paths stay `/medical` + `/team/*` internally.
 - The active tab is clearly highlighted.
 - Each tab has three possible landing behaviors:
   - **Home** → a dashboard.

@@ -28,16 +28,24 @@ Future<({
   WidgetTester tester, {
   TriageArgs args = const TriageArgs.forBehavior(_sundowning),
 }) async {
-  await tester.binding.setSurfaceSize(const Size(400, 1000));
+  // Wide enough that the PathHeader's full breadcrumb trail
+  // (Home › Medical › Journal › What's happening? › Triage) lays out
+  // without a horizontal RenderFlex overflow. The old AppBar header fit
+  // at 400px wide; the breadcrumb header needs more room.
+  await tester.binding.setSurfaceSize(const Size(600, 1000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final List<Object?> capturedResultExtras = <Object?>[];
   final GlobalKey<NavigatorState> rootKey = GlobalKey<NavigatorState>();
 
-  // Two routes:
+  // Routes:
   //   '/' — a stub "home" so the BackButton on Q1 has somewhere to
   //   pop to (otherwise maybePop is a no-op and Back-from-Q1 looks
   //   indistinguishable from a stuck state).
+  //   '/decoder/behavior' — a stub for the picker that the triage
+  //   PathHeader's parent crumb ("What's happening?") `context.go`s to.
+  //   It's the back affordance now that the standalone "Back to X"
+  //   control was removed from PathHeader.
   //   '/decoder/triage' — the real screen.
   //   '/decoder/result' — a stub that captures `state.extra`.
   final GoRouter router = GoRouter(
@@ -48,6 +56,12 @@ Future<({
         path: '/',
         builder: (BuildContext context, GoRouterState state) =>
             const Scaffold(body: Center(child: Text('test-home'))),
+      ),
+      GoRoute(
+        path: '/decoder/behavior',
+        parentNavigatorKey: rootKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const Scaffold(body: Center(child: Text('test-behavior-picker'))),
       ),
       GoRoute(
         path: '/decoder/triage',
@@ -219,39 +233,43 @@ void main() {
     });
   });
 
-  group('TriageScreen — Back preserves prior answer', () {
-    testWidgets('Back from Q2 lands on Q1 with the prior selection intact',
+  group('TriageScreen — breadcrumb back affordance leaves the flow', () {
+    // The standalone "‹ Back to X" control was removed from PathHeader;
+    // the parent breadcrumb crumb is the only back affordance now, and
+    // tapping it runs `context.go(crumb.route)`. For triage the parent
+    // crumb ("What's happening?") routes to `/decoder/behavior`, so a
+    // crumb tap is a route-level navigation OUT of the triage flow — no
+    // longer the old in-page setState that stepped the question index
+    // down while keeping the picked answer painted. These tests now
+    // verify that the crumb back affordance navigates to its parent
+    // route and tears down the current triage question.
+    testWidgets('Back from Q2 navigates to the parent crumb route',
         (WidgetTester tester) async {
       final pumped = await _pumpTriage(tester);
 
-      // Q1: pick option 2 ("Late afternoon / evening").
+      // Q1: pick option 2 ("Late afternoon / evening") → advance to Q2.
       await tester.tap(find.byKey(TriageScreen.optionKey(0, 2)));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(TriageScreen.nextButtonKey));
       await tester.pumpAndSettle();
       expect(find.byKey(TriageScreen.questionKey(1)), findsOneWidget);
 
-      // Back to Q1.
-      await tester.tap(find.byKey(TriageScreen.backButtonKey));
+      // Tap the parent crumb ("What's happening?", the segment just
+      // before the terminal "Triage" crumb) — the back affordance.
+      await tester.tap(find.widgetWithText(InkWell, "What's happening?"));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(TriageScreen.questionKey(0)), findsOneWidget);
-      expect(find.text('1 of 3'), findsOneWidget);
-      // Provider state is the source of truth for "preserved": tapping
-      // back must not have wiped Q1's pick.
+      // It `context.go`s to the parent route and leaves triage entirely.
       expect(
-        pumped.container.read(triageProvider).when,
-        TriageWhen.lateAfternoonEvening,
+        pumped.router.routerDelegate.currentConfiguration.uri.toString(),
+        '/decoder/behavior',
       );
-      // Next stays enabled because Q1's answer is still set.
-      final ElevatedButton next = tester.widget<ElevatedButton>(
-        find.byKey(TriageScreen.nextButtonKey),
-      );
-      expect(next.onPressed, isNotNull);
+      expect(find.byType(TriageScreen), findsNothing);
+      expect(find.text('test-behavior-picker'), findsOneWidget);
     });
 
     testWidgets(
-      'Back from Q3 lands on Q2 with the Q2 selection intact',
+      'Back from Q3 navigates to the parent crumb route',
       (WidgetTester tester) async {
         final pumped = await _pumpTriage(tester);
 
@@ -266,16 +284,17 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(TriageScreen.questionKey(2)), findsOneWidget);
 
-        // Back from Q3 → Q2.
-        await tester.tap(find.byKey(TriageScreen.backButtonKey));
+        // Tap the parent crumb ("What's happening?") — the back
+        // affordance; it `context.go`s to `/decoder/behavior`.
+        await tester.tap(find.widgetWithText(InkWell, "What's happening?"));
         await tester.pumpAndSettle();
 
-        expect(find.byKey(TriageScreen.questionKey(1)), findsOneWidget);
-        expect(find.text('2 of 3'), findsOneWidget);
         expect(
-          pumped.container.read(triageProvider).whatChanged,
-          TriageWhatChanged.medication,
+          pumped.router.routerDelegate.currentConfiguration.uri.toString(),
+          '/decoder/behavior',
         );
+        expect(find.byType(TriageScreen), findsNothing);
+        expect(find.text('test-behavior-picker'), findsOneWidget);
       },
     );
   });
@@ -352,26 +371,33 @@ void main() {
   });
 
   group('TriageScreen — VoiceOver labels (BUILD_SPEC.md §11.5)', () {
-    testWidgets('Back button announces context-aware label',
+    testWidgets('Back affordance carries its word label at each step',
         (WidgetTester tester) async {
       await _pumpTriage(tester);
 
+      // The PathHeader replaced the old AppBar back arrow, and the
+      // standalone "Back to X" control was then removed too: the back
+      // affordance is now the parent breadcrumb crumb ("What's
+      // happening?"), a tappable InkWell whose visible Text IS its
+      // accessible label for VoiceOver. The crumb trail is stable, not
+      // re-framed per step, so assert the word-labeled crumb is present
+      // on Q1 …
       expect(
-        hasSemanticsLabel(tester, RegExp('Leave triage')),
-        isTrue,
-        reason: 'Q1 Back must announce "Leave triage"',
+        find.widgetWithText(InkWell, "What's happening?"),
+        findsOneWidget,
+        reason: 'Q1 Back must surface a word-labeled back affordance',
       );
 
-      // Advance Q1 → Q2 and confirm the back label re-frames.
+      // Advance Q1 → Q2 and confirm the word-labeled crumb is still there.
       await tester.tap(find.byKey(TriageScreen.optionKey(0, 0)));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(TriageScreen.nextButtonKey));
       await tester.pumpAndSettle();
 
       expect(
-        hasSemanticsLabel(tester, RegExp('Back to previous question')),
-        isTrue,
-        reason: 'Q2 Back must announce "Back to previous question"',
+        find.widgetWithText(InkWell, "What's happening?"),
+        findsOneWidget,
+        reason: 'Q2 Back must still surface the word-labeled back affordance',
       );
     });
 

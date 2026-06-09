@@ -9,13 +9,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
-/// The six tiles in their documented order (BUILD_SPEC.md §5.13,
-/// TASKS.md Phase 14.26): (label, icon, route).
+/// The five tiles in their documented order (BUILD_SPEC.md §5.13,
+/// TASKS.md Phase 14.26): (label, icon, route). The 2026-06-06 IA refactor
+/// dropped the Calendar tile (the one schedule now lives under Care) and
+/// renamed the roster tile from "Care Circle" to "People".
 const List<(String, IconData, String)> _expected = <(String, IconData, String)>[
-  ('Calendar', Icons.calendar_view_week_outlined, '/team/calendar'),
   ('Tasks', Icons.task_alt_outlined, '/team/tasks'),
   ('Shifts', Icons.access_time_outlined, '/team/shifts'),
-  ('Care Circle', Icons.diversity_3_outlined, '/team/circle'),
+  ('People', Icons.diversity_3_outlined, '/team/circle'),
   ('Activity', Icons.timeline_outlined, '/team/activity'),
   ('Expenses', Icons.account_balance_wallet_outlined, '/team/expenses'),
 ];
@@ -56,7 +57,7 @@ InMemoryStorageProvider _seededStorage({required bool teamEnabled}) {
   return storage;
 }
 
-/// Pumps the hub at a tall phone surface so all six tiles render inside
+/// Pumps the hub at a tall phone surface so all five tiles render inside
 /// the viewport (the grid scrolls, but a tall surface keeps every tile
 /// hittable). We deliberately skip `careblazersLightTheme` — its
 /// google_fonts TextStyles fire fire-and-forget Futures that surface as
@@ -86,13 +87,13 @@ Future<GoRouter> _pumpHub(
 
 void main() {
   group('CareTeamHubScreen — coordination enabled', () {
-    testWidgets('renders all six tiles in the documented order',
+    testWidgets('renders all five tiles in the documented order',
         (WidgetTester tester) async {
       await _pumpHub(tester);
 
       final List<HubTile> tiles =
           tester.widgetList<HubTile>(find.byType(HubTile)).toList();
-      expect(tiles.length, 6);
+      expect(tiles.length, 5);
       expect(
         tiles.map((HubTile t) => t.label).toList(),
         <String>[for (final (String label, _, _) in _expected) label],
@@ -103,16 +104,20 @@ void main() {
       );
     });
 
-    testWidgets('is a landing screen — no breadcrumb, no Back control',
+    testWidgets('is a pushed page — Care › Care Circle breadcrumb trail',
         (WidgetTester tester) async {
       await _pumpHub(tester);
 
-      // The PathHeader is present with the single "Care Team" crumb...
+      // Pushed under the Care tab now, so the PathHeader carries a full
+      // two-crumb trail (Care › Care Circle) with the parent 'Care' crumb
+      // as the back affordance.
       expect(find.byType(PathHeader), findsOneWidget);
-      expect(find.text('Care Team'), findsOneWidget);
-      // ...but a single-crumb landing suppresses the trail + Back chip.
-      expect(find.text('›'), findsNothing);
-      expect(find.text('‹'), findsNothing);
+      // "Care Circle" appears twice — as the terminal crumb and as the
+      // page title.
+      expect(find.text('Care Circle'), findsNWidgets(2));
+      expect(find.widgetWithText(InkWell, 'Care'), findsOneWidget);
+      // A two-crumb header renders the separator between the crumbs.
+      expect(find.text('›'), findsOneWidget);
     });
 
     for (final (String label, _, String route) in _expected) {

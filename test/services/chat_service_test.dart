@@ -4,11 +4,21 @@ import 'dart:typed_data';
 
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/models/journal_entry.dart';
+import 'package:careblazers/providers/care_plan_provider.dart'
+    show carePlanRepositoryProvider, CarePlanRepository;
+import 'package:careblazers/providers/health_log_provider.dart'
+    show healthLogRepositoryProvider, HealthLogRepository;
 import 'package:careblazers/providers/llm_provider.dart' show claudeShimEndpoint;
+import 'package:careblazers/providers/storage_provider.dart'
+    show storageProvider, InMemoryStorageProvider;
 import 'package:careblazers/seed/chat_system_prompt.dart';
+import 'package:careblazers/services/appointment_repository.dart'
+    show appointmentRepositoryProvider, AppointmentRepository;
+import 'package:careblazers/services/chat_actions.dart';
 import 'package:careblazers/services/chat_repository.dart';
 import 'package:careblazers/services/chat_service.dart';
+import 'package:careblazers/services/medication_repository.dart'
+    show medicationRepositoryProvider, MedicationRepository;
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,6 +58,18 @@ class _ScriptedChatBackend implements ChatLLMBackend {
 String Function() _idFactory() {
   int n = 0;
   return () => 'msg-${++n}';
+}
+
+/// A repo whose [loadMessages] throws — proves a mid-turn failure (before
+/// the LLM is even reached) surfaces as a visible error bubble instead of
+/// an empty stream the screen swallows ("nothing happens after I hit send").
+class _LoadThrowsRepo extends ChatRepository {
+  _LoadThrowsRepo(super.db);
+
+  @override
+  Future<List<Message>> loadMessages(String conversationId) async {
+    throw StateError('boom');
+  }
 }
 
 void main() {
@@ -97,6 +119,30 @@ void main() {
       expect(persisted.first.body, 'What is sundowning?');
     });
 
+    test('a mid-turn repo failure surfaces a visible error, not a dead stream',
+        () async {
+      // Regression for the alpha "nothing happens after I hit send": the
+      // user message must still appear AND a failure after it (here a
+      // throwing loadMessages) must emit a visible, error-flagged assistant
+      // bubble — never an empty/erroring stream the screen swallows.
+      final _LoadThrowsRepo throwingRepo = _LoadThrowsRepo(db);
+      final ChatService svc = ChatService(
+        repository: throwingRepo,
+        backend: _ScriptedChatBackend(<ChatDelta>[const ChatDeltaText('hi')]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+      );
+
+      final List<Message> emitted = await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'ping')
+          .toList();
+
+      expect(emitted.first.role, MessageRole.user); // message still shows
+      expect(emitted.last.role, MessageRole.assistant);
+      expect(emitted.last.streamingDone, isTrue);
+      expect(chatBodyHasError(emitted.last.body), isTrue); // visible error
+    });
+
     test('forwards chatSystemPrompt + history to the backend', () async {
       final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
         const ChatDeltaText('ok'),
@@ -120,6 +166,75 @@ void main() {
       expect(backend.lastHistory!.single.role, MessageRole.user);
       expect(backend.lastHistory!.single.content,
           'tell me about anosognosia');
+    });
+
+    test('appends the fresh data snapshot under the system prompt', () async {
+      final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+        const ChatDeltaText('ok'),
+      ]);
+      int calls = 0;
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: backend,
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        // A fresh snapshot per turn — the counter proves it's re-fetched.
+        contextSnapshot: () async {
+          calls++;
+          return 'CURRENT DATA (read-only):\nLoved one: Mary, 78.';
+        },
+      );
+
+      await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'what meds?')
+          .toList();
+
+      expect(calls, 1);
+      expect(backend.lastSystemPrompt, startsWith(chatSystemPrompt));
+      expect(backend.lastSystemPrompt, contains('Loved one: Mary, 78.'));
+    });
+
+    test('a snapshot failure still streams the reply (prompt unchanged)',
+        () async {
+      final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+        const ChatDeltaText('ok'),
+      ]);
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: backend,
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        contextSnapshot: () async => throw StateError('snapshot boom'),
+      );
+
+      final List<Message> emitted = await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'hi')
+          .toList();
+
+      // The turn completed normally and the prompt fell back to the base.
+      expect(backend.lastSystemPrompt, equals(chatSystemPrompt));
+      expect(emitted.last.body, 'ok');
+      expect(emitted.last.streamingDone, isTrue);
+    });
+
+    test('an empty snapshot leaves the prompt exactly equal to the base',
+        () async {
+      final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+        const ChatDeltaText('ok'),
+      ]);
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: backend,
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        contextSnapshot: () async => '   ',
+      );
+
+      await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'hi')
+          .toList();
+
+      expect(backend.lastSystemPrompt, equals(chatSystemPrompt));
     });
 
     test(
@@ -273,25 +388,17 @@ void main() {
             'situation="Mom asked for her mother" '
             'attempts="I told her she went to the store"]'),
       ]);
-      JournalEntry? captured;
+      Map<String, String>? captured;
       final ChatService svc = ChatService(
         repository: repo,
         backend: backend,
         idFactory: _idFactory(),
         clock: _fixedClock,
-        journalExecutor: ({
-          required DateTime occurredAt,
-          required String situation,
-          required String attempts,
-        }) async {
-          captured = JournalEntry.wizard(
-            id: 'test-entry-1',
-            createdAt: occurredAt,
-            occurredAt: occurredAt,
-            situationText: situation,
-            attemptsText: attempts,
-          );
-          return captured;
+        actions: <String, ChatActionExecutor>{
+          'log_journal': (Map<String, String> args) async {
+            captured = args;
+            return const ChatActionOutcome(citation: 'journal:test-entry-1');
+          },
         },
       );
 
@@ -300,9 +407,11 @@ void main() {
           .toList();
       expect(emitted.last.body, 'Logged that one for you.');
       expect(emitted.last.citations, <String>['journal:test-entry-1']);
+      // The registry hands the executor the parsed key="value" args.
       expect(captured, isNotNull);
-      expect(captured!.situationText, 'Mom asked for her mother');
-      expect(captured!.attemptsText, 'I told her she went to the store');
+      expect(captured!['situation'], 'Mom asked for her mother');
+      expect(captured!['attempts'], 'I told her she went to the store');
+      expect(captured!['occurred_at'], 'just now');
     });
 
     test('journal-action: no executor wired → marker stripped, no citation',
@@ -316,7 +425,7 @@ void main() {
         backend: backend,
         idFactory: _idFactory(),
         clock: _fixedClock,
-        // No journalExecutor — marker is stripped but no entry written.
+        // No actions registered — marker is stripped but nothing written.
       );
 
       final List<Message> emitted = await svc
@@ -369,6 +478,10 @@ void main() {
       expect(finalMsg.streamingDone, isTrue);
       expect(finalMsg.body, contains('partial body so far'));
       expect(finalMsg.body, contains('shim went offline'));
+      // The failed-turn sentinel is present so the chat screen can detect it
+      // and surface the inline retry (#19).
+      expect(finalMsg.body, contains(chatErrorMarkerPrefix));
+      expect(chatBodyHasError(finalMsg.body), isTrue);
 
       // And the same finalized state lands in the repo so the chat
       // screen sees the failed reply on reload.
@@ -399,6 +512,16 @@ void main() {
 
     // ---- Static helpers --------------------------------------------------
 
+    test('chatBodyHasError: detects the failed-turn sentinel (#19)', () {
+      expect(chatBodyHasError('a normal reply'), isFalse);
+      expect(chatBodyHasError(''), isFalse);
+      expect(
+        chatBodyHasError('partial\n\n[chat error: shim offline]'),
+        isTrue,
+      );
+      expect(chatBodyHasError('[chat error: connection refused]'), isTrue);
+    });
+
     test('ChatService.stripActionMarkers: passes through plain prose', () {
       expect(ChatService.stripActionMarkers('plain reply'), 'plain reply');
     });
@@ -419,6 +542,70 @@ void main() {
       );
       expect(stripped, 'Before  after.');
     });
+
+    // ---- displayBody: the render-time sanitiser (alpha bug) -------------
+
+    test('ChatService.displayBody: plain prose passes through unchanged', () {
+      expect(
+        ChatService.displayBody('Step into her reality and validate.'),
+        'Step into her reality and validate.',
+      );
+    });
+
+    test('ChatService.displayBody: strips an [action:…] navigate marker', () {
+      final String shown = ChatService.displayBody(
+        'I pulled up the calendar for you.\n'
+        '[action:navigate target="calendar" date="2026-07-01"]',
+      );
+      expect(shown, 'I pulled up the calendar for you.');
+      // The raw marker text must not survive into the displayed string.
+      expect(shown, isNot(contains('[action:')));
+      expect(shown, isNot(contains('navigate')));
+      expect(shown, isNot(contains('target=')));
+    });
+
+    test('ChatService.displayBody: swaps a raw [chat error: …] trailer for '
+        'the friendly line and drops the DioException detail', () {
+      const String raw =
+          '[chat error: shim request failed: DioException [connection error]: '
+          'The connection errored: Connection refused]';
+      final String shown = ChatService.displayBody(raw);
+
+      expect(shown, chatFriendlyErrorMessage);
+      // None of the internal/transport vocabulary leaks to the caregiver.
+      expect(shown, isNot(contains('chat error')));
+      expect(shown, isNot(contains('DioException')));
+      expect(shown, isNot(contains('shim')));
+      expect(shown, isNot(contains('connection error')));
+    });
+
+    test('ChatService.displayBody: keeps a partial reply and appends the '
+        'friendly line when the stream failed mid-answer', () {
+      const String raw =
+          'Pacing often means restless energy.\n\n'
+          '[chat error: shim request failed: DioException [connection error]]';
+      final String shown = ChatService.displayBody(raw);
+
+      expect(shown, contains('Pacing often means restless energy.'));
+      expect(shown, endsWith(chatFriendlyErrorMessage));
+      expect(shown, isNot(contains('DioException')));
+      expect(shown, isNot(contains('chat error')));
+    });
+
+    test('ChatService.displayBody: friendly message itself names no '
+        'AI/model/shim/transport detail', () {
+      // Guards the brand-voice rule — the LLM stays invisible.
+      for (final String banned in const <String>[
+        'AI',
+        'model',
+        'shim',
+        'JSON',
+        'DioException',
+        'LLM',
+      ]) {
+        expect(chatFriendlyErrorMessage, isNot(contains(banned)));
+      }
+    });
   });
 
   // ---- Backend wiring ---------------------------------------------------
@@ -438,10 +625,25 @@ void main() {
 
       final _ScriptedChatBackend backend = _ScriptedChatBackend(
           <ChatDelta>[const ChatDeltaText('hello back')]);
+      // The wired chatServiceProvider now reads the caregiver's current
+      // data each turn (for the read-only snapshot); override those data
+      // providers with in-memory backends so the read is harmless here
+      // (no real shared DB / platform channels in a binding-less test).
+      final InMemoryStorageProvider storage = InMemoryStorageProvider();
+      addTearDown(storage.dispose);
+      final MedicationRepository medRepo = MedicationRepository(db);
+      final AppointmentRepository apptRepo = AppointmentRepository(db);
+      final CarePlanRepository carePlanRepo = CarePlanRepository(db);
+      final HealthLogRepository healthRepo = HealthLogRepository(db);
       final ProviderContainer c = ProviderContainer(
         overrides: <Override>[
           chatLLMBackendProvider.overrideWithValue(backend),
           chatRepositoryProvider.overrideWithValue(repo),
+          storageProvider.overrideWithValue(storage),
+          medicationRepositoryProvider.overrideWithValue(medRepo),
+          appointmentRepositoryProvider.overrideWithValue(apptRepo),
+          carePlanRepositoryProvider.overrideWithValue(carePlanRepo),
+          healthLogRepositoryProvider.overrideWithValue(healthRepo),
         ],
       );
       addTearDown(c.dispose);

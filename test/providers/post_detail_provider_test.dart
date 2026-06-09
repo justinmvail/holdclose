@@ -64,12 +64,16 @@ class _FakeForumApiClient extends ForumApiClient {
   Object? nextVoteError;
   Object? nextCreateCommentError;
   Object? nextReportError;
+  Object? nextDeletePostError;
+  Object? nextDeleteCommentError;
 
   int getPostCalls = 0;
   int listCommentsCalls = 0;
   int voteCalls = 0;
   int createCommentCalls = 0;
   int reportCalls = 0;
+  final List<String> deletedPostIds = <String>[];
+  final List<String> deletedCommentIds = <String>[];
 
   ForumVoteResponse Function(ForumVoteTarget kind, String id, int value)
       voteResponseFor =
@@ -165,6 +169,26 @@ class _FakeForumApiClient extends ForumApiClient {
       status: 'pending',
       createdAt: _fixedNow,
     );
+  }
+
+  @override
+  Future<void> deletePost(String postId) async {
+    if (nextDeletePostError != null) {
+      final Object err = nextDeletePostError!;
+      nextDeletePostError = null;
+      throw err;
+    }
+    deletedPostIds.add(postId);
+  }
+
+  @override
+  Future<void> deleteComment(String commentId) async {
+    if (nextDeleteCommentError != null) {
+      final Object err = nextDeleteCommentError!;
+      nextDeleteCommentError = null;
+      throw err;
+    }
+    deletedCommentIds.add(commentId);
   }
 }
 
@@ -440,4 +464,83 @@ void main() {
     });
   });
 
+  group('PostDetail.deletePost — owner delete', () {
+    test('returns true and forwards the id on success', () async {
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..postToReturn = _post('p');
+      final ProviderContainer container = _container(client);
+      addTearDown(container.dispose);
+
+      await container.read(postDetailProvider.notifier).load('p');
+      final bool ok =
+          await container.read(postDetailProvider.notifier).deletePost('p');
+
+      expect(ok, isTrue);
+      expect(client.deletedPostIds, <String>['p']);
+    });
+
+    test('returns false + records the error when the delete fails', () async {
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..postToReturn = _post('p')
+        ..nextDeletePostError = Exception('forbidden');
+      final ProviderContainer container = _container(client);
+      addTearDown(container.dispose);
+
+      await container.read(postDetailProvider.notifier).load('p');
+      final bool ok =
+          await container.read(postDetailProvider.notifier).deletePost('p');
+
+      expect(ok, isFalse);
+      expect(client.deletedPostIds, isEmpty);
+      expect(container.read(postDetailProvider).error, isNotNull);
+    });
+  });
+
+  group('PostDetail.deleteComment — owner delete', () {
+    test('drops the comment from the list + decrements the post count',
+        () async {
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..postToReturn = _post('p', commentCount: 2)
+        ..commentsToReturn = <ForumComment>[
+          _comment('c1', body: 'keep me'),
+          _comment('c2', body: 'delete me'),
+        ];
+      final ProviderContainer container = _container(client);
+      addTearDown(container.dispose);
+
+      await container.read(postDetailProvider.notifier).load('p');
+      final bool ok = await container
+          .read(postDetailProvider.notifier)
+          .deleteComment('c2');
+
+      expect(ok, isTrue);
+      expect(client.deletedCommentIds, <String>['c2']);
+      final PostDetailState state = container.read(postDetailProvider);
+      expect(state.comments.map((ForumComment c) => c.id), <String>['c1']);
+      // The denormalized post comment count drops to match.
+      expect(state.post?.commentCount, 1);
+    });
+
+    test('returns false + keeps the comment when the delete fails', () async {
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..postToReturn = _post('p', commentCount: 1)
+        ..commentsToReturn = <ForumComment>[_comment('c1')]
+        ..nextDeleteCommentError = Exception('forbidden');
+      final ProviderContainer container = _container(client);
+      addTearDown(container.dispose);
+
+      await container.read(postDetailProvider.notifier).load('p');
+      final bool ok = await container
+          .read(postDetailProvider.notifier)
+          .deleteComment('c1');
+
+      expect(ok, isFalse);
+      expect(client.deletedCommentIds, isEmpty);
+      final PostDetailState state = container.read(postDetailProvider);
+      // The row stays put and the count is untouched.
+      expect(state.comments.map((ForumComment c) => c.id), <String>['c1']);
+      expect(state.post?.commentCount, 1);
+      expect(state.error, isNotNull);
+    });
+  });
 }

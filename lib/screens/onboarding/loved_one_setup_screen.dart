@@ -1,0 +1,360 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../../l10n/app_localizations.dart';
+import '../../models/patient.dart';
+import '../../providers/active_patient_provider.dart';
+import '../../providers/patient_configured_provider.dart';
+import '../../providers/storage_provider.dart';
+import '../../services/sync_service.dart';
+import '../../theme.dart';
+import '../../widgets/form_validation.dart';
+
+part 'loved_one_setup_screen.g.dart';
+
+/// Mint a new id for the [Patient] the wizard creates. Overridable for
+/// tests + the demo tour so the id is deterministic — same `'<prefix>-
+/// <ms>-<rand>'` shape as the health-log / appointment / medication form
+/// id factories (and the `demo-patient-mary` seed shape).
+typedef PatientIdFactory = String Function();
+
+String _defaultPatientIdFactory() {
+  final int ms = DateTime.now().millisecondsSinceEpoch;
+  final int rand = math.Random().nextInt(1 << 32);
+  return 'patient-$ms-$rand';
+}
+
+/// ID factory the setup wizard uses. Tests override this with a fixed
+/// value so the persisted patient id is stable across runs.
+@Riverpod(keepAlive: true)
+PatientIdFactory patientSetupIdFactory(Ref ref) => _defaultPatientIdFactory;
+
+/// New-user onboarding wizard at `/setup` (BUILD_SPEC.md §5.9 + §9.1).
+///
+/// The first-run flow is welcome carousel → sign-in → **this screen**.
+/// A real (non-demo) install lands here with no [Patient] on file; the
+/// router redirect (`careblazersRedirect`) holds the caregiver here
+/// until they save one, then lets them through to Home. In `DEMO_MODE`
+/// the seeded Mary means the gate is already satisfied, so this screen
+/// is skipped.
+///
+/// Deliberately short + warm for a tired caregiver: it collects the
+/// ESSENTIALS only — their person's name (the one required field), age,
+/// diagnosis, and allergies. Everything else the [Patient] model needs is
+/// defaulted sensibly (no medications, diagnosed "today", no calms /
+/// escalates notes yet, empty primary caregiver / POA, advance directive
+/// "not on file") and can be filled in later from the Emergency Card.
+/// Nothing here diagnoses or prescribes — the diagnosis field is just
+/// what the caregiver was told.
+class LovedOneSetupScreen extends ConsumerStatefulWidget {
+  const LovedOneSetupScreen({super.key, this.isAdd = false});
+
+  /// `false` (default) — the first-run onboarding gate: saving the very
+  /// first loved one flips [PatientConfigured] and lets the router
+  /// through to Home.
+  ///
+  /// `true` — reused from the "Loved ones" manager to ADD another loved
+  /// one (multi-patient, Issue #6): saving appends a patient, makes them
+  /// the active one, and pops back to the manager instead of gating /
+  /// resetting the navigation stack. Same form, two entry points.
+  final bool isAdd;
+
+  static const Key formKey = Key('loved-one-setup-form');
+  static const Key nameFieldKey = Key('loved-one-setup-name');
+  static const Key ageFieldKey = Key('loved-one-setup-age');
+  static const Key diagnosisFieldKey = Key('loved-one-setup-diagnosis');
+  static const Key allergiesFieldKey = Key('loved-one-setup-allergies');
+  static const Key saveButtonKey = Key('loved-one-setup-save');
+
+  @override
+  ConsumerState<LovedOneSetupScreen> createState() =>
+      _LovedOneSetupScreenState();
+}
+
+class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _name = TextEditingController();
+  final TextEditingController _age = TextEditingController();
+  final TextEditingController _diagnosis = TextEditingController();
+  final TextEditingController _allergies = TextEditingController();
+
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _age.dispose();
+    _diagnosis.dispose();
+    _allergies.dispose();
+    super.dispose();
+  }
+
+  /// Split a multiline textarea into trimmed, non-empty lines — the
+  /// model stores allergies / calms / escalates as `List<String>`, one
+  /// item per line of input.
+  List<String> _lines(TextEditingController c) => c.text
+      .split('\n')
+      .map((String s) => s.trim())
+      .where((String s) => s.isNotEmpty)
+      .toList();
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    // Validate on press + scroll to the first invalid field.
+    if (!validateAndScrollToFirstError(_formKey)) return;
+
+    setState(() => _submitting = true);
+
+    try {
+    final String id = ref.read(patientSetupIdFactoryProvider)();
+    // The setup wizard no longer collects a primary caregiver contact;
+    // it's left empty here and editable later. POA / advance directive
+    // mirror that empty contact by default.
+    const Contact primaryCaregiver = Contact(name: '', phone: '');
+    final String? ageText = _age.text.trim().isEmpty ? null : _age.text.trim();
+
+    final Patient patient = Patient(
+      id: id,
+      name: _name.text.trim(),
+      // Age is optional in the wizard; default to 0 ("not given") when
+      // the caregiver leaves it blank. The field validator already
+      // rejects non-numeric input, so a non-empty value parses here.
+      age: ageText == null ? 0 : (int.tryParse(ageText) ?? 0),
+      diagnosis: _diagnosis.text.trim(),
+      // Sensible defaults for the fields the wizard deliberately omits —
+      // the caregiver can fill these in later from the Emergency Card.
+      diagnosedAt: DateTime.now(),
+      medications: const <CrisisMedication>[],
+      allergies: _lines(_allergies),
+      // Calms / escalates are no longer collected in setup — default to
+      // empty lists; they stay on the model and can be filled in later.
+      calms: const <String>[],
+      escalates: const <String>[],
+      primaryCaregiver: primaryCaregiver,
+      // POA mirrors the primary caregiver by default — the most common
+      // single-caregiver case — and is editable later.
+      healthcarePOA: primaryCaregiver,
+      advanceDirective: const AdvanceDirectiveStatus(
+        onFileAt: 'Not on file',
+        dnr: false,
+      ),
+    );
+
+    await ref.read(storageProvider).upsertPatient(patient);
+
+    // Server-authoritative sync: when this is the FIRST loved one, make
+    // them circle-owned by creating a backend circle that owns them.
+    // Strictly best-effort + fail-safe and FIRE-AND-FORGET — onboarding
+    // navigation must NEVER wait on the network. If the backend is offline
+    // or unconfigured this no-ops inside ensureCircleForActivePatient and
+    // the app proceeds exactly as it does today (local patient, no circle);
+    // bootstrap retries the circle creation on a later launch. We don't do
+    // this in ADD mode — a second loved one on the same device isn't a new
+    // circle in v1 (the single-circle model owns the active loved one).
+    if (!widget.isAdd) {
+      try {
+        // Intentionally NOT awaited — the patient is already saved
+        // locally above; circle creation happens in the background.
+        unawaited(
+          ref.read(syncControllerProvider).ensureCircleForActivePatient(),
+        );
+      } catch (_) {
+        // Never block onboarding on sync — stay local-only.
+      }
+    }
+
+    if (widget.isAdd) {
+      // ADD mode (from the "Loved ones" manager): make the new loved one
+      // active so the whole app re-centres on them, then refresh the
+      // active-patient providers + the setup gate (which stays true since
+      // a patient is still on file) and pop back to the manager. We do
+      // NOT `go('/')` — that would blow away the manager's back stack.
+      await ref.read(storageProvider).setActivePatientId(id);
+      ref.invalidate(activePatientProvider);
+      ref.invalidate(activePatientIdProvider);
+      await ref.read(patientConfiguredProvider.notifier).reload();
+      if (!mounted) return;
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/loved-ones');
+      }
+      return;
+    }
+
+    // First-run gate: flip the setup gate so the redirect lets us through
+    // to Home — `reload()` re-reads storage (now non-null) and wakes the
+    // router's refresh listenable.
+    await ref.read(patientConfiguredProvider.notifier).reload();
+
+    if (!mounted) return;
+    context.go('/');
+    } catch (e) {
+      // Never strand the form on "Saving…" — reset so the caregiver can
+      // retry, and surface what went wrong instead of a dead button.
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't save just now — please try again."),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    return Scaffold(
+      backgroundColor: context.cb.background,
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            key: LovedOneSetupScreen.formKey,
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+            children: <Widget>[
+              Text(
+                l10n.lovedOneSetupTitle,
+                style: textTheme.headlineMedium?.copyWith(
+                  color: context.cb.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                l10n.lovedOneSetupIntro,
+                style: textTheme.bodyLarge?.copyWith(
+                  color: context.cb.text,
+                ),
+              ),
+              const SizedBox(height: 28),
+              _FieldLabel(label: l10n.lovedOneSetupNameLabel),
+              const SizedBox(height: 8),
+              TextFormField(
+                key: LovedOneSetupScreen.nameFieldKey,
+                controller: _name,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  hintText: l10n.lovedOneSetupNameHint,
+                ),
+                validator: (String? v) {
+                  if ((v ?? '').trim().isEmpty) {
+                    return l10n.lovedOneSetupNameError;
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+              _FieldLabel(label: l10n.lovedOneSetupAgeLabel),
+              const SizedBox(height: 8),
+              TextFormField(
+                key: LovedOneSetupScreen.ageFieldKey,
+                controller: _age,
+                keyboardType: TextInputType.number,
+                decoration:
+                    InputDecoration(hintText: l10n.lovedOneSetupAgeHint),
+                validator: (String? v) {
+                  final String t = (v ?? '').trim();
+                  if (t.isEmpty) return null;
+                  final int? parsed = int.tryParse(t);
+                  if (parsed == null || parsed < 0 || parsed > 130) {
+                    return l10n.lovedOneSetupAgeError;
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+              _FieldLabel(label: l10n.lovedOneSetupDiagnosisLabel),
+              const SizedBox(height: 8),
+              TextFormField(
+                key: LovedOneSetupScreen.diagnosisFieldKey,
+                controller: _diagnosis,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  hintText: l10n.lovedOneSetupDiagnosisHint,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _FieldLabel(label: l10n.lovedOneSetupAllergiesLabel),
+              const SizedBox(height: 4),
+              _Hint(text: l10n.lovedOneSetupOnePerLine),
+              const SizedBox(height: 8),
+              TextFormField(
+                key: LovedOneSetupScreen.allergiesFieldKey,
+                controller: _allergies,
+                maxLines: 3,
+                minLines: 2,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  hintText: l10n.lovedOneSetupAllergiesHint,
+                ),
+              ),
+              const SizedBox(height: 32),
+              Semantics(
+                button: true,
+                label: l10n.lovedOneSetupSaveSemantics,
+                child: ElevatedButton(
+                  key: LovedOneSetupScreen.saveButtonKey,
+                  onPressed: _submitting ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                    backgroundColor: context.cb.cta,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text(
+                    _submitting
+                        ? l10n.lovedOneSetupSaving
+                        : l10n.lovedOneSetupSave,
+                    style: textTheme.labelLarge?.copyWith(color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Text(
+      label,
+      style: textTheme.bodyLarge?.copyWith(
+        color: context.cb.primary,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+}
+
+class _Hint extends StatelessWidget {
+  const _Hint({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Text(
+      text,
+      style: textTheme.bodyMedium?.copyWith(
+        color: context.cb.primarySoft,
+      ),
+    );
+  }
+}

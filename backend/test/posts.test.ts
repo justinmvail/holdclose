@@ -42,13 +42,18 @@ async function clearTables() {
 
 async function makeProfile(
   sub: string,
-  options: { role?: 'user' | 'admin'; displayName?: string } = {},
+  options: {
+    role?: 'user' | 'admin';
+    displayName?: string;
+    username?: string;
+  } = {},
 ): Promise<Profile> {
   const db = drizzle(env.FORUM_DB);
   const [row] = await db
     .insert(profiles)
     .values({
       displayName: options.displayName ?? sub,
+      username: options.username ?? null,
       careblazersUserId: sub,
       role: options.role ?? 'user',
     })
@@ -411,6 +416,42 @@ describe('GET /api/v1/posts/:id', () => {
     });
     expect(typeof body.created_at).toBe('string');
     expect(typeof body.updated_at).toBe('string');
+  });
+
+  it("carries the author's username + display_name on the response", async () => {
+    const author = await makeProfile('cb-named-author', {
+      displayName: 'Sarah_H',
+      username: 'sarah_h',
+    });
+    const created = await seedPost({
+      authorId: author.id,
+      title: 'named',
+      body: 'body',
+    });
+
+    const res = await SELF.fetch(`${ORIGIN}/api/v1/posts/${created.id}`);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      author_id: author.id,
+      author_username: 'sarah_h',
+      author_display_name: 'Sarah_H',
+    });
+  });
+
+  it('nulls author name fields when the author has no username yet', async () => {
+    const author = await makeProfile('cb-noname-author', {
+      displayName: 'Caregiver_abc123',
+    });
+    const created = await seedPost({
+      authorId: author.id,
+      title: 'nameless',
+      body: 'body',
+    });
+
+    const res = await SELF.fetch(`${ORIGIN}/api/v1/posts/${created.id}`);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.author_username).toBeNull();
+    expect(body.author_display_name).toBe('Caregiver_abc123');
   });
 
   it('returns 404 for an unknown id', async () => {

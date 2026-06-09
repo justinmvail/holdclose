@@ -142,9 +142,13 @@ careblazers/
   v1 demo.
 - **No "AI" framing in the UI.** Per dossier analysis, the audience
   is AI-resistant. The product presents "Dr. Natali's coaching" —
-  the LLM is invisible. The only place "AI" is mentioned is in the
-  Settings → About → Methodology disclosure ("Generated using Dr.
-  Natali's teaching, with her permission") and it's small.
+  the LLM is invisible. The Settings → About → Methodology disclosure
+  AND the "brand & framework credit" card were **removed (2026-06-06,
+  user call)** — they felt out of place and the credit's "used with
+  permission" line was inaccurate for the pitch build. Settings → About
+  now shows only the app version. AI is now mentioned nowhere in the UI;
+  if a disclosure is needed later it should live in a privacy/terms doc,
+  not a Settings card.
 - **Demo mode resets state on every launch by default.** Settings
   has a toggle to disable that for testing. The real-user app NEVER
   resets — that toggle is hidden behind a debug flag.
@@ -154,9 +158,13 @@ careblazers/
   output includes a footer reminder. The LLM system prompt
   explicitly forbids medication dosing recommendations, prognosis
   claims, and "your loved one has X condition" diagnoses.
-- **Bottom tab bar is always exactly five items in this order —
-  Home, Medical, Team, Chat, Community — never collapsed or
-  conditionally hidden.**
+- **Bottom tab bar is always exactly four items in this order —
+  Home, Care, Chat, Community — never collapsed or conditionally
+  hidden.** (IA refactor 2026-06-06: "Medical" was renamed **Care**;
+  the former "Team" tab folded into Care as a gated "Care Circle" hub.
+  The Care branch's route path stays `/medical` internally and the
+  former team routes stay `/team/*` — only the labels + tab structure
+  changed.)
 - **Every feature page below a hub uses `PathHeader` with breadcrumb
   + word-labeled Back. No screen below a hub relies on the OS back
   button alone.**

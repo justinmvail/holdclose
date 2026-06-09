@@ -1,28 +1,64 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/medication.dart';
+import '../../providers/active_patient_provider.dart';
 import '../../providers/patient_timeline_provider.dart';
 import '../../services/medication_repository.dart';
 import '../../theme.dart';
+import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
+import 'medication_form_screen.dart' show TitleCaseTextFormatter;
 import 'medication_list_screen.dart' show medicationListProvider;
 
 part 'dose_window_list_screen.g.dart';
-
-const String _calendarPatientId = 'demo-patient-mary';
 
 /// Async list of dose windows for the active patient, sorted by
 /// anchor time with "As needed" last. Backed by the
 /// [MedicationRepository.windowsForPatient] query so a freshly
 /// upserted window flows in on invalidate.
+///
+/// The patient id comes from [activePatientIdProvider] now (was a hard-
+/// coded 'demo-patient-mary' const) so the windows follow whichever loved
+/// one is active. With one patient on file the provider resolves that
+/// sole id, so the single-patient behaviour is unchanged.
 @Riverpod(keepAlive: false)
 Future<List<DoseWindow>> doseWindowList(Ref ref) async {
   final MedicationRepository repo =
       ref.watch(medicationRepositoryBackendProvider);
-  return repo.windowsForPatient(_calendarPatientId);
+  final String patientId = await ref.watch(activePatientIdProvider.future);
+  return repo.windowsForPatient(patientId);
+}
+
+/// Capitalise the first letter of every whitespace-delimited word in a
+/// time-window name so a freshly-typed or legacy lowercase label
+/// ("morning", "after lunch") persists + displays title-cased
+/// ("Morning", "After Lunch"). Interior letters are left untouched so an
+/// acronym the caregiver typed (e.g. "PRN") survives. Mirrors the
+/// medication form's [TitleCaseTextFormatter] for stored values.
+String capitalizeWindowLabel(String raw) {
+  final String trimmed = raw.trim();
+  if (trimmed.isEmpty) return trimmed;
+  final StringBuffer out = StringBuffer();
+  bool atWordStart = true;
+  for (int i = 0; i < trimmed.length; i++) {
+    final String ch = trimmed[i];
+    if (ch == ' ' || ch == '\t' || ch == '\n') {
+      out.write(ch);
+      atWordStart = true;
+      continue;
+    }
+    if (atWordStart) {
+      out.write(ch.toUpperCase());
+      atWordStart = false;
+    } else {
+      out.write(ch);
+    }
+  }
+  return out.toString();
 }
 
 /// Dose-window management screen at `/medications/windows`. Lists
@@ -43,14 +79,14 @@ class DoseWindowListScreen extends ConsumerWidget {
     final AsyncValue<List<DoseWindow>> async =
         ref.watch(doseWindowListProvider);
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       floatingActionButton: FloatingActionButton.extended(
         key: fabKey,
-        backgroundColor: careblazersColors.cta,
+        backgroundColor: context.cb.cta,
         foregroundColor: Colors.white,
         onPressed: () => context.push('/medications/windows/new'),
         icon: const Icon(Icons.add),
-        label: const Text('Add window'),
+        label: const Text('Add time window'),
       ),
       body: SafeArea(
         child: Column(
@@ -61,12 +97,12 @@ class DoseWindowListScreen extends ConsumerWidget {
               child: PathHeader(
                 breadcrumbs: <PathHeaderCrumb>[
                   PathHeaderCrumb(label: 'Home', route: '/'),
-                  PathHeaderCrumb(label: 'Medical', route: '/medical'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
                   PathHeaderCrumb(
                       label: 'Medications', route: '/medications'),
-                  PathHeaderCrumb(label: 'Windows'),
+                  PathHeaderCrumb(label: 'Time windows'),
                 ],
-                title: 'Dose windows',
+                title: 'Time windows',
                 backLabel: 'Back to Medications',
                 leadingIcon: Icons.schedule_outlined,
               ),
@@ -105,7 +141,7 @@ class _WindowRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Material(
-      color: careblazersColors.surfaceWarm,
+      color: context.cb.surfaceWarm,
       borderRadius: BorderRadius.circular(12),
       child: ListTile(
         key: DoseWindowListScreen.tileKey(window.id),
@@ -127,9 +163,9 @@ class _WindowRow extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             IconButton(
-              tooltip: 'Delete window',
+              tooltip: 'Delete time window',
               icon: const Icon(Icons.delete_outline),
-              color: careblazersColors.primarySoft,
+              color: context.cb.primarySoft,
               onPressed: () =>
                   confirmAndDeleteWindow(context, ref, window.id),
             ),
@@ -153,17 +189,18 @@ class _Empty extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'No windows yet.',
+            'No time windows yet.',
             style: tt.titleMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            "Windows are the times of day medications are given — "
-            "Morning, Bedtime, etc. Tap +Add window to create your first.",
+            "Time windows are the times of day medications are given — "
+            "Morning, Bedtime, etc. Tap +Add time window to create your "
+            "first.",
             style: tt.bodyMedium?.copyWith(
-              color: careblazersColors.text.withValues(alpha: 0.7),
+              color: context.cb.text.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -178,7 +215,7 @@ class _ErrorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.all(24),
-        child: Text("Couldn't load windows.\n\n$message"),
+        child: Text("Couldn't load time windows.\n\n$message"),
       );
 }
 
@@ -220,7 +257,7 @@ Future<bool> confirmAndDeleteWindow(
     context: context,
     builder: (BuildContext dialogContext) => AlertDialog(
       title: Text(attached.isEmpty
-          ? 'Delete this window?'
+          ? 'Delete this time window?'
           : 'Delete and unlink ${attached.length} '
               'medication${attached.length == 1 ? '' : 's'}?'),
       content: Column(
@@ -229,12 +266,12 @@ Future<bool> confirmAndDeleteWindow(
         children: <Widget>[
           if (attached.isEmpty)
             const Text(
-              "No medications are attached to this window. Safe to "
+              "No medications are attached to this time window. Safe to "
               "delete.",
             )
           else ...<Widget>[
             Text(
-              'Deleting this window will unlink it from the '
+              'Deleting this time window will unlink it from the '
               'following medication${attached.length == 1 ? '' : 's'}, '
               "so they'll stop appearing on the schedule at this "
               "time. The medications themselves stay.",
@@ -344,22 +381,24 @@ class _DoseWindowFormScreenState
 
   Future<void> _submit() async {
     if (_submitting) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    // Validate on press + scroll to the first invalid field.
+    if (!validateAndScrollToFirstError(_formKey)) return;
     setState(() => _submitting = true);
     final MedicationRepository repo =
         ref.read(medicationRepositoryBackendProvider);
+    final String patientId = await ref.read(activePatientIdProvider.future);
     final String id = widget.windowId ??
         'window-${DateTime.now().millisecondsSinceEpoch}';
     final int sortOrder = widget.isEdit
         ? _sortOrder
-        : (await repo.windowsForPatient(_calendarPatientId))
+        : (await repo.windowsForPatient(patientId))
             .map((DoseWindow w) => w.sortOrder)
             .fold<int>(-1, (int a, int b) => a > b ? a : b) +
             1;
     final DoseWindow window = DoseWindow(
       id: id,
-      patientId: _calendarPatientId,
-      label: _label.text.trim(),
+      patientId: patientId,
+      label: capitalizeWindowLabel(_label.text.trim()),
       anchorTime: _asNeeded ? null : _time,
       sortOrder: sortOrder,
     );
@@ -417,15 +456,16 @@ class _DoseWindowFormScreenState
     final MaterialLocalizations loc = MaterialLocalizations.of(context);
     final TextTheme tt = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       appBar: AppBar(
-        title: Text(widget.isEdit ? 'Edit window' : 'Add window'),
+        title: Text(
+            widget.isEdit ? 'Edit time window' : 'Add time window'),
         actions: <Widget>[
           if (widget.isEdit)
             IconButton(
               key: DoseWindowFormScreen.deleteButtonKey,
               icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete window',
+              tooltip: 'Delete time window',
               onPressed: _delete,
             ),
         ],
@@ -439,8 +479,15 @@ class _DoseWindowFormScreenState
               TextFormField(
                 key: DoseWindowFormScreen.labelFieldKey,
                 controller: _label,
+                // Capitalise each word so "morning" lands as "Morning"
+                // on disk — keyboard hint + hard formatter for parity
+                // with the medication name + prescriber fields.
+                textCapitalization: TextCapitalization.words,
+                inputFormatters: <TextInputFormatter>[
+                  TitleCaseTextFormatter(),
+                ],
                 decoration: const InputDecoration(
-                  labelText: 'Label',
+                  labelText: 'Time window name',
                   hintText: 'e.g. Morning',
                 ),
                 validator: (String? v) {
@@ -481,7 +528,7 @@ class _DoseWindowFormScreenState
                 key: DoseWindowFormScreen.submitButtonKey,
                 onPressed: _submitting ? null : _submit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: careblazersColors.cta,
+                  backgroundColor: context.cb.cta,
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(56),
                 ),

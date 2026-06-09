@@ -3,10 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/chat.dart';
+import '../../providers/pending_chat_message_provider.dart';
+import '../../providers/voice_capture_provider.dart';
+import '../../services/chat_actions.dart' show chatNavigateRequestProvider;
 import '../../services/chat_repository.dart';
 import '../../services/chat_service.dart';
+import '../../services/voice_intake.dart';
 import '../../theme.dart';
 import '../../widgets/caption_fade.dart';
 import '../../widgets/message_body.dart';
@@ -62,19 +67,42 @@ class ChatScreen extends ConsumerStatefulWidget {
   static const Key listKey = Key('chat-screen-list');
   static const Key emptyHintKey = Key('chat-screen-empty-hint');
 
+  /// The composer mic button (#fb_1780959784045575) — captures one spoken
+  /// phrase and drops the transcript into the message field for the
+  /// caregiver to edit or send.
+  static const Key composerMicKey = Key('chat-screen-composer-mic');
+
+  /// Inline "Try again" affordance rendered under an assistant bubble whose
+  /// reply stream failed (#19). Tapping it re-sends the last user turn so the
+  /// caregiver can retry without retyping; the composer also stays usable.
+  static const Key retryKey = Key('chat-screen-retry');
+
   /// Stable per-bubble key so widget + golden tests can find a specific
   /// message without depending on its visible body.
   static Key messageBubbleKey(String messageId) =>
       Key('chat-screen-bubble-$messageId');
+
+  /// SnackBar copy shown after a long-press copies a bubble's text to the
+  /// clipboard. Exposed so the widget test can assert it surfaced.
+  static const String copiedSnackText = 'Copied';
 
   /// Marks the currently-streaming assistant bubble so tests can assert
   /// the in-flight presentation (CaptionFade + soft "typing" affordance)
   /// independently of the message id.
   static const Key streamingBubbleKey = Key('chat-screen-streaming-bubble');
 
+  /// The "Coach is thinking…" indicator shown after Send while we wait for
+  /// the shim's first token — i.e. the dead-air gap before any assistant
+  /// bubble exists. Lets the caregiver know something's happening.
+  static const Key typingIndicatorKey = Key('chat-screen-typing-indicator');
+
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
+
+/// Tap-target wrapping the thread so a tap outside the composer dismisses
+/// the keyboard (#fb_1780959745327767).
+const Key _threadTapDismissKey = Key('chat-screen-thread-tap-dismiss');
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _input = TextEditingController();
@@ -94,6 +122,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _sending = false;
   bool _hydrated = false;
 
+  /// The text of the most recent user turn dispatched this session. Held so
+  /// the inline "Try again" affordance under a failed assistant bubble can
+  /// re-send it verbatim without the caregiver retyping (#19).
+  String? _lastUserText;
+
   @override
   void initState() {
     super.initState();
@@ -112,6 +145,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     });
     _scrollToBottom();
+    _consumePendingMessage();
+  }
+
+  /// Auto-send a message parked for THIS conversation by the bottom-bar
+  /// center voice button (the spoken-message-as-first-turn flow). Reads
+  /// the one-shot slot keyed by conversation id; a non-null result is
+  /// dispatched exactly once, since [PendingChatMessage.take] clears the
+  /// slot. A thread reached any other way (a tile tap, a deep link) finds
+  /// nothing waiting and no-ops.
+  void _consumePendingMessage() {
+    final String? pending = ref
+        .read(pendingChatMessageProvider.notifier)
+        .take(widget.conversationId);
+    if (pending == null || pending.trim().isEmpty) return;
+    unawaited(_dispatch(pending.trim()));
   }
 
   @override
@@ -123,11 +171,56 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
+  /// Composer Send handler — pulls the field text, clears it, and dispatches.
   Future<void> _send() async {
     final String text = _input.text.trim();
     if (text.isEmpty || _sending) return;
     _input.clear();
-    setState(() => _sending = true);
+    await _dispatch(text);
+  }
+
+  /// Re-send the last user turn after a failed reply (#19). The composer's
+  /// own Send already re-enables on error (the `_sending` flag is cleared in
+  /// the `finally` below), so this is purely a convenience — one tap instead
+  /// of retyping. No-op while a stream is already in flight.
+  ///
+  /// [_lastUserText] is session-only memory of the last dispatch. But a
+  /// failed turn is persisted with the `[chat error: …]` sentinel, so its
+  /// retry affordance reappears whenever the thread is re-rendered from disk
+  /// — after the app restarts, or when the Home tab tears down + rebuilds the
+  /// embedded chat. In that case [_lastUserText] is null even though a
+  /// retryable failed bubble is on screen, and tapping "Try again" was a
+  /// no-op. So fall back to the most recent user message in the rendered
+  /// thread, which always reflects what's actually shown.
+  Future<void> _retryLast() async {
+    if (_sending) return;
+    final String? text = _lastUserText ?? _lastUserMessageBody();
+    if (text == null || text.isEmpty) return;
+    await _dispatch(text);
+  }
+
+  /// The body of the most recent user message in the rendered thread, or
+  /// null when none has been sent. Walks [_order] back-to-front so it
+  /// survives a state recreation (where [_lastUserText] resets to null).
+  String? _lastUserMessageBody() {
+    for (final String id in _order.reversed) {
+      final Message? m = _messages[id];
+      if (m != null && m.role == MessageRole.user) return m.body;
+    }
+    return null;
+  }
+
+  /// Shared dispatch path for both [_send] and [_retryLast]: flips the
+  /// sending flag, opens a fresh streaming-body controller, subscribes to
+  /// the reply stream, and clears the sending flag when the stream closes —
+  /// crucially in a `finally`, so a stream that ERRORS still re-enables the
+  /// Send button (no stuck "sending" state).
+  Future<void> _dispatch(String text) async {
+    if (text.isEmpty || _sending) return;
+    setState(() {
+      _sending = true;
+      _lastUserText = text;
+    });
 
     final ChatService svc = ref.read(chatServiceProvider);
     final Stream<Message> stream = svc.sendMessage(
@@ -154,12 +247,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       },
     );
 
-    await done.future;
+    try {
+      await done.future;
+    } finally {
+      // Always drop the sending flag — on a clean close AND on an errored
+      // stream — so the Send button re-enables and the caregiver can retry
+      // by resending (#19). Without the `finally`, an exception escaping the
+      // await would strand the composer in a permanent "sending" state.
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _streamingAssistantId = null;
+        });
+      }
+    }
     if (!mounted) return;
-    setState(() {
-      _sending = false;
-      _streamingAssistantId = null;
-    });
     // Invalidate the conversation list so the parent route's tile
     // reflects the freshly-sent user message + the assistant's reply
     // when the user navigates back.
@@ -173,12 +275,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _messages[m.id] = m;
       if (m.role == MessageRole.assistant && !m.streamingDone) {
         _streamingAssistantId = m.id;
-        _streamingBodyController?.add(m.body);
+        // Sanitise every streamed snapshot — strip `[action:…]` tags and
+        // swap a raw `[chat error: …]` trailer for the friendly line — so
+        // the in-flight CaptionFade never flashes an internal marker.
+        _streamingBodyController?.add(ChatService.displayBody(m.body));
       } else if (m.role == MessageRole.assistant && m.streamingDone) {
         // Final body lands — push one last emission so CaptionFade fades
         // the trailing tokens before the bubble swaps to the static
         // MessageBody (which renders citation chips).
-        _streamingBodyController?.add(m.body);
+        _streamingBodyController?.add(ChatService.displayBody(m.body));
       }
     });
     _scrollToBottom();
@@ -218,8 +323,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         if (_messages.containsKey(id)) _messages[id]!,
     ];
 
+    // When the coach runs an [action:navigate …], it parks the target route
+    // here; push it, then clear the intent so a later rebuild doesn't
+    // re-fire the same navigation.
+    ref.listen<String?>(chatNavigateRequestProvider,
+        (String? previous, String? next) {
+      if (next == null) return;
+      ref.read(chatNavigateRequestProvider.notifier).clear();
+      context.push(next);
+    });
+
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       // The Home tab passes its own [appBarOverride]; the `/chat/:id`
       // thread leaves it null and renders a [PathHeader] inside the body
       // instead (Phase 14.34) — `Chat › <conversation name>`, back to the
@@ -243,25 +358,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
               ),
             Expanded(
-              child: _hydrated && ordered.isEmpty
-                  ? const _EmptyHint()
-                  : ListView.builder(
-                      key: ChatScreen.listKey,
-                      controller: _scroll,
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                      itemCount: ordered.length,
+              // Tap anywhere in the thread (outside the composer) to
+              // dismiss the keyboard (#fb_1780959745327767). Paired with
+              // the ListView's drag-dismiss below so the caregiver always
+              // has a way to put the keyboard away — by tapping the thread
+              // or by scrolling it.
+              child: GestureDetector(
+                key: _threadTapDismissKey,
+                behavior: HitTestBehavior.opaque,
+                onTap: () => FocusScope.of(context).unfocus(),
+                child: _hydrated && ordered.isEmpty
+                    ? const _EmptyHint()
+                    : ListView.builder(
+                        key: ChatScreen.listKey,
+                        controller: _scroll,
+                        // Drag the thread to dismiss the keyboard
+                        // (#fb_1780959745327767).
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                        itemCount: ordered.length,
                       itemBuilder: (BuildContext context, int index) {
                         final Message m = ordered[index];
                         final bool isStreaming = m.id == _streamingAssistantId;
+                        // Only the LAST bubble offers retry — "the most recent
+                        // attempt failed; resend it." A successful reply later
+                        // pushes the failed bubble out of the last slot, so its
+                        // retry drops (no stale stack of retry buttons), while
+                        // history still keeps the failed turn visible.
+                        final bool isLast = index == ordered.length - 1;
                         return _MessageRow(
                           message: m,
                           streamingBodyStream: isStreaming
                               ? _streamingBodyController?.stream
                               : null,
                           isStreaming: isStreaming,
+                          // Null while a stream is in flight (no double-send
+                          // race) and on every non-final bubble.
+                          onRetry:
+                              (!_sending && isLast) ? _retryLast : null,
                         );
                       },
                     ),
+              ),
             ),
             if (widget.composerPrefix != null) widget.composerPrefix!,
             _Composer(
@@ -292,13 +431,13 @@ class _EmptyHint extends StatelessWidget {
           Icon(
             Icons.chat_bubble_outline,
             size: 48,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 12),
           Text(
             'Ask anything.',
             style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -307,7 +446,7 @@ class _EmptyHint extends StatelessWidget {
             "What is sundowning? Why is she accusing me? What can I "
             "say when he asks for his mom?",
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.primarySoft,
+              color: context.cb.primarySoft,
             ),
             textAlign: TextAlign.center,
           ),
@@ -323,16 +462,59 @@ class _EmptyHint extends StatelessWidget {
 ///   - assistant: surfaceWarm bubble, navy text, left-aligned. When
 ///     [isStreaming] is true the body comes through [CaptionFade] with
 ///     the streaming body stream.
+/// "Coach is thinking…" content shown inside the streaming assistant bubble
+/// while the shim composes a reply but hasn't streamed its first token yet —
+/// a brand-tinted spinner + calm line (same idiom as the decoder result
+/// screen's loading state), in place of an otherwise-blank bubble.
+class _TypingIndicator extends StatelessWidget {
+  const _TypingIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle? style = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: context.cb.primarySoft,
+          fontStyle: FontStyle.italic,
+        );
+    return Semantics(
+      label: 'Coach is thinking',
+      child: Row(
+        key: ChatScreen.typingIndicatorKey,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                context.cb.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text('Coach is thinking…', style: style),
+        ],
+      ),
+    );
+  }
+}
+
 class _MessageRow extends StatelessWidget {
   const _MessageRow({
     required this.message,
     required this.streamingBodyStream,
     required this.isStreaming,
+    this.onRetry,
   });
 
   final Message message;
   final Stream<String>? streamingBodyStream;
   final bool isStreaming;
+
+  /// Re-send the last user turn. Non-null only when a retry is currently
+  /// allowed (no stream in flight); the bubble itself decides whether to
+  /// show the affordance based on [chatBodyHasError].
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -352,8 +534,9 @@ class _MessageRow extends StatelessWidget {
         message: message,
         streamingBodyStream: streamingBodyStream,
         isStreaming: isStreaming,
+        onRetry: onRetry,
         textStyle: textTheme.bodyLarge?.copyWith(
-          color: careblazersColors.primary,
+          color: context.cb.primary,
           height: 1.4,
         ),
       );
@@ -367,10 +550,40 @@ class _MessageRow extends StatelessWidget {
           constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.82,
           ),
-          child: bubble,
+          // Long-press a bubble to copy its text. User bubbles copy the
+          // raw body; assistant bubbles copy [ChatService.displayBody] so
+          // internal `[action:…]` / `[chat error: …]` markers never land on
+          // the clipboard. Streaming bubbles aren't copyable yet — the body
+          // is still in flight.
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPress: isStreaming
+                ? null
+                : () => _copyBody(context, isUser: isUser),
+            child: bubble,
+          ),
         ),
       ),
     );
+  }
+
+  /// Copy this message's displayed text to the clipboard + confirm with a
+  /// brief SnackBar. Assistant text runs through [ChatService.displayBody]
+  /// so the caregiver never copies an internal marker.
+  Future<void> _copyBody(BuildContext context, {required bool isUser}) async {
+    final String text =
+        isUser ? message.body : ChatService.displayBody(message.body);
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text(ChatScreen.copiedSnackText),
+          duration: Duration(seconds: 1),
+        ),
+      );
   }
 }
 
@@ -389,7 +602,7 @@ class _UserBubble extends StatelessWidget {
         decoration: BoxDecoration(
           // Subtle navy per spec: full-primary at 92% opacity reads as
           // "navy bubble" without going stark on the warm background.
-          color: careblazersColors.primary.withValues(alpha: 0.92),
+          color: context.cb.primary.withValues(alpha: 0.92),
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(18),
             topRight: Radius.circular(18),
@@ -410,6 +623,7 @@ class _AssistantBubble extends StatelessWidget {
     required this.streamingBodyStream,
     required this.isStreaming,
     required this.textStyle,
+    this.onRetry,
   });
 
   final Message message;
@@ -417,13 +631,29 @@ class _AssistantBubble extends StatelessWidget {
   final bool isStreaming;
   final TextStyle? textStyle;
 
+  /// Hook to re-send the last user turn; rendered as an inline "Try again"
+  /// row only when this is a finalised, errored bubble and a retry is
+  /// currently allowed.
+  final VoidCallback? onRetry;
+
   @override
   Widget build(BuildContext context) {
+    // The caregiver-facing text — `[action:…]` tags stripped, a raw
+    // `[chat error: …]` trailer swapped for the friendly line. The raw
+    // `message.body` is kept ONLY for failed-turn detection (showRetry)
+    // below; it is never rendered.
+    final String shownBody = ChatService.displayBody(message.body);
+
     final Widget body;
-    if (isStreaming) {
+    if (isStreaming && shownBody.isEmpty) {
+      // The reply has started (an empty assistant turn is on screen) but no
+      // token has landed yet — show "Coach is thinking…" in place of a blank
+      // bubble so the wait reads as activity, not a stall.
+      body = const _TypingIndicator();
+    } else if (isStreaming) {
       body = CaptionFade(
         key: ChatScreen.streamingBubbleKey,
-        text: message.body,
+        text: shownBody,
         stream: streamingBodyStream,
         style: textStyle,
       );
@@ -432,17 +662,25 @@ class _AssistantBubble extends StatelessWidget {
       // `[card:<id>]` citation markers the assistant emitted resolve to
       // their salmon library-card chips (Phase 11.5).
       body = MessageBody(
-        body: message.body,
+        body: shownBody,
         style: textStyle,
       );
     }
 
+    // A finalised bubble that carries the `[chat error: …]` sentinel is a
+    // failed turn — surface an inline "Try again" under the body so the
+    // caregiver can resend with one tap (#19). Suppressed while streaming
+    // and while a retry is in flight (onRetry null). Detection runs on the
+    // RAW body (the sentinel is stripped from `shownBody`).
+    final bool showRetry =
+        !isStreaming && onRetry != null && chatBodyHasError(message.body);
+
     return Semantics(
-      label: 'Coach said: ${message.body}',
+      label: 'Coach said: $shownBody',
       child: Container(
         key: ChatScreen.messageBubbleKey(message.id),
         decoration: BoxDecoration(
-          color: careblazersColors.surfaceWarm,
+          color: context.cb.surfaceWarm,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(18),
             topRight: Radius.circular(18),
@@ -451,7 +689,38 @@ class _AssistantBubble extends StatelessWidget {
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: body,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            body,
+            if (showRetry) ...<Widget>[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Semantics(
+                  button: true,
+                  label: 'Try again. Re-send your last message to the coach.',
+                  child: TextButton.icon(
+                    key: ChatScreen.retryKey,
+                    onPressed: onRetry,
+                    style: TextButton.styleFrom(
+                      foregroundColor: context.cb.cta,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Try again'),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -463,7 +732,7 @@ class _AssistantBubble extends StatelessWidget {
 /// dims itself out while a reply is in flight so a second tap can't
 /// kick off a parallel stream and clobber the in-flight assistant
 /// message's id.
-class _Composer extends StatelessWidget {
+class _Composer extends ConsumerStatefulWidget {
   const _Composer({
     required this.controller,
     required this.sending,
@@ -475,14 +744,57 @@ class _Composer extends StatelessWidget {
   final VoidCallback onSend;
 
   @override
+  ConsumerState<_Composer> createState() => _ComposerState();
+}
+
+class _ComposerState extends ConsumerState<_Composer> {
+  /// True while a spoken phrase is being captured for the composer field.
+  /// Swaps the mic glyph for a progress ring + disables the button so a
+  /// second tap can't start an overlapping capture (mirrors [VoiceButton]).
+  bool _listening = false;
+
+  /// Capture one spoken phrase through the shared [voiceCaptureProvider]
+  /// seam and drop the transcript into the message field — the caregiver
+  /// can then edit it or hit send (#fb_1780959784045575). Reuses the same
+  /// capture impl + permission handling as the Home Add-sheet mic, so no
+  /// new speech pipeline is introduced. A blank/aborted capture is a
+  /// silent no-op; a denied mic surfaces the standard snackbar.
+  Future<void> _captureIntoField() async {
+    if (_listening) return;
+    setState(() => _listening = true);
+    try {
+      final String? transcript =
+          await ref.read(voiceCaptureProvider).capture();
+      if (!mounted) return;
+      final String text = transcript?.trim() ?? '';
+      if (text.isEmpty) return;
+      // Append to whatever's already typed so a mid-compose capture
+      // doesn't clobber the caregiver's text; insert a space when joining.
+      final String existing = widget.controller.text;
+      final String joined = existing.isEmpty
+          ? text
+          : '${existing.trimRight()} $text';
+      widget.controller
+        ..text = joined
+        ..selection = TextSelection.collapsed(offset: joined.length);
+    } on VoiceCapturePermissionDeniedException {
+      if (!mounted) return;
+      showVoiceCapturePermissionDeniedSnackBar(context);
+    } finally {
+      if (mounted) setState(() => _listening = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
+    final bool sending = widget.sending;
     return Container(
       decoration: BoxDecoration(
-        color: careblazersColors.background,
+        color: context.cb.background,
         border: Border(
           top: BorderSide(
-            color: careblazersColors.surfaceWarm,
+            color: context.cb.surfaceWarm,
             width: 1,
           ),
         ),
@@ -491,26 +803,53 @@ class _Composer extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: <Widget>[
+          // Composer mic — capture a spoken phrase into the field
+          // (#fb_1780959784045575). While listening it shows a progress
+          // ring; "Listening…" reads on the semantics label for the
+          // screen reader without naming the speech tech (CLAUDE.md rules).
+          Semantics(
+            button: true,
+            enabled: !_listening,
+            label: _listening
+                ? 'Listening. Speak your message.'
+                : 'Speak your message.',
+            child: IconButton(
+              key: ChatScreen.composerMicKey,
+              tooltip: _listening ? 'Listening…' : 'Speak your message',
+              onPressed: _listening ? null : _captureIntoField,
+              icon: _listening
+                  ? SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(context.cb.cta),
+                      ),
+                    )
+                  : Icon(Icons.mic_none, color: context.cb.primarySoft),
+            ),
+          ),
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: careblazersColors.surfaceWarm,
+                color: context.cb.surfaceWarm,
                 borderRadius: BorderRadius.circular(20),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: TextField(
                 key: ChatScreen.inputFieldKey,
-                controller: controller,
+                controller: widget.controller,
                 minLines: 1,
                 maxLines: 5,
                 textInputAction: TextInputAction.newline,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: careblazersColors.text,
+                  color: context.cb.text,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Ask the coach...',
                   hintStyle: textTheme.bodyLarge?.copyWith(
-                    color: careblazersColors.primarySoft,
+                    color: context.cb.primarySoft,
                   ),
                   border: InputBorder.none,
                   isDense: true,
@@ -528,13 +867,13 @@ class _Composer extends StatelessWidget {
             label: 'Send message to the coach.',
             child: Material(
               color: sending
-                  ? careblazersColors.cta.withValues(alpha: 0.5)
-                  : careblazersColors.cta,
+                  ? context.cb.cta.withValues(alpha: 0.5)
+                  : context.cb.cta,
               shape: const CircleBorder(),
               child: InkWell(
                 key: ChatScreen.sendButtonKey,
                 customBorder: const CircleBorder(),
-                onTap: sending ? null : onSend,
+                onTap: sending ? null : widget.onSend,
                 child: const Padding(
                   padding: EdgeInsets.all(12),
                   child: Icon(

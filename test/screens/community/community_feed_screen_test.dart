@@ -246,6 +246,44 @@ void main() {
       expect(find.byKey(CommunityFeedScreen.errorKey), findsNothing);
     });
 
+    testWidgets(
+        'a transport error (statusCode 0) shows the branded "check your '
+        'connection" view; Retry re-fetches and renders content (#19)',
+        (WidgetTester tester) async {
+      // The forum client maps a Dio transport failure (DNS/refused/timeout)
+      // to a ForumApiException with statusCode 0 — the offline case #19
+      // targets. The feed must degrade to a branded retry, not a blank list.
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..nextError = ForumApiException(
+          statusCode: 0,
+          error: 'transport_error',
+        )
+        ..setPage(
+          sort: ForumPostSort.hot,
+          page: <ForumPost>[_post('a', title: 'Back online post')],
+        );
+      await _pump(tester, client: client);
+
+      // Branded headline + the offline-specific nudge + a Retry button.
+      expect(find.byKey(CommunityFeedScreen.errorKey), findsOneWidget);
+      expect(find.text("We couldn't reach the community."), findsOneWidget);
+      expect(find.text('Check your connection and try again.'), findsOneWidget);
+      expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+      // No blank/empty-state copy leaked through.
+      expect(find.byKey(CommunityFeedScreen.emptyStateKey), findsNothing);
+      expect(find.text('Be the first to post.'), findsNothing);
+
+      final int callsBefore = client.callCount;
+
+      // Tapping Retry re-fetches; the seeded page now resolves and renders.
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(client.callCount, greaterThan(callsBefore));
+      expect(find.byKey(CommunityFeedScreen.errorKey), findsNothing);
+      expect(find.text('Back online post'), findsOneWidget);
+    });
+
     testWidgets('sort chips carry screen-reader labels',
         (WidgetTester tester) async {
       final _FakeForumApiClient client = _FakeForumApiClient()
@@ -292,11 +330,34 @@ void main() {
       );
     });
 
-    test('displayNameForAuthor strips known prefixes and pads short ids', () {
+    test('displayNameForAuthor falls back to id-stub when no name fields', () {
       expect(displayNameForAuthor('profile-abc123'), 'Caregiver_abc123');
       expect(displayNameForAuthor('user-xyz'), 'Caregiver_xyz');
       expect(displayNameForAuthor('plainid'), 'Caregiver_plaini');
       expect(displayNameForAuthor(''), 'Caregiver');
+    });
+
+    test('displayNameForAuthor prefers @username over display_name + id', () {
+      expect(
+        displayNameForAuthor(
+          'profile-abc123',
+          username: 'sarah_h',
+          displayName: 'Sarah H',
+        ),
+        '@sarah_h',
+      );
+    });
+
+    test('displayNameForAuthor falls back to display_name when no username', () {
+      expect(
+        displayNameForAuthor('profile-abc123', displayName: 'Sarah H'),
+        'Sarah H',
+      );
+      // Empty strings are treated as absent and fall through.
+      expect(
+        displayNameForAuthor('profile-abc123', username: '', displayName: ''),
+        'Caregiver_abc123',
+      );
     });
   });
 }

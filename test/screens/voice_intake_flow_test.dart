@@ -4,6 +4,7 @@ import 'package:careblazers/db/database.dart';
 import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/appointment/appointment_form_screen.dart';
 import 'package:careblazers/screens/journal/journal_wizard_screen.dart';
+import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/screens/medication/dose_log_screen.dart';
 import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/services/provider_repository.dart';
@@ -110,6 +111,11 @@ void main() {
       overrides: <Override>[
         medicationRepositoryBackendProvider.overrideWithValue(repo),
         doseLogClockProvider.overrideWithValue(_fixedNow),
+        // DoseLogScreen's dosesTodayProvider now resolves its patient id via
+        // activePatientIdProvider → storageProvider; an empty in-memory store
+        // keeps the test off the real sqlite database and falls back to
+        // 'demo-patient-mary'.
+        storageBackendProvider.overrideWithValue(InMemoryStorageProvider()),
       ],
     );
 
@@ -170,6 +176,11 @@ void main() {
       overrides: <Override>[
         medicationRepositoryBackendProvider.overrideWithValue(repo),
         doseLogClockProvider.overrideWithValue(_fixedNow),
+        // DoseLogScreen's dosesTodayProvider now resolves its patient id via
+        // activePatientIdProvider → storageProvider; an empty in-memory store
+        // keeps the test off the real sqlite database and falls back to
+        // 'demo-patient-mary'.
+        storageBackendProvider.overrideWithValue(InMemoryStorageProvider()),
       ],
     );
 

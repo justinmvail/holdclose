@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/care_plan_routine.dart';
 import '../../models/medication.dart' show FrequencyKind;
 import '../../providers/care_plan_provider.dart';
+import '../../providers/care_tasks_provider.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
 
@@ -25,11 +26,16 @@ class CarePlanRoutinesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<List<CarePlanRoutine>> async =
         ref.watch(carePlanProvider);
+    // Child-task counts per routine (unified task/routine model) — feeds the
+    // "· N tasks" suffix. A loading/error count just renders no suffix.
+    final Map<String, int> taskCounts =
+        ref.watch(routineTaskCountsProvider).value ?? const <String, int>{};
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       floatingActionButton: FloatingActionButton.extended(
         key: addFabKey,
-        backgroundColor: careblazersColors.cta,
+        heroTag: 'care-plan-routines-add-fab',
+        backgroundColor: context.cb.cta,
         foregroundColor: Colors.white,
         onPressed: () => context.push('/medical/routines/new'),
         icon: const Icon(Icons.add),
@@ -44,11 +50,11 @@ class CarePlanRoutinesScreen extends ConsumerWidget {
               child: PathHeader(
                 breadcrumbs: <PathHeaderCrumb>[
                   PathHeaderCrumb(label: 'Home', route: '/'),
-                  PathHeaderCrumb(label: 'Medical', route: '/medical'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
                   PathHeaderCrumb(label: 'Routines'),
                 ],
                 title: 'Routines',
-                backLabel: 'Back to Medical',
+                backLabel: 'Back to Care',
                 leadingIcon: Icons.assignment_outlined,
               ),
             ),
@@ -70,7 +76,7 @@ class CarePlanRoutinesScreen extends ConsumerWidget {
                       final MaterialLocalizations loc =
                           MaterialLocalizations.of(context);
                       return Material(
-                        color: careblazersColors.surfaceWarm,
+                        color: context.cb.surfaceWarm,
                         borderRadius: BorderRadius.circular(12),
                         child: ListTile(
                           key: rowKey(r.id),
@@ -84,7 +90,8 @@ class CarePlanRoutinesScreen extends ConsumerWidget {
                           ),
                           subtitle: Text(
                             '${loc.formatTimeOfDay(r.scheduledTime)} · '
-                            '${_frequencyLabel(r.frequencyKind)}',
+                            '${_frequencyLabel(r.frequencyKind)}'
+                            '${_tasksSuffix(taskCounts[r.id] ?? 0)}',
                           ),
                           trailing: const Icon(Icons.chevron_right),
                         ),
@@ -98,6 +105,13 @@ class CarePlanRoutinesScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// " · N tasks" suffix for a routine that bundles child tasks; empty
+  /// when it has none (unified task/routine model).
+  static String _tasksSuffix(int count) {
+    if (count == 0) return '';
+    return ' · $count task${count == 1 ? '' : 's'}';
   }
 
   static String _frequencyLabel(FrequencyKind k) {
@@ -136,7 +150,7 @@ class _EmptyState extends StatelessWidget {
             'evening wind-down, "ask about water at 3 PM". Each one '
             'shows up on the schedule with your other day.',
             style: tt.bodyMedium?.copyWith(
-              color: careblazersColors.text.withValues(alpha: 0.7),
+              color: context.cb.text.withValues(alpha: 0.7),
             ),
           ),
         ],

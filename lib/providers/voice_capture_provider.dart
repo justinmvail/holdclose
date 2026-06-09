@@ -1,5 +1,8 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../services/real_capture.dart';
+import 'photo_attacher_provider.dart' show useRealCapture;
+
 part 'voice_capture_provider.g.dart';
 
 /// Speech-to-text capture seam for the multi-kind Add sheet (BUILD_SPEC.md
@@ -52,7 +55,17 @@ class UnavailableVoiceCapture implements VoiceCapture {
   Future<String?> capture() async => null;
 }
 
-/// Riverpod-wired capture seam. Widgets read this and get the impl the
-/// host overrode (or the no-op default in production).
+/// Pure impl selector — [RealVoiceCapture] when [useReal] is set, else
+/// the [UnavailableVoiceCapture] stand-in. Split out from the provider so
+/// both branches are unit-testable without recompiling against the
+/// `USE_REAL_CAPTURE` dart-define.
+VoiceCapture selectVoiceCapture(bool useReal) =>
+    useReal ? RealVoiceCapture() : const UnavailableVoiceCapture();
+
+/// Riverpod-wired capture seam. Widgets read this and get whichever impl
+/// the build mode picked — the real `speech_to_text` recognizer when the
+/// `USE_REAL_CAPTURE` flag is set (see [useRealCapture] in
+/// `photo_attacher_provider.dart`), the unavailable stand-in otherwise —
+/// or whatever a test overrode.
 @Riverpod(keepAlive: true)
-VoiceCapture voiceCapture(Ref ref) => const UnavailableVoiceCapture();
+VoiceCapture voiceCapture(Ref ref) => selectVoiceCapture(useRealCapture);

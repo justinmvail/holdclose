@@ -6,6 +6,7 @@ import '../../models/behavior.dart';
 import '../../models/triage.dart';
 import '../../providers/triage_provider.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 import 'behavior_picker_screen.dart';
 import 'decoder_result_screen.dart';
 
@@ -50,9 +51,10 @@ class _TriageScreenState extends ConsumerState<TriageScreen> {
   /// 0-based question index. 0 = Q1, 1 = Q2, 2 = Q3.
   int _questionIndex = 0;
 
-  /// Chip text in the AppBar. Free-text path renders a generic label
-  /// since the per-caregiver text input is a later task; the canonical
-  /// path renders the picked behavior's label verbatim.
+  /// Behavior chip text shown under the PathHeader. Free-text path
+  /// renders a generic label since the per-caregiver text input is a
+  /// later task; the canonical path renders the picked behavior's label
+  /// verbatim.
   String get _behaviorLabel =>
       widget.args.behavior?.label ?? 'Something else';
 
@@ -112,47 +114,46 @@ class _TriageScreenState extends ConsumerState<TriageScreen> {
     final bool nextEnabled = currentSelection != null;
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        leading: Semantics(
-          button: true,
-          label: _questionIndex == 0
-              ? 'Back. Leave triage.'
-              : 'Back to previous question.',
-          child: BackButton(
-            key: TriageScreen.backButtonKey,
-            onPressed: _goBack,
-            color: careblazersColors.primary,
-          ),
-        ),
-        title: _BehaviorChip(label: _behaviorLabel),
-        centerTitle: true,
-        actions: <Widget>[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Center(
-              child: Text(
-                '${_questionIndex + 1} of ${TriageScreen.totalQuestions}',
-                key: TriageScreen.progressKey,
-                style: textTheme.bodyMedium?.copyWith(
-                  color: careblazersColors.primarySoft,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
+              PathHeader(
+                breadcrumbs: const <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  PathHeaderCrumb(label: 'Journal', route: '/journal'),
+                  PathHeaderCrumb(
+                    label: "What's happening?",
+                    route: '/decoder/behavior',
+                  ),
+                  PathHeaderCrumb(label: 'Triage'),
+                ],
+                title: 'Triage',
+                backLabel: "Back to What's happening?",
+                leadingIcon: Icons.checklist_outlined,
+                trailing: Text(
+                  '${_questionIndex + 1} of ${TriageScreen.totalQuestions}',
+                  key: TriageScreen.progressKey,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: context.cb.primarySoft,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _BehaviorChip(label: _behaviorLabel),
+              ),
+              const SizedBox(height: 24),
               Text(
                 _promptFor(_questionIndex),
                 key: TriageScreen.questionKey(_questionIndex),
                 style: textTheme.headlineMedium?.copyWith(
-                  color: careblazersColors.primary,
+                  color: context.cb.primary,
                 ),
               ),
               const SizedBox(height: 24),
@@ -165,29 +166,61 @@ class _TriageScreenState extends ConsumerState<TriageScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Semantics(
-                button: true,
-                enabled: nextEnabled,
-                label: _questionIndex == TriageScreen.totalQuestions - 1
-                    ? 'Next. Get the script.'
-                    : 'Next question.',
-                child: ElevatedButton(
-                  key: TriageScreen.nextButtonKey,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: careblazersColors.cta,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor:
-                        careblazersColors.cta.withValues(alpha: 0.35),
-                    disabledForegroundColor:
-                        Colors.white.withValues(alpha: 0.7),
-                    minimumSize: const Size.fromHeight(56),
+              Row(
+                children: <Widget>[
+                  // In-wizard Back (replaces the removed PathHeader back
+                  // control): steps to the previous question, or leaves the
+                  // flow from Q1 — so a caregiver can fix an earlier answer
+                  // without restarting the triage.
+                  Expanded(
+                    child: OutlinedButton(
+                      key: TriageScreen.backButtonKey,
+                      onPressed: _goBack,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(56),
+                        foregroundColor: context.cb.primary,
+                        side: BorderSide(
+                          color:
+                              context.cb.primary.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Text(
+                        '‹ Back',
+                        style: textTheme.labelLarge
+                            ?.copyWith(color: context.cb.primary),
+                      ),
+                    ),
                   ),
-                  onPressed: nextEnabled ? () => _goNext(answers) : null,
-                  child: Text(
-                    'Next →',
-                    style: textTheme.labelLarge?.copyWith(color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: Semantics(
+                      button: true,
+                      enabled: nextEnabled,
+                      label: _questionIndex == TriageScreen.totalQuestions - 1
+                          ? 'Next. Get the script.'
+                          : 'Next question.',
+                      child: ElevatedButton(
+                        key: TriageScreen.nextButtonKey,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: context.cb.cta,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor:
+                              context.cb.cta.withValues(alpha: 0.35),
+                          disabledForegroundColor:
+                              Colors.white.withValues(alpha: 0.7),
+                          minimumSize: const Size.fromHeight(56),
+                        ),
+                        onPressed: nextEnabled ? () => _goNext(answers) : null,
+                        child: Text(
+                          'Next →',
+                          style: textTheme.labelLarge
+                              ?.copyWith(color: Colors.white),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
           ),
@@ -333,10 +366,10 @@ class _PillButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color background = selected
-        ? careblazersColors.primary
-        : careblazersColors.surfaceWarm;
+        ? context.cb.primary
+        : context.cb.surfaceWarm;
     final Color foreground =
-        selected ? Colors.white : careblazersColors.primary;
+        selected ? Colors.white : context.cb.primary;
     return Semantics(
       button: true,
       selected: selected,
@@ -386,14 +419,14 @@ class _BehaviorChip extends StatelessWidget {
     return Container(
       key: TriageScreen.behaviorChipKey,
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Text(
         label,
         style: textTheme.titleLarge?.copyWith(
-          color: careblazersColors.primary,
+          color: context.cb.primary,
           fontSize: 16,
         ),
       ),

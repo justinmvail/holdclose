@@ -195,6 +195,7 @@ void main() {
   });
 }
 
+
 /// Walk the three triage questions (BUILD_SPEC.md §5.3): pick an answer,
 /// tap Next, repeat — landing on the result screen after Q3.
 Future<void> _answerTriage(WidgetTester tester) async {

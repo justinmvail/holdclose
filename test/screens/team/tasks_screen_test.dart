@@ -3,6 +3,7 @@ import 'package:careblazers/models/care_task.dart';
 import 'package:careblazers/models/caregiver.dart';
 import 'package:careblazers/providers/care_circle_provider.dart';
 import 'package:careblazers/providers/care_tasks_provider.dart';
+import 'package:careblazers/providers/storage_provider.dart';
 import 'package:careblazers/screens/team/tasks_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -61,6 +62,12 @@ void main() {
           careTasksClockProvider.overrideWithValue(() => _clock),
           currentCaregiverIdProvider.overrideWithValue(_me),
           taskIdFactoryProvider.overrideWithValue(() => 'new-${ids++}'),
+          // Creating a task now resolves the active loved one via
+          // activePatientIdProvider → storageProvider; an empty in-memory
+          // store keeps the test off the on-device sqlite file and falls
+          // back to 'demo-patient-mary' (== _patientId), so the stamped
+          // patientId is unchanged.
+          storageBackendProvider.overrideWithValue(InMemoryStorageProvider()),
         ],
         child: const MaterialApp(home: TasksScreen()),
       ),
@@ -240,6 +247,167 @@ void main() {
       final List<CareTask> tasks = await tasksRepo.listTasks();
       expect(tasks.single.title, 'Call the pharmacy');
       expect(tasks.single.status, CareTaskStatus.open);
+    });
+
+    testWidgets(
+        'a fully-filled task persists title, details, due, and assignee',
+        (tester) async {
+      // An assignee chip only renders for a roster caregiver.
+      await circleRepo.upsertCaregiver(const Caregiver(
+        id: 'maria',
+        displayName: 'Maria Lopez',
+        role: CaregiverRole.aide,
+      ));
+      await pump(tester);
+
+      // The Material time picker's action row needs more vertical room than
+      // the default 460x900 to render its OK button on-screen; grow the
+      // surface so the due picker confirms cleanly. (pump()'s tearDown
+      // already restores the size to null.)
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(TasksScreen.fabKey));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(TasksScreen.titleFieldKey), 'Refill blood pressure meds');
+      await tester.enterText(
+          find.byKey(TasksScreen.bodyFieldKey), 'Two prescriptions at CVS.');
+
+      // Pick the seeded caregiver. The chip sits low in the scrollable sheet,
+      // so bring it into view before tapping.
+      final Finder assignee =
+          find.byKey(TasksScreen.assigneeOptionKey('maria'));
+      await tester.ensureVisible(assignee);
+      await tester.pumpAndSettle();
+      await tester.tap(assignee);
+      await tester.pumpAndSettle();
+
+      // Set a due time last (it's a modal that takes over the screen): open
+      // the date picker, accept the default date, then the default time —
+      // same flow the shifts schedule sheet uses.
+      await tester.tap(find.byKey(TasksScreen.dueButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      final Finder save = find.byKey(TasksScreen.saveButtonKey);
+      await tester.ensureVisible(save);
+      await tester.pumpAndSettle();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+
+      // Sheet closed; the task renders on the Open board with its details.
+      expect(find.byKey(TasksScreen.createSheetKey), findsNothing);
+      expect(find.text('Refill blood pressure meds'), findsOneWidget);
+      expect(find.text('Two prescriptions at CVS.'), findsOneWidget);
+
+      // The whole payload persisted to the in-memory repository.
+      final List<CareTask> tasks = await tasksRepo.listTasks();
+      final CareTask saved = tasks.single;
+      expect(saved.title, 'Refill blood pressure meds');
+      expect(saved.body, 'Two prescriptions at CVS.');
+      expect(saved.assigneeCaregiverId, 'maria');
+      // The default date+time picker yields the clock's day, 9:00 — the form
+      // seeds the time picker from "now" (the pinned clock at 12:00) but the
+      // accepted default keeps it the pinned date; assert the date persisted.
+      expect(saved.dueAt, isNotNull);
+      expect(saved.dueAt!.year, _clock.year);
+      expect(saved.dueAt!.month, _clock.month);
+      expect(saved.dueAt!.day, _clock.day);
+      // Pre-assigned at creation but not yet claimed → still Open.
+      expect(saved.status, CareTaskStatus.open);
+    });
+  });
+
+  group('TasksScreen — long-press edit + delete', () {
+    testWidgets('long-press opens the card menu with Edit + Delete',
+        (tester) async {
+      await tasksRepo.upsertTask(_task(id: 't1', title: 'Open task'));
+      await pump(tester);
+
+      await tester.longPress(find.byKey(TasksScreen.cardKey('t1')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(TasksScreen.cardMenuKey), findsOneWidget);
+      expect(find.byKey(TasksScreen.cardMenuEditKey), findsOneWidget);
+      expect(find.byKey(TasksScreen.cardMenuDeleteKey), findsOneWidget);
+    });
+
+    testWidgets('delete removes the card and persists the removal',
+        (tester) async {
+      await tasksRepo.upsertTask(_task(id: 't1', title: 'Open task'));
+      await pump(tester);
+
+      await tester.longPress(find.byKey(TasksScreen.cardKey('t1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(TasksScreen.cardMenuDeleteKey));
+      await tester.pumpAndSettle();
+
+      // Confirm dialog appears; confirm the delete.
+      expect(find.byKey(TasksScreen.deleteDialogKey), findsOneWidget);
+      await tester.tap(find.byKey(TasksScreen.deleteConfirmKey));
+      await tester.pumpAndSettle();
+
+      // Gone from the board and from the in-memory repo.
+      expect(find.byKey(TasksScreen.cardKey('t1')), findsNothing);
+      expect(await tasksRepo.listTasks(), isEmpty);
+    });
+
+    testWidgets('cancelling the delete keeps the task', (tester) async {
+      await tasksRepo.upsertTask(_task(id: 't1', title: 'Open task'));
+      await pump(tester);
+
+      await tester.longPress(find.byKey(TasksScreen.cardKey('t1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(TasksScreen.cardMenuDeleteKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(TasksScreen.deleteCancelKey));
+      await tester.pumpAndSettle();
+
+      // Still on disk after a cancelled delete.
+      expect((await tasksRepo.listTasks()).single.id, 't1');
+    });
+
+    testWidgets('edit updates the task in place — same id, no duplicate',
+        (tester) async {
+      // A claimed task so we also prove the lifecycle survives the edit.
+      await tasksRepo.upsertTask(_task(
+        id: 't1',
+        title: 'Old title',
+        assigneeCaregiverId: _me,
+        claimedAt: _clock,
+      ));
+      await pump(tester);
+      await tapSegment(tester, CareTaskStatus.claimed);
+
+      await tester.longPress(find.byKey(TasksScreen.cardKey('t1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(TasksScreen.cardMenuEditKey));
+      await tester.pumpAndSettle();
+
+      // The edit sheet seeds from the task, then we change the title. (The
+      // card is still in the tree under the sheet, so assert the field's own
+      // controller rather than a bare text match.)
+      expect(find.byKey(TasksScreen.createSheetKey), findsOneWidget);
+      final TextField titleField =
+          tester.widget<TextField>(find.byKey(TasksScreen.titleFieldKey));
+      expect(titleField.controller!.text, 'Old title');
+      await tester.enterText(
+          find.byKey(TasksScreen.titleFieldKey), 'New title');
+      await tester.tap(find.byKey(TasksScreen.saveButtonKey));
+      await tester.pumpAndSettle();
+
+      // Exactly one task, same id, new title, still Claimed.
+      final List<CareTask> tasks = await tasksRepo.listTasks();
+      expect(tasks, hasLength(1));
+      expect(tasks.single.id, 't1');
+      expect(tasks.single.title, 'New title');
+      expect(tasks.single.status, CareTaskStatus.claimed);
+      expect(tasks.single.assigneeCaregiverId, _me);
     });
   });
 }

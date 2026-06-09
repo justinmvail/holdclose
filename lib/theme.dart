@@ -7,7 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 /// these via `Theme.of(context).colorScheme.X` or `careblazersColors.X`
 /// — never as raw hex.
 @immutable
-class CareblazersColors {
+class CareblazersColors extends ThemeExtension<CareblazersColors> {
   const CareblazersColors({
     required this.primary,
     required this.primarySoft,
@@ -31,8 +31,58 @@ class CareblazersColors {
   final Color link;
   final Color error;
   final Color success;
+
+  @override
+  CareblazersColors copyWith({
+    Color? primary,
+    Color? primarySoft,
+    Color? text,
+    Color? cta,
+    Color? accentDeep,
+    Color? surfaceWarm,
+    Color? background,
+    Color? link,
+    Color? error,
+    Color? success,
+  }) {
+    return CareblazersColors(
+      primary: primary ?? this.primary,
+      primarySoft: primarySoft ?? this.primarySoft,
+      text: text ?? this.text,
+      cta: cta ?? this.cta,
+      accentDeep: accentDeep ?? this.accentDeep,
+      surfaceWarm: surfaceWarm ?? this.surfaceWarm,
+      background: background ?? this.background,
+      link: link ?? this.link,
+      error: error ?? this.error,
+      success: success ?? this.success,
+    );
+  }
+
+  @override
+  CareblazersColors lerp(
+    covariant ThemeExtension<CareblazersColors>? other,
+    double t,
+  ) {
+    if (other is! CareblazersColors) return this;
+    return CareblazersColors(
+      primary: Color.lerp(primary, other.primary, t)!,
+      primarySoft: Color.lerp(primarySoft, other.primarySoft, t)!,
+      text: Color.lerp(text, other.text, t)!,
+      cta: Color.lerp(cta, other.cta, t)!,
+      accentDeep: Color.lerp(accentDeep, other.accentDeep, t)!,
+      surfaceWarm: Color.lerp(surfaceWarm, other.surfaceWarm, t)!,
+      background: Color.lerp(background, other.background, t)!,
+      link: Color.lerp(link, other.link, t)!,
+      error: Color.lerp(error, other.error, t)!,
+      success: Color.lerp(success, other.success, t)!,
+    );
+  }
 }
 
+/// Light brand palette (BUILD_SPEC.md §3.1). Source of truth for light
+/// mode and the safe const fallback for any context that can't reach a
+/// [BuildContext] (theme construction, top-level functions, static data).
 const CareblazersColors careblazersColors = CareblazersColors(
   primary: Color(0xFF1F2A44),
   primarySoft: Color(0xFF2A3B61),
@@ -51,6 +101,39 @@ const CareblazersColors careblazersColors = CareblazersColors(
 const Color _darkSurface = Color(0xFF0F1422);
 const Color _darkSurfaceVariant = Color(0xFF1A2236);
 const Color _darkText = Color(0xFFE8E6E2);
+
+/// Dark brand palette. Same token slots as [careblazersColors] but tuned
+/// for a dark navy/charcoal canvas:
+/// - `background`/`surfaceWarm` become dark navy + a slightly lifted
+///   variant so cards separate from the scaffold.
+/// - `text` is the warm off-white `_darkText` (≈13.5:1 on `_darkSurface`,
+///   well past WCAG-AA for body text).
+/// - `primary`/`primarySoft` (used for headings, icons, chips) are
+///   lightened to a pale slate-blue so navy-on-navy stays legible.
+/// - `cta`/`accentDeep` (the brand orange) are nudged brighter so the CTA
+///   keeps AA contrast on the dark canvas while staying on-brand.
+/// - `link`/`error`/`success` are lightened for contrast on dark.
+const CareblazersColors careblazersColorsDark = CareblazersColors(
+  primary: Color(0xFFB7C4E0),
+  primarySoft: Color(0xFF8C9BBF),
+  text: _darkText,
+  cta: Color(0xFFE08A6B),
+  accentDeep: Color(0xFFC97458),
+  surfaceWarm: _darkSurfaceVariant,
+  background: _darkSurface,
+  link: Color(0xFF8FA2E8),
+  error: Color(0xFFF06A6A),
+  success: Color(0xFF5FBF8C),
+);
+
+/// Reads the active [CareblazersColors] theme extension off [context],
+/// falling back to the light const if no ancestor theme registered one
+/// (keeps tests + stray contexts safe — never crashes, never returns
+/// null).
+extension CareblazersColorsContext on BuildContext {
+  CareblazersColors get cb =>
+      Theme.of(this).extension<CareblazersColors>() ?? careblazersColors;
+}
 
 TextTheme _careblazersTextTheme({
   required Color bodyColor,
@@ -116,6 +199,7 @@ ThemeData _buildLightTheme() {
     brightness: Brightness.light,
     colorScheme: scheme,
     scaffoldBackgroundColor: careblazersColors.background,
+    extensions: const <ThemeExtension<dynamic>>[careblazersColors],
     textTheme: _careblazersTextTheme(
       bodyColor: careblazersColors.text,
       headingColor: careblazersColors.primary,
@@ -134,16 +218,16 @@ ThemeData _buildLightTheme() {
 }
 
 ThemeData _buildDarkTheme() {
-  const ColorScheme scheme = ColorScheme(
+  final ColorScheme scheme = ColorScheme(
     brightness: Brightness.dark,
-    primary: Color(0xFF1F2A44),
-    onPrimary: _darkText,
-    secondary: Color(0xFFC97458),
-    onSecondary: Color(0xFFFFFFFF),
-    tertiary: Color(0xFFB05C40),
-    onTertiary: Color(0xFFFFFFFF),
-    error: Color(0xFFCF2E2E),
-    onError: Color(0xFFFFFFFF),
+    primary: careblazersColorsDark.primary,
+    onPrimary: _darkSurface,
+    secondary: careblazersColorsDark.cta,
+    onSecondary: _darkSurface,
+    tertiary: careblazersColorsDark.accentDeep,
+    onTertiary: _darkSurface,
+    error: careblazersColorsDark.error,
+    onError: _darkSurface,
     surface: _darkSurface,
     onSurface: _darkText,
     surfaceContainerHighest: _darkSurfaceVariant,
@@ -154,6 +238,7 @@ ThemeData _buildDarkTheme() {
     brightness: Brightness.dark,
     colorScheme: scheme,
     scaffoldBackgroundColor: _darkSurface,
+    extensions: const <ThemeExtension<dynamic>>[careblazersColorsDark],
     textTheme: _careblazersTextTheme(
       bodyColor: _darkText,
       headingColor: _darkText,

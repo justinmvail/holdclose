@@ -98,9 +98,44 @@ class Settings extends _$Settings {
   Future<void> setAllowAudioDuringQuietHours(bool value) =>
       _update(state.copyWith(allowAudioDuringQuietHours: value));
 
+  /// Set the quiet-hours window bounds (whole hour-of-day, 0–23). The
+  /// window wraps midnight when start > end. Hours are normalised into
+  /// 0–23 so a picker can't persist an out-of-range value.
+  Future<void> setQuietHoursWindow({
+    required int startHour,
+    required int endHour,
+  }) =>
+      _update(state.copyWith(
+        quietHoursStartHour: startHour % 24,
+        quietHoursEndHour: endHour % 24,
+      ));
+
   /// Toggle the auto-dark-after-6pm behavior (BUILD_SPEC.md §11.4).
+  ///
+  /// Legacy setter kept for back-compat callers; the appearance UI now
+  /// drives [setThemePreference] / [setDarkWindow] instead.
   Future<void> setDarkModeAtNight(bool value) =>
       _update(state.copyWith(darkModeAtNight: value));
+
+  /// Set how the app chooses between the light and dark palettes
+  /// (BUILD_SPEC.md §11.4 — system / on / off / scheduled). The
+  /// [nightThemeModeProvider] re-evaluates the moment this lands.
+  Future<void> setThemePreference(ThemePreference value) =>
+      _update(state.copyWith(themePreference: value));
+
+  /// Set the scheduled dark-mode window bounds (whole hour-of-day,
+  /// 0–23). Only consulted when [AppSettings.themePreference] is
+  /// [ThemePreference.scheduled]; the window wraps midnight when start >
+  /// end. Hours are normalised into 0–23 so a picker can't persist an
+  /// out-of-range value.
+  Future<void> setDarkWindow({
+    required int startHour,
+    required int endHour,
+  }) =>
+      _update(state.copyWith(
+        darkStartHour: startHour % 24,
+        darkEndHour: endHour % 24,
+      ));
 
   /// Toggle "Reset on launch" — visible only in [demoModeEnabled]
   /// builds (BUILD_SPEC.md §5.10 + §9.3).

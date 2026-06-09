@@ -1,3 +1,4 @@
+import 'package:careblazers/l10n/app_localizations.dart';
 import 'package:careblazers/providers/onboarding_provider.dart';
 import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
 import 'package:flutter/material.dart';
@@ -40,7 +41,15 @@ Future<({ProviderContainer container, GoRouter router})> _pumpCarousel(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        // The carousel reads its chrome strings via AppLocalizations.of
+        // (#18 localization), so the pumped MaterialApp must register the
+        // generated delegate + supportedLocales — otherwise `.of(context)`
+        // throws (nullable-getter: false).
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     ),
   );
   await tester.pumpAndSettle();

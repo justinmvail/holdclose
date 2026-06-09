@@ -44,6 +44,7 @@ library;
 import 'dart:async';
 
 import 'package:careblazers/models/appointment.dart';
+import 'package:careblazers/models/care_event.dart';
 import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/appointment/appointment_detail_screen.dart';
 import 'package:careblazers/screens/appointment/appointment_form_screen.dart';
@@ -53,6 +54,7 @@ import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/provider_repository.dart';
 import 'package:careblazers/providers/patient_timeline_provider.dart';
 import 'package:careblazers/widgets/home/schedule_card.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 // `Provider` in [models/appointment.dart] collides with riverpod's own
 // `Provider` class — `hide` keeps the model name resolvable here without
@@ -82,15 +84,37 @@ const Provider _ortega = Provider(
 /// appointment id and the default `startsAt` slot are deterministic. A
 /// fresh monotonic counter per call ('id0', 'id1', …); the add path takes
 /// `appt-id0` for the appointment when an existing provider is selected.
+///
+/// Also stubs the two patient-timeline sources the shared harness leaves
+/// unwired — `patientHealthLogEvents` and `patientCarePlanEvents` —
+/// straight to empty (the sanctioned "override each source via the
+/// existing per-source providers" seam on [patientTimelineEvents]).
+/// Their backends call `CareblazersDatabase.open()` (the real on-disk
+/// handle), which never resolves under `flutter test`, so the Home
+/// Schedule card's `patientTimelineEvents` watch would otherwise hang in
+/// its loading skeleton and the seeded appointments never render. None of
+/// these flows seed health-log or care-plan rows, so empty is the same
+/// value a correctly-wired merger would produce — only the appointment
+/// projection (read through the harness's in-memory repo) carries data.
 List<Override> _formOverrides() {
   int counter = 0;
   return <Override>[
     appointmentFormClockProvider.overrideWithValue(() => kHarnessClock),
     appointmentFormIdFactoryProvider.overrideWithValue(() => 'id${counter++}'),
+    patientHealthLogEventsProvider
+        .overrideWith((Ref ref) async => const <CareEvent>[]),
+    patientCarePlanEventsProvider
+        .overrideWith((Ref ref) async => const <CareEvent>[]),
   ];
 }
 
 void main() {
+  // The "Add appointment" affordances share a process-wide debounce
+  // (the duplicate-appointment guard) that drops a rapid second tap.
+  // Reset it before each case so one test's add tap doesn't suppress the
+  // next test's.
+  setUp(appointmentAddDebounce.reset);
+
   group('Appointment CRUD — empty state (Phase 15.7)', () {
     testWidgets('Medical → Appointments shows the empty body, no sections',
         (WidgetTester tester) async {
@@ -128,7 +152,12 @@ void main() {
       // list is populated.
       await _tap(tester, AppointmentListScreen.emptyCtaKey);
       expect(find.byType(AppointmentFormScreen), findsOneWidget);
-      expect(find.widgetWithText(AppBar, 'Add appointment'), findsOneWidget);
+      // The form's header is now a PathHeader (Home › Medical › Appointments
+      // › Add appointment) rather than an AppBar — assert the add-mode title
+      // on the header itself. (The text repeats in the header as both the
+      // title row and the terminal breadcrumb crumb, so match the
+      // PathHeader.title property directly instead of by descendant text.)
+      expect(_pathHeaderWithTitle('Add appointment'), findsOneWidget);
 
       // Provider — pick the seeded row from the dropdown.
       await tester.tap(find.byKey(AppointmentFormScreen.providerDropdownKey));
@@ -219,7 +248,10 @@ void main() {
           .push('/appointments/appt-edit/edit'));
       await tester.pumpAndSettle();
       expect(find.byType(AppointmentFormScreen), findsOneWidget);
-      expect(find.widgetWithText(AppBar, 'Edit appointment'), findsOneWidget);
+      // Edit-mode header is the PathHeader (… › Appointments › Edit
+      // appointment), not an AppBar. Match PathHeader.title directly — the
+      // label also repeats in the terminal breadcrumb crumb.
+      expect(_pathHeaderWithTitle('Edit appointment'), findsOneWidget);
       // Pre-filled from the saved row — the location field hydrated from
       // the persisted appointment (the lower notes field sits below the
       // fold in the lazy form ListView, so location is the in-view proof).
@@ -286,22 +318,22 @@ void main() {
   });
 
   group('Appointment CRUD — Home cross-screen sync (Phase 15.7)', () {
-    testWidgets('Schedule card surfaces today + later-week visits',
+    testWidgets('Schedule card surfaces today + tomorrow visits',
         (WidgetTester tester) async {
       final ProviderContainer container =
           await pumpCareblazersApp(tester, extraOverrides: _formOverrides());
       await _seedProvider(container);
       // A later visit (no driver) + a sooner one. Both must surface on
       // the Schedule card — the sooner one under "Today", the later one
-      // under "This week" — rather than the single Next Appointment row
+      // under "Tomorrow" — rather than the single Next Appointment row
       // the old card showed.
       await _seedAppointment(
         container,
         const _ApptSeed(
           id: 'appt-later',
-          // 2026-06-05 09:00 — Friday, same Sun-anchored week as the
-          // pinned harness clock (Mon 2026-06-01). Falls in "This week".
-          startsAt: _Instant(2026, 6, 5, 9, 0),
+          // 2026-06-02 09:00 — tomorrow against the pinned harness clock
+          // (Mon 2026-06-01). Falls under "Tomorrow".
+          startsAt: _Instant(2026, 6, 2, 9, 0),
           location: 'Marin Neurology',
         ),
       );
@@ -326,7 +358,7 @@ void main() {
 
       // Both sections + both rows render.
       expect(find.byKey(ScheduleCard.todaySectionKey), findsOneWidget);
-      expect(find.byKey(ScheduleCard.thisWeekSectionKey), findsOneWidget);
+      expect(find.byKey(ScheduleCard.tomorrowSectionKey), findsOneWidget);
       expect(
         find.byKey(ScheduleCard.rowKey('appt-appt-soon')),
         findsOneWidget,
@@ -406,6 +438,16 @@ Future<void> _seedAppointment(ProviderContainer container, _ApptSeed seed) =>
 // Navigation + interaction helpers
 // ---------------------------------------------------------------------------
 
+/// The [PathHeader] whose [PathHeader.title] equals [title] — the
+/// AppBar-free replacement for the old `widgetWithText(AppBar, …)` title
+/// check. Matching the title property (rather than descendant text) keeps
+/// the assertion to exactly one widget even though the form's header
+/// repeats the label in its terminal breadcrumb crumb, and even with the
+/// list screen's own PathHeader still mounted beneath the pushed form.
+Finder _pathHeaderWithTitle(String title) => find.byWidgetPredicate(
+      (Widget w) => w is PathHeader && w.title == title,
+    );
+
 /// Grow the test surface before driving the date/time pickers. The
 /// material date picker dialog is wider than the harness's default
 /// 420-wide surface (its "OK" action lands off the right edge and the tap
@@ -416,9 +458,9 @@ Future<void> _useWideSurface(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Home → Medical tab → Appointments tile → [AppointmentListScreen].
+/// Home → Care tab → Appointments tile → [AppointmentListScreen].
 Future<void> _openAppointmentList(WidgetTester tester) async {
-  await tester.tap(tabFor('Medical'));
+  await tester.tap(tabFor('Care'));
   await tester.pumpAndSettle();
   expect(find.byType(MedicalHubScreen), findsOneWidget);
 

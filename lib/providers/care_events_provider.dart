@@ -6,15 +6,22 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../db/database.dart';
 import '../models/appointment.dart';
 import '../models/care_event.dart';
+import '../models/care_task.dart';
 import '../services/appointment_repository.dart';
+import '../services/sync_sink.dart';
+import 'care_tasks_provider.dart';
 
 part 'care_events_provider.g.dart';
 
-/// Logical patient id projected appointment events carry (TASKS.md Phase
-/// 14.29). Appointments FK onto a provider, not a patient, so the
-/// projection stamps the single-install loved one here — same fallback
-/// constant the medical + care-circle forms use.
-const String calendarPatientId = 'demo-patient-mary';
+/// Last-resort patient id used when no active loved one is on file yet.
+///
+/// Shared neutral fallback constant the medical + care-circle forms and the
+/// appointment-event projection all reference (the appointment projection
+/// FKs onto a provider, not a patient, so it stamps the single-install
+/// loved one here). The string value still matches the bundled seed data so
+/// DEMO_MODE / widget tests that seed records keyed on it keep resolving;
+/// real installs set an explicit active patient and never persist this.
+const String fallbackPatientId = 'demo-patient-mary';
 
 /// Project one [Appointment] onto a calendar [CareEvent] (TASKS.md Phase
 /// 14.29).
@@ -48,10 +55,30 @@ CareEvent careEventFromAppointment(
     start: appointment.startsAt,
     end: appointment.startsAt
         .add(Duration(minutes: appointment.durationMinutes)),
-    patientId: calendarPatientId,
+    patientId: fallbackPatientId,
     externalRef: appointment.id,
   );
 }
+
+/// Project one standalone [CareTask] onto a calendar [CareEvent] (unified
+/// task/routine model, 2026-06-06).
+///
+/// A task is the atom and a routine is the bundle: a standalone task (one
+/// with `routineId == null`) that carries a due time rides the schedule on
+/// its own, exactly the way a routine occurrence does. Callers guarantee
+/// [CareTask.dueAt] is non-null before projecting. The synthetic `task-`
+/// id prefix keeps these from colliding with the native note ids; a tapped
+/// block routes to the task list via [CareEventX.detailRoute].
+CareEvent careEventFromTask(CareTask task) => CareEvent(
+      id: 'task-${task.id}',
+      kind: CareEventKind.task,
+      title: task.title,
+      start: task.dueAt!,
+      ownerCaregiverId: task.assigneeCaregiverId,
+      patientId: task.patientId,
+      externalRef: task.id,
+      subtitle: task.body,
+    );
 
 /// Persistence for the natively-stored calendar events — ad-hoc notes
 /// ([CareEventKind.note]) the caregiver adds straight on the calendar
@@ -63,7 +90,7 @@ CareEvent careEventFromAppointment(
 /// the freezed [CareEvent] serialises into the row's `payload`, with
 /// [CareEventsTable.startMs] lifted out so the chronological read doesn't
 /// decode every blob.
-class CareEventsRepository {
+class CareEventsRepository with SyncSinkHost {
   CareEventsRepository(this._db);
 
   final CareblazersDatabase _db;
@@ -82,12 +109,17 @@ class CareEventsRepository {
             payload: jsonEncode(event.toJson()),
           ),
         );
+    // Only the natively-stored notes round-trip through this repository;
+    // the projected appointment/task/shift CareEvents are materialized in
+    // the [careEvents] provider and never written here, so they never sync.
+    emitUpsert('care_events', event.id, event.toJson());
   }
 
   /// Drop the event with this id. No-op if absent.
   Future<void> deleteEvent(String id) async {
     await (_db.delete(_db.careEventsTable)..where((t) => t.id.equals(id)))
         .go();
+    emitDelete('care_events', id);
   }
 
   /// One event by id, or null if absent.
@@ -135,17 +167,24 @@ CareEventsRepository careEventsRepositoryBackend(Ref ref) {
 final CareEventsRepositoryBackendProvider careEventsRepositoryProvider =
     careEventsRepositoryBackendProvider;
 
-/// Task-sourced calendar events ([CareEventKind.task]) — the seam Phase
-/// 14.30 overrides to project Care Team → Tasks onto the shared calendar
-/// (TASKS.md Phase 14.29).
+/// Task-sourced calendar events ([CareEventKind.task]) — projects every
+/// **standalone** task that carries a due time onto the shared calendar
+/// (unified task/routine model, 2026-06-06).
 ///
-/// Contributes nothing until that phase lands; kept as an overridable
-/// provider so the [careEvents] unifier can merge all four sources
-/// without this phase pre-building the Tasks module. Tests override it to
+/// Only standalone tasks (`routineId == null`) with a [CareTask.dueAt]
+/// surface as loose blocks; a routine-bound task renders under its routine
+/// header instead, so it's excluded here. Tests override this provider to
 /// inject sample task events.
 @riverpod
-Future<List<CareEvent>> calendarTaskEvents(Ref ref) async =>
-    const <CareEvent>[];
+Future<List<CareEvent>> calendarTaskEvents(Ref ref) async {
+  final CareTasksRepository repo = ref.watch(careTasksRepositoryProvider);
+  final List<CareTask> tasks = await repo.listTasks();
+  return <CareEvent>[
+    for (final CareTask task in tasks)
+      if (task.routineId == null && task.dueAt != null)
+        careEventFromTask(task),
+  ];
+}
 
 /// Shift-sourced calendar events ([CareEventKind.shift]) — the seam Phase
 /// 14.31 overrides to project Care Team → Shifts onto the shared calendar

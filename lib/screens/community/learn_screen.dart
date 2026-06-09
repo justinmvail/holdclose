@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../providers/link_launcher_provider.dart';
 import '../../routing/router.dart' show CareblazersRoutes;
 import '../../seed/learn_content.dart';
 import '../../theme.dart';
@@ -13,10 +15,10 @@ import '../../theme.dart';
 /// `CommunityFeedScreen` owns the Scaffold + sub-nav). Top to bottom:
 ///
 ///   * **Videos** — a vertical list of seeded framework videos
-///     ([learnVideos]). Each card carries a thumbnail placeholder (real
-///     video hosting is deferred to a later phase), the title, the run
-///     length, and a "Watch" button that pushes
-///     `/community/learn/videos/:id`.
+///     ([learnVideos]). Each card shows the real YouTube thumbnail, the
+///     title, and the run length. Tapping the card deep-links straight to
+///     Dr. Natali's video on YouTube via [linkLauncherProvider] (no
+///     in-app detail screen — alpha feedback fb_1780932492880889).
 ///   * **Playbooks** — the seeded "what do I do when…" guides
 ///     ([learnPlaybooks]), grouped under their [LearnTopic] header. Each
 ///     row pushes `/community/learn/playbooks/:id`.
@@ -28,10 +30,9 @@ class LearnScreen extends StatelessWidget {
 
   static const Key listKey = Key('learn-list');
 
-  /// Per-video card + its Watch button, keyed by video id so tests tap by
-  /// id rather than by a copy string.
+  /// Per-video card, keyed by video id so tests tap by id rather than by a
+  /// copy string. The whole card is the tap target (opens YouTube).
   static Key videoCardKey(String id) => Key('learn-video-$id');
-  static Key watchButtonKey(String id) => Key('learn-watch-$id');
 
   /// Per-topic section header + per-playbook row keys.
   static Key topicHeaderKey(LearnTopic topic) =>
@@ -51,7 +52,7 @@ class LearnScreen extends StatelessWidget {
         Text(
           "Short primers on Dr. Natali's framework.",
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
         ),
         const SizedBox(height: 12),
@@ -65,12 +66,11 @@ class LearnScreen extends StatelessWidget {
         Text(
           'Step-by-step guides for the moments that keep coming up.',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
         ),
         const SizedBox(height: 12),
-        for (final LearnTopic topic in LearnTopic.values)
-          ..._topicGroup(topic),
+        for (final LearnTopic topic in LearnTopic.values) ..._topicGroup(topic),
       ],
     );
   }
@@ -104,7 +104,7 @@ class _SectionHeader extends StatelessWidget {
     return Text(
       label,
       style: textTheme.titleLarge?.copyWith(
-        color: careblazersColors.primary,
+        color: context.cb.primary,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -125,66 +125,134 @@ class _TopicHeader extends StatelessWidget {
       child: Text(
         topic.label,
         style: textTheme.titleLarge?.copyWith(
-          color: careblazersColors.primarySoft,
+          color: context.cb.primarySoft,
         ),
       ),
     );
   }
 }
 
-class _VideoCard extends StatelessWidget {
+class _VideoCard extends ConsumerWidget {
   const _VideoCard({required this.video});
+
+  final LearnVideo video;
+
+  Future<void> _openOnYouTube(WidgetRef ref) =>
+      ref.read(linkLauncherProvider).launch(Uri.parse(video.youtubeUrl));
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        label: 'Play ${video.title} on YouTube',
+        child: Material(
+          color: context.cb.surfaceWarm,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            key: LearnScreen.videoCardKey(video.id),
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => _openOnYouTube(ref),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  _Thumbnail(video: video),
+                  const SizedBox(height: 12),
+                  Text(
+                    video.title,
+                    style: textTheme.titleLarge?.copyWith(
+                      color: context.cb.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    video.blurb,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: context.cb.text,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (video.durationLabel != null) ...<Widget>[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.schedule,
+                          size: 18,
+                          color: context.cb.primarySoft,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          video.durationLabel!,
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: context.cb.primarySoft,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The real YouTube thumbnail (`hqdefault.jpg` — the most reliably present
+/// frame) with a play-button overlay. While the image loads, and if it
+/// ever fails to load, the soft navy placeholder panel renders instead so
+/// the card never shows a broken image (and so goldens stay deterministic,
+/// since network images don't load under test).
+class _Thumbnail extends StatelessWidget {
+  const _Thumbnail({required this.video});
 
   final LearnVideo video;
 
   @override
   Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Material(
-      key: LearnScreen.videoCardKey(video.id),
-      color: careblazersColors.surfaceWarm,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
           children: <Widget>[
-            _Thumbnail(durationLabel: video.durationLabel),
-            const SizedBox(height: 12),
-            Text(
-              video.title,
-              style: textTheme.titleLarge?.copyWith(
-                color: careblazersColors.primary,
-              ),
+            Image.network(
+              video.thumbnailUrl,
+              fit: BoxFit.cover,
+              loadingBuilder: (
+                BuildContext context,
+                Widget child,
+                ImageChunkEvent? progress,
+              ) {
+                if (progress == null) return child;
+                return const _ThumbnailPlaceholder();
+              },
+              errorBuilder: (
+                BuildContext context,
+                Object error,
+                StackTrace? stackTrace,
+              ) =>
+                  const _ThumbnailPlaceholder(),
             ),
-            const SizedBox(height: 6),
-            Text(
-              video.blurb,
-              style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.text,
+            // Play-button overlay sits above the thumbnail (or placeholder).
+            Center(
+              child: Icon(
+                Icons.play_circle_outline,
+                size: 48,
+                color: context.cb.background,
+                shadows: const <Shadow>[
+                  Shadow(blurRadius: 8, color: Colors.black54),
+                ],
               ),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: <Widget>[
-                Icon(
-                  Icons.schedule,
-                  size: 18,
-                  color: careblazersColors.primarySoft,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  video.durationLabel,
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: careblazersColors.primarySoft,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Spacer(),
-                _WatchButton(video: video),
-              ],
             ),
           ],
         ),
@@ -193,64 +261,14 @@ class _VideoCard extends StatelessWidget {
   }
 }
 
-class _Thumbnail extends StatelessWidget {
-  const _Thumbnail({required this.durationLabel});
-
-  final String durationLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    // Placeholder until real video hosting lands (Phase 14.37 note). A
-    // navy panel with a centered play glyph reads as "video" without a
-    // real frame to show.
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: careblazersColors.primary,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Center(
-          child: Icon(
-            Icons.play_circle_outline,
-            size: 48,
-            color: careblazersColors.background,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WatchButton extends StatelessWidget {
-  const _WatchButton({required this.video});
-
-  final LearnVideo video;
+/// The soft navy fallback panel shown while the thumbnail loads or when it
+/// fails. Deterministic (no network) so goldens are stable.
+class _ThumbnailPlaceholder extends StatelessWidget {
+  const _ThumbnailPlaceholder();
 
   @override
   Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Semantics(
-      button: true,
-      label: 'Watch ${video.title}, ${video.durationLabel}.',
-      child: ElevatedButton.icon(
-        key: LearnScreen.watchButtonKey(video.id),
-        onPressed: () => context.pushNamed(
-          CareblazersRoutes.communityLearnVideo,
-          pathParameters: <String, String>{'id': video.id},
-        ),
-        icon: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
-        label: Text(
-          'Watch',
-          style: textTheme.labelLarge?.copyWith(color: Colors.white),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: careblazersColors.cta,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        ),
-      ),
-    );
+    return ColoredBox(color: context.cb.primary);
   }
 }
 
@@ -267,7 +285,7 @@ class _PlaybookRow extends StatelessWidget {
       label: '${playbook.title}. ${playbook.steps.length} steps. '
           'Double-tap to open.',
       child: Material(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           key: LearnScreen.playbookRowKey(playbook.id),
@@ -287,7 +305,7 @@ class _PlaybookRow extends StatelessWidget {
                       Text(
                         playbook.title,
                         style: textTheme.bodyLarge?.copyWith(
-                          color: careblazersColors.primary,
+                          color: context.cb.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -295,7 +313,7 @@ class _PlaybookRow extends StatelessWidget {
                       Text(
                         playbook.summary,
                         style: textTheme.bodyMedium?.copyWith(
-                          color: careblazersColors.text,
+                          color: context.cb.text,
                         ),
                       ),
                     ],
@@ -304,7 +322,7 @@ class _PlaybookRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Icon(
                   Icons.chevron_right,
-                  color: careblazersColors.primarySoft,
+                  color: context.cb.primarySoft,
                 ),
               ],
             ),

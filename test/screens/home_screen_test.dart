@@ -140,13 +140,17 @@ void main() {
       expect(find.text('Good evening, Sarah'), findsOneWidget);
     });
 
-    testWidgets('profile icon is account_circle_outlined at 32px',
+    testWidgets('profile icon is account_circle_outlined at 24px',
         (WidgetTester tester) async {
       await _pumpHome(tester, now: DateTime(2026, 6, 1, 9));
       final IconButton button = tester
           .widget<IconButton>(find.byKey(HomeScreen.profileButtonKey));
       expect((button.icon as Icon).icon, Icons.account_circle_outlined);
-      expect(button.iconSize, 32);
+      // The Home refactor moved the greeting into a [PathHeader] and pinned
+      // the trailing profile affordance to a 24×24 box so the IconButton's
+      // implicit padding can't inflate the title-row height; 24px also
+      // matches the PathHeader leadingIcon size used across the app.
+      expect(button.iconSize, 24);
     });
 
     testWidgets('tapping the profile icon pushes Settings',

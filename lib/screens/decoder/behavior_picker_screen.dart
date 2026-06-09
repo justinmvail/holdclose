@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/behavior.dart';
 import '../../theme.dart';
+import '../../widgets/path_header.dart';
 
 /// Arguments passed via `GoRouterState.extra` from the behavior picker
 /// (BUILD_SPEC.md §5.2) into the triage screen (§5.3).
@@ -60,27 +61,26 @@ class BehaviorPickerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: const Text("What's happening?"),
-      ),
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  "What's happening?",
-                  style: textTheme.headlineLarge,
-                  textAlign: TextAlign.center,
-                ),
+              const PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  PathHeaderCrumb(label: 'Journal', route: '/journal'),
+                  PathHeaderCrumb(label: "What's happening?"),
+                ],
+                title: "What's happening?",
+                backLabel: 'Back to Journal',
+                leadingIcon: Icons.psychology_outlined,
               ),
+              const SizedBox(height: 16),
               Expanded(
                 child: GridView.count(
                   key: gridKey,
@@ -135,7 +135,7 @@ class _BehaviorCard extends StatelessWidget {
       button: true,
       label: 'Behavior: ${behavior.label}. Double-tap to select.',
       child: Material(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         elevation: 2,
         shadowColor: Colors.black.withValues(alpha: 0.2),
@@ -161,7 +161,7 @@ class _BehaviorCard extends StatelessWidget {
                   child: Text(
                     behavior.label,
                     style: textTheme.titleLarge?.copyWith(
-                      color: careblazersColors.primary,
+                      color: context.cb.primary,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 2,
@@ -192,7 +192,7 @@ class _SomethingElsePill extends StatelessWidget {
       button: true,
       label: 'Something else. Double-tap to describe the behavior yourself.',
       child: Material(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(32),
         elevation: 1,
         shadowColor: Colors.black.withValues(alpha: 0.15),
@@ -212,7 +212,7 @@ class _SomethingElsePill extends StatelessWidget {
                   child: Text(
                     'Something else — describe it',
                     style: textTheme.labelLarge?.copyWith(
-                      color: careblazersColors.primary,
+                      color: context.cb.primary,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 1,

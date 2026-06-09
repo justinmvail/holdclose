@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../services/real_capture.dart';
 
 part 'photo_attacher_provider.g.dart';
 
@@ -33,7 +36,46 @@ class NoopPhotoAttacher implements PhotoAttacher {
   Future<String?> pickPhoto() async => 'assets/seed/sample-photo-1.jpg';
 }
 
+/// Whether to use real device capture (camera / microphone / dictation)
+/// over the production fakes (#8). **Automatic** — real on a PHYSICAL
+/// device, the [NoopPhotoAttacher] / Noop / Unavailable fakes on the iOS
+/// simulator and under `flutter test`. So the demo + tests never touch the
+/// OS camera, gallery, or mic, and a real-device build "just works" with no
+/// flag to remember. `--dart-define=USE_REAL_CAPTURE=true` forces it on
+/// anywhere (e.g. to exercise the real path).
+bool get useRealCapture =>
+    const bool.fromEnvironment('USE_REAL_CAPTURE', defaultValue: false) ||
+    _isPhysicalDevice;
+
+/// True only on a real device — not the iOS simulator, not under
+/// `flutter test`. The iOS simulator exports `SIMULATOR_*` env vars a
+/// physical device lacks; `flutter test` exports `FLUTTER_TEST`. Android
+/// emulator detection needs a plugin, so Android stays on the fakes unless
+/// `USE_REAL_CAPTURE` is set explicitly. Any detection failure falls back
+/// to the safe (fake) path.
+bool get _isPhysicalDevice {
+  try {
+    final Map<String, String> env = Platform.environment;
+    if (env.containsKey('FLUTTER_TEST')) return false;
+    if (Platform.isIOS) {
+      return !env.containsKey('SIMULATOR_DEVICE_NAME') &&
+          !env.containsKey('SIMULATOR_UDID');
+    }
+    return false; // Android / other: explicit USE_REAL_CAPTURE only
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Pure impl selector — [RealPhotoAttacher] when [useReal] is set, else
+/// the [NoopPhotoAttacher] fake. Split out from the provider so both
+/// branches are unit-testable without recompiling against the
+/// `USE_REAL_CAPTURE` dart-define.
+PhotoAttacher selectPhotoAttacher(bool useReal) =>
+    useReal ? RealPhotoAttacher() : const NoopPhotoAttacher();
+
 /// Riverpod-wired photo attacher. Widgets read this and get whichever
-/// impl the host overrode (or the no-op default in production).
+/// impl the build mode picked (real `image_picker` when [useRealCapture]
+/// is set, the no-op fake otherwise) — or whatever a test overrode.
 @Riverpod(keepAlive: true)
-PhotoAttacher photoAttacher(Ref ref) => const NoopPhotoAttacher();
+PhotoAttacher photoAttacher(Ref ref) => selectPhotoAttacher(useRealCapture);

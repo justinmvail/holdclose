@@ -7,22 +7,37 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../db/database.dart';
 import '../models/care_task.dart';
 import '../models/caregiver.dart';
+import '../services/sync_sink.dart';
+import 'auth_provider.dart';
 import 'care_circle_provider.dart';
+import 'care_events_provider.dart' show fallbackPatientId;
 
 part 'care_tasks_provider.g.dart';
 
 /// Logical patient id new tasks are stamped with (TASKS.md Phase 14.30) —
-/// the single-install loved one. Same fallback constant the calendar +
-/// care-circle forms use.
-const String careTasksPatientId = 'demo-patient-mary';
+/// the single-install loved one. Aliases the shared neutral
+/// [fallbackPatientId] so there's one source of truth for the value.
+const String careTasksPatientId = fallbackPatientId;
 
-/// Stand-in for the signed-in caregiver's id until real per-device auth
-/// lands (TASKS.md Phase 14.30). Claiming a task stamps this id, and the
-/// task board compares against it to decide which claimed cards show the
-/// Complete + Unclaim actions ("claimed by me") versus a read-only
-/// assignee. Overridable so tests pin a known "me".
+/// Fallback caregiver id used only when no real user is signed in (the
+/// demo / signed-out path). Real signed-in installs resolve to the
+/// caregiver's actual user id via [currentCaregiverId].
+const String fallbackCaregiverId = 'demo-caregiver-me';
+
+/// The signed-in caregiver's id (TASKS.md Phase 14.30). Claiming a task or
+/// naming an expense payer stamps this id, and the task board compares
+/// against it to decide which claimed cards show the Complete + Unclaim
+/// actions ("claimed by me") versus a read-only assignee.
+///
+/// Resolves to the REAL signed-in user's id, read synchronously from the
+/// user persisted at launch ([preloadedAlphaUser], loaded in `main()`
+/// before `runApp`). When signed out — the demo, widget tests, or a
+/// first launch before any sign-in — it falls back to
+/// [fallbackCaregiverId] so attribution stays stable. Overridable so
+/// tests pin a known "me".
 @Riverpod(keepAlive: true)
-String currentCaregiverId(Ref ref) => 'demo-caregiver-me';
+String currentCaregiverId(Ref ref) =>
+    preloadedAlphaUser?.id ?? fallbackCaregiverId;
 
 /// Persistence for the Care Team task board (TASKS.md Phase 14.30).
 ///
@@ -32,7 +47,7 @@ String currentCaregiverId(Ref ref) => 'demo-caregiver-me';
 /// without decoding every blob. Tests build a repository directly against
 /// `CareblazersDatabase(NativeDatabase.memory())` so each test gets an
 /// isolated DB.
-class CareTasksRepository {
+class CareTasksRepository with SyncSinkHost {
   CareTasksRepository(this._db);
 
   final CareblazersDatabase _db;
@@ -51,11 +66,13 @@ class CareTasksRepository {
             payload: jsonEncode(task.toJson()),
           ),
         );
+    emitUpsert('care_tasks', task.id, task.toJson());
   }
 
   /// Drop the task with this id. No-op if absent.
   Future<void> deleteTask(String id) async {
     await (_db.delete(_db.careTasksTable)..where((t) => t.id.equals(id))).go();
+    emitDelete('care_tasks', id);
   }
 
   /// One task by id, or null if absent.
@@ -192,6 +209,24 @@ class CareTasks extends _$CareTasks {
   }
 }
 
+/// Child-task counts per routine (unified task/routine model, 2026-06-06).
+///
+/// Maps a routine id to how many child [CareTask]s are bundled under it.
+/// The Routines list reads this to show "· N tasks" next to each routine.
+/// Watches the [CareTasks] notifier so an add / reconcile through the
+/// routine form refreshes the count without a manual invalidate.
+@riverpod
+Future<Map<String, int>> routineTaskCounts(Ref ref) async {
+  final List<CareTask> tasks = await ref.watch(careTasksProvider.future);
+  final Map<String, int> counts = <String, int>{};
+  for (final CareTask task in tasks) {
+    final String? routineId = task.routineId;
+    if (routineId == null) continue;
+    counts[routineId] = (counts[routineId] ?? 0) + 1;
+  }
+  return counts;
+}
+
 /// One task paired with its resolved assignee, if any (TASKS.md Phase
 /// 14.30).
 ///
@@ -229,6 +264,10 @@ Future<List<Caregiver>> assignableCaregivers(Ref ref) async {
 /// assignee via [assignableCaregivers]. Tests override this provider
 /// wholesale for the display + golden cases, and drive the notifier +
 /// repository for the state-machine cases.
+///
+/// Only **standalone** tasks (`routineId == null`) surface on the team
+/// board (unified task/routine model, 2026-06-06) — routine-bound tasks
+/// live under their routine in Medical → Routines, not on the loose board.
 @riverpod
 Future<List<CareTaskCard>> careTasksView(Ref ref) async {
   final List<CareTask> tasks = await ref.watch(careTasksProvider.future);
@@ -239,11 +278,12 @@ Future<List<CareTaskCard>> careTasksView(Ref ref) async {
   };
   return <CareTaskCard>[
     for (final CareTask task in tasks)
-      CareTaskCard(
-        task: task,
-        assignee: task.assigneeCaregiverId == null
-            ? null
-            : byId[task.assigneeCaregiverId],
-      ),
+      if (task.routineId == null)
+        CareTaskCard(
+          task: task,
+          assignee: task.assigneeCaregiverId == null
+              ? null
+              : byId[task.assigneeCaregiverId],
+        ),
   ];
 }

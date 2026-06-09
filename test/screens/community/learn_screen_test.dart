@@ -1,27 +1,37 @@
+import 'package:careblazers/providers/link_launcher_provider.dart';
 import 'package:careblazers/routing/router.dart' show CareblazersRoutes;
 import 'package:careblazers/screens/community/learn_playbook_detail_screen.dart';
 import 'package:careblazers/screens/community/learn_screen.dart';
-import 'package:careblazers/screens/community/learn_video_detail_screen.dart';
 import 'package:careblazers/seed/learn_content.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 /// Pumps the bare [LearnScreen] (the in-tab segment body) on a tall
 /// surface so the lazy [ListView] builds every video card + playbook row
 /// for the rendering assertions.
-Future<void> _pumpScreen(WidgetTester tester) async {
-  await tester.binding.setSurfaceSize(const Size(500, 4000));
+Future<void> _pumpScreen(WidgetTester tester,
+    {LinkLauncher? launcher}) async {
+  await tester.binding.setSurfaceSize(const Size(500, 6500));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
-    const MaterialApp(home: Scaffold(body: LearnScreen())),
+    ProviderScope(
+      overrides: <Override>[
+        if (launcher != null)
+          linkLauncherProvider.overrideWithValue(launcher),
+      ],
+      child: const MaterialApp(home: Scaffold(body: LearnScreen())),
+    ),
   );
   await tester.pumpAndSettle();
 }
 
-/// A minimal router hosting the Learn segment + the two pushed detail
-/// routes so `context.pushNamed` resolves the same names the real router
-/// registers (Phase 14.37).
+/// A minimal router hosting the Learn segment + the pushed playbook detail
+/// route so `context.pushNamed` resolves the same name the real router
+/// registers (Phase 14.37). Video cards no longer route — they deep-link
+/// to YouTube via the launcher — so only the playbook route is wired here.
 GoRouter _buildTestRouter() {
   return GoRouter(
     initialLocation: '/community',
@@ -30,12 +40,6 @@ GoRouter _buildTestRouter() {
         path: '/community',
         builder: (BuildContext _, GoRouterState __) =>
             const Scaffold(body: LearnScreen()),
-      ),
-      GoRoute(
-        path: '/community/learn/videos/:id',
-        name: CareblazersRoutes.communityLearnVideo,
-        builder: (BuildContext _, GoRouterState state) =>
-            LearnVideoDetailScreen(videoId: state.pathParameters['id'] ?? ''),
       ),
       GoRoute(
         path: '/community/learn/playbooks/:id',
@@ -49,11 +53,20 @@ GoRouter _buildTestRouter() {
   );
 }
 
-Future<GoRouter> _pumpRouted(WidgetTester tester) async {
-  await tester.binding.setSurfaceSize(const Size(500, 4000));
+Future<GoRouter> _pumpRouted(WidgetTester tester,
+    {LinkLauncher? launcher}) async {
+  await tester.binding.setSurfaceSize(const Size(500, 6500));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final GoRouter router = _buildTestRouter();
-  await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: <Override>[
+        if (launcher != null)
+          linkLauncherProvider.overrideWithValue(launcher),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ),
+  );
   await tester.pumpAndSettle();
   return router;
 }
@@ -68,7 +81,7 @@ void main() {
       expect(find.text('Playbooks'), findsOneWidget);
     });
 
-    testWidgets('renders a card + Watch button for every seeded video',
+    testWidgets('renders a tappable card for every seeded video',
         (WidgetTester tester) async {
       await _pumpScreen(tester);
 
@@ -78,12 +91,19 @@ void main() {
           findsOneWidget,
           reason: '${video.id} card should render',
         );
-        expect(
-          find.byKey(LearnScreen.watchButtonKey(video.id)),
-          findsOneWidget,
-          reason: '${video.id} watch button should render',
-        );
         expect(find.text(video.title), findsOneWidget);
+        // The whole card carries the YouTube semantics label so screen
+        // readers announce a single "Play <title> on YouTube" button.
+        expect(
+          find.byWidgetPredicate(
+            (Widget w) =>
+                w is Semantics &&
+                w.properties.button == true &&
+                w.properties.label == 'Play ${video.title} on YouTube',
+          ),
+          findsOneWidget,
+          reason: '${video.id} card should expose a YouTube semantics label',
+        );
       }
       // Sanity: the seed actually has videos to show.
       expect(learnVideos, isNotEmpty);
@@ -113,22 +133,23 @@ void main() {
   });
 
   group('LearnScreen — navigation (Phase 14.37)', () {
-    testWidgets('Watch pushes the video detail at /community/learn/videos/:id',
+    testWidgets('tapping a video card deep-links straight to YouTube',
         (WidgetTester tester) async {
-      await _pumpRouted(tester);
+      final RecordingLinkLauncher launcher = RecordingLinkLauncher();
+      // No router needed — the card hands the URL to the launcher directly
+      // (no in-app detail screen anymore; fb_1780932492880889).
+      await _pumpScreen(tester, launcher: launcher);
 
-      final String id = learnVideos.first.id;
-      final Finder watch = find.byKey(LearnScreen.watchButtonKey(id));
-      await tester.ensureVisible(watch);
-      await tester.tap(watch);
+      final LearnVideo video = learnVideos.first;
+      final Finder card = find.byKey(LearnScreen.videoCardKey(video.id));
+      await tester.ensureVisible(card);
+      await tester.tap(card);
       await tester.pumpAndSettle();
 
-      // The pushed video detail renders its soft placeholder body.
-      expect(find.byType(LearnVideoDetailScreen), findsOneWidget);
-      expect(
-        find.byKey(LearnVideoDetailScreen.placeholderKey),
-        findsOneWidget,
-      );
+      // The real Dementia Careblazers video URL is handed to the launcher,
+      // with no intervening detail screen.
+      expect(launcher.launched, hasLength(1));
+      expect(launcher.launched.single.toString(), video.youtubeUrl);
     });
 
     testWidgets(
@@ -154,19 +175,6 @@ void main() {
   });
 
   group('Learn detail screens — missing content (Phase 14.37)', () {
-    testWidgets('video detail shows a soft missing view for an unknown id',
-        (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: LearnVideoDetailScreen(videoId: 'does-not-exist'),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(LearnVideoDetailScreen.missingKey), findsOneWidget);
-      expect(find.byKey(LearnVideoDetailScreen.placeholderKey), findsNothing);
-    });
-
     testWidgets('playbook detail shows a soft missing view for an unknown id',
         (WidgetTester tester) async {
       await tester.pumpWidget(
@@ -200,10 +208,28 @@ void main() {
       const LearnVideo v = LearnVideo(
         id: 'x',
         title: 't',
+        youtubeId: 'abc123',
         duration: Duration(minutes: 8, seconds: 5),
         blurb: 'b',
       );
       expect(v.durationLabel, '8:05');
+    });
+
+    test('durationLabel is null when no duration is set', () {
+      const LearnVideo v = LearnVideo(
+        id: 'x',
+        title: 't',
+        youtubeId: 'abc123',
+        blurb: 'b',
+      );
+      expect(v.durationLabel, isNull);
+    });
+
+    test('every seeded video is a real Careblazers YouTube link', () {
+      for (final LearnVideo v in learnVideos) {
+        expect(v.youtubeId, isNotEmpty);
+        expect(v.youtubeUrl, 'https://www.youtube.com/watch?v=${v.youtubeId}');
+      }
     });
   });
 }

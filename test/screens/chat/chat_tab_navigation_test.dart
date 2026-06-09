@@ -104,7 +104,7 @@ void main() {
       expect(find.byType(ChatScreen), findsNothing);
     });
 
-    testWidgets("the thread's PathHeader Back control returns to the list",
+    testWidgets("the thread's PathHeader parent crumb returns to the list",
         (WidgetTester tester) async {
       await _seedOneThread(repo);
       await _pump(tester, repo: repo, db: db);
@@ -113,9 +113,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ChatScreen), findsOneWidget);
 
-      // The thread header's word-labeled Back control pops the pushed
-      // thread off the Chat branch navigator, back to the list.
-      await tester.tap(find.text('Back to Chat'));
+      // The thread header's parent breadcrumb crumb ('Chat') is the back
+      // affordance now (the separate "Back to Chat" control was removed as
+      // redundant). Tapping it runs `context.go('/chat')`, popping the
+      // pushed thread off the Chat branch navigator back to the list.
+      await tester.tap(find.widgetWithText(InkWell, 'Chat'));
       await tester.pumpAndSettle();
 
       expect(find.byType(ConversationListScreen), findsOneWidget);

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import '../models/forum.dart';
@@ -14,8 +15,9 @@ import 'forum_api_client.dart';
 /// always opens to the same seeded conversation rather than
 /// accumulating stale drafts.
 class FakeForumApiClient extends ForumApiClient {
-  FakeForumApiClient({DateTime Function()? clock})
+  FakeForumApiClient({DateTime Function()? clock, FakeForumBackend? backend})
       : _clock = clock ?? DateTime.now,
+        _backend = backend ?? FakeForumBackend(),
         super(
           tokenLoader: _stubTokenLoader,
           baseUrl: 'https://demo.invalid',
@@ -34,6 +36,26 @@ class FakeForumApiClient extends ForumApiClient {
       <String, List<ForumComment>>{};
   final Map<String, int> _votes = <String, int>{};
   final List<ForumReport> _reports = <ForumReport>[];
+
+  // Care-circle connect (2026-06-06). Lowercased `@handle` → profile id,
+  // the circles the demo user belongs to, and the live invites mapped by
+  // token. All in-process so tests/demo never hit the network.
+  final Map<String, String> _usernameRegistry = <String, String>{};
+
+  /// Circle + sync state. Held in a separate [FakeForumBackend] so a
+  /// "two device" test can construct two [FakeForumApiClient]s over one
+  /// shared backend (server-authoritative sync) — device A pushes,
+  /// device B pulls, both through the same circles + sync store. A fake
+  /// constructed without one gets its own private backend (the demo /
+  /// single-device default).
+  final FakeForumBackend _backend;
+
+  List<CircleDto> get _circles => _backend.circles;
+  Map<String, _FakeInvite> get _invites => _backend.invites;
+  Map<String, _FakeCircleSync> get _sync => _backend.sync;
+
+  /// Matches the Worker's `^[a-z0-9_]{3,20}$` rule.
+  static final RegExp _usernamePattern = RegExp(r'^[a-z0-9_]{3,20}$');
 
   /// The synthetic profile the demo signs in as. The fake auth
   /// provider's user maps to `careblazers_user_id = 'demo-user'`.
@@ -162,8 +184,26 @@ class FakeForumApiClient extends ForumApiClient {
   Future<ForumProfile> updateMyProfile({
     String? displayName,
     String? avatarUrl,
+    String? username,
   }) async {
     final ForumProfile current = _resolveMyProfile();
+    String? nextUsername = current.username;
+    if (username != null) {
+      final String handle = username.toLowerCase();
+      if (!_usernamePattern.hasMatch(handle)) {
+        throw ForumApiException(statusCode: 400, error: 'invalid_username');
+      }
+      final String? holder = _usernameRegistry[handle];
+      if (holder != null && holder != current.id) {
+        throw ForumApiException(statusCode: 409, error: 'username_taken');
+      }
+      // Release any handle the demo user previously held, then claim.
+      if (current.username != null) {
+        _usernameRegistry.remove(current.username);
+      }
+      _usernameRegistry[handle] = current.id;
+      nextUsername = handle;
+    }
     final ForumProfile next = ForumProfile(
       id: current.id,
       careblazersUserId: current.careblazersUserId,
@@ -171,6 +211,7 @@ class FakeForumApiClient extends ForumApiClient {
       avatarUrl: avatarUrl ?? current.avatarUrl,
       joinedAt: current.joinedAt,
       role: current.role,
+      username: nextUsername,
     );
     _profiles[current.careblazersUserId] = next;
     return next;
@@ -197,7 +238,188 @@ class FakeForumApiClient extends ForumApiClient {
       joinedAt: match.joinedAt,
       postCount: posts,
       commentCount: comments,
+      username: match.username,
     );
+  }
+
+  // ---- Username + circles (care-circle connect, 2026-06-06) --------------
+
+  @override
+  Future<({bool valid, bool available})> usernameAvailable(
+    String handle,
+  ) async {
+    final String h = handle.toLowerCase();
+    final bool valid = _usernamePattern.hasMatch(h);
+    if (!valid) return (valid: false, available: false);
+    final ForumProfile me = _resolveMyProfile();
+    final String? holder = _usernameRegistry[h];
+    // The caller's own current handle counts as available to them.
+    final bool available = holder == null || holder == me.id;
+    return (valid: true, available: available);
+  }
+
+  @override
+  Future<ForumPublicProfile> getProfileByUsername(String username) async {
+    final String? profileId = _usernameRegistry[username.toLowerCase()];
+    final ForumProfile? match = profileId == null
+        ? null
+        : _profiles.values
+            .where((ForumProfile p) => p.id == profileId)
+            .firstOrNull;
+    if (match == null) {
+      throw ForumApiException(statusCode: 404, error: 'profile_not_found');
+    }
+    return ForumPublicProfile(
+      id: match.id,
+      displayName: match.displayName,
+      avatarUrl: match.avatarUrl,
+      username: match.username,
+    );
+  }
+
+  @override
+  Future<CircleDto> createCircle(
+    String name, {
+    SyncPatientWrite? patient,
+  }) async {
+    final ForumProfile me = _resolveMyProfile();
+    final String circleId = _mintId('circle');
+    final _FakeCircleSync sync = _FakeCircleSync();
+    _sync[circleId] = sync;
+    SyncPatient? syncPatient;
+    if (patient != null) {
+      syncPatient = sync.upsertPatient(
+        payload: jsonEncode(patient.payload),
+        clientUpdatedAt: patient.clientUpdatedAt,
+        deleted: patient.deleted,
+      );
+    }
+    final CircleDto circle = CircleDto(
+      id: circleId,
+      name: name,
+      ownerProfileId: me.id,
+      createdAt: _clock(),
+      members: <CircleMemberDto>[
+        CircleMemberDto(
+          profileId: me.id,
+          username: me.username,
+          displayName: me.displayName,
+          role: 'owner',
+        ),
+      ],
+      patient: syncPatient,
+    );
+    _circles.add(circle);
+    return circle;
+  }
+
+  @override
+  Future<List<CircleDto>> listCircles() async => List<CircleDto>.unmodifiable(
+        _circles.map(_withCurrentPatient),
+      );
+
+  /// Re-attach the circle's current sync patient (it may have changed
+  /// since the [CircleDto] was first cached in [_circles]).
+  CircleDto _withCurrentPatient(CircleDto c) =>
+      c.copyWith(patient: _sync[c.id]?.patient);
+
+  @override
+  Future<CircleInviteDto> createInvite(String circleId) async {
+    final bool exists = _circles.any((CircleDto c) => c.id == circleId);
+    if (!exists) {
+      throw ForumApiException(statusCode: 404, error: 'circle_not_found');
+    }
+    final DateTime expiresAt = _clock().add(const Duration(days: 7));
+    final String token = _mintId('invite');
+    _invites[token] = _FakeInvite(circleId: circleId, expiresAt: expiresAt);
+    return CircleInviteDto(
+      token: token,
+      circleId: circleId,
+      expiresAt: expiresAt,
+    );
+  }
+
+  @override
+  Future<CircleDto> joinCircle(String token) async {
+    final _FakeInvite? invite = _invites[token];
+    if (invite == null) {
+      throw ForumApiException(statusCode: 404, error: 'invite_not_found');
+    }
+    if (!invite.expiresAt.isAfter(_clock())) {
+      throw ForumApiException(statusCode: 410, error: 'invite_expired');
+    }
+    final int idx =
+        _circles.indexWhere((CircleDto c) => c.id == invite.circleId);
+    if (idx < 0) {
+      throw ForumApiException(statusCode: 404, error: 'invite_not_found');
+    }
+    final ForumProfile me = _resolveMyProfile();
+    final CircleDto current = _circles[idx];
+    final bool alreadyMember =
+        current.members.any((CircleMemberDto m) => m.profileId == me.id);
+    final CircleDto next = alreadyMember
+        ? current
+        : current.copyWith(
+            members: <CircleMemberDto>[
+              ...current.members,
+              CircleMemberDto(
+                profileId: me.id,
+                username: me.username,
+                displayName: me.displayName,
+                role: 'member',
+              ),
+            ],
+          );
+    _circles[idx] = next;
+    return _withCurrentPatient(next);
+  }
+
+  // ---- Sync (server-authoritative) ---------------------------------------
+
+  @override
+  Future<SyncPullResult> syncPull(String circleId, {int since = 0}) async {
+    final _FakeCircleSync? sync = _sync[circleId];
+    if (sync == null) {
+      return SyncPullResult(cursor: since, patient: null, docs: const <SyncDoc>[]);
+    }
+    return sync.pull(since);
+  }
+
+  @override
+  Future<SyncPushResult> syncPush(
+    String circleId, {
+    SyncPatientWrite? patient,
+    required List<SyncDocWrite> docs,
+  }) async {
+    final _FakeCircleSync sync =
+        _sync.putIfAbsent(circleId, () => _FakeCircleSync());
+    return sync.push(patient: patient, docs: docs);
+  }
+
+  // ---- Document scan blobs -----------------------------------------------
+
+  @override
+  Future<String> uploadDocumentBlob({
+    required String circleId,
+    required String key,
+    required List<int> bytes,
+    String contentType = 'application/octet-stream',
+  }) async {
+    final String fullKey = 'documents/$circleId/$key';
+    _backend.docBlobs[fullKey] = List<int>.from(bytes);
+    return fullKey;
+  }
+
+  @override
+  Future<List<int>> downloadDocumentBlob({
+    required String circleId,
+    required String key,
+  }) async {
+    final List<int>? bytes = _backend.docBlobs['documents/$circleId/$key'];
+    if (bytes == null) {
+      throw ForumApiException(statusCode: 404, error: 'not_found');
+    }
+    return List<int>.from(bytes);
   }
 
   // ---- Posts -------------------------------------------------------------
@@ -499,6 +721,112 @@ class FakeForumApiClient extends ForumApiClient {
       bannedUserId:
           action == ForumReportAction.banUser ? 'demo-banned' : null,
     );
+  }
+}
+
+/// In-memory invite record the fake mints from [createInvite] and
+/// redeems in [joinCircle] (care-circle connect, 2026-06-06).
+class _FakeInvite {
+  const _FakeInvite({required this.circleId, required this.expiresAt});
+
+  final String circleId;
+  final DateTime expiresAt;
+}
+
+/// Shared circle + sync state for [FakeForumApiClient]
+/// (server-authoritative sync). Pass one instance to two clients to
+/// model two devices talking to the same backend; omit it and each
+/// client gets a private store (the demo / single-device default).
+class FakeForumBackend {
+  final List<CircleDto> circles = <CircleDto>[];
+  // The invite + sync records are internal infra; only [FakeForumApiClient]
+  // reaches through these getters, never an external caller.
+  // ignore: library_private_types_in_public_api
+  final Map<String, _FakeInvite> invites = <String, _FakeInvite>{};
+  // ignore: library_private_types_in_public_api
+  final Map<String, _FakeCircleSync> sync = <String, _FakeCircleSync>{};
+
+  /// In-memory mirror of the document-scan R2 bucket, keyed by the full
+  /// `documents/<circleId>/<key>` storage key so a "two device" test
+  /// (one shared backend) round-trips a scan exactly like the real bucket.
+  final Map<String, List<int>> docBlobs = <String, List<int>>{};
+}
+
+/// Per-circle in-memory mirror of the server's sync store
+/// (server-authoritative sync). Holds the monotonic [_rev] counter, the
+/// circle-owned patient, and the latest-rev doc per (collection,id), and
+/// applies the same LWW rule the real backend does: a write is accepted
+/// iff its `client_updated_at` is >= the stored one.
+class _FakeCircleSync {
+  int _rev = 0;
+  SyncPatient? patient;
+  final Map<String, SyncDoc> _docs = <String, SyncDoc>{};
+
+  static String _key(String collection, String id) => '$collection|$id';
+
+  SyncPatient upsertPatient({
+    required String payload,
+    required int clientUpdatedAt,
+    bool deleted = false,
+  }) {
+    final SyncPatient? prior = patient;
+    // LWW: reject a stale write but echo the current row back.
+    if (prior != null && clientUpdatedAt < prior.clientUpdatedAt) {
+      return prior;
+    }
+    _rev += 1;
+    patient = SyncPatient(
+      payload: payload,
+      clientUpdatedAt: clientUpdatedAt,
+      rev: _rev,
+      deleted: deleted,
+    );
+    return patient!;
+  }
+
+  SyncPushResult push({
+    SyncPatientWrite? patient,
+    required List<SyncDocWrite> docs,
+  }) {
+    if (patient != null) {
+      upsertPatient(
+        payload: jsonEncode(patient.payload),
+        clientUpdatedAt: patient.clientUpdatedAt,
+        deleted: patient.deleted,
+      );
+    }
+    final List<({String id, int rev, bool accepted})> applied =
+        <({String id, int rev, bool accepted})>[];
+    for (final SyncDocWrite d in docs) {
+      final String k = _key(d.collection, d.id);
+      final SyncDoc? prior = _docs[k];
+      if (prior != null && d.clientUpdatedAt < prior.clientUpdatedAt) {
+        applied.add((id: d.id, rev: prior.rev, accepted: false));
+        continue;
+      }
+      _rev += 1;
+      final SyncDoc next = SyncDoc(
+        id: d.id,
+        collection: d.collection,
+        payload: jsonEncode(d.payload),
+        clientUpdatedAt: d.clientUpdatedAt,
+        rev: _rev,
+        deleted: d.deleted,
+      );
+      _docs[k] = next;
+      applied.add((id: d.id, rev: _rev, accepted: true));
+    }
+    return SyncPushResult(cursor: _rev, patient: this.patient, applied: applied);
+  }
+
+  SyncPullResult pull(int since) {
+    final SyncPatient? p =
+        (patient != null && patient!.rev > since) ? patient : null;
+    final List<SyncDoc> docs = _docs.values
+        .where((SyncDoc d) => d.rev > since)
+        .toList()
+      ..sort((SyncDoc a, SyncDoc b) => a.rev.compareTo(b.rev));
+    return SyncPullResult(cursor: _rev, patient: p, docs: docs);
   }
 }
 

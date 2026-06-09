@@ -1,4 +1,4 @@
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Hono } from 'hono';
 
@@ -52,17 +52,23 @@ async function loadVisiblePost(
   return row;
 }
 
-function commentResponse(c: Comment) {
+function commentResponse(
+  c: Comment,
+  author?: Pick<Profile, 'username' | 'displayName'>,
+) {
   if (c.hidden) {
     // Reddit-style placeholder: preserve tree shape (id, parent,
     // depth) but strip everything that could leak author or text.
     // Also strip crisis_flagged so a moderated row doesn't broadcast
-    // its triage state to readers.
+    // its triage state to readers. Author name fields are nulled
+    // alongside author_id so a moderated row never leaks its author.
     return {
       id: c.id,
       post_id: c.postId,
       parent_comment_id: c.parentCommentId,
       author_id: null,
+      author_username: null,
+      author_display_name: null,
       body: null,
       created_at: c.createdAt.toISOString(),
       vote_count: 0,
@@ -75,6 +81,8 @@ function commentResponse(c: Comment) {
     post_id: c.postId,
     parent_comment_id: c.parentCommentId,
     author_id: c.authorId,
+    author_username: author?.username ?? null,
+    author_display_name: author?.displayName ?? null,
     body: c.body,
     created_at: c.createdAt.toISOString(),
     vote_count: c.voteCount,
@@ -82,6 +90,32 @@ function commentResponse(c: Comment) {
     hidden: false,
     crisis_flagged: c.crisisFlagged,
   };
+}
+
+// Build a profileId -> {username, displayName} lookup for a batch of
+// comments so the list endpoint attaches author names with a single
+// extra query rather than one per row.
+async function loadAuthors(
+  db: Db,
+  authorIds: string[],
+): Promise<Map<string, Pick<Profile, 'username' | 'displayName'>>> {
+  const map = new Map<string, Pick<Profile, 'username' | 'displayName'>>();
+  const unique = [...new Set(authorIds)];
+  if (unique.length === 0) {
+    return map;
+  }
+  const rows = await db
+    .select({
+      id: profiles.id,
+      username: profiles.username,
+      displayName: profiles.displayName,
+    })
+    .from(profiles)
+    .where(inArray(profiles.id, unique));
+  for (const row of rows) {
+    map.set(row.id, { username: row.username, displayName: row.displayName });
+  }
+  return map;
 }
 
 export const commentsRouter = () => {
@@ -122,7 +156,20 @@ export const commentsRouter = () => {
         sort === 'top' ? asc(comments.createdAt) : asc(comments.id),
       );
 
-    return c.json({ comments: rows.map(commentResponse) }, 200);
+    // Hidden rows have their author nulled in the response, so only
+    // non-hidden authors need a name lookup.
+    const authors = await loadAuthors(
+      db,
+      rows.filter((r) => !r.hidden).map((r) => r.authorId),
+    );
+    return c.json(
+      {
+        comments: rows.map((r) =>
+          commentResponse(r, authors.get(r.authorId)),
+        ),
+      },
+      200,
+    );
   });
 
   // ---------- Authed writes ----------
@@ -205,7 +252,7 @@ export const commentsRouter = () => {
         crisisFlagged: detection.flagged,
       })
       .returning();
-    const payload: Record<string, unknown> = commentResponse(created);
+    const payload: Record<string, unknown> = commentResponse(created, profile);
     if (detection.flagged) {
       payload.crisis_resources = detection.resources;
     }

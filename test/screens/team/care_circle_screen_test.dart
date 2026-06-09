@@ -1,43 +1,63 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_circle_membership.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/link_launcher_provider.dart';
+import 'package:careblazers/models/forum.dart';
+import 'package:careblazers/providers/my_forum_profile_provider.dart';
 import 'package:careblazers/screens/team/care_circle_screen.dart';
-import 'package:drift/native.dart';
+import 'package:careblazers/services/forum_api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
+import 'package:shared_preferences/shared_preferences.dart';
 
-const String _patientId = 'demo-patient-mary';
+/// Recording stub for the Invite-by-link path: a circle already exists
+/// (so the screen never needs `myForumProfileProvider`), and
+/// [createInvite] hands back a fixed token. [baseUrl] is the forum origin
+/// WITHOUT the /api/v1 suffix — the link is built off it.
+class _RecordingForumClient extends ForumApiClient {
+  _RecordingForumClient({this.baseUrlValue = 'https://forum.example.test'})
+      : super(
+          tokenLoader: _stub,
+          baseUrl: baseUrlValue,
+        );
 
-CareCircleMember _member({
-  required String id,
+  static Future<String> _stub() async => 'stub-token';
+
+  final String baseUrlValue;
+  int createInviteCalls = 0;
+
+  static final CircleDto _circle = CircleDto(
+    id: 'c1',
+    name: 'Sarah\'s circle',
+    ownerProfileId: 'p1',
+    createdAt: DateTime(2026, 1, 1),
+  );
+
+  @override
+  Future<List<CircleDto>> listCircles() async => <CircleDto>[_circle];
+
+  @override
+  Future<CircleInviteDto> createInvite(String circleId) async {
+    createInviteCalls++;
+    return CircleInviteDto(
+      token: 'tok_link_123',
+      circleId: circleId,
+      expiresAt: DateTime(2026, 1, 8),
+    );
+  }
+}
+
+CircleMemberDto _member({
+  required String profileId,
+  String? username,
   String displayName = 'Sarah Henderson',
-  CaregiverRole role = CaregiverRole.child,
-  PermissionLevel permission = PermissionLevel.viewer,
-  String? phone,
-  bool pending = false,
-}) {
-  return CareCircleMember(
-    caregiver: Caregiver(
-      id: id,
+  String role = 'member',
+}) =>
+    CircleMemberDto(
+      profileId: profileId,
+      username: username,
       displayName: displayName,
       role: role,
-      phone: phone,
-    ),
-    membership: CareCircleMembership(
-      id: 'm-$id',
-      caregiverId: id,
-      patientId: _patientId,
-      permissionLevel: permission,
-      invitedAt: DateTime.utc(2026, 5, 1),
-      acceptedAt: pending ? null : DateTime.utc(2026, 1, 1),
-    ),
-  );
-}
+    );
 
 GoRouter _router() {
   return GoRouter(
@@ -53,9 +73,19 @@ GoRouter _router() {
         builder: (BuildContext c, GoRouterState s) => const CareCircleScreen(),
         routes: <RouteBase>[
           GoRoute(
-            path: 'invite',
+            path: 'username',
             builder: (BuildContext c, GoRouterState s) =>
-                const Scaffold(body: Center(child: Text('DEST invite'))),
+                const Scaffold(body: Center(child: Text('DEST username'))),
+          ),
+          GoRoute(
+            path: 'qr',
+            builder: (BuildContext c, GoRouterState s) =>
+                const Scaffold(body: Center(child: Text('DEST qr'))),
+          ),
+          GoRoute(
+            path: 'scan',
+            builder: (BuildContext c, GoRouterState s) =>
+                const Scaffold(body: Center(child: Text('DEST scan'))),
           ),
         ],
       ),
@@ -63,28 +93,31 @@ GoRouter _router() {
   );
 }
 
-Future<(GoRouter, RecordingLinkLauncher)> _pumpView(
+Future<GoRouter> _pump(
   WidgetTester tester, {
-  required List<CareCircleMember> members,
+  required List<CircleMemberDto> members,
+  String? myProfileId,
+  ForumApiClient? client,
 }) async {
   await tester.binding.setSurfaceSize(const Size(440, 1200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
-  final RecordingLinkLauncher launcher = RecordingLinkLauncher();
   final GoRouter router = _router();
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
-        careCircleViewProvider.overrideWith(
-          (Ref ref) async => CareCircleView(members: members),
+        syncedCircleMembersProvider.overrideWith(
+          (Ref ref) async => members,
         ),
-        linkLauncherProvider.overrideWithValue(launcher),
+        if (myProfileId != null)
+          myForumProfileIdProvider.overrideWithValue(myProfileId),
+        if (client != null) forumApiClientProvider.overrideWithValue(client),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
   );
   await tester.pumpAndSettle();
-  return (router, launcher);
+  return router;
 }
 
 String _path(GoRouter router) =>
@@ -93,139 +126,177 @@ String _path(GoRouter router) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('CareCircleScreen — display', () {
-    testWidgets('empty state shows the share-the-load copy and a CTA',
+  group('CareCircleScreen — People list (backend members)', () {
+    testWidgets('renders synced members by @username, no pending tag',
         (WidgetTester tester) async {
-      final (GoRouter router, _) =
-          await _pumpView(tester, members: const <CareCircleMember>[]);
-
-      expect(find.byKey(CareCircleScreen.emptyStateKey), findsOneWidget);
-      expect(
-        find.textContaining('Your care circle is just you right now'),
-        findsOneWidget,
+      await _pump(
+        tester,
+        members: <CircleMemberDto>[
+          _member(
+            profileId: 'p1',
+            username: 'sarah_h',
+            displayName: 'Sarah Henderson',
+            role: 'owner',
+          ),
+          _member(
+            profileId: 'p2',
+            username: 'james_h',
+            displayName: 'James Henderson',
+          ),
+        ],
       );
-      expect(find.byKey(CareCircleScreen.listKey), findsNothing);
 
-      await tester.tap(find.byKey(CareCircleScreen.emptyCtaKey));
-      await tester.pumpAndSettle();
-      expect(_path(router), '/team/circle/invite');
+      expect(find.byKey(CareCircleScreen.rowKey('p1')), findsOneWidget);
+      expect(find.byKey(CareCircleScreen.rowKey('p2')), findsOneWidget);
+      expect(find.text('@sarah_h'), findsOneWidget);
+      expect(find.text('@james_h'), findsOneWidget);
+      // Owner is badged; nobody is "Invite pending".
+      expect(find.text('Owner'), findsOneWidget);
+      expect(find.textContaining('Invite pending'), findsNothing);
+      // Not the empty state.
+      expect(find.byKey(CareCircleScreen.emptyStateKey), findsNothing);
     });
 
-    testWidgets('populated roster renders name, role chip, permission badge',
+    testWidgets('falls back to display name when a member has no @username',
         (WidgetTester tester) async {
-      await _pumpView(tester, members: <CareCircleMember>[
-        _member(
-          id: 'c1',
-          displayName: 'Sarah Henderson',
-          role: CaregiverRole.child,
-          permission: PermissionLevel.owner,
-        ),
-      ]);
-
-      expect(find.byKey(CareCircleScreen.rowKey('c1')), findsOneWidget);
-      expect(find.text('Sarah Henderson'), findsOneWidget);
-      expect(find.text('Child'), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byKey(CareCircleScreen.permissionBadgeKey('c1')),
-          matching: find.text('Owner'),
-        ),
-        findsOneWidget,
+      await _pump(
+        tester,
+        members: <CircleMemberDto>[
+          _member(profileId: 'p1', username: null, displayName: 'Maria Lopez'),
+        ],
       );
+
+      expect(find.text('Maria Lopez'), findsOneWidget);
     });
 
-    testWidgets('a pending invite is badged "Invite pending"',
+    testWidgets('badges the signed-in member as "You"',
         (WidgetTester tester) async {
-      await _pumpView(tester, members: <CareCircleMember>[
-        _member(id: 'c1', pending: true),
-      ]);
-      expect(find.text('Invite pending'), findsOneWidget);
-    });
+      await _pump(
+        tester,
+        myProfileId: 'p1',
+        members: <CircleMemberDto>[
+          _member(profileId: 'p1', username: 'me_h', role: 'owner'),
+          _member(profileId: 'p2', username: 'them_h'),
+        ],
+      );
 
-    testWidgets('call button appears only when a phone is on file, and dials',
-        (WidgetTester tester) async {
-      final (_, RecordingLinkLauncher launcher) =
-          await _pumpView(tester, members: <CareCircleMember>[
-        _member(id: 'with', phone: '(555) 010-0200'),
-        _member(id: 'without', displayName: 'No Phone'),
-      ]);
-
-      expect(find.byKey(CareCircleScreen.callButtonKey('with')), findsOneWidget);
-      expect(
-          find.byKey(CareCircleScreen.callButtonKey('without')), findsNothing);
-
-      await tester.tap(find.byKey(CareCircleScreen.callButtonKey('with')));
-      await tester.pump();
-      expect(launcher.launched.single, Uri(scheme: 'tel', path: '5550100200'));
-    });
-
-    testWidgets('invite header action pushes the invite route',
-        (WidgetTester tester) async {
-      final (GoRouter router, _) = await _pumpView(tester,
-          members: <CareCircleMember>[_member(id: 'c1')]);
-
-      await tester.tap(find.byKey(CareCircleScreen.inviteActionKey));
-      await tester.pumpAndSettle();
-      expect(_path(router), '/team/circle/invite');
+      expect(find.text('You'), findsOneWidget);
     });
   });
 
-  group('CareCircleScreen — long-press edit (real repo)', () {
-    testWidgets('editing role + permission persists through the notifier',
-        (WidgetTester tester) async {
-      await tester.binding.setSurfaceSize(const Size(440, 1200));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+  group('CareCircleScreen — empty / unconfigured', () {
+    testWidgets(
+        'shows the placeholder + connect actions when no one else is in '
+        'the circle', (WidgetTester tester) async {
+      final GoRouter router =
+          await _pump(tester, members: const <CircleMemberDto>[]);
 
-      final CareblazersDatabase db =
-          CareblazersDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
-      final CareCircleRepository repo = CareCircleRepository(db);
-      await repo.upsertCaregiver(const Caregiver(
-        id: 'c1',
-        displayName: 'Sarah Henderson',
-        role: CaregiverRole.friend,
-      ));
-      await repo.upsertMembership(CareCircleMembership(
-        id: 'm-c1',
-        caregiverId: 'c1',
-        patientId: _patientId,
-        permissionLevel: PermissionLevel.viewer,
-        invitedAt: DateTime.utc(2026, 5, 1),
-        acceptedAt: DateTime.utc(2026, 5, 2),
-      ));
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: <Override>[
-            careCircleRepositoryProvider.overrideWithValue(repo),
-            careCircleClockProvider.overrideWithValue(
-              () => DateTime.utc(2026, 6, 1, 12),
-            ),
-          ],
-          child: MaterialApp.router(routerConfig: _router()),
-        ),
+      expect(find.byKey(CareCircleScreen.emptyStateKey), findsOneWidget);
+      expect(
+        find.textContaining('No one else in your circle yet'),
+        findsOneWidget,
       );
+      // No pending rows ever.
+      expect(find.textContaining('Invite pending'), findsNothing);
+
+      // The connect actions are present and route correctly.
+      expect(find.byKey(CareCircleScreen.usernameActionKey), findsOneWidget);
+      expect(find.byKey(CareCircleScreen.showQrActionKey), findsOneWidget);
+      expect(find.byKey(CareCircleScreen.scanActionKey), findsOneWidget);
+      expect(
+        find.byKey(CareCircleScreen.addByUsernameActionKey),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(CareCircleScreen.usernameActionKey));
+      await tester.pumpAndSettle();
+      expect(_path(router), '/team/circle/username');
+    });
+
+    testWidgets('Show my QR routes to the QR screen',
+        (WidgetTester tester) async {
+      final GoRouter router =
+          await _pump(tester, members: const <CircleMemberDto>[]);
+
+      await tester.tap(find.byKey(CareCircleScreen.showQrActionKey));
+      await tester.pumpAndSettle();
+      expect(_path(router), '/team/circle/qr');
+    });
+
+    testWidgets('Scan to add routes to the scan screen',
+        (WidgetTester tester) async {
+      final GoRouter router =
+          await _pump(tester, members: const <CircleMemberDto>[]);
+
+      await tester.tap(find.byKey(CareCircleScreen.scanActionKey));
+      await tester.pumpAndSettle();
+      expect(_path(router), '/team/circle/scan');
+    });
+  });
+
+  group('CareCircleScreen — Invite by link', () {
+    setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
+    Future<void> Function(String) original = shareCircleInvite;
+    setUp(() => original = shareCircleInvite);
+    tearDown(() => shareCircleInvite = original);
+
+    testWidgets(
+        'mints an invite + shares the <origin>/join/<token> link', (
+      WidgetTester tester,
+    ) async {
+      final _RecordingForumClient client = _RecordingForumClient();
+      final List<String> shared = <String>[];
+      shareCircleInvite = (String message) async => shared.add(message);
+
+      await _pump(
+        tester,
+        members: const <CircleMemberDto>[],
+        client: client,
+      );
+
+      expect(
+        find.byKey(CareCircleScreen.inviteByLinkActionKey),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(CareCircleScreen.inviteByLinkActionKey));
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byKey(CareCircleScreen.rowKey('c1')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(CareCircleScreen.editSheetKey), findsOneWidget);
+      expect(client.createInviteCalls, 1);
+      expect(shared, hasLength(1));
+      // The shared message carries the warm copy + the full link built
+      // off the backend origin + the minted token.
+      expect(
+        shared.single,
+        'Join my care circle on Careblazers: '
+        'https://forum.example.test/join/tok_link_123',
+      );
+    });
 
-      await tester
-          .tap(find.byKey(CareCircleScreen.editRoleOptionKey(CaregiverRole.aide)));
-      await tester.tap(find.byKey(
-          CareCircleScreen.editPermissionOptionKey(PermissionLevel.editor)));
-      await tester.pump();
-      await tester.tap(find.byKey(CareCircleScreen.editSaveKey));
+    testWidgets('degrades calmly when there is no backend origin', (
+      WidgetTester tester,
+    ) async {
+      final _RecordingForumClient client =
+          _RecordingForumClient(baseUrlValue: '');
+      final List<String> shared = <String>[];
+      shareCircleInvite = (String message) async => shared.add(message);
+
+      await _pump(
+        tester,
+        members: const <CircleMemberDto>[],
+        client: client,
+      );
+
+      await tester.tap(find.byKey(CareCircleScreen.inviteByLinkActionKey));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(CareCircleScreen.editSheetKey), findsNothing);
-      final Caregiver? caregiver = await repo.getCaregiver('c1');
-      final CareCircleMembership? membership = await repo.getMembership('m-c1');
-      expect(caregiver!.role, CaregiverRole.aide);
-      expect(membership!.permissionLevel, PermissionLevel.editor);
-      // The roster reflects the edit.
-      expect(find.text('Aide'), findsOneWidget);
+      // No invite minted, no share — just a calm SnackBar.
+      expect(client.createInviteCalls, 0);
+      expect(shared, isEmpty);
+      expect(
+        find.textContaining('Connect to share an invite link'),
+        findsOneWidget,
+      );
     });
   });
 }

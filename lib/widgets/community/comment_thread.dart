@@ -78,6 +78,8 @@ class CommentThreadHandlers {
     required this.onSubmitReply,
     required this.onCancelReply,
     required this.replyValueFor,
+    required this.isOwn,
+    required this.onDelete,
   });
 
   /// Cast a vote on a comment. [value] is +1, -1, or 0 (to clear).
@@ -104,6 +106,16 @@ class CommentThreadHandlers {
   /// Pending-vote value to highlight for [comment]. Returns 0 when the
   /// row has no optimistic flip pending so the arrows render neutral.
   final int Function(ForumComment comment) replyValueFor;
+
+  /// Whether [comment] belongs to the signed-in caregiver. When true the
+  /// row's long-press opens the owner action sheet (Delete) via [onDelete]
+  /// instead of the report sheet — a caregiver manages their own replies and
+  /// reports everyone else's.
+  final bool Function(ForumComment comment) isOwn;
+
+  /// User long-pressed their OWN comment — open the delete action sheet.
+  /// Only invoked for rows where [isOwn] returns true.
+  final Future<void> Function(ForumComment comment) onDelete;
 }
 
 /// Recursive comment-tree widget (BUILD_SPEC.md §13 / Phase 13.11).
@@ -151,6 +163,18 @@ class CommentThread extends StatelessWidget {
       Key('comment-downvote-$commentId');
   static Key replyButtonKey(String commentId) =>
       Key('comment-reply-$commentId');
+
+  /// Trailing "Reply options" icon shown on the caregiver's own comment row
+  /// (the tap-equivalent of the long-press → delete sheet).
+  static Key deleteTriggerKey(String commentId) =>
+      Key('comment-delete-trigger-$commentId');
+
+  /// "Delete reply" item in an own-comment's long-press action sheet.
+  static Key deleteKey(String commentId) => Key('comment-delete-$commentId');
+
+  /// Cancel button in an own-comment's long-press action sheet.
+  static Key deleteCancelKey(String commentId) =>
+      Key('comment-delete-cancel-$commentId');
   static Key replyComposerKey(String commentId) =>
       Key('comment-reply-composer-$commentId');
   static Key replySendKey(String commentId) =>
@@ -256,16 +280,24 @@ class _CommentRow extends StatelessWidget {
     final String body = hidden ? hiddenCommentPlaceholder : comment.body!;
     final int pending = handlers.replyValueFor(comment);
     final bool canReply = !hidden && comment.depth < maxCommentDepth;
+    // Own (non-hidden) comments long-press into the delete sheet; everyone
+    // else's long-press into the report sheet. Hidden rows have no author,
+    // so they're never "own" and keep no long-press action.
+    final bool isOwn = !hidden && handlers.isOwn(comment);
 
     return GestureDetector(
-      onLongPress: hidden ? null : () => handlers.onReport(comment),
+      onLongPress: hidden
+          ? null
+          : () => isOwn
+              ? handlers.onDelete(comment)
+              : handlers.onReport(comment),
       child: Container(
         key: CommentThread.rowKey(comment.id),
         decoration: BoxDecoration(
-          color: careblazersColors.surfaceWarm,
+          color: context.cb.surfaceWarm,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: careblazersColors.primary.withValues(alpha: 0.08),
+            color: context.cb.primary.withValues(alpha: 0.08),
           ),
         ),
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -276,8 +308,8 @@ class _CommentRow extends StatelessWidget {
               body,
               style: textTheme.bodyMedium?.copyWith(
                 color: hidden
-                    ? careblazersColors.primarySoft
-                    : careblazersColors.text,
+                    ? context.cb.primarySoft
+                    : context.cb.text,
                 fontStyle: hidden ? FontStyle.italic : FontStyle.normal,
               ),
             ),
@@ -294,8 +326,13 @@ class _CommentRow extends StatelessWidget {
                   ? null
                   : () => handlers.onVote(comment, pending == -1 ? 0 : -1),
               onReply: canReply ? () => handlers.onReplyTap(comment) : null,
-              onReport:
-                  hidden ? null : () => handlers.onReport(comment),
+              // On the caregiver's own comment the trailing slot is a Delete
+              // affordance; on everyone else's it's the Report flag. Hidden
+              // rows expose neither.
+              onReport: (hidden || isOwn)
+                  ? null
+                  : () => handlers.onReport(comment),
+              onDelete: isOwn ? () => handlers.onDelete(comment) : null,
             ),
           ],
         ),
@@ -314,6 +351,7 @@ class _ActionBar extends StatelessWidget {
     required this.onDownvote,
     required this.onReply,
     required this.onReport,
+    required this.onDelete,
   });
 
   final ForumComment comment;
@@ -324,6 +362,9 @@ class _ActionBar extends StatelessWidget {
   final VoidCallback? onDownvote;
   final VoidCallback? onReply;
   final VoidCallback? onReport;
+
+  /// Non-null only on the caregiver's own comment — opens the delete sheet.
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -337,8 +378,8 @@ class _ActionBar extends StatelessWidget {
           // warm "yes, agree" colour. Brand spec §3 calls out the
           // salmon-orange as the primary affordance hue.
           color: pendingVote == 1
-              ? careblazersColors.cta
-              : careblazersColors.primarySoft,
+              ? context.cb.cta
+              : context.cb.primarySoft,
           icon: const Icon(Icons.arrow_upward),
           iconSize: 20,
           tooltip: 'Upvote',
@@ -348,7 +389,7 @@ class _ActionBar extends StatelessWidget {
         Text(
           '${comment.voteCount}',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.primary,
+            color: context.cb.primary,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -358,8 +399,8 @@ class _ActionBar extends StatelessWidget {
           // Navy (primary) for the downvote so the cooler colour reads
           // as the de-emphasized direction.
           color: pendingVote == -1
-              ? careblazersColors.primary
-              : careblazersColors.primarySoft,
+              ? context.cb.primary
+              : context.cb.primarySoft,
           icon: const Icon(Icons.arrow_downward),
           iconSize: 20,
           tooltip: 'Downvote',
@@ -374,21 +415,32 @@ class _ActionBar extends StatelessWidget {
             icon: const Icon(Icons.reply, size: 18),
             label: const Text('Reply'),
             style: TextButton.styleFrom(
-              foregroundColor: careblazersColors.primarySoft,
+              foregroundColor: context.cb.primarySoft,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               minimumSize: const Size(0, 32),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
         const Spacer(),
-        if (onReport != null)
+        if (onDelete != null)
+          IconButton(
+            key: CommentThread.deleteTriggerKey(comment.id),
+            onPressed: onDelete,
+            icon: const Icon(Icons.more_horiz),
+            iconSize: 18,
+            tooltip: 'Reply options',
+            color: context.cb.primarySoft,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          )
+        else if (onReport != null)
           IconButton(
             key: Key('comment-report-${comment.id}'),
             onPressed: onReport,
             icon: const Icon(Icons.flag_outlined),
             iconSize: 18,
             tooltip: 'Report',
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
             padding: const EdgeInsets.all(4),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
@@ -457,10 +509,10 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
     return Container(
       key: composerKey,
       decoration: BoxDecoration(
-        color: careblazersColors.background,
+        color: context.cb.background,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: careblazersColors.primarySoft.withValues(alpha: 0.4),
+          color: context.cb.primarySoft.withValues(alpha: 0.4),
         ),
       ),
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
@@ -483,11 +535,11 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
               border: InputBorder.none,
               isDense: true,
               hintStyle: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.primarySoft,
+                color: context.cb.primarySoft,
               ),
             ),
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.text,
+              color: context.cb.text,
             ),
           ),
           Row(
@@ -499,7 +551,7 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
                     : CommentThread.replyCancelKey(parent.id),
                 onPressed: widget.isSending ? null : widget.onCancel,
                 style: TextButton.styleFrom(
-                  foregroundColor: careblazersColors.primarySoft,
+                  foregroundColor: context.cb.primarySoft,
                 ),
                 child: const Text('Cancel'),
               ),
@@ -510,7 +562,7 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
                     : CommentThread.replySendKey(parent.id),
                 onPressed: widget.isSending ? null : _handleSubmit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: careblazersColors.cta,
+                  backgroundColor: context.cb.cta,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,

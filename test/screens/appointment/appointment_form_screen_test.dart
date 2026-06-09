@@ -6,6 +6,7 @@ import 'package:careblazers/screens/appointment/appointment_form_screen.dart';
 import 'package:careblazers/screens/appointment/appointment_list_screen.dart';
 import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/provider_repository.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
@@ -265,6 +266,45 @@ void main() {
           <String>['Ask about evening agitation', 'Refill Donepezil']);
       expect(saved.status, model.AppointmentStatus.upcoming);
       expect(saved.notes, 'Bring journal.');
+    });
+
+    testWidgets(
+        'double-tapping Save writes exactly ONE appointment row '
+        '(the in-flight guard blocks the re-entrant submit)',
+        (WidgetTester tester) async {
+      // Regression: a fast double-tap on Save used to mint a second
+      // `appt-${mint()}` id and insert a duplicate row. The `_submitting`
+      // guard (set synchronously before the first await + the button's
+      // `onPressed: _submitting ? null : _submit` disable) must collapse
+      // the two taps into a single insert. A fresh monotonic id factory
+      // proves it: an unguarded second submit would mint `appt-id1` and
+      // land a second row.
+      await _seedProvider(db, id: 'prov-1', name: 'Dr. Ortega');
+      final p = await _pumpForm(
+        tester,
+        apptRepo: apptRepo,
+        providerRepo: providerRepo,
+        db: db,
+      );
+
+      await tester.tap(find.byKey(AppointmentFormScreen.providerDropdownKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dr. Ortega').last);
+      await tester.pumpAndSettle();
+
+      // First tap kicks off the (async) save; the second tap fires before
+      // it settles. The guard must drop the second.
+      final Finder save = find.byKey(AppointmentFormScreen.submitButtonKey);
+      await tester.tap(save);
+      await tester.pump(); // commit setState(_submitting = true) + disable
+      await tester.tap(save, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      // Exactly one row, and it kept the first minted id.
+      final List<model.Appointment> rows = await apptRepo.listAppointments();
+      expect(rows, hasLength(1));
+      expect(rows.single.id, 'appt-id0');
+      expect(p.popped, contains('/appointments'));
     });
 
     testWidgets(
@@ -609,6 +649,140 @@ void main() {
       final model.Appointment? loaded = await apptRepo.getAppointment('appt-1');
       expect(loaded?.agenda, <String>['Second', 'Third']);
       expect(loaded?.completedAgendaIndices, <int>{0, 1});
+    });
+
+    testWidgets(
+        'setting status to Canceled and saving cancels the appointment '
+        'in the repository', (WidgetTester tester) async {
+      // The detail/form screens ship no dedicated "delete" affordance; the
+      // status dropdown's "Canceled" option is the supported cancel path
+      // (it round-trips through AppointmentRepository.upsertAppointment,
+      // leaving the row in place but flipped to canceled). See the report
+      // note re: the missing hard-delete UI.
+      await _seedProvider(db, id: 'prov-1', name: 'Dr. Ortega');
+      await apptRepo.upsertAppointment(model.Appointment(
+        id: 'appt-1',
+        providerId: 'prov-1',
+        startsAt: DateTime(2026, 6, 15, 14, 30),
+        durationMinutes: 30,
+        location: 'Marin General — Neurology',
+        agenda: const <String>['Ask about agitation'],
+        status: model.AppointmentStatus.upcoming,
+      ));
+
+      final p = await _pumpForm(
+        tester,
+        apptRepo: apptRepo,
+        providerRepo: providerRepo,
+        db: db,
+        editAppointmentId: 'appt-1',
+      );
+
+      // Flip the status dropdown Upcoming → Canceled.
+      await tester.ensureVisible(
+          find.byKey(AppointmentFormScreen.statusDropdownKey));
+      await tester.tap(find.byKey(AppointmentFormScreen.statusDropdownKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Canceled').last);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(
+          find.byKey(AppointmentFormScreen.submitButtonKey));
+      await tester.tap(find.byKey(AppointmentFormScreen.submitButtonKey));
+      await tester.pumpAndSettle();
+
+      // The row is still on file (id reused) but now canceled — and the
+      // repository's past/upcoming split moves it out of "upcoming".
+      final model.Appointment? loaded =
+          await p.apptRepo.getAppointment('appt-1');
+      expect(loaded, isNotNull);
+      expect(loaded!.id, 'appt-1');
+      expect(loaded.status, model.AppointmentStatus.canceled);
+      final List<model.Appointment> upcoming = await p.apptRepo.upcoming();
+      expect(
+          upcoming.map((model.Appointment a) => a.id), isNot(contains('appt-1')));
+    });
+  });
+
+  group('AppointmentFormScreen — discard on the add path', () {
+    testWidgets(
+        'leaving the add form via the breadcrumb writes no appointment row',
+        (WidgetTester tester) async {
+      await _seedProvider(db, id: 'prov-1', name: 'Dr. Ortega');
+      final p = await _pumpForm(
+        tester,
+        apptRepo: apptRepo,
+        providerRepo: providerRepo,
+        db: db,
+      );
+
+      // Start filling the form: pick a provider + override the location,
+      // then abandon it WITHOUT tapping Save.
+      await tester.tap(find.byKey(AppointmentFormScreen.providerDropdownKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dr. Ortega').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(AppointmentFormScreen.locationFieldKey),
+        'Half-typed location',
+      );
+      await tester.pumpAndSettle();
+
+      // The form's only back affordance is the PathHeader's parent
+      // breadcrumb crumb ("Appointments" → context.go('/appointments')) —
+      // there is no Cancel button on the form. Tap it to discard.
+      await tester.tap(find.text('Appointments'));
+      await tester.pumpAndSettle();
+
+      // Back on the list stub, and nothing was persisted.
+      expect(find.text('list-stub'), findsOneWidget);
+      expect(p.popped, contains('/appointments'));
+      expect(await p.apptRepo.listAppointments(), isEmpty);
+    });
+  });
+
+  group('AppointmentFormScreen — PathHeader back affordance', () {
+    // Regression for alpha bug fb_1780932762335231: the breadcrumb back
+    // affordance must be present on every branch — including before the
+    // hydration future resolves — so the screen is never swipe-only.
+    testWidgets('renders the PathHeader breadcrumb on the loading branch',
+        (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final GoRouter router = GoRouter(
+        initialLocation: '/appointments/new',
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/appointments/new',
+            builder: (BuildContext context, GoRouterState state) =>
+                const AppointmentFormScreen(),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            appointmentRepositoryBackendProvider.overrideWithValue(apptRepo),
+            providerRepositoryBackendProvider
+                .overrideWithValue(providerRepo),
+            appointmentFormClockProvider.overrideWithValue(_fixedNow),
+            appointmentFormIdFactoryProvider
+                .overrideWithValue(_counterFactory()),
+            appointmentListClockProvider.overrideWithValue(_fixedNow),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      // A single pump — the hydration future has NOT resolved yet, so this
+      // is the loading branch. The PathHeader must already be on screen.
+      await tester.pump();
+
+      expect(find.byType(PathHeader), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Care'), findsOneWidget);
+      expect(find.text('Appointments'), findsOneWidget);
     });
   });
 }

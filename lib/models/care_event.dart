@@ -86,6 +86,21 @@ abstract class CareEvent with _$CareEvent {
     // four team-scoped kinds leave it null today; native [note] events
     // can store it directly in the `care_events` drift table.
     String? subtitle,
+    // For dose events ([CareEventKind.doseScheduled] /
+    // [CareEventKind.doseLogged]) — the label of the [DoseWindow] the
+    // dose belongs to ("Morning", "Evening"). Window-grouped consumers
+    // (the Home Schedule card) head a dose group with the window name +
+    // time rather than a bare clock minute. Null for every other kind
+    // and for any dose that predates window scheduling.
+    String? windowLabel,
+    // For dose events — the window's canonical occurrence for the day
+    // (the anchored slot, [ScheduledDose.scheduledFor]). Distinct from
+    // [start], which for a logged dose is when the caregiver actually
+    // gave it: a dose given at 2:15pm still belongs to the 8:00am
+    // "Morning" slot. Window-grouped consumers display + order by this
+    // so a late-logged dose stays under its window's time. Null for
+    // every non-dose kind.
+    DateTime? windowSlot,
   }) = _CareEvent;
 
   factory CareEvent.fromJson(Map<String, dynamic> json) =>
@@ -100,7 +115,7 @@ extension CareEventX on CareEvent {
   ///
   /// Derived from [CareEvent.kind] + [CareEvent.externalRef]:
   /// - [CareEventKind.appointment] → `/appointments/<ref>` (Phase 12.6).
-  /// - [CareEventKind.task] → `/team/tasks/<ref>` (Phase 14.30).
+  /// - [CareEventKind.task] → `/team/tasks` (the task list; no per-id page).
   /// - [CareEventKind.shift] → `/team/shifts/<ref>` (Phase 14.31).
   /// - [CareEventKind.note] → null; a note lives natively on the calendar
   ///   and has no separate detail page.
@@ -114,7 +129,10 @@ extension CareEventX on CareEvent {
       case CareEventKind.appointment:
         return '/appointments/$ref';
       case CareEventKind.task:
-        return '/team/tasks/$ref';
+        // Tasks have no per-id detail page; a tapped block opens the task
+        // list (there is no `/team/tasks/:id` route — the old `$ref` form
+        // dead-ended on "Page Not Found").
+        return '/team/tasks';
       case CareEventKind.shift:
         return '/team/shifts/$ref';
       case CareEventKind.note:
@@ -127,7 +145,11 @@ extension CareEventX on CareEvent {
         // the dose-log id and the dose-log screen highlights the row.
         return '/medications/today';
       case CareEventKind.healthLogEntry:
-        return '/medical/health-log/$ref';
+        // Health-log entries have no standalone detail page — the list
+        // opens an entry straight into its edit form, and there is no
+        // `health-log/:id` route (only `:id/edit`). Match that so a
+        // timeline tap doesn't dead-end on "Page Not Found".
+        return '/medical/health-log/$ref/edit';
       case CareEventKind.journalEntry:
         return '/journal/$ref';
       case CareEventKind.carePlanItem:

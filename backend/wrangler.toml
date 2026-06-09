@@ -30,6 +30,15 @@ crons = ["0 13 * * 1"]
 # per environment via `wrangler deploy --var R2_PUBLIC_URL:...`.
 R2_PUBLIC_URL = "https://media.careblazers.local"
 
+# Allowed audience(s) for POST /api/v1/auth/google — the Google *Web* OAuth
+# client id (the app sets it as serverClientId so iOS+Android ID tokens both
+# carry it as `aud`). May be a comma-separated list to allow additional
+# audiences (e.g. a native iOS client id). The Web client id is public, not a
+# secret, so it lives here; override per environment via
+# `wrangler deploy --var GOOGLE_CLIENT_ID:...` or set it for local dev in
+# `.dev.vars`.
+GOOGLE_CLIENT_ID = "187697773608-uha89s0cc6f9bm4mefcu7r93sopas5jq.apps.googleusercontent.com,187697773608-ica8fo1ho8brojse9ai1lq63kbb2nqae.apps.googleusercontent.com"
+
 # Watchdog wiring (Phase 13.13). Non-secret values live here; secrets
 # (CLOUDFLARE_API_TOKEN, RESEND_API_KEY) are set via `wrangler secret
 # put`. See backend/README.md → "Watchdog setup".
@@ -48,3 +57,13 @@ migrations_dir = "drizzle"
 [[r2_buckets]]
 binding = "FORUM_MEDIA"
 bucket_name = "careblazers-forum-media"
+
+# Document scans (emergency card / POA / ID images). Stored under a
+# circle-namespaced key so blobs survive a reinstall and sync across the
+# care circle. Local `wrangler dev` + vitest use miniflare's in-process R2
+# emulator (blobs persist under .wrangler/state), so no real bucket is
+# required for alpha; create it before remote deploy:
+#   wrangler r2 bucket create careblazers-doc-blobs
+[[r2_buckets]]
+binding = "DOC_BLOBS"
+bucket_name = "careblazers-doc-blobs"

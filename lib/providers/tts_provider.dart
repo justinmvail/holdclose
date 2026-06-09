@@ -242,7 +242,11 @@ bool shouldMuteTts(AppSettings settings, DateTime now) {
   if (!settings.readScriptsAloud) return true;
   if (!settings.quietHoursEnabled) return false;
   if (settings.allowAudioDuringQuietHours) return false;
-  return isQuietHoursActive(now);
+  return isQuietHoursActive(
+    now,
+    startHour: settings.quietHoursStartHour,
+    endHour: settings.quietHoursEndHour,
+  );
 }
 
 // ---------------------------------------------------------------------------

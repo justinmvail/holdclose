@@ -3,24 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/care_event.dart';
+import '../../models/caregiver.dart';
 import '../../providers/care_events_provider.dart';
+import '../../providers/care_tasks_provider.dart'
+    show assignableCaregiversProvider;
 import '../../providers/patient_timeline_provider.dart';
 import '../../theme.dart';
+import '../appointment/appointment_list_screen.dart' show appointmentAddDebounce;
 import '../../widgets/path_header.dart';
+import '../../widgets/schedule_grouping.dart';
 
-/// Which audience's events the Calendar surfaces. [both] is the
-/// default — what's happening with the patient AND who's covering when.
-/// [patient] narrows to the dosing / appointments / journal /
-/// health-log / routines stream; [team] narrows to the
-/// appointment / task / shift / note coordination layer. Appointment
-/// kind is in BOTH audiences so it never hides under either filter.
-enum CalendarAudience { both, patient, team }
-
-/// Care Team → Calendar at `/team/calendar` (TASKS.md Phase 14.29 v2,
+/// Care Circle → Calendar at `/team/calendar` (TASKS.md Phase 14.29 v2,
 /// BUILD_SPEC.md §5.14 v2).
 ///
 /// **Shell v2 (week strip + agenda):** a [PathHeader]
-/// (`Home › Care Team › Calendar`, back to Care Team), an audience
+/// (`Home › Care Circle › Calendar`, back to Care Circle), an audience
 /// filter (Both / Patient / Team), a week-cycling header, a 7-day
 /// strip with a selectable day, and a scrollable agenda of that day's
 /// events as full-width cards. Replaces the legacy 7-col × 24-hour
@@ -35,12 +32,47 @@ enum CalendarAudience { both, patient, team }
 /// the audience chip filter narrows on demand. Default is
 /// [CalendarAudience.both].
 ///
+/// The three ways the Schedule can be read, toggled by the in-page
+/// [SegmentedButton] (Cheyne: "multiple views… like what's coming up next
+/// week"). All three honour the owner ("who does what") filter.
+///   - [week] — the 7-day strip plus a by-day grouped agenda of every event
+///     in the visible week (date-headed), so the whole week reads at a
+///     glance rather than just the selected day.
+///   - [day] — only the selected day, as a vertical agenda. The week
+///     strip stays so the caregiver can still hop days.
+///   - [upcoming] — a flat chronological list of the next 30 days of
+///     events, date-headed, so "what's coming up" is one glance.
+enum CalendarView { day, week, upcoming }
+
+/// The visible window the [CalendarView.upcoming] agenda spans, starting
+/// at today. 30 days so "what's coming up" is genuinely useful and reaches
+/// well past the visible week (alpha report fb_1780960227608706: "Upcoming
+/// only goes one day past week"). The patient-timeline forecast source
+/// projects the same horizon so permanent meds populate the whole span.
+const int _upcomingHorizonDays = 30;
+
 /// The visible week + selected day are local state. The arrows shift
 /// [_weekStart] by ±7 days and re-anchor the selected day to the new
 /// week (defaulting to today if it falls in-week, else to Sunday).
 /// Seeded from [calendarClockProvider] so tests pin "now".
 class CalendarScreen extends ConsumerStatefulWidget {
-  const CalendarScreen({super.key});
+  const CalendarScreen({
+    super.key,
+    this.fromMedical = false,
+    this.initialDate,
+  });
+
+  /// When true (the Medical hub's "Schedule" entry passes `?from=medical`,
+  /// lifted to this flag by the route builder), the path header shows the
+  /// Medical breadcrumb + back label instead of the Care Circle path — the
+  /// same calendar screen with contextual chrome.
+  final bool fromMedical;
+
+  /// When set (the chat coach's "take me to that day" navigation passes
+  /// `?date=YYYY-MM-DD`, lifted here by the route builder), the calendar
+  /// opens on this day's week with it selected, instead of defaulting to
+  /// today.
+  final DateTime? initialDate;
 
   /// The scrollable agenda body — kept for test continuity since the
   /// legacy 24-hour grid carried the same key.
@@ -50,6 +82,18 @@ class CalendarScreen extends ConsumerStatefulWidget {
   static const Key weekLabelKey = Key('calendar-week-label');
   static const Key audienceFilterKey = Key('calendar-audience-filter');
   static const Key emptyDayKey = Key('calendar-empty-day');
+
+  /// The "+ Add appointment" affordance — opens the appointment form on
+  /// the selected day. The add gap Cheyne flagged ("how do I schedule
+  /// appointments on the calendar?").
+  static const Key addFabKey = Key('calendar-add-fab');
+
+  /// The Day / Week / Upcoming view switcher.
+  static const Key viewSwitcherKey = Key('calendar-view-switcher');
+
+  /// The flat next-30-days agenda body in the Upcoming view.
+  static const Key upcomingListKey = Key('calendar-upcoming-list');
+  static const Key upcomingEmptyKey = Key('calendar-upcoming-empty');
 
   /// Stable per-event key — present on the agenda row so tests tap a
   /// node rather than a copy string. Same naming the legacy grid used,
@@ -76,17 +120,23 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   /// on first build; re-anchored on week shift.
   DateTime? _selectedDay;
 
-  /// Active audience filter. Defaults to [CalendarAudience.both] so the
-  /// caregiver sees the patient AND team event streams unless they
-  /// narrow.
-  CalendarAudience _audience = CalendarAudience.both;
+  /// Active "who" filter — null shows everyone's schedule; a caregiver id
+  /// narrows to that person's assignments (plus the loved one's unassigned
+  /// care, which belongs to no one in particular). Answers "what am I on
+  /// the hook for?" / "who's doing what?" — the schedule's real job.
+  String? _ownerFilter;
+
+  /// The active view. Local state — persists for the life of the screen,
+  /// no settings-model change (so no codegen). Defaults to the legacy
+  /// Week view.
+  CalendarView _view = CalendarView.week;
 
   DateTime get _week => _weekStart ??= weekStartFor(
-        ref.read(calendarClockProvider)(),
+        widget.initialDate ?? ref.read(calendarClockProvider)(),
       );
 
-  DateTime get _selected =>
-      _selectedDay ??= dateOnly(ref.read(calendarClockProvider)());
+  DateTime get _selected => _selectedDay ??=
+      dateOnly(widget.initialDate ?? ref.read(calendarClockProvider)());
 
   void _shiftWeek(int weeks) {
     setState(() {
@@ -109,15 +159,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     setState(() => _selectedDay = dateOnly(day));
   }
 
-  bool _matchesAudience(CareEvent e) {
-    switch (_audience) {
-      case CalendarAudience.both:
-        return true;
-      case CalendarAudience.patient:
-        return e.isPatientScoped;
-      case CalendarAudience.team:
-        return e.isTeamScoped;
-    }
+  bool _matchesOwner(CareEvent e) {
+    // "Everyone" → the whole schedule.
+    if (_ownerFilter == null) return true;
+    // A person → their own assignments + the loved one's unassigned care
+    // (meds / appointments belong to no single caregiver); other people's
+    // assigned tasks + shifts drop away.
+    return e.ownerCaregiverId == _ownerFilter || e.ownerCaregiverId == null;
   }
 
   @override
@@ -136,11 +184,25 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final AsyncValue<List<CareEvent>> async = _combine(
       teamAsync,
       patientAsync,
-      filter: _matchesAudience,
+      filter: _matchesOwner,
     );
 
+    // The Day + Week views both anchor on the selected day and keep the
+    // week-cycling header (arrows + week label). The Upcoming view is a flat
+    // horizon list, so it drops the header.
+    final bool showsWeekNav = _view != CalendarView.upcoming;
+    // The day-of-week chip strip only does anything in Day view (it picks
+    // which single day the agenda shows). In Week view every day already
+    // renders, so the strip was inert — tapping a chip changed nothing
+    // (alpha report fb_1780960170044232: "Day selector doesn't do anything
+    // on week setting"). Hide it outside Day view.
+    final bool showsDayStrip = _view == CalendarView.day;
+
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
+      floatingActionButton: _AddAppointmentFab(
+        onPressed: () => _openAddForm(context, selected, today),
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -150,52 +212,58 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
+                  // One schedule now, always under Care (the Medical/Team
+                  // calendar duality is gone). [widget.fromMedical] is kept
+                  // for route compatibility but no longer changes chrome.
                   const PathHeader(
                     breadcrumbs: <PathHeaderCrumb>[
                       PathHeaderCrumb(label: 'Home', route: '/'),
-                      PathHeaderCrumb(label: 'Care Team', route: '/team'),
-                      PathHeaderCrumb(label: 'Calendar'),
+                      PathHeaderCrumb(label: 'Care', route: '/medical'),
+                      PathHeaderCrumb(label: 'Schedule'),
                     ],
-                    title: 'Calendar',
-                    backLabel: 'Back to Care Team',
-                    leadingIcon: Icons.calendar_view_week_outlined,
+                    title: 'Schedule',
+                    backLabel: 'Back to Care',
+                    leadingIcon: Icons.schedule_outlined,
                   ),
                   const SizedBox(height: 8),
-                  _AudienceFilter(
-                    audience: _audience,
-                    onChanged: (CalendarAudience next) =>
-                        setState(() => _audience = next),
+                  _ViewSwitcher(
+                    view: _view,
+                    onChanged: (CalendarView next) =>
+                        setState(() => _view = next),
                   ),
                   const SizedBox(height: 8),
-                  _WeekNav(
-                    weekStart: weekStart,
-                    onPrev: () => _shiftWeek(-1),
-                    onNext: () => _shiftWeek(1),
+                  _OwnerFilter(
+                    selectedId: _ownerFilter,
+                    onChanged: (String? id) =>
+                        setState(() => _ownerFilter = id),
                   ),
+                  if (showsWeekNav) ...<Widget>[
+                    const SizedBox(height: 8),
+                    _WeekNav(
+                      weekStart: weekStart,
+                      onPrev: () => _shiftWeek(-1),
+                      onNext: () => _shiftWeek(1),
+                    ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-            _WeekStrip(
-              weekStart: weekStart,
-              today: today,
-              selected: selected,
-              onSelect: _selectDay,
-            ),
+            if (showsDayStrip) ...<Widget>[
+              const SizedBox(height: 8),
+              _WeekStrip(
+                weekStart: weekStart,
+                today: today,
+                selected: selected,
+                onSelect: _selectDay,
+              ),
+            ],
             const Divider(height: 24),
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
                 error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-                data: (List<CareEvent> events) => _DayAgenda(
-                  events: events
-                      .where((CareEvent e) =>
-                          dateOnly(e.start) == selected)
-                      .toList(growable: false),
-                  selected: selected,
-                  onTapEvent: (CareEvent event) =>
-                      _openDetail(context, event),
-                ),
+                data: (List<CareEvent> events) =>
+                    _body(context, events, selected, today),
               ),
             ),
           ],
@@ -204,9 +272,185 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     );
   }
 
+  /// The view-specific body.
+  ///   - [day] — only the selected day, as a vertical agenda.
+  ///   - [week] — every event in the 7-day week containing the selected day,
+  ///     grouped by day under date headers (so it's clearly more than one
+  ///     day — the fix for "Day and Week look the same").
+  ///   - [upcoming] — a flat horizon list of the next 30 days.
+  Widget _body(
+    BuildContext context,
+    List<CareEvent> events,
+    DateTime selected,
+    DateTime today,
+  ) {
+    switch (_view) {
+      case CalendarView.day:
+        return _DayAgenda(
+          events: events
+              .where((CareEvent e) => dateOnly(e.start) == selected)
+              .toList(growable: false),
+          selected: selected,
+          today: today,
+          onTapEvent: (CareEvent event) => _openDetail(context, event),
+        );
+      case CalendarView.week:
+        // The whole week CONTAINING the selected day (its Sunday + 6 days),
+        // grouped by day so the caregiver sees the week at a glance — not
+        // just the one selected day. Bounds are derived from the same
+        // `selected` Day view anchors on, so Day and Week clip the (now
+        // 30-day) forecast source identically — Day to one day, Week to the
+        // seven days around it. A permanent med can't leak past either
+        // window (alpha report fb_1780960326057462: Day/Week "going forever"
+        // and "ending at different times").
+        final DateTime weekStart = weekStartFor(selected);
+        final DateTime weekEnd =
+            weekStart.add(const Duration(days: CalendarScreen._daysPerWeek));
+        return _GroupedAgenda(
+          key: const Key('calendar-week-agenda'),
+          events: events
+              .where((CareEvent e) {
+                final DateTime day = dateOnly(e.start);
+                return !day.isBefore(weekStart) && day.isBefore(weekEnd);
+              })
+              .toList(growable: false),
+          today: today,
+          listKey: CalendarScreen.gridKey,
+          emptyKey: CalendarScreen.emptyDayKey,
+          emptyTitle: 'Nothing scheduled this week.',
+          emptySubtitle: 'The week of ${_formatWeekLabel(weekStart)} is clear.',
+          onTapEvent: (CareEvent event) => _openDetail(context, event),
+        );
+      case CalendarView.upcoming:
+        final DateTime horizonEnd =
+            today.add(const Duration(days: _upcomingHorizonDays));
+        return _GroupedAgenda(
+          events: events
+              .where((CareEvent e) {
+                final DateTime day = dateOnly(e.start);
+                return !day.isBefore(today) && day.isBefore(horizonEnd);
+              })
+              .toList(growable: false),
+          today: today,
+          listKey: CalendarScreen.upcomingListKey,
+          emptyKey: CalendarScreen.upcomingEmptyKey,
+          emptyTitle: 'Nothing coming up.',
+          emptySubtitle: 'The next 30 days are clear.',
+          onTapEvent: (CareEvent event) => _openDetail(context, event),
+        );
+    }
+  }
+
+  /// Open the appointment form pre-anchored to the day the caregiver is
+  /// looking at. In the Upcoming view there's no single selected day, so
+  /// default to today.
+  void _openAddForm(BuildContext context, DateTime selected, DateTime today) {
+    // Guard against a fast double-tap on the FAB pushing the add form
+    // twice (which let the caregiver save two identical appointments —
+    // alpha bug: "got added twice", 2026-06-07). The shared time-based
+    // debounce drops a same-frame second tap; `isCurrent` covers the
+    // slower case where the first form is already on screen.
+    if (!appointmentAddDebounce.shouldOpen()) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    final DateTime day = _view == CalendarView.upcoming ? today : selected;
+    final String date = '${day.year.toString().padLeft(4, '0')}-'
+        '${day.month.toString().padLeft(2, '0')}-'
+        '${day.day.toString().padLeft(2, '0')}';
+    context.push('/appointments/new?date=$date');
+  }
+
   void _openDetail(BuildContext context, CareEvent event) {
     final String? route = event.detailRoute;
     if (route != null) context.push(route);
+  }
+}
+
+/// The Day / Week / Upcoming view toggle (Cheyne: "multiple views… like
+/// what's coming up next week"). A [SegmentedButton] so the active view
+/// reads at a glance and the brand CTA color fills the selection.
+class _ViewSwitcher extends StatelessWidget {
+  const _ViewSwitcher({required this.view, required this.onChanged});
+
+  final CalendarView view;
+  final ValueChanged<CalendarView> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SegmentedButton<CalendarView>(
+        key: CalendarScreen.viewSwitcherKey,
+        segments: const <ButtonSegment<CalendarView>>[
+          ButtonSegment<CalendarView>(
+            value: CalendarView.day,
+            label: Text('Day', maxLines: 1, softWrap: false),
+            icon: Icon(Icons.view_day_outlined),
+          ),
+          ButtonSegment<CalendarView>(
+            value: CalendarView.week,
+            label: Text('Week', maxLines: 1, softWrap: false),
+            icon: Icon(Icons.view_week_outlined),
+          ),
+          ButtonSegment<CalendarView>(
+            value: CalendarView.upcoming,
+            label: Text('Upcoming', maxLines: 1, softWrap: false),
+            icon: Icon(Icons.list_alt_outlined),
+          ),
+        ],
+        selected: <CalendarView>{view},
+        showSelectedIcon: false,
+        onSelectionChanged: (Set<CalendarView> next) =>
+            onChanged(next.first),
+        // Compact treatment mirrors Settings' `_compactSegmentStyle`:
+        // tighter padding + a smaller label so "Upcoming" fits on one line
+        // (alpha report fb_1780960095402023: "Upcoming has a weird word wrap
+        // issue"). The brand fg/bg fills layer on top.
+        style: ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+            EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          ),
+          textStyle: const WidgetStatePropertyAll<TextStyle>(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith<Color>(
+            (Set<WidgetState> states) =>
+                states.contains(WidgetState.selected)
+                    ? Colors.white
+                    : context.cb.primary,
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith<Color>(
+            (Set<WidgetState> states) =>
+                states.contains(WidgetState.selected)
+                    ? context.cb.cta
+                    : context.cb.surfaceWarm,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The "+ Add" affordance — opens the appointment form on the selected
+/// day. Closes Cheyne's "how do I schedule appointments on the calendar?"
+/// gap. No emoji on the label per the brand voice; the leading "+" is an
+/// icon, not a primary-CTA emoji.
+class _AddAppointmentFab extends StatelessWidget {
+  const _AddAppointmentFab({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton.extended(
+      key: CalendarScreen.addFabKey,
+      heroTag: 'calendar-add-fab',
+      onPressed: onPressed,
+      backgroundColor: context.cb.cta,
+      foregroundColor: Colors.white,
+      icon: const Icon(Icons.add),
+      label: const Text('Add appointment'),
+    );
   }
 }
 
@@ -234,7 +478,7 @@ class _WeekNav extends StatelessWidget {
           child: IconButton(
             key: CalendarScreen.prevWeekKey,
             icon: const Icon(Icons.chevron_left),
-            color: careblazersColors.link,
+            color: context.cb.link,
             onPressed: onPrev,
             tooltip: 'Previous week',
           ),
@@ -245,7 +489,7 @@ class _WeekNav extends StatelessWidget {
             key: CalendarScreen.weekLabelKey,
             textAlign: TextAlign.center,
             style: textTheme.titleLarge?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -256,7 +500,7 @@ class _WeekNav extends StatelessWidget {
           child: IconButton(
             key: CalendarScreen.nextWeekKey,
             icon: const Icon(Icons.chevron_right),
-            color: careblazersColors.link,
+            color: context.cb.link,
             onPressed: onNext,
             tooltip: 'Next week',
           ),
@@ -321,13 +565,13 @@ class _DayChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color fill = isSelected
-        ? careblazersColors.cta
-        : careblazersColors.surfaceWarm;
+        ? context.cb.cta
+        : context.cb.surfaceWarm;
     final Color fg = isSelected
         ? Colors.white
-        : (isToday ? careblazersColors.cta : careblazersColors.primary);
+        : (isToday ? context.cb.cta : context.cb.primary);
     final BoxBorder? border = (!isSelected && isToday)
-        ? Border.all(color: careblazersColors.cta, width: 1.5)
+        ? Border.all(color: context.cb.cta, width: 1.5)
         : null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -377,11 +621,17 @@ class _DayAgenda extends StatelessWidget {
   const _DayAgenda({
     required this.events,
     required this.selected,
+    required this.today,
     required this.onTapEvent,
   });
 
   final List<CareEvent> events;
   final DateTime selected;
+
+  /// Midnight today — a dose window only taps through to the dose log
+  /// when it's today's window (the log shows today's doses).
+  final DateTime today;
+
   final ValueChanged<CareEvent> onTapEvent;
 
   @override
@@ -389,17 +639,147 @@ class _DayAgenda extends StatelessWidget {
     if (events.isEmpty) {
       return _EmptyDay(selected: selected);
     }
+    // Fold the day's medication doses into their time windows — the same
+    // "Morning Medication · 8:00 AM" grouping the Home schedule uses — so
+    // a window's meds list under one header instead of one row per dose.
+    final List<ScheduleRow> rows = groupDoseEventsByWindow(events);
     return ListView.separated(
       key: CalendarScreen.gridKey,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-      itemCount: events.length,
+      itemCount: rows.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (BuildContext context, int i) => _AgendaRow(
-        event: events[i],
-        onTap: () => onTapEvent(events[i]),
-      ),
+      itemBuilder: (BuildContext context, int i) {
+        final ScheduleRow r = rows[i];
+        if (r is DoseGroupRow) {
+          return _DoseWindowRow(group: r.group, today: today);
+        }
+        final CareEvent event = (r as EventRow).event;
+        return _AgendaRow(event: event, onTap: () => onTapEvent(event));
+      },
     );
   }
+}
+
+/// A by-day grouped agenda — the shared body of the Week and Upcoming
+/// views. Events are grouped under a date header per day (so a multi-day
+/// span like the week or the next two weeks reads top-down), with the same
+/// dose-window folding the day agenda uses keeping meds compact. The owner
+/// filter is already applied upstream (the events passed in are
+/// pre-filtered + pre-sorted ascending by start). Keys + empty-state copy
+/// are injected so the two callers keep their distinct test hooks and
+/// "this week" / "next two weeks" wording.
+class _GroupedAgenda extends StatelessWidget {
+  const _GroupedAgenda({
+    super.key,
+    required this.events,
+    required this.today,
+    required this.listKey,
+    required this.emptyKey,
+    required this.emptyTitle,
+    required this.emptySubtitle,
+    required this.onTapEvent,
+  });
+
+  final List<CareEvent> events;
+  final DateTime today;
+  final Key listKey;
+  final Key emptyKey;
+  final String emptyTitle;
+  final String emptySubtitle;
+  final ValueChanged<CareEvent> onTapEvent;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    if (events.isEmpty) {
+      return Padding(
+        key: emptyKey,
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              emptyTitle,
+              style: textTheme.titleMedium?.copyWith(
+                color: context.cb.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              emptySubtitle,
+              style: textTheme.bodyMedium?.copyWith(
+                color: context.cb.text.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Group the horizon's events by calendar day, preserving the ascending
+    // order, then fold each day's doses into their windows.
+    final List<DateTime> days = <DateTime>[];
+    final Map<DateTime, List<CareEvent>> byDay = <DateTime, List<CareEvent>>{};
+    for (final CareEvent e in events) {
+      final DateTime day = dateOnly(e.start);
+      (byDay[day] ??= <CareEvent>[]).add(e);
+      if (!days.contains(day)) days.add(day);
+    }
+
+    // Flatten into a single item list: a header per day followed by its
+    // (window-folded) rows, so one ListView scrolls the whole horizon.
+    final List<_UpcomingItem> items = <_UpcomingItem>[];
+    for (final DateTime day in days) {
+      items.add(_UpcomingHeaderItem(day));
+      for (final ScheduleRow r in groupDoseEventsByWindow(byDay[day]!)) {
+        items.add(_UpcomingRowItem(r));
+      }
+    }
+
+    return ListView.separated(
+      key: listKey,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (BuildContext context, int i) {
+        final _UpcomingItem item = items[i];
+        if (item is _UpcomingHeaderItem) {
+          return Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 8, bottom: 2),
+            child: Text(
+              _formatUpcomingHeader(item.day, today),
+              style: textTheme.titleMedium?.copyWith(
+                color: context.cb.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          );
+        }
+        final ScheduleRow r = (item as _UpcomingRowItem).row;
+        if (r is DoseGroupRow) {
+          return _DoseWindowRow(group: r.group, today: today);
+        }
+        final CareEvent event = (r as EventRow).event;
+        return _AgendaRow(event: event, onTap: () => onTapEvent(event));
+      },
+    );
+  }
+}
+
+/// One row in the flattened Upcoming list — either a day header or a
+/// (possibly dose-folded) event row.
+sealed class _UpcomingItem {
+  const _UpcomingItem();
+}
+
+class _UpcomingHeaderItem extends _UpcomingItem {
+  const _UpcomingHeaderItem(this.day);
+  final DateTime day;
+}
+
+class _UpcomingRowItem extends _UpcomingItem {
+  const _UpcomingRowItem(this.row);
+  final ScheduleRow row;
 }
 
 class _AgendaRow extends StatelessWidget {
@@ -411,7 +791,7 @@ class _AgendaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final Color color = _kindColor(event.kind);
+    final Color color = _kindColor(context, event.kind);
     final String label = _kindLabel(event.kind);
     final String startClock = _formatClock(event.start);
     final DateTime? end = event.end;
@@ -430,7 +810,7 @@ class _AgendaRow extends StatelessWidget {
       label: semanticLabel,
       child: ExcludeSemantics(
         child: Material(
-          color: careblazersColors.surfaceWarm,
+          color: context.cb.surfaceWarm,
           borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -455,7 +835,7 @@ class _AgendaRow extends StatelessWidget {
                           Text(
                             startClock,
                             style: textTheme.bodyMedium?.copyWith(
-                              color: careblazersColors.text,
+                              color: context.cb.text,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -464,7 +844,7 @@ class _AgendaRow extends StatelessWidget {
                             Text(
                               endClock,
                               style: textTheme.bodySmall?.copyWith(
-                                color: careblazersColors.primarySoft,
+                                color: context.cb.primarySoft,
                               ),
                             ),
                           ],
@@ -485,7 +865,7 @@ class _AgendaRow extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: textTheme.bodyLarge?.copyWith(
-                              color: careblazersColors.primary,
+                              color: context.cb.primary,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -506,7 +886,7 @@ class _AgendaRow extends StatelessWidget {
                       padding: const EdgeInsets.only(right: 12),
                       child: Icon(
                         Icons.chevron_right,
-                        color: careblazersColors.primarySoft,
+                        color: context.cb.primarySoft,
                       ),
                     ),
                 ],
@@ -515,6 +895,148 @@ class _AgendaRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A folded medication window in the agenda — the day's doses sharing one
+/// window slot, headed "Morning Medication · 8:00 AM" with each med + its
+/// taken/pending mark beneath. Mirrors the Home schedule's grouping
+/// (`groupDoseEventsByWindow`). Today's window taps through to the dose
+/// log; other days have no per-day destination and stay static.
+class _DoseWindowRow extends StatelessWidget {
+  const _DoseWindowRow({required this.group, required this.today});
+
+  final DoseWindowGroup group;
+  final DateTime today;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final Color color = _kindColor(context, CareEventKind.doseScheduled);
+    final String time = _formatClock(group.start);
+    // "Morning Medication" so the window reads unambiguously as meds among
+    // the appointments + other events the agenda mixes in. A label-less
+    // legacy dose falls back to a bare "Medication".
+    final String header = group.windowLabel == null
+        ? 'Medication'
+        : '${group.windowLabel} Medication';
+    final bool isToday = dateOnly(group.start) == today;
+    final String semanticLabel = <String>[
+      header,
+      time,
+      for (final ({String name, bool taken}) m in group.meds)
+        '${m.name} ${m.taken ? 'taken' : 'due'}',
+      if (isToday) 'Double-tap to open today\'s medications.',
+    ].join('. ');
+
+    return Semantics(
+      button: isToday,
+      label: semanticLabel,
+      child: ExcludeSemantics(
+        child: Material(
+          color: context.cb.surfaceWarm,
+          borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            key: CalendarScreen.blockKey(group.firstEventId),
+            onTap: isToday
+                ? () => GoRouter.of(context).push('/medications/today')
+                : null,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Container(width: 6, color: color),
+                  const SizedBox(width: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: SizedBox(
+                      width: 64,
+                      child: Text(
+                        time,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: context.cb.text,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            header,
+                            style: textTheme.bodyLarge?.copyWith(
+                              color: context.cb.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          for (final ({String name, bool taken}) m
+                              in group.meds)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2, bottom: 2),
+                              child: Row(
+                                children: <Widget>[
+                                  _DoseMark(taken: m.taken),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      m.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: textTheme.bodyMedium?.copyWith(
+                                        color: context.cb.text,
+                                        decoration: m.taken
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                        decorationColor:
+                                            context.cb.text,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (isToday)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: context.cb.primarySoft,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DoseMark extends StatelessWidget {
+  const _DoseMark({required this.taken});
+
+  final bool taken;
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      taken ? Icons.check_circle : Icons.radio_button_unchecked,
+      size: 18,
+      color: taken ? context.cb.success : context.cb.primarySoft,
     );
   }
 }
@@ -536,14 +1058,14 @@ class _EmptyDay extends StatelessWidget {
           Text(
             'Nothing scheduled.',
             style: textTheme.titleMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             _formatLongDate(selected),
             style: textTheme.bodyMedium?.copyWith(
-              color: careblazersColors.text.withValues(alpha: 0.7),
+              color: context.cb.text.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -565,7 +1087,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load the calendar.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),
@@ -585,25 +1107,25 @@ class _ErrorView extends StatelessWidget {
 /// shift → `success` (green, for amber), note → `accentDeep` (for plum).
 /// Patient-scoped kinds map onto the Home Recent Activity hues so the
 /// calendar and the home feed read the same.
-Color _kindColor(CareEventKind kind) {
+Color _kindColor(BuildContext context, CareEventKind kind) {
   switch (kind) {
     case CareEventKind.appointment:
-      return careblazersColors.cta;
+      return context.cb.cta;
     case CareEventKind.task:
-      return careblazersColors.link;
+      return context.cb.link;
     case CareEventKind.shift:
-      return careblazersColors.success;
+      return context.cb.success;
     case CareEventKind.note:
-      return careblazersColors.accentDeep;
+      return context.cb.accentDeep;
     case CareEventKind.doseScheduled:
     case CareEventKind.doseLogged:
-      return careblazersColors.link;
+      return context.cb.link;
     case CareEventKind.healthLogEntry:
-      return careblazersColors.primary;
+      return context.cb.primary;
     case CareEventKind.journalEntry:
-      return careblazersColors.accentDeep;
+      return context.cb.accentDeep;
     case CareEventKind.carePlanItem:
-      return careblazersColors.success;
+      return context.cb.success;
   }
 }
 
@@ -660,6 +1182,15 @@ String _formatLongDate(DateTime d) {
   final String weekday = _weekdaysLong[d.weekday % 7];
   final String month = _monthsShort[d.month - 1];
   return '$weekday, $month ${d.day}';
+}
+
+/// The Upcoming view's per-day header. "Today" / "Tomorrow" for the two
+/// nearest days so the soonest items read fastest, else "Wed, Jun 3".
+String _formatUpcomingHeader(DateTime day, DateTime today) {
+  final int delta = dateOnly(day).difference(today).inDays;
+  if (delta == 0) return 'Today';
+  if (delta == 1) return 'Tomorrow';
+  return _formatLongDate(day);
 }
 
 /// Strip the time-of-day off [d], leaving midnight in the local zone.
@@ -719,44 +1250,56 @@ AsyncValue<List<CareEvent>> _combine(
   return AsyncValue<List<CareEvent>>.data(merged);
 }
 
-/// Segmented filter row: Both | Patient | Team. Lives under the
-/// PathHeader so the caregiver can narrow without scrolling.
-class _AudienceFilter extends StatelessWidget {
-  const _AudienceFilter({required this.audience, required this.onChanged});
+/// Per-person filter row: "Everyone" + a chip per care-circle caregiver.
+/// Selecting a person narrows the schedule to what THEY are on the hook for
+/// (their assigned tasks / shifts) plus the loved one's unassigned care, so
+/// the team can see who does what. Collapses to nothing when there's no
+/// care circle yet — a lone "Everyone" chip would do nothing.
+class _OwnerFilter extends ConsumerWidget {
+  const _OwnerFilter({required this.selectedId, required this.onChanged});
 
-  final CalendarAudience audience;
-  final ValueChanged<CalendarAudience> onChanged;
+  /// null = Everyone; otherwise a caregiver id.
+  final String? selectedId;
+  final ValueChanged<String?> onChanged;
+
+  /// Stable per-chip key for tests/goldens.
+  static Key chipKey(String? id) => Key('calendar-owner-${id ?? 'everyone'}');
 
   @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: SegmentedButton<CalendarAudience>(
-        key: CalendarScreen.audienceFilterKey,
-        segments: const <ButtonSegment<CalendarAudience>>[
-          ButtonSegment<CalendarAudience>(
-            value: CalendarAudience.both,
-            label: Text('Both'),
-            icon: Icon(Icons.merge_type),
-          ),
-          ButtonSegment<CalendarAudience>(
-            value: CalendarAudience.patient,
-            label: Text('Patient'),
-            icon: Icon(Icons.favorite_outline),
-          ),
-          ButtonSegment<CalendarAudience>(
-            value: CalendarAudience.team,
-            label: Text('Team'),
-            icon: Icon(Icons.groups_outlined),
-          ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final List<Caregiver> caregivers =
+        ref.watch(assignableCaregiversProvider).asData?.value ??
+            const <Caregiver>[];
+    if (caregivers.isEmpty) return const SizedBox.shrink();
+
+    return SingleChildScrollView(
+      key: CalendarScreen.audienceFilterKey,
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: <Widget>[
+          _chip(context, label: 'Everyone', id: null),
+          for (final Caregiver c in caregivers) ...<Widget>[
+            const SizedBox(width: 8),
+            _chip(context, label: c.displayName, id: c.id),
+          ],
         ],
-        selected: <CalendarAudience>{audience},
-        onSelectionChanged: (Set<CalendarAudience> next) {
-          if (next.isEmpty) return;
-          onChanged(next.first);
-        },
-        showSelectedIcon: false,
       ),
+    );
+  }
+
+  Widget _chip(BuildContext context, {required String label, required String? id}) {
+    final bool selected = selectedId == id;
+    return ChoiceChip(
+      key: chipKey(id),
+      label: Text(label),
+      selected: selected,
+      selectedColor: context.cb.primary,
+      backgroundColor: context.cb.surfaceWarm,
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : context.cb.text,
+        fontWeight: FontWeight.w600,
+      ),
+      onSelected: (_) => onChanged(id),
     );
   }
 }

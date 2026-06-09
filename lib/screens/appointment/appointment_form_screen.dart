@@ -15,6 +15,8 @@ import '../../services/appointment_repository.dart';
 import '../../services/notification_scheduler.dart';
 import '../../services/provider_repository.dart';
 import '../../theme.dart';
+import '../../widgets/form_validation.dart';
+import '../../widgets/path_header.dart';
 import 'appointment_detail_screen.dart';
 import 'appointment_list_screen.dart';
 
@@ -105,10 +107,18 @@ class AppointmentFormScreen extends ConsumerStatefulWidget {
     super.key,
     this.appointmentId,
     this.initialNotes,
+    this.initialDate,
   });
 
   /// Non-null on the edit path; null on the add path.
   final String? appointmentId;
+
+  /// A day pre-selected on the add path — passed by the Schedule
+  /// calendar's "Add" affordance (`?date=YYYY-MM-DD`) so the new
+  /// appointment lands on the day the caregiver was looking at. The time
+  /// keeps the form's default next-round-hour slot. Ignored on the edit
+  /// path (the saved row's own `startsAt` hydrates instead).
+  final DateTime? initialDate;
 
   /// A spoken phrase captured from the Home Add sheet's voice button
   /// (Phase 14.14), pre-filled into the visit-notes textarea on the add
@@ -191,7 +201,19 @@ class _AppointmentFormScreenState
     final DateTime now = ref.read(appointmentFormClockProvider)();
     final DateTime nextHour = DateTime(now.year, now.month, now.day, now.hour)
         .add(const Duration(hours: 1));
-    _startsAt = nextHour.add(const Duration(days: 7));
+    final DateTime? seedDay = widget.isEdit ? null : widget.initialDate;
+    if (seedDay != null) {
+      // Anchor on the caregiver-chosen day, keeping the next-round-hour
+      // time-of-day so the slot still reads like a real appointment time.
+      _startsAt = DateTime(
+        seedDay.year,
+        seedDay.month,
+        seedDay.day,
+        nextHour.hour,
+      );
+    } else {
+      _startsAt = nextHour.add(const Duration(days: 7));
+    }
 
     // Voice intake (Phase 14.14): seed the notes textarea on the add
     // path. The edit path lets _hydrateFromAppointment overwrite this
@@ -365,8 +387,9 @@ class _AppointmentFormScreenState
 
   Future<void> _submit() async {
     if (_submitting) return;
-    final FormState? form = _formKey.currentState;
-    if (form == null || !form.validate()) return;
+    // Validate on press + scroll to the first invalid field so a failed save
+    // highlights exactly what's missing.
+    if (!validateAndScrollToFirstError(_formKey)) return;
     if (_selectedProviderId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -454,22 +477,50 @@ class _AppointmentFormScreenState
     final TextTheme textTheme = theme.textTheme;
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
-      appBar: AppBar(
-        title: Text(widget.isEdit ? 'Edit appointment' : 'Add appointment'),
-      ),
+      backgroundColor: context.cb.background,
       body: SafeArea(
-        child: hydration.when(
-          loading: () => const SizedBox.shrink(),
-          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-          data: (AppointmentDetailData? data) {
-            _hydrateFromAppointment(data);
-            return Form(
-              key: _formKey,
-              child: ListView(
-                key: AppointmentFormScreen.formKey,
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                children: <Widget>[
+        // The PathHeader sits OUTSIDE the hydration `.when()` so the
+        // breadcrumb back affordance is present on EVERY branch —
+        // including the loading and error states (alpha bug
+        // fb_1780932762335231: those branches were swipe-only with no
+        // header).
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  const PathHeaderCrumb(label: 'Home', route: '/'),
+                  const PathHeaderCrumb(label: 'Care', route: '/medical'),
+                  const PathHeaderCrumb(
+                      label: 'Appointments', route: '/appointments'),
+                  PathHeaderCrumb(
+                    label: widget.isEdit
+                        ? 'Edit appointment'
+                        : 'Add appointment',
+                  ),
+                ],
+                title: widget.isEdit
+                    ? 'Edit appointment'
+                    : 'Add appointment',
+                backLabel: 'Back to Appointments',
+                leadingIcon: Icons.event_outlined,
+              ),
+            ),
+            Expanded(
+              child: hydration.when(
+                loading: () => const SizedBox.shrink(),
+                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                data: (AppointmentDetailData? data) {
+                  _hydrateFromAppointment(data);
+                  return Form(
+                    key: _formKey,
+                    child: ListView(
+                      key: AppointmentFormScreen.formKey,
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                      children: <Widget>[
+                  const SizedBox(height: 4),
                   _LabelledField(
                     label: 'Provider',
                     child: providersAsync.when(
@@ -480,7 +531,7 @@ class _AppointmentFormScreenState
                       error: (Object e, StackTrace _) => Text(
                         "We couldn't load your providers.",
                         style: textTheme.bodyMedium?.copyWith(
-                          color: careblazersColors.text,
+                          color: context.cb.text,
                         ),
                       ),
                       data: (List<Provider> providers) => _ProviderPicker(
@@ -546,7 +597,7 @@ class _AppointmentFormScreenState
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         hintText:
-                            'e.g. Marin General — Neurology, Suite 200',
+                            'e.g. Dr. Smith — Neurology, Suite 200',
                       ),
                     ),
                   ),
@@ -581,7 +632,7 @@ class _AppointmentFormScreenState
                   Text(
                     'Agenda',
                     style: textTheme.titleLarge?.copyWith(
-                      color: careblazersColors.primary,
+                      color: context.cb.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -590,7 +641,7 @@ class _AppointmentFormScreenState
                     "Add bullets you want to cover. You'll check them off "
                     'in the waiting room.',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: careblazersColors.primarySoft,
+                      color: context.cb.primarySoft,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -604,7 +655,7 @@ class _AppointmentFormScreenState
                       icon: const Icon(Icons.add),
                       label: const Text('Add agenda item'),
                       style: TextButton.styleFrom(
-                        foregroundColor: careblazersColors.primary,
+                        foregroundColor: context.cb.primary,
                       ),
                     ),
                   ),
@@ -633,7 +684,7 @@ class _AppointmentFormScreenState
                       onPressed: _submitting ? null : _submit,
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size.fromHeight(56),
-                        backgroundColor: careblazersColors.cta,
+                        backgroundColor: context.cb.cta,
                         foregroundColor: Colors.white,
                       ),
                       child: Text(
@@ -647,10 +698,13 @@ class _AppointmentFormScreenState
                       ),
                     ),
                   ),
-                ],
+                      ],
+                    ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
@@ -663,7 +717,7 @@ class _AppointmentFormScreenState
         child: Text(
           'No agenda items yet.',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
         ),
       );
@@ -688,7 +742,7 @@ class _AppointmentFormScreenState
                 IconButton(
                   key: AppointmentFormScreen.agendaItemRemoveKey(i),
                   icon: const Icon(Icons.close),
-                  color: careblazersColors.primarySoft,
+                  color: context.cb.primarySoft,
                   tooltip: 'Remove item',
                   onPressed: () => _removeAgendaItem(i),
                 ),
@@ -703,7 +757,7 @@ class _AppointmentFormScreenState
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -712,7 +766,7 @@ class _AppointmentFormScreenState
           Text(
             'New provider',
             style: textTheme.titleMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -798,7 +852,7 @@ class _AppointmentFormScreenState
             Text(
               _newProviderError!,
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.cta,
+                color: context.cb.cta,
               ),
             ),
           ],
@@ -810,7 +864,7 @@ class _AppointmentFormScreenState
                   key: AppointmentFormScreen.newProviderCancelButtonKey,
                   onPressed: _cancelInlineProvider,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: careblazersColors.primary,
+                    foregroundColor: context.cb.primary,
                     minimumSize: const Size.fromHeight(48),
                   ),
                   child: const Text('Cancel'),
@@ -822,7 +876,7 @@ class _AppointmentFormScreenState
                   key: AppointmentFormScreen.newProviderSaveButtonKey,
                   onPressed: _saveInlineProvider,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: careblazersColors.cta,
+                    backgroundColor: context.cb.cta,
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(48),
                   ),
@@ -862,7 +916,7 @@ class _ProviderPicker extends StatelessWidget {
             child: Text(
               'No providers on file yet. Add the first one below.',
               style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.primarySoft,
+                color: context.cb.primarySoft,
               ),
             ),
           ),
@@ -874,7 +928,7 @@ class _ProviderPicker extends StatelessWidget {
               icon: const Icon(Icons.person_add_alt_1),
               label: const Text('Add a provider'),
               style: TextButton.styleFrom(
-                foregroundColor: careblazersColors.primary,
+                foregroundColor: context.cb.primary,
               ),
             ),
           ),
@@ -911,7 +965,7 @@ class _ProviderPicker extends StatelessWidget {
             icon: const Icon(Icons.person_add_alt_1),
             label: const Text('Add a new provider'),
             style: TextButton.styleFrom(
-              foregroundColor: careblazersColors.primary,
+              foregroundColor: context.cb.primary,
             ),
           ),
         ),
@@ -966,18 +1020,18 @@ class _PickerField extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
-          border: Border.all(color: careblazersColors.primarySoft),
+          border: Border.all(color: context.cb.primarySoft),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: <Widget>[
-            Icon(icon, color: careblazersColors.primarySoft, size: 18),
+            Icon(icon, color: context.cb.primarySoft, size: 18),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 label,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: careblazersColors.text,
+                  color: context.cb.text,
                 ),
               ),
             ),
@@ -1001,7 +1055,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load this appointment.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),

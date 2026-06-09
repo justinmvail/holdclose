@@ -7,11 +7,15 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/medication.dart';
+import '../../providers/active_patient_provider.dart';
 import '../../providers/notifications_provider.dart';
 import '../../providers/patient_timeline_provider.dart' show invalidatePatientTimeline;
 import '../../services/medication_repository.dart';
 import '../../services/notification_scheduler.dart';
 import '../../theme.dart';
+import '../../widgets/form_validation.dart';
+import '../../widgets/path_header.dart';
+import '../../widgets/weekday_picker.dart';
 import 'dose_window_list_screen.dart';
 import 'medication_list_screen.dart';
 
@@ -169,9 +173,22 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
 
   /// Entry-id by window-id captured on edit-mode hydrate so we can
   /// diff the chip set on submit (delete removed entries; insert new
-  /// ones; leave untouched ones alone — preserves any custom
-  /// daysOfWeek / endsOn the entry already carried).
+  /// ones). The full entry is also cached in [_entryByWindowId] so an
+  /// edit preserves each entry's `startsOn` / `endsOn` while updating
+  /// its days.
   Map<String, String> _entryIdByWindowId = <String, String>{};
+
+  /// Full existing entries by window-id (edit hydrate) — lets submit
+  /// re-persist an entry with the chosen days without losing its date
+  /// bounds.
+  Map<String, MedicationWindowEntry> _entryByWindowId =
+      <String, MedicationWindowEntry>{};
+
+  /// The weekdays this medication is taken on (1 = Mon … 7 = Sun),
+  /// applied to every dose window the med belongs to. Defaults to all
+  /// seven ("every day"); a subset (e.g. Mon/Wed/Fri) persists as the
+  /// entry `daysOfWeek` the dose forecast already honours.
+  Set<int> _daysOfWeek = const <int>{1, 2, 3, 4, 5, 6, 7};
   bool _hydrated = false;
   bool _submitting = false;
 
@@ -250,6 +267,20 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
       _entryIdByWindowId = <String, String>{
         for (final MedicationWindowEntry e in entries) e.windowId: e.id,
       };
+      _entryByWindowId = <String, MedicationWindowEntry>{
+        for (final MedicationWindowEntry e in entries) e.windowId: e,
+      };
+      // Reflect the persisted days. Entries store an empty set for
+      // "every day"; surface that as all seven chips selected. A med
+      // with mixed per-entry days (not reachable from this form) takes
+      // the first entry's set.
+      final MedicationWindowEntry? first =
+          entries.isEmpty ? null : entries.first;
+      if (first != null) {
+        _daysOfWeek = first.daysOfWeek.isEmpty
+            ? const <int>{1, 2, 3, 4, 5, 6, 7}
+            : first.daysOfWeek;
+      }
     });
   }
 
@@ -264,8 +295,9 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
 
   Future<void> _submit() async {
     if (_submitting) return;
-    final FormState? form = _formKey.currentState;
-    if (form == null || !form.validate()) return;
+    // Validate on press, then scroll to the first empty/invalid field so a
+    // failed save points the caregiver at exactly what to fix.
+    if (!validateAndScrollToFirstError(_formKey)) return;
     setState(() => _submitting = true);
 
     final MedicationRepository repo =
@@ -308,18 +340,26 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
     //     edit.
     final Set<String> existing = _entryIdByWindowId.keys.toSet();
     final Set<String> toDelete = existing.difference(_selectedWindowIds);
-    final Set<String> toAdd = _selectedWindowIds.difference(existing);
     for (final String windowId in toDelete) {
       final String? entryId = _entryIdByWindowId[windowId];
       if (entryId != null) await repo.deleteEntry(entryId);
     }
-    for (final String windowId in toAdd) {
+    // Normalise the day set: all seven selected → empty (= "every day",
+    // the forecast's convention), otherwise the chosen subset.
+    final Set<int> days =
+        _daysOfWeek.length >= 7 ? const <int>{} : _daysOfWeek;
+    // Upsert every selected window with the chosen days. Existing entries
+    // re-persist under their own id (keeping startsOn/endsOn); new ones
+    // get a fresh id + today's start.
+    for (final String windowId in _selectedWindowIds) {
+      final MedicationWindowEntry? prior = _entryByWindowId[windowId];
       await repo.upsertEntry(MedicationWindowEntry(
-        id: 'entry-${mint()}',
+        id: prior?.id ?? 'entry-${mint()}',
         medicationId: medicationId,
         windowId: windowId,
-        daysOfWeek: const <int>{},
-        startsOn: DateTime(now.year, now.month, now.day),
+        daysOfWeek: days,
+        startsOn: prior?.startsOn ?? DateTime(now.year, now.month, now.day),
+        endsOn: prior?.endsOn,
       ));
     }
     ref.invalidate(medicationListProvider);
@@ -354,29 +394,72 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
     final TextTheme textTheme = theme.textTheme;
     final AsyncValue<Medication?> hydration =
         ref.watch(medicationFormHydrationProvider(widget.medicationId));
+    // Existing medication names (lower-cased), minus the one being edited,
+    // so the Name field can reject a duplicate (alpha bug report:
+    // "Multiple medications with same name allowed").
+    final Set<String> existingNamesLower = <String>{
+      for (final MedicationListItem item
+          in ref.watch(medicationListProvider).asData?.value ??
+              const <MedicationListItem>[])
+        if (item.medication.id != widget.medicationId)
+          item.medication.name.trim().toLowerCase(),
+    };
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isEdit ? 'Edit medication' : 'Add medication'),
-      ),
+      backgroundColor: context.cb.background,
       body: SafeArea(
-        child: hydration.when(
-          loading: () => const SizedBox.shrink(),
-          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
-          data: (Medication? med) {
-            _hydrateFromMedication(med);
-            return Form(
-              key: _formKey,
-              // Column + Expanded(ListView) + pinned Save button. The
-              // form fields scroll independently of the Save action so
-              // a long med (notes + many windows) can't push the
-              // submit affordance below the fold.
-              child: Column(
-                children: <Widget>[
-                  Expanded(
-                    child: ListView(
-                      key: MedicationFormScreen.formKey,
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        // The PathHeader sits OUTSIDE the hydration `.when()` so the
+        // breadcrumb back affordance is present on EVERY branch —
+        // including the loading and error states (alpha bug
+        // fb_1780932762335231: those branches were swipe-only with no
+        // header).
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  const PathHeaderCrumb(label: 'Home', route: '/'),
+                  const PathHeaderCrumb(
+                    label: 'Care',
+                    route: '/medical',
+                  ),
+                  const PathHeaderCrumb(
+                    label: 'Medications',
+                    route: '/medications',
+                  ),
+                  PathHeaderCrumb(
+                    label: widget.isEdit
+                        ? 'Edit medication'
+                        : 'Add medication',
+                  ),
+                ],
+                title: widget.isEdit ? 'Edit medication' : 'Add medication',
+                backLabel: 'Back to Medications',
+                leadingIcon: Icons.medication_outlined,
+              ),
+            ),
+            Expanded(
+              child: hydration.when(
+                loading: () => const SizedBox.shrink(),
+                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                data: (Medication? med) {
+                  _hydrateFromMedication(med);
+                  return Form(
+                    key: _formKey,
+                    // Column + Expanded(ListView) + pinned Save button. The
+                    // form fields scroll independently of the Save action so
+                    // a long med (notes + many windows) can't push the
+                    // submit affordance below the fold.
+                    child: Column(
                       children: <Widget>[
+                        Expanded(
+                          child: ListView(
+                            key: MedicationFormScreen.formKey,
+                            padding:
+                                const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                            children: <Widget>[
+                  const SizedBox(height: 4),
                   _LabelledField(
                     label: 'Name',
                     child: TextFormField(
@@ -396,8 +479,14 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                         hintText: 'e.g. Donepezil',
                       ),
                       validator: (String? v) {
-                        if (v == null || v.trim().isEmpty) {
+                        final String name = v?.trim() ?? '';
+                        if (name.isEmpty) {
                           return 'Name is required.';
+                        }
+                        if (existingNamesLower.contains(name.toLowerCase())) {
+                          return 'You already have a medication named '
+                              '"$name". Edit that one, or use a more '
+                              'specific name.';
                         }
                         return null;
                       },
@@ -540,9 +629,28 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Tap a chip to add or remove the window. '
-                    '"+ Add time" opens existing windows or lets you '
+                    'Tap a chip to add or remove the time window. '
+                    '"+ Add time" opens existing time windows or lets you '
                     'create a new one.',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _LabelledField(
+                    label: 'Days',
+                    child: WeekdayPicker(
+                      selected: _daysOfWeek,
+                      onChanged: (Set<int> next) =>
+                          setState(() => _daysOfWeek = next),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Leave every day selected for a daily medication, or '
+                    'pick specific days (e.g. Mon/Wed/Fri) for an '
+                    'every-other-day or weekly schedule.',
                     style: textTheme.bodyMedium?.copyWith(
                       color:
                           theme.colorScheme.onSurface.withValues(alpha: 0.7),
@@ -589,7 +697,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                             onPressed: _submitting ? null : _submit,
                             style: ElevatedButton.styleFrom(
                               minimumSize: const Size.fromHeight(56),
-                              backgroundColor: careblazersColors.cta,
+                              backgroundColor: context.cb.cta,
                               foregroundColor: Colors.white,
                             ),
                             child: Text(
@@ -613,7 +721,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                             icon: const Icon(Icons.delete_outline),
                             label: const Text('Delete medication'),
                             style: TextButton.styleFrom(
-                              foregroundColor: careblazersColors.text
+                              foregroundColor: context.cb.text
                                   .withValues(alpha: 0.65),
                               minimumSize: const Size.fromHeight(44),
                             ),
@@ -622,10 +730,13 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                       ],
                     ),
                   ),
-                ],
+                      ],
+                    ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );
@@ -645,7 +756,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load this medication.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),
@@ -714,24 +825,40 @@ class _WindowChipPicker extends ConsumerWidget {
           for (final String id in selected)
             if (byId[id] != null) byId[id]!,
         ]..sort(_byAnchorThenAsNeeded);
-        return Wrap(
+        // Chips first (a Wrap of the selected windows), then the
+        // "Add time" button BELOW them — left-aligned under the list,
+        // not trailing to the right (alpha bug report
+        // fb_1780933462488395). The Column keeps the affordance
+        // discoverable as the chip list grows.
+        return Column(
           key: fieldKey,
-          spacing: 8,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            for (final DoseWindow w in selectedList)
-              InputChip(
-                label: Text(_windowLabel(context, w)),
-                onDeleted: () {
-                  final Set<String> next = <String>{...selected}..remove(w.id);
-                  onChanged(next);
-                },
+            if (selectedList.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: <Widget>[
+                  for (final DoseWindow w in selectedList)
+                    InputChip(
+                      label: Text(_windowLabel(context, w)),
+                      onDeleted: () {
+                        final Set<String> next = <String>{...selected}
+                          ..remove(w.id);
+                        onChanged(next);
+                      },
+                    ),
+                ],
               ),
-            ActionChip(
-              avatar: const Icon(Icons.add, size: 18),
-              label: const Text('Add time'),
-              onPressed: () => _openAddSheet(context, ref, windows),
+            if (selectedList.isNotEmpty) const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ActionChip(
+                avatar: const Icon(Icons.add, size: 18),
+                label: const Text('Add time'),
+                onPressed: () => _openAddSheet(context, ref, windows),
+              ),
             ),
           ],
         );
@@ -762,7 +889,8 @@ class _WindowChipPicker extends ConsumerWidget {
       final String lower = label.toLowerCase();
       if (windows.any((DoseWindow w) => w.label.toLowerCase() == lower)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("\"$label\" is already a window name.")),
+          SnackBar(
+              content: Text("\"$label\" is already a time window name.")),
         );
         return;
       }
@@ -775,8 +903,9 @@ class _WindowChipPicker extends ConsumerWidget {
       if (time == null) return;
       final MedicationRepository repo =
           ref.read(medicationRepositoryBackendProvider);
+      final String patientId = await ref.read(activePatientIdProvider.future);
       final List<DoseWindow> existing =
-          await repo.windowsForPatient('demo-patient-mary');
+          await repo.windowsForPatient(patientId);
       final int nextSort = existing.isEmpty
           ? 0
           : (existing.map((DoseWindow w) => w.sortOrder).reduce(
@@ -784,7 +913,7 @@ class _WindowChipPicker extends ConsumerWidget {
               1);
       final DoseWindow window = DoseWindow(
         id: 'window-${DateTime.now().millisecondsSinceEpoch}',
-        patientId: 'demo-patient-mary',
+        patientId: patientId,
         label: label,
         anchorTime: time,
         sortOrder: nextSort,
@@ -867,22 +996,22 @@ class _AddWindowSheetState extends State<_AddWindowSheet> {
               Text(
                 'Add a time',
                 style: tt.titleLarge?.copyWith(
-                  color: careblazersColors.primary,
+                  color: context.cb.primary,
                 ),
               ),
               const SizedBox(height: 8),
               if (widget.available.isEmpty)
                 Text(
-                  'No other windows on file. Create a new one below.',
+                  'No other time windows on file. Create a new one below.',
                   style: tt.bodyMedium?.copyWith(
-                    color: careblazersColors.primarySoft,
+                    color: context.cb.primarySoft,
                   ),
                 )
               else ...<Widget>[
                 Text(
                   'Pick an existing time',
                   style: tt.titleSmall?.copyWith(
-                    color: careblazersColors.primarySoft,
+                    color: context.cb.primarySoft,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -907,16 +1036,23 @@ class _AddWindowSheetState extends State<_AddWindowSheet> {
               const Divider(),
               const SizedBox(height: 12),
               Text(
-                'Or create a new window',
+                'Or create a new time window',
                 style: tt.titleSmall?.copyWith(
-                  color: careblazersColors.primarySoft,
+                  color: context.cb.primarySoft,
                 ),
               ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _newLabel,
+                // Capitalise each word so "mid-morning" lands as
+                // "Mid-morning" on disk — parity with the dose-window
+                // form's name field.
+                textCapitalization: TextCapitalization.words,
+                inputFormatters: <TextInputFormatter>[
+                  TitleCaseTextFormatter(),
+                ],
                 decoration: const InputDecoration(
-                  labelText: 'Window name',
+                  labelText: 'Time window name',
                   hintText: 'e.g. Mid-morning',
                 ),
               ),
@@ -925,16 +1061,17 @@ class _AddWindowSheetState extends State<_AddWindowSheet> {
                 onPressed: _creating
                     ? null
                     : () {
-                        final String label = _newLabel.text.trim();
+                        final String label =
+                            capitalizeWindowLabel(_newLabel.text.trim());
                         if (label.isEmpty) return;
                         setState(() => _creating = true);
                         Navigator.of(context)
                             .pop(_PickedWindow.create(label));
                       },
                 icon: const Icon(Icons.add),
-                label: const Text('Pick a time for this window'),
+                label: const Text('Pick a time for this time window'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: careblazersColors.cta,
+                  backgroundColor: context.cb.cta,
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(48),
                 ),

@@ -21,6 +21,7 @@ export default defineWorkersConfig(async () => {
               TEST_MIGRATIONS: migrations,
               FORUM_JWT_SECRET: 'test-forum-jwt-secret',
               R2_PUBLIC_URL: 'https://media.careblazers.test',
+              GOOGLE_CLIENT_ID: 'test-google-web-client-id.apps.googleusercontent.com',
             },
           },
         },

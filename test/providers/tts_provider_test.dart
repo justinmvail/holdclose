@@ -174,6 +174,19 @@ void main() {
           .copyWith(allowAudioDuringQuietHours: true);
       expect(shouldMuteTts(override, late), isFalse);
     });
+
+    test('honours a custom quiet-hours window (8pm–6am)', () {
+      // A user who shifts the window earlier: 8pm now mutes, and a time the
+      // default 10pm window would NOT have muted (9pm) now does.
+      final AppSettings custom = AppSettings.defaults()
+          .copyWith(quietHoursStartHour: 20, quietHoursEndHour: 6);
+      final DateTime ninePm = DateTime(2026, 5, 29, 21, 0);
+      final DateTime sixThirtyAm = DateTime(2026, 5, 29, 6, 30);
+      expect(shouldMuteTts(custom, ninePm), isTrue,
+          reason: '9pm is inside the custom 8pm–6am window');
+      expect(shouldMuteTts(custom, sixThirtyAm), isFalse,
+          reason: '6:30am is past the custom 6am end');
+    });
   });
 
   // ---- Riverpod ttsProvider selection -------------------------------------

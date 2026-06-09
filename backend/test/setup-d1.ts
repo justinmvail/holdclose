@@ -7,6 +7,7 @@ declare module 'cloudflare:test' {
     FORUM_MEDIA: R2Bucket;
     FORUM_JWT_SECRET: string;
     R2_PUBLIC_URL: string;
+    GOOGLE_CLIENT_ID: string;
     TEST_MIGRATIONS: import('cloudflare:test').D1Migration[];
   }
 }

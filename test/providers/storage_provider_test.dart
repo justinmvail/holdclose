@@ -165,6 +165,36 @@ void main() {
           <String>['keep']);
     });
 
+    test(
+      'listAllJournalEntries returns every entry newest-first, ignoring the '
+      '30-day window (Issue #20 backup)',
+      () async {
+        final DateTime now = DateTime.now();
+        // One entry well outside the on-screen 30-day window.
+        final JournalEntry ancient = buildEntry(
+          id: 'ancient',
+          createdAt: now.subtract(const Duration(days: 400)),
+        );
+        final JournalEntry recent = buildEntry(
+          id: 'recent',
+          createdAt: now.subtract(const Duration(hours: 2)),
+        );
+        await storage.insertJournalEntry(ancient);
+        await storage.insertJournalEntry(recent);
+
+        // The windowed watch drops the ancient entry…
+        final List<JournalEntry> windowed = await storage
+            .watchJournalEntries(window: const Duration(days: 30))
+            .first;
+        expect(windowed.map((JournalEntry e) => e.id), <String>['recent']);
+
+        // …but the backup read keeps it, newest first.
+        final List<JournalEntry> all = await storage.listAllJournalEntries();
+        expect(all.map((JournalEntry e) => e.id).toList(),
+            <String>['recent', 'ancient']);
+      },
+    );
+
     test('upsertPatient + getPatient round-trip the loved one', () async {
       expect(await storage.getPatient(), isNull);
 
@@ -176,6 +206,56 @@ void main() {
       final Patient renamed = mary.copyWith(name: 'Mary H.');
       await storage.upsertPatient(renamed);
       expect((await storage.getPatient())!.name, 'Mary H.');
+    });
+
+    test(
+      'multi-patient: listPatients returns every loved one + setActive '
+      'switches which getPatient resolves (Issue #6)',
+      () async {
+        // Empty before onboarding.
+        expect(await storage.listPatients(), isEmpty);
+        expect(await storage.getActivePatientId(), isNull);
+
+        final Patient mary = buildPatient();
+        final Patient frank = buildPatient().copyWith(
+          id: 'demo-patient-frank',
+          name: 'Frank Albright',
+        );
+        await storage.upsertPatient(mary);
+        await storage.upsertPatient(frank);
+
+        // listPatients returns both, name-sorted (Frank before Mary).
+        final List<Patient> all = await storage.listPatients();
+        expect(all.map((Patient p) => p.id).toList(),
+            <String>['demo-patient-frank', 'demo-patient-mary']);
+
+        // With no active id chosen, getPatient falls back to the first
+        // row (single-patient v1 contract preserved) — name-sorted, so
+        // Frank here.
+        expect((await storage.getPatient())!.id, 'demo-patient-frank');
+
+        // Switching the active id changes which patient getPatient
+        // resolves, and it persists in getActivePatientId.
+        await storage.setActivePatientId('demo-patient-mary');
+        expect(await storage.getActivePatientId(), 'demo-patient-mary');
+        expect((await storage.getPatient())!.id, 'demo-patient-mary');
+
+        await storage.setActivePatientId('demo-patient-frank');
+        expect((await storage.getPatient())!.id, 'demo-patient-frank');
+
+        // A stale active id (no matching row) falls back to the first.
+        await storage.setActivePatientId('does-not-exist');
+        expect((await storage.getPatient())!.id, 'demo-patient-frank');
+      },
+    );
+
+    test('single patient stays the default-active row (backward compat)',
+        () async {
+      // The v1 demo case: exactly one loved one, no active id ever set.
+      await storage.upsertPatient(buildPatient());
+      expect(await storage.getActivePatientId(), isNull);
+      expect((await storage.getPatient())!.id, 'demo-patient-mary');
+      expect(await storage.listPatients(), hasLength(1));
     });
 
     test('getSettings returns defaults when nothing is persisted',
@@ -280,6 +360,20 @@ void main() {
       await sub.cancel();
     });
 
+    test('listAllJournalEntries returns the full history newest-first',
+        () async {
+      final DateTime base = DateTime.utc(2026, 5, 29, 12);
+      await storage.insertJournalEntry(buildEntry(
+        id: 'old',
+        createdAt: base.subtract(const Duration(days: 400)),
+      ));
+      await storage.insertJournalEntry(buildEntry(id: 'new', createdAt: base));
+
+      final List<JournalEntry> all = await storage.listAllJournalEntries();
+      expect(all.map((JournalEntry e) => e.id).toList(),
+          <String>['new', 'old']);
+    });
+
     test('patient + settings round-trips match Drift impl semantics',
         () async {
       expect(await storage.getPatient(), isNull);
@@ -295,6 +389,39 @@ void main() {
       expect((await storage.getSettings()).fontSize,
           FontSizeMultiplier.large);
     });
+
+    test(
+      'multi-patient list + active switching match Drift impl semantics '
+      '(Issue #6)',
+      () async {
+        expect(await storage.listPatients(), isEmpty);
+        expect(await storage.getActivePatientId(), isNull);
+
+        final Patient mary = buildPatient();
+        final Patient frank = buildPatient().copyWith(
+          id: 'demo-patient-frank',
+          name: 'Frank Albright',
+        );
+        await storage.upsertPatient(mary);
+        await storage.upsertPatient(frank);
+
+        // Name-sorted list.
+        expect((await storage.listPatients()).map((Patient p) => p.id),
+            <String>['demo-patient-frank', 'demo-patient-mary']);
+
+        // Default-active = first (name-sorted) when none chosen.
+        expect((await storage.getPatient())!.id, 'demo-patient-frank');
+
+        await storage.setActivePatientId('demo-patient-mary');
+        expect(await storage.getActivePatientId(), 'demo-patient-mary');
+        expect((await storage.getPatient())!.id, 'demo-patient-mary');
+
+        // reset() clears the active id back to null.
+        await storage.reset();
+        expect(await storage.getActivePatientId(), isNull);
+        expect(await storage.listPatients(), isEmpty);
+      },
+    );
 
     test('reset() empties every collection', () async {
       await storage.insertJournalEntry(buildEntry());

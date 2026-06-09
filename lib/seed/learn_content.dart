@@ -21,8 +21,9 @@ class LearnVideo {
   const LearnVideo({
     required this.id,
     required this.title,
-    required this.duration,
+    required this.youtubeId,
     required this.blurb,
+    this.duration,
   });
 
   /// Stable id used in the `/community/learn/videos/:id` route.
@@ -31,17 +32,32 @@ class LearnVideo {
   /// Title shown on the list card + the detail header.
   final String title;
 
-  /// Run length. Rendered as `m:ss` next to the title via [durationLabel].
-  final Duration duration;
+  /// The YouTube video id — drives [youtubeUrl] (opened externally) and
+  /// [thumbnailUrl]. These are Dr. Natali's own public Dementia
+  /// Careblazers videos; the app links out to them rather than re-hosting.
+  final String youtubeId;
+
+  /// Optional run length. Rendered as `m:ss` via [durationLabel] when
+  /// known; null hides the label (YouTube shows the real length on open).
+  final Duration? duration;
 
   /// One-sentence description shown under the title on the list card and
-  /// on the detail placeholder.
+  /// on the detail screen.
   final String blurb;
 
-  /// `8:40`-style label for the video's [duration].
-  String get durationLabel {
-    final int minutes = duration.inMinutes;
-    final int seconds = duration.inSeconds % 60;
+  /// Canonical watch URL handed to the link launcher.
+  String get youtubeUrl => 'https://www.youtube.com/watch?v=$youtubeId';
+
+  /// Static thumbnail for the video (YouTube's hosted hqdefault frame).
+  String get thumbnailUrl =>
+      'https://img.youtube.com/vi/$youtubeId/hqdefault.jpg';
+
+  /// `8:40`-style label, or null when [duration] is unknown.
+  String? get durationLabel {
+    final Duration? d = duration;
+    if (d == null) return null;
+    final int minutes = d.inMinutes;
+    final int seconds = d.inSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
@@ -103,41 +119,58 @@ class LearnPlaybook {
   final List<PlaybookStep> steps;
 }
 
-/// The seeded framework videos (Phase 14.37). Short primers on Dr.
-/// Natali's core teaching, ordered most-foundational first.
+/// The seeded framework videos — Dr. Natali's own popular Dementia
+/// Careblazers YouTube videos (verified channel: "Dementia Careblazers").
+/// The app links out to each one rather than re-hosting it; tapping a
+/// card opens the video on YouTube.
 const List<LearnVideo> learnVideos = <LearnVideo>[
   LearnVideo(
-    id: 'five-causes',
-    title: 'The 5 Causes of difficult behaviors',
-    duration: Duration(minutes: 8, seconds: 40),
+    id: 'top-three',
+    title: 'Top 3 must-watch videos on dementia care',
+    youtubeId: 'Zx0Qzfm00Nw',
     blurb:
-        'A walk through the five things usually driving a hard moment — '
-        'loss of control, relationship strain, brain changes, an unmet '
-        'need, and not knowing anything is wrong.',
+        "Dr. Natali's three most essential lessons for every caregiver, "
+        'gathered into one place to start with.',
   ),
   LearnVideo(
-    id: 'step-into-reality',
-    title: 'Step into their reality',
-    duration: Duration(minutes: 6, seconds: 15),
+    id: 'lying',
+    title: 'Lying to someone with dementia',
+    youtubeId: '5EM1Iu_eIS4',
     blurb:
-        'Why correcting your loved one rarely lands, and what it looks '
-        'like to join them where they are instead.',
+        "A kinder way to think about little 'fibs' — when stepping into "
+        "your loved one's reality is the more loving choice.",
   ),
   LearnVideo(
-    id: 'respond-to-emotion',
-    title: 'Respond to the emotion, not the words',
-    duration: Duration(minutes: 5, seconds: 30),
+    id: 'stages',
+    title: 'Stages of dementia caregiving: from chaos to calm',
+    youtubeId: '-JbqrkO935E',
     blurb:
-        'The feeling underneath what your loved one says is the part you '
-        'can actually answer. Here is how to hear it.',
+        'The three stages every caregiver moves through, and how to tell '
+        'which one you are in right now.',
   ),
   LearnVideo(
-    id: 'caring-for-yourself',
-    title: 'Caring for yourself as a Careblazer',
-    duration: Duration(minutes: 7, seconds: 20),
+    id: 'one-thing',
+    title: 'The one thing every dementia caregiver can control',
+    youtubeId: 'sQdH7CWIn_U',
     blurb:
-        'You cannot pour from an empty cup. Small, realistic ways to keep '
-        'something in yours on the hardest weeks.',
+        "You cannot control the disease, but there is one thing you can — "
+        'and it changes the hardest moments.',
+  ),
+  LearnVideo(
+    id: 'early-signs',
+    title: "Early dementia signs caregivers wish they hadn't ignored",
+    youtubeId: 's70cm2aGHno',
+    blurb:
+        'Real caregivers on the early signs they look back on, so you can '
+        'recognise them sooner.',
+  ),
+  LearnVideo(
+    id: 'level-of-care',
+    title: 'Is it time? 8 signs it might be time for a different level of care',
+    youtubeId: '646gn3Vy6t8',
+    blurb:
+        'Eight honest signs that it may be time to consider more help, and '
+        'how to face that decision.',
   ),
 ];
 

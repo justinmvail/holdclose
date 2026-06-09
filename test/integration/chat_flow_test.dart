@@ -494,7 +494,10 @@ void main() {
       );
 
       // Back → the conversation list (kept mounted on the Chat branch).
-      await tester.tap(find.text('Back to Chat'));
+      // The redundant "Back to Chat" control was removed; the parent `Chat`
+      // breadcrumb crumb is the back affordance now (tapping it runs
+      // `context.go('/chat')`).
+      await tester.tap(pathHeaderBackTo('Chat'));
       await tester.pumpAndSettle();
       expect(find.byType(ConversationListScreen), findsOneWidget);
       expect(find.byType(ChatScreen), findsNothing);

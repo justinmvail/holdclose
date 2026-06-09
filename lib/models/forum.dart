@@ -51,10 +51,29 @@ abstract class ForumProfile with _$ForumProfile {
     @JsonKey(name: 'avatar_url') String? avatarUrl,
     @JsonKey(name: 'joined_at') required DateTime joinedAt,
     required String role,
+    // The caregiver's chosen `@handle` (care-circle connect, 2026-06-06).
+    // Null until they pick one via `PATCH /profiles/me {username}`; the
+    // Worker also returns null for legacy rows that predate the column.
+    String? username,
   }) = _ForumProfile;
 
   factory ForumProfile.fromJson(Map<String, dynamic> json) =>
       _$ForumProfileFromJson(json);
+}
+
+/// The name a freshly-minted care circle takes from its owner [profile]
+/// (username propagation, 2026-06-07). Username is the canonical public
+/// identity, so a circle reads as `@handle's care circle` when the owner
+/// has set a username; otherwise it falls back to their display name
+/// (`Name's care circle`). Shared by both circle-creation entry points
+/// (Add-by-username and Show-my-QR) so a circle is named the same way
+/// regardless of how it was bootstrapped.
+String circleNameForOwner(ForumProfile profile) {
+  final String? username = profile.username;
+  if (username != null && username.isNotEmpty) {
+    return "@$username's care circle";
+  }
+  return "${profile.displayName}'s care circle";
 }
 
 /// A public view of someone else's profile (BUILD_SPEC.md §13 / Phase
@@ -67,9 +86,15 @@ abstract class ForumPublicProfile with _$ForumPublicProfile {
     required String id,
     @JsonKey(name: 'display_name') required String displayName,
     @JsonKey(name: 'avatar_url') String? avatarUrl,
-    @JsonKey(name: 'joined_at') required DateTime joinedAt,
-    @JsonKey(name: 'post_count') required int postCount,
-    @JsonKey(name: 'comment_count') required int commentCount,
+    // joined_at + the denormalized counts are absent from the lean
+    // `GET /profiles/by-username/:username` lookup (which returns only
+    // {id, username, display_name, avatar_url}); default them so that
+    // response decodes into the same DTO as the full `GET /profiles/:id`.
+    @JsonKey(name: 'joined_at') DateTime? joinedAt,
+    @JsonKey(name: 'post_count') @Default(0) int postCount,
+    @JsonKey(name: 'comment_count') @Default(0) int commentCount,
+    // The caregiver's `@handle` (care-circle connect, 2026-06-06).
+    String? username,
   }) = _ForumPublicProfile;
 
   factory ForumPublicProfile.fromJson(Map<String, dynamic> json) =>
@@ -91,6 +116,13 @@ abstract class ForumPost with _$ForumPost {
   const factory ForumPost({
     required String id,
     @JsonKey(name: 'author_id') required String authorId,
+    // The post author's chosen `@handle` and display name, denormalized
+    // onto the wire (username propagation, 2026-06-07) so the feed/detail
+    // renders the real name without a per-author profile fetch. Both are
+    // null for a row whose author profile was deleted, or on a legacy
+    // Worker that predates these fields.
+    @JsonKey(name: 'author_username') String? authorUsername,
+    @JsonKey(name: 'author_display_name') String? authorDisplayName,
     required String title,
     required String body,
     @JsonKey(name: 'created_at') required DateTime createdAt,
@@ -116,6 +148,11 @@ abstract class ForumComment with _$ForumComment {
     @JsonKey(name: 'post_id') required String postId,
     @JsonKey(name: 'parent_comment_id') String? parentCommentId,
     @JsonKey(name: 'author_id') String? authorId,
+    // The comment author's `@handle` + display name (username propagation,
+    // 2026-06-07). Null on a moderated/hidden row (the Worker strips the
+    // author there) or a legacy Worker that predates these fields.
+    @JsonKey(name: 'author_username') String? authorUsername,
+    @JsonKey(name: 'author_display_name') String? authorDisplayName,
     String? body,
     @JsonKey(name: 'created_at') required DateTime createdAt,
     @JsonKey(name: 'vote_count') required int voteCount,
@@ -164,4 +201,100 @@ abstract class ForumReport with _$ForumReport {
 
   factory ForumReport.fromJson(Map<String, dynamic> json) =>
       _$ForumReportFromJson(json);
+}
+
+/// One member of a care circle (care-circle connect, 2026-06-06).
+/// Mirrors the Worker's `members[]` element on every circle response —
+/// `{profile_id, username, display_name, role}`. [username] is null
+/// until the member picks an `@handle`; [role] is `owner` for the
+/// circle creator and `member` for everyone who joined via an invite.
+@freezed
+abstract class CircleMemberDto with _$CircleMemberDto {
+  const factory CircleMemberDto({
+    @JsonKey(name: 'profile_id') required String profileId,
+    String? username,
+    @JsonKey(name: 'display_name') required String displayName,
+    required String role,
+  }) = _CircleMemberDto;
+
+  factory CircleMemberDto.fromJson(Map<String, dynamic> json) =>
+      _$CircleMemberDtoFromJson(json);
+}
+
+/// The circle-owned loved one as it lives on the sync backend
+/// (server-authoritative sync). Carried on every circle response so a
+/// joiner adopts the shared loved one in the same round-trip that joins
+/// them. [payload] is the [Patient]'s `toJson` shape encoded as a JSON
+/// **string** on the wire; decode with `jsonDecode` then
+/// `Patient.fromJson`. [rev] is the server's monotonic revision; [deleted]
+/// is the tombstone flag.
+@freezed
+abstract class SyncPatient with _$SyncPatient {
+  const factory SyncPatient({
+    required String payload,
+    @JsonKey(name: 'client_updated_at') required int clientUpdatedAt,
+    required int rev,
+    @Default(false) bool deleted,
+  }) = _SyncPatient;
+
+  factory SyncPatient.fromJson(Map<String, dynamic> json) =>
+      _$SyncPatientFromJson(json);
+}
+
+/// One synced document — a circle-scoped row in some [collection]
+/// (`medication`, `dose_window`, …) (server-authoritative sync).
+/// [payload] is the model's `toJson` shape encoded as a JSON **string**
+/// on the wire. A pulled doc with [deleted] true is a tombstone the
+/// apply dispatcher routes to the matching local delete.
+@freezed
+abstract class SyncDoc with _$SyncDoc {
+  const factory SyncDoc({
+    required String id,
+    required String collection,
+    required String payload,
+    @JsonKey(name: 'client_updated_at') required int clientUpdatedAt,
+    required int rev,
+    @Default(false) bool deleted,
+  }) = _SyncDoc;
+
+  factory SyncDoc.fromJson(Map<String, dynamic> json) =>
+      _$SyncDocFromJson(json);
+}
+
+/// A care circle (care-circle connect, 2026-06-06). Returned by
+/// `POST /circles`, `GET /circles`, and `POST /circles/join`. Carries
+/// the denormalized [members] roster so the People surface renders the
+/// circle without a second round-trip, and (server-authoritative sync)
+/// the circle-owned [patient] so a joiner adopts the shared loved one
+/// without a separate fetch. [patient] is null for a circle that has no
+/// loved one on file yet.
+@freezed
+abstract class CircleDto with _$CircleDto {
+  const factory CircleDto({
+    required String id,
+    required String name,
+    @JsonKey(name: 'owner_profile_id') required String ownerProfileId,
+    @JsonKey(name: 'created_at') required DateTime createdAt,
+    @Default(<CircleMemberDto>[]) List<CircleMemberDto> members,
+    SyncPatient? patient,
+  }) = _CircleDto;
+
+  factory CircleDto.fromJson(Map<String, dynamic> json) =>
+      _$CircleDtoFromJson(json);
+}
+
+/// A circle invite (care-circle connect, 2026-06-06). Returned by
+/// `POST /circles/:id/invites`. [token] is the opaque join code the
+/// QR encodes; a co-caregiver joins by POSTing it back to
+/// `POST /circles/join` before [expiresAt].
+@freezed
+abstract class CircleInviteDto with _$CircleInviteDto {
+  const factory CircleInviteDto({
+    required String token,
+    @JsonKey(name: 'circle_id') required String circleId,
+    @JsonKey(name: 'expires_at') required DateTime expiresAt,
+  }) = _CircleInviteDto;
+
+  factory CircleInviteDto.fromJson(Map<String, dynamic> json) =>
+      _$CircleInviteDtoFromJson(json);
 }

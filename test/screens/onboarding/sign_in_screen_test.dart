@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:careblazers/l10n/app_localizations.dart';
 import 'package:careblazers/providers/auth_provider.dart';
 import 'package:careblazers/providers/settings_provider.dart';
 import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../_semantics_matchers.dart';
 
@@ -78,7 +80,10 @@ Future<({_SpyAuthProvider spy, GoRouter router})> _pumpSignIn(
   WidgetTester tester, {
   TargetPlatform platform = TargetPlatform.android,
   _SpyAuthProvider? spy,
+  bool alphaMode = false,
+  bool showGoogleInAlpha = false,
 }) async {
+  SharedPreferences.setMockInitialValues(<String, Object>{});
   await tester.binding.setSurfaceSize(const Size(400, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -91,7 +96,10 @@ Future<({_SpyAuthProvider spy, GoRouter router})> _pumpSignIn(
       GoRoute(
         path: '/sign-in',
         builder: (BuildContext context, GoRouterState state) =>
-            const SignInScreen(),
+            SignInScreen(
+          alphaMode: alphaMode,
+          showGoogleInAlpha: showGoogleInAlpha,
+        ),
       ),
       GoRoute(
         path: '/',
@@ -108,6 +116,11 @@ Future<({_SpyAuthProvider spy, GoRouter router})> _pumpSignIn(
       ],
       child: MaterialApp.router(
         theme: ThemeData(platform: platform),
+        // The screen reads chrome strings via AppLocalizations.of (#18
+        // localization); register the generated delegate + supportedLocales
+        // so `.of(context)` resolves (nullable-getter: false).
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         routerConfig: router,
       ),
     ),
@@ -268,6 +281,56 @@ void main() {
         hasSemanticsLabel(tester, RegExp('Continue with Google')),
         isTrue,
       );
+    });
+  });
+
+  group('SignInScreen — alpha tester (Google-only)', () {
+    testWidgets(
+        'alpha mode (Google configured) shows ONLY the Google button',
+        (WidgetTester tester) async {
+      await _pumpSignIn(
+        tester,
+        alphaMode: true,
+        showGoogleInAlpha: true,
+        platform: TargetPlatform.iOS,
+      );
+
+      expect(find.byKey(SignInScreen.alphaGoogleButtonKey), findsOneWidget);
+      expect(find.text('Continue with Google'), findsOneWidget);
+      // No bypass: no name field, no Continue button, no Apple button, no
+      // unavailable message.
+      expect(find.byKey(SignInScreen.appleButtonKey), findsNothing);
+      expect(find.byKey(SignInScreen.alphaUnavailableKey), findsNothing);
+      // Terms line still renders under the button.
+      expect(find.byKey(SignInScreen.termsLinkKey), findsOneWidget);
+    });
+
+    testWidgets(
+        'alpha mode (Google NOT configured) shows the unavailable message, '
+        'no bypass', (WidgetTester tester) async {
+      await _pumpSignIn(tester, alphaMode: true, platform: TargetPlatform.iOS);
+
+      expect(find.byKey(SignInScreen.alphaUnavailableKey), findsOneWidget);
+      expect(find.textContaining("isn't available"), findsOneWidget);
+      // No actionable affordance of any kind.
+      expect(find.byKey(SignInScreen.alphaGoogleButtonKey), findsNothing);
+      expect(find.byKey(SignInScreen.googleButtonKey), findsNothing);
+      expect(find.byKey(SignInScreen.appleButtonKey), findsNothing);
+    });
+
+    testWidgets('tapping the alpha Google button runs the real Google flow',
+        (WidgetTester tester) async {
+      final ({_SpyAuthProvider spy, GoRouter router}) pumped = await _pumpSignIn(
+        tester,
+        alphaMode: true,
+        showGoogleInAlpha: true,
+      );
+
+      await tester.tap(find.byKey(SignInScreen.alphaGoogleButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(pumped.spy.googleCalls, 1); // the backend-verified Google path
+      expect(find.text('test-home'), findsOneWidget); // routed home
     });
   });
 }

@@ -1,3 +1,4 @@
+import 'package:careblazers/l10n/app_localizations.dart';
 import 'package:careblazers/models/forum.dart';
 import 'package:careblazers/providers/guidelines_acknowledged_provider.dart';
 import 'package:careblazers/screens/community/post_compose_screen.dart';
@@ -109,7 +110,16 @@ Future<void> _pump(
       overrides: <Override>[
         forumApiClientProvider.overrideWithValue(client),
       ],
-      child: MaterialApp.router(routerConfig: _router()),
+      // The first-post ack modal embeds CommunityGuidelinesScreen.embedded(),
+      // which reads AppLocalizations.of(context) after the #18 localization
+      // conversion. Register the generated delegate + supportedLocales here
+      // (as lib/app.dart does) so opening the modal doesn't throw on a
+      // missing Localizations scope.
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: _router(),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -140,16 +150,25 @@ void main() {
       expect(counter.data, '5 / 200');
     });
 
-    testWidgets('submit is disabled until both fields have content',
+    testWidgets(
+        'empty submit is tappable and highlights both missing fields',
         (WidgetTester tester) async {
       final _FakeForumApiClient client = _FakeForumApiClient();
-      await _pump(tester, client: client);
+      await _pump(tester, client: client, alreadyAcknowledged: true);
 
-      // Empty state — tap submits but does nothing (no API call).
+      // The Post button is ALWAYS tappable (no greyed-out mystery) —
+      // pressing it on an empty form validates and surfaces the inline
+      // "Add a title" / "Add some detail" errors instead of POSTing.
       await tester.tap(find.byKey(PostComposeScreen.submitButtonKey));
       await tester.pumpAndSettle();
-      expect(client.calls, isEmpty);
+      expect(client.calls, isEmpty,
+          reason: 'empty submit must not POST');
+      expect(find.text('Add a title — even a few words helps.'),
+          findsOneWidget);
+      expect(find.text('Add some detail — tell us the moment.'),
+          findsOneWidget);
 
+      // Title only — body error persists, still no POST.
       await tester.enterText(
         find.byKey(PostComposeScreen.titleFieldKey),
         'Title only',
@@ -159,6 +178,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(client.calls, isEmpty,
           reason: 'submit must require non-empty body');
+      expect(find.text('Add some detail — tell us the moment.'),
+          findsOneWidget);
     });
 
     testWidgets(

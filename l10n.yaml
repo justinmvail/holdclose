@@ -1,0 +1,23 @@
+# Flutter gen-l10n configuration (#18 — localization / i18n).
+#
+# Strings live in ARB files under `lib/l10n/`; `app_en.arb` is the
+# template (source of truth for keys + descriptions). On `flutter pub
+# get` / `flutter gen-l10n`, Flutter generates `AppLocalizations`
+# (class `AppLocalizations`) into the build folder, importable as
+# `package:careblazers/l10n/app_localizations.dart` via the synthetic
+# package.
+#
+# `nullable-getter: false` makes `AppLocalizations.of(context)` return a
+# non-null instance (it throws if the delegate is missing rather than
+# returning null), so call sites read `AppLocalizations.of(context).key`
+# without the `!`. Every MaterialApp — including the ones pumped in
+# widget/golden tests — must register `AppLocalizations.localizationsDelegates`
+# + `supportedLocales` or `.of(context)` throws.
+#
+# Adding a new locale = drop `app_<locale>.arb` next to the template and
+# re-run gen-l10n. `en` is the only locale shipped today; the rest is
+# translation work (see BUILD_SPEC.md §1).
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+nullable-getter: false

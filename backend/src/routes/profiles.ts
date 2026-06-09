@@ -1,4 +1,4 @@
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, ne } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Hono } from 'hono';
 
@@ -17,6 +17,16 @@ export type ProfilesBindings = AuthBindings & {
 export type ProfilesVariables = AuthVariables;
 
 const DISPLAY_NAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
+const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
+
+// The shape `defaultDisplayName` mints: `Caregiver_` + 6 lowercase hex
+// chars. Used to decide whether a profile's display_name is still the
+// auto-generated default (and therefore safe to overwrite with a
+// freshly-set username) vs. a name the caregiver explicitly customized.
+const DEFAULT_DISPLAY_NAME_PATTERN = /^Caregiver_[0-9a-f]{6}$/;
+
+const isDefaultDisplayName = (name: string): boolean =>
+  DEFAULT_DISPLAY_NAME_PATTERN.test(name);
 
 // Conservative wordlist meant as a first line of defense, not exhaustive
 // moderation. Substring match against the lowercased display name.
@@ -54,6 +64,7 @@ function meResponse(profile: Profile) {
     id: profile.id,
     careblazers_user_id: profile.careblazersUserId,
     display_name: profile.displayName,
+    username: profile.username ?? null,
     avatar_url: profile.avatarUrl,
     joined_at: profile.joinedAt.toISOString(),
     role: profile.role,
@@ -104,6 +115,14 @@ export const profilesRouter = () => {
     const careblazersUserId = c.get('userId');
     const db = drizzle(c.env.FORUM_DB);
 
+    const [current] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.careblazersUserId, careblazersUserId));
+    if (!current) {
+      return c.json({ error: 'profile_not_found' }, 404);
+    }
+
     let body: unknown;
     try {
       body = await c.req.json();
@@ -113,8 +132,52 @@ export const profilesRouter = () => {
     if (!body || typeof body !== 'object') {
       return c.json({ error: 'invalid_body' }, 400);
     }
-    const patch = body as { display_name?: unknown; avatar_url?: unknown };
-    const updates: { displayName?: string; avatarUrl?: string } = {};
+    const patch = body as {
+      display_name?: unknown;
+      username?: unknown;
+      avatar_url?: unknown;
+    };
+    const updates: {
+      displayName?: string;
+      username?: string;
+      avatarUrl?: string;
+    } = {};
+
+    if (patch.username !== undefined) {
+      if (
+        typeof patch.username !== 'string' ||
+        !USERNAME_PATTERN.test(patch.username)
+      ) {
+        return c.json({ error: 'invalid_username' }, 400);
+      }
+      if (containsProfanity(patch.username)) {
+        return c.json({ error: 'profanity_blocked' }, 400);
+      }
+      const handle = patch.username.toLowerCase();
+      const [taken] = await db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(
+          and(
+            eq(profiles.username, handle),
+            ne(profiles.careblazersUserId, careblazersUserId),
+          ),
+        );
+      if (taken) {
+        return c.json({ error: 'username_taken' }, 409);
+      }
+      updates.username = handle;
+      // Username is the canonical public identity: when one is being set
+      // and the profile still carries the auto-generated default
+      // display_name, mirror the username into display_name so every
+      // surface that renders display_name shows the chosen handle. A
+      // display_name the caregiver explicitly customized (one that does
+      // NOT match the default `Caregiver_<hex>` shape) is preserved. An
+      // explicit display_name in this same PATCH still wins (applied below).
+      if (isDefaultDisplayName(current.displayName)) {
+        updates.displayName = handle;
+      }
+    }
 
     if (patch.display_name !== undefined) {
       if (
@@ -154,6 +217,44 @@ export const profilesRouter = () => {
       return c.json({ error: 'profile_not_found' }, 404);
     }
     return c.json(meResponse(updated), 200);
+  });
+
+  router.get('/username-available', async (c) => {
+    const db = drizzle(c.env.FORUM_DB);
+    const handle = c.req.query('u') ?? '';
+
+    const valid = USERNAME_PATTERN.test(handle) && !containsProfanity(handle);
+    if (!valid) {
+      return c.json({ valid: false, available: false }, 200);
+    }
+
+    const [existing] = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.username, handle));
+    return c.json({ valid: true, available: !existing }, 200);
+  });
+
+  router.get('/by-username/:username', async (c) => {
+    const db = drizzle(c.env.FORUM_DB);
+    const handle = c.req.param('username').toLowerCase();
+
+    const [profile] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.username, handle));
+    if (!profile) {
+      return c.json({ error: 'profile_not_found' }, 404);
+    }
+    return c.json(
+      {
+        id: profile.id,
+        username: profile.username,
+        display_name: profile.displayName,
+        avatar_url: profile.avatarUrl,
+      },
+      200,
+    );
   });
 
   router.get('/:id', async (c) => {

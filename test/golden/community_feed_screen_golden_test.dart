@@ -17,10 +17,12 @@ ForumPost _post(
   required int voteCount,
   required int commentCount,
   required Duration age,
+  String? username,
 }) =>
     ForumPost(
       id: id,
       authorId: 'profile-$id',
+      authorUsername: username,
       title: title,
       body: body,
       createdAt: _fixedNow.subtract(age),
@@ -55,6 +57,27 @@ class _CannedForumApiClient extends ForumApiClient {
   }
 }
 
+/// Always fails the first-page fetch with a transport error (statusCode 0)
+/// so the golden captures the offline retry surface (#19).
+class _OfflineForumApiClient extends ForumApiClient {
+  _OfflineForumApiClient()
+      : super(
+          tokenLoader: _stubTokenLoader,
+          baseUrl: 'https://example.test',
+        );
+
+  static Future<String> _stubTokenLoader() async => 'fake-jwt';
+
+  @override
+  Future<List<ForumPost>> listPosts({
+    ForumPostSort sort = ForumPostSort.hot,
+    String? before,
+    int? limit,
+  }) async {
+    throw ForumApiException(statusCode: 0, error: 'transport_error');
+  }
+}
+
 void main() {
   group('CommunityFeedScreen golden', () {
     goldenTest(
@@ -69,6 +92,40 @@ void main() {
               overrides: <Override>[
                 forumApiClientProvider.overrideWithValue(
                   _CannedForumApiClient(const <ForumPost>[]),
+                ),
+                communityFeedClockProvider.overrideWithValue(() => _fixedNow),
+              ],
+              child: SizedBox(
+                width: 420,
+                height: 900,
+                child: MaterialApp(
+                  builder: (BuildContext context, Widget? child) {
+                    return ColoredBox(
+                      color: careblazersColors.background,
+                      child: child ?? const SizedBox.shrink(),
+                    );
+                  },
+                  home: const CommunityFeedScreen(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'offline state — branded retry surface (#19)',
+      fileName: 'community_feed_screen_offline',
+      builder: () => GoldenTestGroup(
+        columns: 1,
+        children: <Widget>[
+          GoldenTestScenario(
+            name: 'transport error (#19)',
+            child: ProviderScope(
+              overrides: <Override>[
+                forumApiClientProvider.overrideWithValue(
+                  _OfflineForumApiClient(),
                 ),
                 communityFeedClockProvider.overrideWithValue(() => _fixedNow),
               ],
@@ -113,6 +170,7 @@ void main() {
                       voteCount: 12,
                       commentCount: 5,
                       age: const Duration(minutes: 18),
+                      username: 'sundown_sarah',
                     ),
                     _post(
                       'b',

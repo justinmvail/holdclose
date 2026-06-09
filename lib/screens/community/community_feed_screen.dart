@@ -13,6 +13,7 @@ import '../../providers/my_forum_profile_provider.dart';
 import '../../routing/router.dart' show CareblazersRoutes;
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/network_error_view.dart';
 import '../../widgets/path_header.dart';
 import '../../widgets/segmented_subnav.dart';
 import 'learn_screen.dart';
@@ -161,7 +162,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
 
     final bool onFeed = _segment == CommunitySegment.feed;
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       // The compose surface posts to the feed, so it only belongs on the
       // Feed segment.
       floatingActionButton: onFeed
@@ -172,7 +173,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
               // with another tab landing's default-tagged FAB (the Chat
               // conversation list) mid-transition.
               heroTag: 'community-compose-fab',
-              backgroundColor: careblazersColors.cta,
+              backgroundColor: context.cb.cta,
               foregroundColor: Colors.white,
               onPressed: () =>
                   context.pushNamed(CareblazersRoutes.communityCompose),
@@ -201,7 +202,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
                         key: CommunityFeedScreen.adminActionKey,
                         tooltip: 'Moderation queue',
                         icon: const Icon(Icons.shield_outlined),
-                        color: careblazersColors.primary,
+                        color: context.cb.primary,
                         onPressed: () => context.pushNamed(
                           CareblazersRoutes.communityAdminReports,
                         ),
@@ -334,8 +335,8 @@ class _SortChip extends StatelessWidget {
           '${selected ? 'reload this view' : 'switch the feed to $label'}.',
       child: Material(
         color: selected
-            ? careblazersColors.primary
-            : careblazersColors.surfaceWarm,
+            ? context.cb.primary
+            : context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           key: chipKey,
@@ -347,8 +348,8 @@ class _SortChip extends StatelessWidget {
               label,
               style: textTheme.labelLarge?.copyWith(
                 color: selected
-                    ? careblazersColors.background
-                    : careblazersColors.primarySoft,
+                    ? context.cb.background
+                    : context.cb.primarySoft,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -381,15 +382,24 @@ class _Body extends StatelessWidget {
       return const _LoadingPlaceholder();
     }
     if (feed.posts.isEmpty && feed.error != null) {
-      return _ErrorView(
-        message: feed.error.toString(),
-        onRetry: onRefresh,
+      // A failed first fetch (or sort-change reload) with nothing already
+      // on screen → the branded retry surface instead of a blank list or a
+      // thrown exception. Transport failures (no connection) get the
+      // "check your connection" nudge; see [NetworkErrorView].
+      return Padding(
+        key: CommunityFeedScreen.errorKey,
+        padding: EdgeInsets.zero,
+        child: NetworkErrorView(
+          headline: "We couldn't reach the community.",
+          detail: networkErrorDetail(feed.error),
+          onRetry: onRefresh,
+        ),
       );
     }
     if (feed.posts.isEmpty) {
       return RefreshIndicator(
         onRefresh: onRefresh,
-        color: careblazersColors.cta,
+        color: context.cb.cta,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: const <Widget>[
@@ -401,7 +411,7 @@ class _Body extends StatelessWidget {
     }
     return RefreshIndicator(
       onRefresh: onRefresh,
-      color: careblazersColors.cta,
+      color: context.cb.cta,
       child: ListView.separated(
         key: CommunityFeedScreen.listKey,
         controller: scrollController,
@@ -433,7 +443,7 @@ class _LoadingPlaceholder extends StatelessWidget {
         width: 32,
         child: CircularProgressIndicator(
           strokeWidth: 2.5,
-          color: careblazersColors.primarySoft,
+          color: context.cb.primarySoft,
         ),
       ),
     );
@@ -456,13 +466,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.forum_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'Be the first to post.',
             style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -471,7 +481,7 @@ class _EmptyState extends StatelessWidget {
             "When you're stuck on something, chances are another Careblazer "
             'has been there too. Share a moment and the community shows up.',
             style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.text,
+              color: context.cb.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -498,7 +508,7 @@ class _Footer extends StatelessWidget {
             width: 22,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: careblazersColors.primarySoft,
+              color: context.cb.primarySoft,
             ),
           ),
         ),
@@ -511,71 +521,13 @@ class _Footer extends StatelessWidget {
         child: Text(
           "Couldn't load more right now. Pull to refresh.",
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.accentDeep,
+            color: context.cb.accentDeep,
           ),
           textAlign: TextAlign.center,
         ),
       );
     }
     return const SizedBox(height: 8);
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-
-  final String message;
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      key: CommunityFeedScreen.errorKey,
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(
-              Icons.cloud_off_outlined,
-              size: 48,
-              color: careblazersColors.primarySoft,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              "We couldn't load the community feed.",
-              style: textTheme.bodyLarge?.copyWith(
-                color: careblazersColors.text,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              message,
-              style: textTheme.bodyMedium?.copyWith(
-                color: careblazersColors.primarySoft,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: careblazersColors.cta,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: onRetry,
-              child: Text(
-                'Try again',
-                style: textTheme.labelLarge?.copyWith(
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -588,7 +540,11 @@ class _PostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final String displayName = displayNameForAuthor(post.authorId);
+    final String displayName = displayNameForAuthor(
+      post.authorId,
+      username: post.authorUsername,
+      displayName: post.authorDisplayName,
+    );
     final String time = relativeTime(post.createdAt, now);
 
     return Semantics(
@@ -597,7 +553,7 @@ class _PostCard extends StatelessWidget {
           '${post.voteCount} votes, ${post.commentCount} comments. '
           'Double-tap to open.',
       child: Material(
-        color: careblazersColors.surfaceWarm,
+        color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           key: CommunityFeedScreen.postTileKey(post.id),
@@ -623,7 +579,7 @@ class _PostCard extends StatelessWidget {
                 Text(
                   post.title,
                   style: textTheme.titleLarge?.copyWith(
-                    color: careblazersColors.primary,
+                    color: context.cb.primary,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -633,7 +589,7 @@ class _PostCard extends StatelessWidget {
                   Text(
                     post.body,
                     style: textTheme.bodyMedium?.copyWith(
-                      color: careblazersColors.text,
+                      color: context.cb.text,
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
@@ -673,7 +629,7 @@ class _AuthorRow extends StatelessWidget {
               Text(
                 displayName,
                 style: textTheme.bodyMedium?.copyWith(
-                  color: careblazersColors.primary,
+                  color: context.cb.primary,
                   fontWeight: FontWeight.w700,
                 ),
                 maxLines: 1,
@@ -683,7 +639,7 @@ class _AuthorRow extends StatelessWidget {
               Text(
                 time,
                 style: textTheme.bodyMedium?.copyWith(
-                  color: careblazersColors.primarySoft,
+                  color: context.cb.primarySoft,
                   fontSize: 14,
                 ),
               ),
@@ -710,13 +666,13 @@ class _Avatar extends StatelessWidget {
       height: 36,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: careblazersColors.primary,
+        color: context.cb.primary,
         shape: BoxShape.circle,
       ),
       child: Text(
         initial,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: careblazersColors.background,
+              color: context.cb.background,
               fontWeight: FontWeight.w700,
             ),
       ),
@@ -738,13 +694,13 @@ class _CountsRow extends StatelessWidget {
         Icon(
           Icons.arrow_upward,
           size: 18,
-          color: careblazersColors.primarySoft,
+          color: context.cb.primarySoft,
         ),
         const SizedBox(width: 4),
         Text(
           '$voteCount',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -752,13 +708,13 @@ class _CountsRow extends StatelessWidget {
         Icon(
           Icons.mode_comment_outlined,
           size: 18,
-          color: careblazersColors.primarySoft,
+          color: context.cb.primarySoft,
         ),
         const SizedBox(width: 4),
         Text(
           '$commentCount',
           style: textTheme.bodyMedium?.copyWith(
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -767,20 +723,27 @@ class _CountsRow extends StatelessWidget {
   }
 }
 
-/// Derive a stable, non-PII display name from the author's profile id.
+/// The display name to render for a post / comment author.
 ///
-/// Phase 13.10 lands before the feed wire carries a denormalized
-/// `display_name` per post; until then the screen renders a
-/// `Caregiver_<first 6 chars of profile id>` placeholder so each author
-/// still reads as a distinct human in the list. Matches the
-/// `Caregiver_xxxxxx` shape the bootstrap endpoint mints for fresh
-/// profiles (BUILD_SPEC.md §13 / Phase 13.4) so a future swap to the
-/// wire value won't visually shift authors that already match.
+/// Username is the canonical public identity (username propagation,
+/// 2026-06-07): when the wire carries an [username] it renders as
+/// `@handle`; otherwise it falls back to the author's [displayName],
+/// and only if BOTH are absent does it synthesize the
+/// `Caregiver_<first 6 chars of profile id>` stub from [authorId] (a
+/// legacy Worker that predates the denormalized author-name fields).
+/// The stub matches the `Caregiver_xxxxxx` shape the bootstrap endpoint
+/// mints (BUILD_SPEC.md §13 / Phase 13.4).
 ///
-/// Exported (not `@visibleForTesting`) so the post-detail screen
-/// (Phase 13.11) can reuse the same derivation — both surfaces must
-/// agree on what each author is called.
-String displayNameForAuthor(String authorId) {
+/// Exported (not `@visibleForTesting`) so the post-detail screen reuses
+/// the same derivation — both surfaces must agree on what each author
+/// is called.
+String displayNameForAuthor(
+  String authorId, {
+  String? username,
+  String? displayName,
+}) {
+  if (username != null && username.isNotEmpty) return '@$username';
+  if (displayName != null && displayName.isNotEmpty) return displayName;
   if (authorId.isEmpty) return 'Caregiver';
   // Strip a "profile-" prefix if one shows up so the rendered suffix
   // is actually distinguishing entropy rather than a shared header.

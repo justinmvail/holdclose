@@ -9,6 +9,7 @@ import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
 import 'package:careblazers/screens/journal/journal_entry_screen.dart';
 import 'package:careblazers/screens/journal/journal_screen.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -240,13 +241,21 @@ void main() {
       expect(pushed.entryId, 'today-1');
     });
 
-    testWidgets('AppBar title is "Journal" and has no BackButton',
+    testWidgets('PathHeader title is "Journal" and there is no auto BackButton',
         (WidgetTester tester) async {
       await _pumpJournal(tester);
 
-      expect(find.widgetWithText(AppBar, 'Journal'), findsOneWidget);
-      // Journal is a tab root — never an auto back arrow.
+      // The Journal root moved from an AppBar to the shared [PathHeader]
+      // (CLAUDE.md: feature pages below a hub use PathHeader, never a bare
+      // AppBar). Its title is "Journal" (the same word also appears as the
+      // trailing breadcrumb crumb, so assert the title property directly).
+      final PathHeader header =
+          tester.widget<PathHeader>(find.byType(PathHeader));
+      expect(header.title, 'Journal');
+      // Journal is a tab root reached via the Care hub — navigation is the
+      // PathHeader breadcrumb, never an OS-implied AppBar back arrow.
       expect(find.byType(BackButton), findsNothing);
+      expect(find.byType(AppBar), findsNothing);
     });
 
     testWidgets('empty-state CTA announces the decoder hand-off',

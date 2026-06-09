@@ -45,7 +45,7 @@ class HealthLogScreen extends ConsumerWidget {
     final DateTime now = ref.watch(healthLogClockProvider)();
 
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,11 +55,11 @@ class HealthLogScreen extends ConsumerWidget {
               child: PathHeader(
                 breadcrumbs: <PathHeaderCrumb>[
                   PathHeaderCrumb(label: 'Home', route: '/'),
-                  PathHeaderCrumb(label: 'Medical', route: '/medical'),
+                  PathHeaderCrumb(label: 'Care', route: '/medical'),
                   PathHeaderCrumb(label: 'Health Log'),
                 ],
                 title: 'Health Log',
-                backLabel: 'Back to Medical',
+                backLabel: 'Back to Care',
                 leadingIcon: Icons.monitor_heart_outlined,
               ),
             ),
@@ -108,13 +108,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.monitor_heart_outlined,
             size: 56,
-            color: careblazersColors.primarySoft,
+            color: context.cb.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'No entries yet.',
             style: textTheme.headlineMedium?.copyWith(
-              color: careblazersColors.primary,
+              color: context.cb.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -124,7 +124,7 @@ class _EmptyState extends StatelessWidget {
             "loved one's day. It's an easy way to bring the real picture to "
             'the next doctor visit.',
             style: textTheme.bodyLarge?.copyWith(
-              color: careblazersColors.text,
+              color: context.cb.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -144,7 +144,7 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: careblazersColors.cta,
+                backgroundColor: context.cb.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -195,7 +195,7 @@ class _DayHeader extends StatelessWidget {
       child: Text(
         label,
         style: textTheme.titleLarge?.copyWith(
-          color: careblazersColors.primary,
+          color: context.cb.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -214,7 +214,7 @@ class _EntryRow extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final String summary = _summaryFor(entry);
     final String when = _relativeTime(entry.recordedAt, now);
-    final Color glyphColor = _kindColor(entry.kind);
+    final Color glyphColor = _kindColor(context, entry.kind);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Semantics(
@@ -222,7 +222,7 @@ class _EntryRow extends StatelessWidget {
         label: '${_kindLabel(entry.kind)}. $summary. $when. '
             'Double-tap to edit.',
         child: Material(
-          color: careblazersColors.surfaceWarm,
+          color: context.cb.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: HealthLogScreen.rowKey(entry.id),
@@ -255,7 +255,7 @@ class _EntryRow extends StatelessWidget {
                         Text(
                           summary,
                           style: textTheme.bodyLarge?.copyWith(
-                            color: careblazersColors.text,
+                            color: context.cb.text,
                             fontWeight: FontWeight.w700,
                           ),
                           maxLines: 2,
@@ -265,7 +265,7 @@ class _EntryRow extends StatelessWidget {
                         Text(
                           when,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: careblazersColors.primarySoft,
+                            color: context.cb.primarySoft,
                           ),
                         ),
                       ],
@@ -293,8 +293,9 @@ class _AddEntryFab extends StatelessWidget {
       label: 'Add an entry. Open the new health-log entry form.',
       child: FloatingActionButton.extended(
         key: HealthLogScreen.fabKey,
+        heroTag: 'health-log-add-fab',
         onPressed: onPressed,
-        backgroundColor: careblazersColors.cta,
+        backgroundColor: context.cb.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -322,7 +323,7 @@ class _ErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           "We couldn't load the health log.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: careblazersColors.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
           textAlign: TextAlign.center,
         ),
       ),
@@ -422,7 +423,8 @@ String _formatClock(DateTime t) {
 
 /// One-line summary the row shows for [entry], keyed off its kind
 /// (TASKS.md Phase 14.17):
-///   - vitals  → "BP 130/82 · HR 76 · 98.6°F" (only the fields present)
+///   - vitals  → "BP 130/82 · HR 76 · 98.6°F · 110 mg/dL" (only the
+///     fields present)
 ///   - symptom → "Headache · 3/5" (note text + severity when set)
 ///   - note    → the first 60 characters of the note text
 String _summaryFor(HealthLogEntry entry) {
@@ -435,6 +437,9 @@ String _summaryFor(HealthLogEntry entry) {
       if (entry.heartRate != null) parts.add('HR ${entry.heartRate}');
       if (entry.temperatureF != null) {
         parts.add('${_formatTemp(entry.temperatureF!)}°F');
+      }
+      if (entry.glucoseMgDl != null) {
+        parts.add('${entry.glucoseMgDl} mg/dL');
       }
       if (parts.isNotEmpty) return parts.join(' · ');
       final String notes = entry.notes?.trim() ?? '';
@@ -483,13 +488,13 @@ IconData _kindGlyph(HealthLogKind kind) {
   }
 }
 
-Color _kindColor(HealthLogKind kind) {
+Color _kindColor(BuildContext context, HealthLogKind kind) {
   switch (kind) {
     case HealthLogKind.vitals:
-      return careblazersColors.accentDeep;
+      return context.cb.accentDeep;
     case HealthLogKind.symptom:
-      return careblazersColors.cta;
+      return context.cb.cta;
     case HealthLogKind.note:
-      return careblazersColors.link;
+      return context.cb.link;
   }
 }

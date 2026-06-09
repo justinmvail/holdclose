@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../theme.dart';
 
@@ -93,10 +94,11 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Scaffold(
-      backgroundColor: careblazersColors.background,
+      backgroundColor: context.cb.background,
       appBar: AppBar(
-        backgroundColor: careblazersColors.background,
+        backgroundColor: context.cb.background,
         elevation: 0,
         automaticallyImplyLeading: false,
         actions: <Widget>[
@@ -104,14 +106,14 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
             padding: const EdgeInsets.only(right: 8),
             child: Semantics(
               button: true,
-              label: 'Skip onboarding and go to sign-in.',
+              label: l10n.welcomeSkipSemantics,
               child: TextButton(
                 key: WelcomeCarousel.skipButtonKey,
                 onPressed: _onSkipPressed,
                 child: Text(
-                  'Skip',
+                  l10n.commonSkip,
                   style: textTheme.labelLarge?.copyWith(
-                    color: careblazersColors.primarySoft,
+                    color: context.cb.primarySoft,
                   ),
                 ),
               ),
@@ -147,7 +149,7 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
                   key: WelcomeCarousel.primaryCtaKey,
                   onPressed: _onCtaPressed,
                   style: FilledButton.styleFrom(
-                    backgroundColor: careblazersColors.cta,
+                    backgroundColor: context.cb.cta,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
@@ -155,7 +157,9 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
                     ),
                   ),
                   child: Text(
-                    _isLastPage ? 'Get started' : 'Next →',
+                    _isLastPage
+                        ? l10n.welcomeGetStartedCta
+                        : l10n.welcomeNextCta,
                     style: textTheme.labelLarge?.copyWith(
                       color: Colors.white,
                     ),
@@ -200,7 +204,7 @@ class _PageBody extends StatelessWidget {
               height: 120,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
                 borderRadius: BorderRadius.circular(28),
               ),
               child: Text(
@@ -255,8 +259,8 @@ class _DotIndicator extends StatelessWidget {
               // reserved for the CTA button below — using it here
               // doubled the orange surface area on the carousel.
               color: i == active
-                  ? careblazersColors.primary
-                  : careblazersColors.primarySoft.withValues(alpha: 0.3),
+                  ? context.cb.primary
+                  : context.cb.primarySoft.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -309,7 +313,7 @@ class _CbBrandMark extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: ColoredBox(
-                color: careblazersColors.primary,
+                color: context.cb.primary,
                 child: Center(
                   child: Text(
                     'C',
@@ -320,11 +324,11 @@ class _CbBrandMark extends StatelessWidget {
             ),
             Expanded(
               child: ColoredBox(
-                color: careblazersColors.background,
+                color: context.cb.background,
                 child: Center(
                   child: Text(
                     'b',
-                    style: letter.copyWith(color: careblazersColors.primary),
+                    style: letter.copyWith(color: context.cb.primary),
                   ),
                 ),
               ),
