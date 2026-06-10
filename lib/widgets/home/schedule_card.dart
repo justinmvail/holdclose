@@ -278,39 +278,53 @@ class _GroupedRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              // Header: window name leads, time trails — "Morning · 8:00 AM".
-          // A label-less legacy dose falls back to the bare time.
-          Text.rich(
-            label == null
-                ? TextSpan(
-                    text: time,
-                    style: tt.bodyMedium?.copyWith(
-                      color: labelColor,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  )
-                : TextSpan(
-                    children: <InlineSpan>[
-                      TextSpan(
-                        // "Medication" appended to the window name so a
-                        // dose group reads unambiguously as meds among the
-                        // appointments + other events the schedule mixes
-                        // in — "Morning Medication" not just "Morning".
-                        text: '$label Medication',
-                        style: tt.bodyMedium?.copyWith(
-                          color: labelColor,
-                          fontWeight: FontWeight.w700,
+              // Header: window name leads, time trails — "Morning · 8:00 AM"
+              // — plus a chevron when the group taps through, matching a
+              // single-event row (fb_1781045816196914).
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Expanded(
+                child: Text.rich(
+                  label == null
+                      ? TextSpan(
+                          text: time,
+                          style: tt.bodyMedium?.copyWith(
+                            color: labelColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        )
+                      : TextSpan(
+                          children: <InlineSpan>[
+                            TextSpan(
+                              // "Medication" appended to the window name so a
+                              // dose group reads unambiguously as meds among
+                              // the appointments + other events the schedule
+                              // mixes in — "Morning Medication" not "Morning".
+                              text: '$label Medication',
+                              style: tt.bodyMedium?.copyWith(
+                                color: labelColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            TextSpan(
+                              text: '  ·  $time',
+                              style: tt.bodyMedium?.copyWith(
+                                color: timeColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      TextSpan(
-                        text: '  ·  $time',
-                        style: tt.bodyMedium?.copyWith(
-                          color: timeColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
+                ),
+              ),
+              if (isToday)
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: context.cb.primarySoft,
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           // Each medication on its own row, indented under the header.
@@ -382,63 +396,65 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme tt = Theme.of(context).textTheme;
-    final Color dot = _kindDotColor(context, event.kind);
     final bool past = event.start.isBefore(now);
     final String time = _formatClock(event.start);
     final String? route = event.detailRoute;
     final VoidCallback? onTap = route == null
         ? null
         : () => GoRouter.of(context).push(route);
-    return InkWell(
-      key: ScheduleCard.rowKey(event.id),
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: <Widget>[
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: past ? dot.withValues(alpha: 0.35) : dot,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 64,
-              child: Text(
-                time,
-                style: tt.bodyMedium?.copyWith(
-                  color: past
-                      ? context.cb.text.withValues(alpha: 0.55)
-                      : context.cb.text,
-                  fontWeight: FontWeight.w700,
+    // Same header format as a medication window — "Title  ·  Time", title
+    // navy/bold + time soft/bold, no leading kind-dot — so every schedule
+    // entry reads identically (fb_1781045816196914). A single event just
+    // has no sub-rows beneath it.
+    final Color labelColor = past
+        ? context.cb.primary.withValues(alpha: 0.55)
+        : context.cb.primary;
+    final Color timeColor = past
+        ? context.cb.primarySoft.withValues(alpha: 0.55)
+        : context.cb.primarySoft;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: InkWell(
+        key: ScheduleCard.rowKey(event.id),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: <InlineSpan>[
+                      TextSpan(
+                        text: event.title,
+                        style: tt.bodyMedium?.copyWith(
+                          color: labelColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '  ·  $time',
+                        style: tt.bodyMedium?.copyWith(
+                          color: timeColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                event.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: tt.bodyMedium?.copyWith(
-                  color: past
-                      ? context.cb.text.withValues(alpha: 0.55)
-                      : context.cb.text,
+              if (onTap != null)
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: context.cb.primarySoft,
                 ),
-              ),
-            ),
-            if (route != null)
-              Icon(
-                Icons.chevron_right,
-                size: 18,
-                color: context.cb.primarySoft,
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -565,31 +581,6 @@ _Buckets _bucket(List<CareEvent> events, DateTime now) {
     }
   }
   return _Buckets(today: today, tomorrow: tomorrow);
-}
-
-// Origin-dot hues for the non-dose rows the schedule shows (appointments,
-// care-plan items, …). Dose teal + appointment coral match the medication
-// status language; journal is plum; everything else resolves to brand navy.
-const Color _journalDotColor = Color(0xFF7B4B94); // plum
-const Color _doseDotColor = Color(0xFF1F8A70); // teal
-const Color _appointmentDotColor = Color(0xFFE5573F); // coral
-
-Color _kindDotColor(BuildContext context, CareEventKind kind) {
-  switch (kind) {
-    case CareEventKind.journalEntry:
-      return _journalDotColor;
-    case CareEventKind.doseLogged:
-    case CareEventKind.doseScheduled:
-      return _doseDotColor;
-    case CareEventKind.appointment:
-      return _appointmentDotColor;
-    case CareEventKind.healthLogEntry:
-    case CareEventKind.carePlanItem:
-    case CareEventKind.task:
-    case CareEventKind.shift:
-    case CareEventKind.note:
-      return context.cb.primary;
-  }
 }
 
 String _formatClock(DateTime t) {

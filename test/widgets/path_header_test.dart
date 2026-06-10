@@ -140,6 +140,50 @@ void main() {
     });
   });
 
+  group('PathHeader — back button (fb_1781046567327682)', () {
+    testWidgets('a sub-page shows a top-left Back that routes to the parent',
+        (WidgetTester tester) async {
+      final GoRouter router = _routerHosting(const PathHeader(
+        breadcrumbs: _threeCrumbs, // Home › Medical › Medications
+        title: 'Medications',
+      ));
+      await _pumpRouter(tester, router);
+      expect(_path(router), '/medical/medications');
+
+      expect(find.byKey(PathHeader.backButtonKey), findsOneWidget);
+      await tester.tap(find.byKey(PathHeader.backButtonKey));
+      await tester.pumpAndSettle();
+      // Back goes to the parent crumb's route (/medical).
+      expect(_path(router), '/medical');
+    });
+
+    testWidgets('a non-Home landing shows Back → Home',
+        (WidgetTester tester) async {
+      final GoRouter router = _routerHosting(const PathHeader(
+        breadcrumbs: <PathHeaderCrumb>[PathHeaderCrumb(label: 'Medical')],
+        title: 'Medical',
+      ));
+      await _pumpRouter(tester, router);
+
+      expect(find.byKey(PathHeader.backButtonKey), findsOneWidget);
+      await tester.tap(find.byKey(PathHeader.backButtonKey));
+      await tester.pumpAndSettle();
+      expect(_path(router), '/'); // parent is the auto-prepended Home
+    });
+
+    testWidgets('the Home root has NO back button',
+        (WidgetTester tester) async {
+      await _pumpRouter(
+        tester,
+        _routerHosting(const PathHeader(
+          breadcrumbs: <PathHeaderCrumb>[PathHeaderCrumb(label: 'Home')],
+          title: 'Good morning',
+        )),
+      );
+      expect(find.byKey(PathHeader.backButtonKey), findsNothing);
+    });
+  });
+
   group('PathHeader — navigation', () {
     testWidgets('tapping a parent crumb routes to it',
         (WidgetTester tester) async {

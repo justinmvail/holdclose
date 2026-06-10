@@ -89,6 +89,7 @@ class PathHeader extends StatelessWidget {
   /// Tap targets / test handles for the standard top-right cluster.
   static const Key profileButtonKey = Key('path-header-profile');
   static const Key reportButtonKey = Key('path-header-report');
+  static const Key backButtonKey = Key('path-header-back');
 
   /// The trail actually rendered — every page starts from Home so the
   /// format is identical everywhere. A trail that doesn't already begin at
@@ -108,6 +109,14 @@ class PathHeader extends StatelessWidget {
   /// (where the trail is just "Home" — a self-referential crumb adds
   /// nothing).
   bool get _showBreadcrumbs => _trail.length > 1;
+
+  /// Where the top-left Back button goes — the parent crumb's route (the
+  /// second-to-last in the trail). Null on the Home root (no parent), which
+  /// is the only page without a Back button (fb_1781046567327682).
+  String? get _backRoute {
+    if (_trail.length < 2) return null;
+    return _trail[_trail.length - 2].route;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -176,9 +185,27 @@ class PathHeader extends StatelessWidget {
         (textTheme.headlineMedium ?? const TextStyle()).copyWith(
       color: context.cb.primary,
     );
+    final String? backRoute = _backRoute;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
+        // Back button, top-left, on every page that has a parent
+        // (fb_1781046567327682). Goes to the parent crumb's route — same
+        // target as tapping the parent breadcrumb. Absent only on Home.
+        if (backRoute != null) ...<Widget>[
+          IconButton(
+            key: PathHeader.backButtonKey,
+            icon: const Icon(Icons.arrow_back),
+            iconSize: 22,
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            color: context.cb.primary,
+            tooltip: 'Back',
+            onPressed: () => context.go(backRoute),
+          ),
+          const SizedBox(width: 4),
+        ],
         if (leadingIcon != null) ...<Widget>[
           Icon(leadingIcon, size: 24, color: context.cb.primary),
           const SizedBox(width: 8),
