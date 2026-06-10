@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -32,6 +33,11 @@ HOST = os.environ.get("SHIM_HOST", "127.0.0.1")
 # --dart-define=SHIM_TOKEN=...). Empty = open (fine for localhost only).
 SHIM_TOKEN = os.environ.get("SHIM_TOKEN", "")
 CLAUDE_CMD = "claude"
+# Neutral, EMPTY working dir for the one-shot chat calls. Running `claude`
+# in the project dir made every chat reply load this repo's CLAUDE.md
+# (~10k tokens) and scan the tree before answering — pure waste for a chat
+# completion. An empty cwd drops all of it. Created once at startup.
+CHAT_CWD = tempfile.mkdtemp(prefix="careblazers-shim-chat-")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -62,6 +68,11 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(body)
             system = payload["system"]
             user = payload["user"]
+            # Opt-in token streaming. Only the chat endpoint sets this; the
+            # decoder + recap leave it off because their parsers accumulate a
+            # single final message (partial chunks would corrupt their JSON /
+            # double the text). See --include-partial-messages below.
+            partial = bool(payload.get("partial"))
         except Exception as exc:
             return self._bad(400, f"bad request: {exc}")
 
@@ -70,16 +81,52 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
 
+        # Lean one-shot invocation. This is a chat completion, NOT an agent
+        # session, so we strip everything the agent harness loads by default:
+        #   --system-prompt (REPLACE, not append) → drops Claude Code's own
+        #     multi-thousand-token agent prompt; the app's coaching prompt
+        #     becomes the entire system prompt.
+        #   --tools (empty: the next token is a flag) → no tool definitions
+        #     loaded into context, no tool setup.
+        #   --strict-mcp-config --mcp-config {} → no MCP servers start.
+        #   --exclude-dynamic-system-prompt-sections → drop cwd/env/git/memory
+        #     blurbs (only valid with --system-prompt).
+        #   cwd=CHAT_CWD (empty dir) → no CLAUDE.md, no repo scan.
+        # Together these cut per-reply input from ~15-20k tokens to just the
+        # coaching prompt + the turn, which is the difference between ~15s
+        # and a couple of seconds to first token.
         cmd = [
             CLAUDE_CMD, "--print", "--verbose", "--output-format", "stream-json",
+            # --effort low: a warm coaching reply doesn't need extended
+            #   reasoning; higher effort spends seconds on a thinking block
+            #   BEFORE the first visible word. Low gets the answer streaming
+            #   sooner. (--bare would also skip hooks/LSP but it disables the
+            #   OAuth/keychain read → authentication_failed, so it's out.)
+            "--effort", "low",
             "--model", "claude-sonnet-4-6",
-            "--append-system-prompt", system,
-            user,
+            "--system-prompt", system,
+            "--tools",
+            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+            "--exclude-dynamic-system-prompt-sections",
+            # No skills in a chat completion — skip resolving them.
+            "--disable-slash-commands",
         ]
+        if partial:
+            # Stream token chunks as they generate (chat only). WITHOUT this,
+            # stream-json only emits the assistant message once it's COMPLETE
+            # — the app showed nothing for ~16s, then the whole reply at once.
+            # With it, words appear in a few seconds and stream in continuously
+            # (as `stream_event`/`content_block_delta`/`text_delta` events).
+            cmd.append("--include-partial-messages")
+        cmd.append(user)
         try:
+            # MAX_THINKING_TOKENS=0 disables the extended-thinking block the
+            # model otherwise emits BEFORE its answer — seconds of latency
+            # before the first visible word, for a reply that doesn't need it.
+            env = {**os.environ, "MAX_THINKING_TOKENS": "0"}
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, bufsize=1,
+                text=True, bufsize=1, cwd=CHAT_CWD, env=env,
             )
             for line in proc.stdout:
                 line = line.rstrip("\n")
@@ -141,6 +188,20 @@ class Handler(BaseHTTPRequestHandler):
                 screenshot_file = None
 
         payload["screenshot_file"] = screenshot_file
+
+        # On-device log snapshot → a sidecar .log file (and drop the bulky
+        # text out of the .json so the metadata stays readable).
+        logs = payload.pop("logs", None)
+        logs_file = None
+        if logs:
+            try:
+                logs_file = f"{safe_id}.log"
+                with open(os.path.join(FEEDBACK_DIR, logs_file), "w") as fh:
+                    fh.write(logs)
+            except Exception:
+                logs_file = None
+        payload["logs_file"] = logs_file
+
         payload["received_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
 
         try:

@@ -762,23 +762,42 @@ class _ComposerState extends ConsumerState<_Composer> {
   Future<void> _captureIntoField() async {
     if (_listening) return;
     setState(() => _listening = true);
-    try {
-      final String? transcript =
-          await ref.read(voiceCaptureProvider).capture();
-      if (!mounted) return;
-      final String text = transcript?.trim() ?? '';
-      if (text.isEmpty) return;
-      // Append to whatever's already typed so a mid-compose capture
-      // doesn't clobber the caregiver's text; insert a space when joining.
-      final String existing = widget.controller.text;
-      final String joined = existing.isEmpty
-          ? text
-          : '${existing.trimRight()} $text';
+    // Anchor to whatever's already typed so a mid-compose capture APPENDS
+    // rather than clobbers; the live partials + the final transcript build
+    // on this prefix.
+    final String base = widget.controller.text;
+    final String prefix = base.isEmpty ? '' : '${base.trimRight()} ';
+    void fill(String words) {
+      final String joined = '$prefix$words';
       widget.controller
         ..text = joined
         ..selection = TextSelection.collapsed(offset: joined.length);
+    }
+
+    try {
+      final String? transcript =
+          await ref.read(voiceCaptureProvider).capture(
+        // Stream the words into the field as they're recognized, so the
+        // caregiver SEES it working word-for-word (fb_1781034095668808).
+        onPartial: (String partial) {
+          if (mounted && partial.trim().isNotEmpty) fill(partial);
+        },
+      );
+      if (!mounted) return;
+      final String text = transcript?.trim() ?? '';
+      if (text.isEmpty) {
+        // Nothing usable — restore the pre-capture text (drop any partials).
+        widget.controller
+          ..text = base
+          ..selection = TextSelection.collapsed(offset: base.length);
+        return;
+      }
+      fill(text);
     } on VoiceCapturePermissionDeniedException {
       if (!mounted) return;
+      widget.controller
+        ..text = base
+        ..selection = TextSelection.collapsed(offset: base.length);
       showVoiceCapturePermissionDeniedSnackBar(context);
     } finally {
       if (mounted) setState(() => _listening = false);
@@ -803,33 +822,6 @@ class _ComposerState extends ConsumerState<_Composer> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: <Widget>[
-          // Composer mic — capture a spoken phrase into the field
-          // (#fb_1780959784045575). While listening it shows a progress
-          // ring; "Listening…" reads on the semantics label for the
-          // screen reader without naming the speech tech (CLAUDE.md rules).
-          Semantics(
-            button: true,
-            enabled: !_listening,
-            label: _listening
-                ? 'Listening. Speak your message.'
-                : 'Speak your message.',
-            child: IconButton(
-              key: ChatScreen.composerMicKey,
-              tooltip: _listening ? 'Listening…' : 'Speak your message',
-              onPressed: _listening ? null : _captureIntoField,
-              icon: _listening
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(context.cb.cta),
-                      ),
-                    )
-                  : Icon(Icons.mic_none, color: context.cb.primarySoft),
-            ),
-          ),
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -857,6 +849,44 @@ class _ComposerState extends ConsumerState<_Composer> {
                 inputFormatters: <TextInputFormatter>[
                   LengthLimitingTextInputFormatter(2000),
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Composer mic — capture a spoken phrase into the field
+          // (#fb_1780959784045575 / fb_1781034095668808). Moved to the RIGHT
+          // beside Send and made a filled, brand-coloured circle so it's easy
+          // to spot; while listening the whole button turns salmon with a
+          // ring so it clearly reads as "recording". The transcript streams
+          // in word-for-word via [_captureIntoField]'s onPartial. "Listening…"
+          // reads on the semantics label without naming the speech tech.
+          Semantics(
+            button: true,
+            enabled: !_listening,
+            label: _listening
+                ? 'Listening. Speak your message.'
+                : 'Speak your message.',
+            child: Material(
+              color: _listening ? context.cb.cta : context.cb.surfaceWarm,
+              shape: const CircleBorder(),
+              child: InkWell(
+                key: ChatScreen.composerMicKey,
+                customBorder: const CircleBorder(),
+                onTap: _listening ? null : _captureIntoField,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: _listening
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Icon(Icons.mic, color: context.cb.cta, size: 24),
+                ),
               ),
             ),
           ),

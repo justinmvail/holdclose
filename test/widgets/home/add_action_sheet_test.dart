@@ -16,7 +16,7 @@ class _FakeVoiceCapture implements VoiceCapture {
   final String? transcript;
 
   @override
-  Future<String?> capture() async => transcript;
+  Future<String?> capture({void Function(String partial)? onPartial}) async => transcript;
 }
 
 /// Renders the destination route name + the kind/text of any

@@ -750,6 +750,86 @@ void main() {
       expect(deltas.whereType<ChatDeltaError>(), isEmpty);
     });
 
+    test('requests token streaming via partial:true in the body', () async {
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _assistantEvent('hi'),
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeShimChatBackend backend = ClaudeShimChatBackend(dio: dio);
+
+      await backend
+          .streamReply(
+            systemPrompt: 'SYS',
+            history: const <ChatTurn>[
+              ChatTurn(role: MessageRole.user, content: 'q'),
+            ],
+          )
+          .toList();
+
+      expect(adapter.lastRequestBody!['partial'], isTrue);
+    });
+
+    test(
+        'streams partial text_delta chunks incrementally AND drops the '
+        'trailing full-message echo (no doubled reply)', () async {
+      // With --include-partial-messages the shim sends incremental chunks,
+      // then a complete `assistant` message that repeats the whole text.
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _textDeltaEvent('Step into '),
+        _textDeltaEvent('her reality. '),
+        _textDeltaEvent('Say: come sit with me.'),
+        _assistantEvent('Step into her reality. Say: come sit with me.'),
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeShimChatBackend backend = ClaudeShimChatBackend(dio: dio);
+
+      final List<ChatDelta> deltas = await backend
+          .streamReply(
+            systemPrompt: 'SYS',
+            history: const <ChatTurn>[
+              ChatTurn(role: MessageRole.user, content: 'q'),
+            ],
+          )
+          .toList();
+
+      final List<String> texts = deltas
+          .whereType<ChatDeltaText>()
+          .map((ChatDeltaText t) => t.text)
+          .toList();
+      // Only the three incremental chunks — the duplicate full echo is gone.
+      expect(texts, <String>['Step into ', 'her reality. ', 'Say: come sit with me.']);
+      // And they fold to exactly the message once, not twice.
+      expect(texts.join(), 'Step into her reality. Say: come sit with me.');
+      expect(deltas.whereType<ChatDeltaError>(), isEmpty);
+    });
+
+    test('falls back to the complete assistant message when no partials stream',
+        () async {
+      // Non-streaming mode (e.g. partial flag off): a lone complete message
+      // is still delivered as the whole reply.
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _assistantEvent('The whole reply at once.'),
+        'data: [DONE]\n\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeShimChatBackend backend = ClaudeShimChatBackend(dio: dio);
+
+      final List<ChatDelta> deltas = await backend
+          .streamReply(
+            systemPrompt: 'SYS',
+            history: const <ChatTurn>[
+              ChatTurn(role: MessageRole.user, content: 'q'),
+            ],
+          )
+          .toList();
+      expect(
+        deltas.whereType<ChatDeltaText>().map((ChatDeltaText t) => t.text),
+        <String>['The whole reply at once.'],
+      );
+    });
+
     test('surfaces an {error: ...} event as a single ChatDeltaError',
         () async {
       final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
@@ -789,6 +869,133 @@ void main() {
           contains('shim request failed'));
     });
   });
+
+  group('ChatService.routeVoiceIntent — hands-free mic (fb_1781029699933602)',
+      () {
+    late CareblazersDatabase db;
+    late ChatRepository repo;
+
+    setUp(() {
+      db = CareblazersDatabase(NativeDatabase.memory());
+      repo = ChatRepository(db);
+    });
+    tearDown(() async => db.close());
+
+    test('a spoken COMMAND runs the action and returns VoiceIntentAction '
+        '— no thread', () async {
+      Map<String, String>? logged;
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText(
+            'Logged that she did not sleep.\n'
+            '[action:log_journal occurred_at="just now" '
+            'situation="did not sleep" attempts="none"]',
+          ),
+        ]),
+        actions: <String, ChatActionExecutor>{
+          'log_journal': (Map<String, String> args) async {
+            logged = args;
+            return null;
+          },
+        },
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+      );
+
+      final VoiceIntentOutcome outcome =
+          await svc.routeVoiceIntent('log that she did not sleep');
+
+      expect(outcome, isA<VoiceIntentAction>());
+      expect((outcome as VoiceIntentAction).summary,
+          'Logged that she did not sleep.');
+      expect(logged, isNotNull);
+      expect(logged!['situation'], 'did not sleep');
+      // No conversation was created — it acted in place.
+      expect(await repo.listConversations(), isEmpty);
+    });
+
+    test('a spoken QUESTION opens a thread with the answer already persisted',
+        () async {
+      final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+        const ChatDeltaText('Step into her reality and reassure her.'),
+      ]);
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: backend,
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+      );
+
+      final VoiceIntentOutcome outcome =
+          await svc.routeVoiceIntent('why is she pacing at night');
+
+      expect(outcome, isA<VoiceIntentChat>());
+      // Voice-mode prompt was used (not the plain chat prompt).
+      expect(backend.lastSystemPrompt, equals(voiceIntentSystemPrompt));
+      final List<Message> msgs =
+          await repo.loadMessages((outcome as VoiceIntentChat).conversationId);
+      expect(msgs.first.role, MessageRole.user);
+      expect(msgs.first.body, 'why is she pacing at night');
+      expect(msgs.last.role, MessageRole.assistant);
+      expect(msgs.last.body, 'Step into her reality and reassure her.');
+    });
+
+    test('an UNREGISTERED action tag falls back to a chat (no false "Done")',
+        () async {
+      // The model sometimes invents an unsupported action name; nothing
+      // would be written, so it must not flash an action confirmation.
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText(
+            'Noted.\n[action:teleport_her_home when="now"]',
+          ),
+        ]),
+        // No executors wired — the tag matches nothing.
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+      );
+
+      final VoiceIntentOutcome outcome =
+          await svc.routeVoiceIntent('teleport her home');
+      expect(outcome, isA<VoiceIntentChat>());
+    });
+
+    test('a backend error opens a retryable thread instead of throwing',
+        () async {
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaError('shim down'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+      );
+
+      final VoiceIntentOutcome outcome =
+          await svc.routeVoiceIntent('why is she pacing');
+      expect(outcome, isA<VoiceIntentChat>());
+      final List<Message> msgs =
+          await repo.loadMessages((outcome as VoiceIntentChat).conversationId);
+      expect(chatBodyHasError(msgs.last.body), isTrue);
+    });
+  });
+}
+
+/// Format a partial token chunk the way the shim forwards them when run
+/// with --include-partial-messages — a `stream_event` carrying a
+/// `content_block_delta` / `text_delta`.
+String _textDeltaEvent(String text) {
+  final Map<String, Object?> event = <String, Object?>{
+    'type': 'stream_event',
+    'event': <String, Object?>{
+      'type': 'content_block_delta',
+      'index': 1,
+      'delta': <String, Object?>{'type': 'text_delta', 'text': text},
+    },
+  };
+  return 'data: ${json.encode(event)}\n\n';
 }
 
 /// Format an assistant-text SSE event the way the shim forwards them —

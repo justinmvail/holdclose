@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/feedback_service.dart';
+import '../../services/log_buffer.dart';
 import '../../theme.dart';
 
 /// Opens the alpha feedback sheet. Shared entry point so the overlay and
@@ -119,6 +120,9 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
       route: widget.route,
       testerName: name,
       hasScreenshot: attach,
+      // Snapshot recent on-device logs so the report carries context that
+      // a screenshot + sentence can't (the "works but wrong" class).
+      logs: LogBuffer.instance.snapshot(),
     );
     final bool delivered =
         await ref.read(feedbackControllerProvider).submit(

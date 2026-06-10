@@ -12,6 +12,7 @@
 library;
 
 import 'package:careblazers/app.dart';
+import 'package:careblazers/widgets/tab_scaffold.dart';
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/appointment.dart';
 import 'package:careblazers/models/journal_entry.dart';
@@ -380,7 +381,7 @@ final Finder homeGreeting = find.byKey(HomeScreen.greetingKey);
 /// the bar is four tabs — `Home · Care · Chat · Community` — with the old
 /// Team tab folded into Care as a gated Care Circle hub.
 Finder tabFor(String label) => find.descendant(
-      of: find.byType(NavigationBar),
+      of: find.byType(TabScaffoldBar),
       matching: find.text(label),
     );
 

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/home_clock_provider.dart';
-import '../routing/router.dart';
 import '../theme.dart';
 import '../widgets/home/catch_me_up_card.dart';
 import '../widgets/home/community_recap_card.dart';
@@ -24,7 +22,6 @@ class HomeScreen extends ConsumerWidget {
 
   static const Key dashboardListKey = Key('home-dashboard-list');
   static const Key greetingKey = Key('home-greeting');
-  static const Key profileButtonKey = Key('home-profile-button');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -68,30 +65,9 @@ class HomeScreen extends ConsumerWidget {
                       title: greetingLine(now.hour, name),
                       backLabel: 'Back to Home',
                       leadingIcon: Icons.home_outlined,
-                      // Force a 24×24 tap target so the IconButton's
-                      // implicit Material/ink-well padding can't expand
-                      // the title row's height. The InkWell inside still
-                      // gives a ripple within the 24-px box; tooltip +
-                      // accessibility label travel through the wrapper.
-                      trailing: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: IconButton(
-                          key: HomeScreen.profileButtonKey,
-                          icon: const Icon(Icons.account_circle_outlined),
-                          iconSize: 24,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints.tightFor(
-                            width: 24,
-                            height: 24,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          color: context.cb.primary,
-                          tooltip: 'Profile & settings',
-                          onPressed: () => GoRouter.of(context)
-                              .pushNamed(CareblazersRoutes.settings),
-                        ),
-                      ),
+                      // Profile/settings now lives in PathHeader's standard
+                      // top-right cluster (on every screen), so Home no
+                      // longer supplies its own.
                     );
                   },
                 ),

@@ -85,3 +85,6 @@ coverage/
 test/**/goldens/**/*.*
 test/**/failures/**/*.*
 !test/**/goldens/ci/*.*
+
+# Claude Code session/harness state (lock files, etc.)
+.claude/

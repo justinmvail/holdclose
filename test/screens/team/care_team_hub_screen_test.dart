@@ -104,20 +104,21 @@ void main() {
       );
     });
 
-    testWidgets('is a pushed page — Care › Care Circle breadcrumb trail',
+    testWidgets('is a pushed page — Home › Care › Care Circle breadcrumb trail',
         (WidgetTester tester) async {
       await _pumpHub(tester);
 
-      // Pushed under the Care tab now, so the PathHeader carries a full
-      // two-crumb trail (Care › Care Circle) with the parent 'Care' crumb
-      // as the back affordance.
+      // Every trail starts from Home now, so this reads
+      // "Home › Care › Care Circle" with the parent 'Care' crumb as the
+      // back affordance.
       expect(find.byType(PathHeader), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
       // "Care Circle" appears twice — as the terminal crumb and as the
       // page title.
       expect(find.text('Care Circle'), findsNWidgets(2));
       expect(find.widgetWithText(InkWell, 'Care'), findsOneWidget);
-      // A two-crumb header renders the separator between the crumbs.
-      expect(find.text('›'), findsOneWidget);
+      // Three crumbs (Home › Care › Care Circle) → two separators.
+      expect(find.text('›'), findsNWidgets(2));
     });
 
     for (final (String label, _, String route) in _expected) {

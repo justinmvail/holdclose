@@ -18,7 +18,7 @@ class _ProgrammableVoiceCapture implements VoiceCapture {
   final Completer<String?>? completer;
 
   @override
-  Future<String?> capture() {
+  Future<String?> capture({void Function(String partial)? onPartial}) {
     if (completer != null) return completer!.future;
     return Future<String?>.value(result);
   }
@@ -29,7 +29,7 @@ class _DeniedVoiceCapture implements VoiceCapture {
   const _DeniedVoiceCapture();
 
   @override
-  Future<String?> capture() async =>
+  Future<String?> capture({void Function(String partial)? onPartial}) async =>
       throw const VoiceCapturePermissionDeniedException();
 }
 

@@ -101,8 +101,8 @@ void main() {
     });
   });
 
-  group('PathHeader — hub landing (single crumb)', () {
-    testWidgets('renders the title only — no breadcrumb',
+  group('PathHeader — tab landing (single crumb)', () {
+    testWidgets('a non-Home landing gets a Home crumb prepended (Home › X)',
         (WidgetTester tester) async {
       await _pumpRouter(
         tester,
@@ -115,8 +115,28 @@ void main() {
         ),
       );
 
-      expect(find.text('Medical'), findsOneWidget); // title only
-      expect(find.text('›'), findsNothing);
+      // Every page starts from Home → "Home › Medical", not a bare title.
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('›'), findsOneWidget); // one separator: Home › Medical
+      // 'Medical' is both the title and the terminal crumb.
+      expect(find.text('Medical'), findsNWidgets(2));
+    });
+
+    testWidgets('the Home root suppresses the breadcrumb (just "Home")',
+        (WidgetTester tester) async {
+      await _pumpRouter(
+        tester,
+        _routerHosting(
+          const PathHeader(
+            breadcrumbs: <PathHeaderCrumb>[PathHeaderCrumb(label: 'Home')],
+            title: 'Good morning',
+          ),
+          initialLocation: '/medical/medications',
+        ),
+      );
+
+      expect(find.text('Good morning'), findsOneWidget); // title only
+      expect(find.text('›'), findsNothing); // no self-referential crumb
     });
   });
 

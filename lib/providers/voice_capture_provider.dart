@@ -26,11 +26,17 @@ abstract class VoiceCapture {
   /// no recognizer is wired yet. Callers treat a null/blank result as
   /// "no transcript" and don't navigate.
   ///
+  /// [onPartial], when given, is invoked with the best running transcript
+  /// as the recognizer hears more words — so a caller can show live,
+  /// Siri-style dictation while the caregiver is still speaking. It may
+  /// fire zero times (a stand-in recognizer, or a one-shot result). The
+  /// final value is still the Future's result.
+  ///
   /// Throws [VoiceCapturePermissionDeniedException] when the OS refused
   /// microphone / speech access — distinct from a null result so the
   /// caller can surface a clear "turn the mic on" prompt instead of
   /// failing silently (Phase 14.14).
-  Future<String?> capture();
+  Future<String?> capture({void Function(String partial)? onPartial});
 }
 
 /// Raised by [VoiceCapture.capture] when microphone / speech-recognition
@@ -52,7 +58,8 @@ class UnavailableVoiceCapture implements VoiceCapture {
   const UnavailableVoiceCapture();
 
   @override
-  Future<String?> capture() async => null;
+  Future<String?> capture({void Function(String partial)? onPartial}) async =>
+      null;
 }
 
 /// Pure impl selector — [RealVoiceCapture] when [useReal] is set, else

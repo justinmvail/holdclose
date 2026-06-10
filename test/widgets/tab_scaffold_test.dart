@@ -9,6 +9,7 @@ import 'package:careblazers/screens/chat/chat_screen.dart';
 import 'package:careblazers/screens/chat/conversation_list_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/medical/medical_hub_screen.dart';
+import 'package:careblazers/services/chat_actions.dart';
 import 'package:careblazers/services/chat_repository.dart';
 import 'package:careblazers/services/chat_service.dart';
 import 'package:careblazers/theme.dart';
@@ -29,25 +30,34 @@ Future<Widget> _pumpBar(
     currentIndex: currentIndex,
     onDestinationSelected: onTap ?? (_) {},
   );
-  await tester.pumpWidget(MaterialApp(
-    home: Scaffold(
-      body: const SizedBox.shrink(),
-      bottomNavigationBar: bar,
+  // ProviderScope because the bar's inline center mic is a ConsumerWidget
+  // (it looks up the container at mount, even though build reads nothing).
+  await tester.pumpWidget(ProviderScope(
+    child: MaterialApp(
+      home: Scaffold(
+        body: const SizedBox.shrink(),
+        bottomNavigationBar: bar,
+      ),
     ),
   ));
   await tester.pumpAndSettle();
   return bar;
 }
 
-/// A [ChatLLMBackend] that yields a canned reply — keeps the center-button
-/// new-chat test off the live shim.
-class _FakeChatBackend implements ChatLLMBackend {
+/// A [ChatLLMBackend] that yields one canned reply — keeps the center-button
+/// voice-intent tests off the live shim. The reply text drives the
+/// action-vs-chat routing (an `[action:…]` tag → action; prose → chat).
+class _ScriptedChatBackend implements ChatLLMBackend {
+  const _ScriptedChatBackend(this.reply);
+
+  final String reply;
+
   @override
   Stream<ChatDelta> streamReply({
     required String systemPrompt,
     required List<ChatTurn> history,
   }) async* {
-    yield const ChatDeltaText('A gentle idea.');
+    yield ChatDeltaText(reply);
   }
 }
 
@@ -58,7 +68,7 @@ class _FakeVoiceCapture implements VoiceCapture {
   final String? transcript;
 
   @override
-  Future<String?> capture() async => transcript;
+  Future<String?> capture({void Function(String partial)? onPartial}) async => transcript;
 }
 
 Future<({GoRouter router, ChatRepository repo})> _pumpRouter(
@@ -158,24 +168,37 @@ void main() {
   });
 
   group('TabScaffoldBar — standalone widget', () {
-    testWidgets('always renders all four NavigationDestinations',
+    testWidgets('renders the four tabs spread around the inline center mic',
         (WidgetTester tester) async {
       await _pumpBar(tester, currentIndex: 0);
 
-      expect(find.byType(NavigationBar), findsOneWidget);
-      expect(find.byType(NavigationDestination), findsNWidgets(4));
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Care'), findsOneWidget);
       expect(find.text('Chat'), findsOneWidget);
       expect(find.text('Community'), findsOneWidget);
+      // The mic is an inline center action, not a tab.
+      expect(find.byKey(TabScaffold.centerVoiceButtonKey), findsOneWidget);
       // The old Medical/Team labels are gone.
       expect(find.text('Medical'), findsNothing);
       expect(find.text('Team'), findsNothing);
     });
 
-    testWidgets('forwards taps to onDestinationSelected by slot index',
+    testWidgets('the inline mic sits between Care and Chat (2 left / 2 right)',
         (WidgetTester tester) async {
-      // Bar order: [Home, Care, Chat, Community] → slots 0..3.
+      await _pumpBar(tester, currentIndex: 0);
+
+      double cx(Finder f) => tester.getCenter(f).dx;
+      final double mic = cx(find.byKey(TabScaffold.centerVoiceButtonKey));
+      // Home + Care are left of the mic; Chat + Community are right of it.
+      expect(cx(find.text('Home')), lessThan(mic));
+      expect(cx(find.text('Care')), lessThan(mic));
+      expect(cx(find.text('Chat')), greaterThan(mic));
+      expect(cx(find.text('Community')), greaterThan(mic));
+    });
+
+    testWidgets('forwards taps to onDestinationSelected by branch index',
+        (WidgetTester tester) async {
+      // Tab order: [Home, Care, Chat, Community] → branch 0..3.
       int? tapped;
       await _pumpBar(
         tester,
@@ -191,39 +214,31 @@ void main() {
     });
 
     testWidgets(
-      'NavigationBarTheme paints active=primary / inactive=primarySoft',
+      'paints the active tab primary and inactive tabs primarySoft',
       (WidgetTester tester) async {
+        // Care (branch 1) is active.
         await _pumpBar(tester, currentIndex: 1);
 
-        final BuildContext barContext =
-            tester.element(find.byType(NavigationBar));
-        final NavigationBarThemeData themeData =
-            NavigationBarTheme.of(barContext);
-
-        final IconThemeData selectedIcon = themeData.iconTheme!
-            .resolve(<WidgetState>{WidgetState.selected})!;
-        final IconThemeData unselectedIcon =
-            themeData.iconTheme!.resolve(<WidgetState>{})!;
-        expect(selectedIcon.color, careblazersColors.primary);
-        expect(unselectedIcon.color, careblazersColors.primarySoft);
-
-        final TextStyle selectedLabel = themeData.labelTextStyle!
-            .resolve(<WidgetState>{WidgetState.selected})!;
-        final TextStyle unselectedLabel =
-            themeData.labelTextStyle!.resolve(<WidgetState>{})!;
-        expect(selectedLabel.color, careblazersColors.primary);
-        expect(unselectedLabel.color, careblazersColors.primarySoft);
+        Color iconColor(IconData glyph) =>
+            tester.widget<Icon>(find.byIcon(glyph)).color!;
+        // Active tab shows its filled glyph in primary…
+        expect(iconColor(Icons.volunteer_activism), careblazersColors.primary);
+        // …inactive tabs show their outlined glyph in primarySoft.
+        expect(iconColor(Icons.home_outlined), careblazersColors.primarySoft);
+        expect(
+          iconColor(Icons.chat_bubble_outline),
+          careblazersColors.primarySoft,
+        );
       },
     );
 
     testWidgets(
-      'currentIndex highlights the matching destination',
+      'currentIndex shows the matching tab\'s filled glyph',
       (WidgetTester tester) async {
+        // Chat (branch 2) active → filled chat glyph, no outlined one.
         await _pumpBar(tester, currentIndex: 2);
-        expect(
-          tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-          2,
-        );
+        expect(find.byIcon(Icons.chat_bubble), findsOneWidget);
+        expect(find.byIcon(Icons.chat_bubble_outline), findsNothing);
       },
     );
   });
@@ -296,19 +311,18 @@ void main() {
       (WidgetTester tester) async {
         await _pumpRouter(tester);
 
-        // Four-tab invariant intact — no fifth destination.
-        expect(find.byType(NavigationDestination), findsNWidgets(4));
+        // Four-tab invariant intact — exactly the four labelled tabs.
         expect(find.text('Home'), findsOneWidget);
         expect(find.text('Care'), findsOneWidget);
         expect(find.text('Chat'), findsOneWidget);
         expect(find.text('Community'), findsOneWidget);
-        // The mic is an additive docked center element, not a tab.
+        // The mic is an additive inline center element, not a tab.
         expect(find.byKey(TabScaffold.centerVoiceButtonKey), findsOneWidget);
       },
     );
 
     testWidgets(
-      'tapping the center mic starts a new chat and sends the spoken message',
+      'a spoken QUESTION routes to a new chat with the coach\'s answer',
       (WidgetTester tester) async {
         final ({GoRouter router, ChatRepository repo}) p = await _pumpRouter(
           tester,
@@ -316,41 +330,88 @@ void main() {
             voiceCaptureProvider.overrideWithValue(
               const _FakeVoiceCapture('why is she pacing at night'),
             ),
-            chatLLMBackendProvider.overrideWithValue(_FakeChatBackend()),
-            conversationListIdFactoryProvider.overrideWithValue(
-              () => 'voice-convo-1',
-            ),
-            conversationListClockProvider.overrideWithValue(
-              () => DateTime.utc(2026, 5, 30, 12),
+            // Reply is plain prose (no [action:…]) → routeVoiceIntent opens
+            // a chat. chatServiceProvider reads the overridden repo from the
+            // graph, so the persisted thread lands in p.repo.
+            chatServiceProvider.overrideWith(
+              (Ref ref) => ChatService(
+                repository: ref.watch(chatRepositoryProvider),
+                backend: const _ScriptedChatBackend('A gentle idea.'),
+                idFactory: _seqIds(<String>['voice-convo-1', 'u1', 'a1']),
+                clock: () => DateTime.utc(2026, 5, 30, 12),
+              ),
             ),
           ],
         );
 
         await tester.tap(find.byKey(TabScaffold.centerVoiceButtonKey));
-        // Bounded pumps rather than pumpAndSettle — the assistant reply
-        // streams through CaptionFade, whose ticker keeps the frame loop
-        // busy (pumpAndSettle would time out). A handful of frames is
-        // enough for the capture future, navigation, and auto-send.
+        // Bounded pumps — CaptionFade's ticker keeps the frame loop busy so
+        // pumpAndSettle would time out. Enough frames for capture → route →
+        // navigation → render.
         for (int i = 0; i < 12; i++) {
           await tester.pump(const Duration(milliseconds: 50));
         }
 
-        // Navigated into the freshly-minted thread.
+        // Opened the freshly-minted thread, answer already in place.
         expect(_currentPath(p.router), '/chat/voice-convo-1');
         expect(find.byType(ChatScreen), findsOneWidget);
-
-        // The spoken phrase was sent as the first user turn.
-        expect(
-          find.descendant(
-            of: find.byKey(ChatScreen.listKey),
-            matching: find.text('why is she pacing at night'),
-          ),
-          findsOneWidget,
-        );
         final List<Message> persisted =
             await p.repo.loadMessages('voice-convo-1');
         expect(persisted.first.role, MessageRole.user);
         expect(persisted.first.body, 'why is she pacing at night');
+        expect(persisted.last.role, MessageRole.assistant);
+        expect(persisted.last.body, 'A gentle idea.');
+      },
+    );
+
+    testWidgets(
+      'a spoken COMMAND runs the action + stays put — no chat thread',
+      (WidgetTester tester) async {
+        Map<String, String>? logged;
+        final ({GoRouter router, ChatRepository repo}) p = await _pumpRouter(
+          tester,
+          extraOverrides: <Override>[
+            voiceCaptureProvider.overrideWithValue(
+              const _FakeVoiceCapture('log that she did not sleep'),
+            ),
+            // Reply carries an [action:…] tag → routeVoiceIntent executes it
+            // and does NOT navigate.
+            chatServiceProvider.overrideWith(
+              (Ref ref) => ChatService(
+                repository: ref.watch(chatRepositoryProvider),
+                backend: const _ScriptedChatBackend(
+                  'Logged that she did not sleep.\n'
+                  '[action:log_journal occurred_at="just now" '
+                  'situation="did not sleep" attempts="none"]',
+                ),
+                actions: <String, ChatActionExecutor>{
+                  'log_journal': (Map<String, String> args) async {
+                    logged = args;
+                    return null;
+                  },
+                },
+                idFactory: _seqIds(<String>['x1', 'x2', 'x3']),
+                clock: () => DateTime.utc(2026, 5, 30, 12),
+              ),
+            ),
+          ],
+        );
+
+        await tester.tap(find.byKey(TabScaffold.centerVoiceButtonKey));
+        for (int i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+
+        // The action ran with the spoken details…
+        expect(logged, isNotNull);
+        expect(logged!['situation'], 'did not sleep');
+        // …and we stayed on Home — no thread was created or navigated to.
+        expect(_currentPath(p.router), '/');
+        expect(await p.repo.listConversations(), isEmpty);
+
+        // Let the confirmation overlay's auto-dismiss timer fire so no timer
+        // is left pending at teardown.
+        await tester.pump(const Duration(milliseconds: 2700));
       },
     );
 
@@ -362,9 +423,6 @@ void main() {
           extraOverrides: <Override>[
             voiceCaptureProvider.overrideWithValue(
               const _FakeVoiceCapture(null),
-            ),
-            conversationListIdFactoryProvider.overrideWithValue(
-              () => 'should-not-exist',
             ),
           ],
         );
@@ -378,4 +436,12 @@ void main() {
       },
     );
   });
+}
+
+/// A sequential id factory — returns the given ids in order, then repeats
+/// the last. Lets a test pin the conversation + message ids
+/// [ChatService.routeVoiceIntent] mints (it calls idFactory once per row).
+ChatIdFactory _seqIds(List<String> ids) {
+  int i = 0;
+  return () => ids[i < ids.length ? i++ : ids.length - 1];
 }

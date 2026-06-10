@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:careblazers/db/database.dart';
+import 'package:careblazers/widgets/tab_scaffold.dart';
 import 'package:careblazers/l10n/app_localizations.dart';
 import 'package:careblazers/models/chat.dart';
 import 'package:careblazers/providers/auth_provider.dart';
@@ -192,7 +193,7 @@ void main() {
 
         expect(currentPath(router), '/');
         expect(find.byType(HomeScreen), findsOneWidget);
-        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(find.byType(TabScaffoldBar), findsOneWidget);
       },
     );
 
@@ -208,7 +209,7 @@ void main() {
         expect(currentPath(router), '/medical');
         expect(find.byType(MedicalHubScreen), findsOneWidget);
         expect(
-          find.byType(NavigationBar),
+          find.byType(TabScaffoldBar),
           findsOneWidget,
           reason: 'a shell branch keeps the bottom tab bar visible',
         );
@@ -219,21 +220,21 @@ void main() {
         await tester.pumpAndSettle();
         expect(currentPath(router), '/team');
         expect(find.byType(CareTeamHubScreen), findsOneWidget);
-        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(find.byType(TabScaffoldBar), findsOneWidget);
 
         // Chat branch — direct landing.
         router.go('/chat');
         await tester.pumpAndSettle();
         expect(currentPath(router), '/chat');
         expect(find.byType(ConversationListScreen), findsOneWidget);
-        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(find.byType(TabScaffoldBar), findsOneWidget);
 
         // Community branch — direct landing.
         router.go('/community');
         await tester.pumpAndSettle();
         expect(currentPath(router), '/community');
         expect(find.byType(CommunityFeedScreen), findsOneWidget);
-        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(find.byType(TabScaffoldBar), findsOneWidget);
 
         // Back to Home.
         router.go('/');
@@ -260,7 +261,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.byType(NavigationBar),
+          find.byType(TabScaffoldBar),
           findsOneWidget,
           reason: 'a thread pushed onto the branch navigator keeps the '
               'tab bar',
@@ -294,7 +295,7 @@ void main() {
         // bar. The Home landing is a hub landing (single breadcrumb), so
         // it renders no tappable parent crumb.
         expect(find.widgetWithText(InkWell, 'Care'), findsNothing);
-        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(find.byType(TabScaffoldBar), findsOneWidget);
 
         // `push` adds an imperative match on top of the current stack;
         // go_router doesn't roll the displayed URL forward for imperative
@@ -315,7 +316,7 @@ void main() {
               "in place of the old AppBar back arrow",
         );
         expect(
-          find.byType(NavigationBar),
+          find.byType(TabScaffoldBar),
           findsOneWidget,
           reason: 'an in-branch feature route keeps the bottom tab bar',
         );
@@ -327,7 +328,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(MedicalHubScreen), findsOneWidget);
         expect(find.byType(MedicationListScreen), findsNothing);
-        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(find.byType(TabScaffoldBar), findsOneWidget);
         expect(currentPath(router), '/medical');
       },
     );
@@ -346,7 +347,7 @@ void main() {
         // the Care shell branch, so the bottom tab bar stays visible.
         expect(find.widgetWithText(InkWell, 'Care'), findsOneWidget);
         expect(
-          find.byType(NavigationBar),
+          find.byType(TabScaffoldBar),
           findsOneWidget,
           reason: 'an in-branch feature route keeps the bottom tab bar',
         );
@@ -356,7 +357,7 @@ void main() {
         await tester.tap(find.widgetWithText(InkWell, 'Care'));
         await tester.pumpAndSettle();
         expect(find.byType(MedicalHubScreen), findsOneWidget);
-        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(find.byType(TabScaffoldBar), findsOneWidget);
         expect(currentPath(router), '/medical');
       },
     );
@@ -374,7 +375,7 @@ void main() {
         // affordance is the tappable 'Journal' breadcrumb crumb — the
         // replacement for the old AppBar back arrow.
         expect(find.widgetWithText(InkWell, 'Journal'), findsOneWidget);
-        expect(find.byType(NavigationBar), findsNothing);
+        expect(find.byType(TabScaffoldBar), findsNothing);
 
         // Tapping the crumb runs context.go('/journal') → the Journal
         // screen; the behavior picker is gone.
@@ -738,7 +739,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(HomeScreen), findsOneWidget);
-        expect(find.byType(NavigationBar), findsOneWidget,
+        expect(find.byType(TabScaffoldBar), findsOneWidget,
             reason: 'tab bar must be visible once the user lands on /');
       },
     );

@@ -167,9 +167,13 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
     try {
       response = await dio.post<ResponseBody>(
         endpoint,
-        data: <String, String>{
+        data: <String, dynamic>{
           'system': systemPrompt,
           'user': userMessage,
+          // Opt into token streaming — the shim adds --include-partial-messages
+          // so the reply streams in as it generates instead of landing all at
+          // once when it's finished (the decoder/recap leave this off).
+          'partial': true,
         },
         options: Options(
           responseType: ResponseType.stream,
@@ -193,6 +197,11 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
     // into a replacement char — Dr. Natali's voice includes em-dashes
     // and smart quotes the model echoes back.
     final List<int> rawBuffer = <int>[];
+    // Tracks whether any incremental token chunk has streamed. Once one
+    // has, the terminal complete `assistant` message is a duplicate of what
+    // we already emitted and is skipped. A one-element list so the static
+    // block helper can mutate it across calls.
+    final List<bool> sawPartial = <bool>[false];
     try {
       await for (final Uint8List bytes in body.stream) {
         rawBuffer.addAll(bytes);
@@ -202,8 +211,7 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
           final List<int> eventBytes = rawBuffer.sublist(0, sep);
           rawBuffer.removeRange(0, sep + 2);
           final String event = utf8.decode(eventBytes);
-          for (final ChatDelta? d in _eventsFromBlock(event)) {
-            if (d == null) continue;
+          for (final ChatDelta d in _deltasFromBlock(event, sawPartial)) {
             yield d;
             if (d is ChatDeltaError) return;
           }
@@ -214,8 +222,7 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
       if (rawBuffer.isNotEmpty) {
         final String trailing = utf8.decode(rawBuffer);
         rawBuffer.clear();
-        for (final ChatDelta? d in _eventsFromBlock(trailing)) {
-          if (d == null) continue;
+        for (final ChatDelta d in _deltasFromBlock(trailing, sawPartial)) {
           yield d;
           if (d is ChatDeltaError) return;
         }
@@ -225,29 +232,36 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
     }
   }
 
-  /// Parse one `\n\n`-delimited block of `data:` lines into zero or
-  /// more deltas. A `null` slot represents a no-op event (init line,
-  /// `[DONE]` terminator, untyped payload) that the caller should skip.
-  static Iterable<ChatDelta?> _eventsFromBlock(String block) sync* {
+  /// Parse one `\n\n`-delimited block of `data:` lines into zero or more
+  /// deltas. Incremental `text_delta` chunks (when the shim streams with
+  /// --include-partial-messages) are appended as they arrive and flip
+  /// [sawPartial]; the terminal complete `assistant` message is emitted
+  /// ONLY when no partials streamed (non-streaming mode) — otherwise it's
+  /// a duplicate of the already-streamed text and is dropped. No-op events
+  /// (init line, `[DONE]`, untyped payloads) yield nothing.
+  static Iterable<ChatDelta> _deltasFromBlock(
+      String block, List<bool> sawPartial) sync* {
     for (final String line in block.split('\n')) {
       if (!line.startsWith('data:')) continue;
       final String payload = line.substring(5).startsWith(' ')
           ? line.substring(6)
           : line.substring(5);
-      if (payload == '[DONE]') {
-        yield null;
-        continue;
-      }
+      if (payload == '[DONE]') continue;
       final _ChatEventPayload parsed = _parseEvent(payload);
       if (parsed.error != null) {
         yield ChatDeltaError(parsed.error!);
         continue;
       }
-      if (parsed.text == null || parsed.text!.isEmpty) {
-        yield null;
-        continue;
+      final String? text = parsed.text;
+      if (text == null || text.isEmpty) continue;
+      if (parsed.isPartial) {
+        sawPartial[0] = true;
+        yield ChatDeltaText(text);
+      } else if (!sawPartial[0]) {
+        // Non-streaming mode: the complete message is the whole reply.
+        yield ChatDeltaText(text);
       }
-      yield ChatDeltaText(parsed.text!);
+      // else: partials already delivered this text — drop the echo.
     }
   }
 
@@ -273,6 +287,25 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
       return _ChatEventPayload(error: obj['error'] as String);
     }
     final String? type = obj['type'] as String?;
+    // Token-streaming chunk (shim ran with --include-partial-messages):
+    // {"type":"stream_event","event":{"type":"content_block_delta",
+    //   "delta":{"type":"text_delta","text":"..."}}}. Each is an incremental
+    // fragment to append — marked isPartial so the loop can skip the
+    // duplicate complete `assistant` echo that follows.
+    if (type == 'stream_event') {
+      final dynamic ev = obj['event'];
+      if (ev is Map<String, dynamic> &&
+          ev['type'] == 'content_block_delta') {
+        final dynamic delta = ev['delta'];
+        if (delta is Map<String, dynamic> && delta['type'] == 'text_delta') {
+          final dynamic text = delta['text'];
+          if (text is String) {
+            return _ChatEventPayload(text: text, isPartial: true);
+          }
+        }
+      }
+      return const _ChatEventPayload();
+    }
     if (type == 'assistant') {
       final dynamic message = obj['message'];
       if (message is Map<String, dynamic>) {
@@ -294,9 +327,14 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
 }
 
 class _ChatEventPayload {
-  const _ChatEventPayload({this.text, this.error});
+  const _ChatEventPayload({this.text, this.error, this.isPartial = false});
   final String? text;
   final String? error;
+
+  /// True for an incremental token chunk (a `text_delta`). False for a
+  /// complete `assistant` message. Once any partial has streamed, the
+  /// terminal complete message is a duplicate and must be skipped.
+  final bool isPartial;
 }
 
 /// Mint a chat message id. Overridable so tests get deterministic ids
@@ -332,6 +370,27 @@ final RegExp _actionPattern = RegExp(
 class _ActionResult {
   const _ActionResult({required this.citation});
   final String citation;
+}
+
+/// Result of [ChatService.routeVoiceIntent] — the hands-free center mic
+/// either performed an action (no thread) or opened a conversation.
+sealed class VoiceIntentOutcome {
+  const VoiceIntentOutcome();
+}
+
+/// The spoken request was a clear command the coach carried out. [summary]
+/// is its one-line confirmation, shown in a transient overlay; no chat
+/// thread is created and the caregiver stays where they were.
+class VoiceIntentAction extends VoiceIntentOutcome {
+  const VoiceIntentAction({required this.summary});
+  final String summary;
+}
+
+/// The spoken request was a conversation. The turn + the coach's reply are
+/// already persisted under [conversationId]; the UI opens `/chat/<id>`.
+class VoiceIntentChat extends VoiceIntentOutcome {
+  const VoiceIntentChat({required this.conversationId});
+  final String conversationId;
 }
 
 /// Multi-turn dementia-care chat orchestrator (TASKS.md Phase 11.3).
@@ -522,6 +581,113 @@ class ChatService {
       }
       yield errorMessage;
     }
+  }
+
+  /// Route one SPOKEN request from the hands-free center mic. Runs the
+  /// transcript through the coach once in voice mode, then:
+  ///   - reply carries an `[action:…]` tag → execute it and return a
+  ///     [VoiceIntentAction] with the coach's short confirmation, so the UI
+  ///     flashes an overlay and stays put — NO thread is created;
+  ///   - otherwise it's a conversation → mint a thread, persist the spoken
+  ///     turn + the reply, and return [VoiceIntentChat] so the UI opens it
+  ///     with the answer already in place (no second model call).
+  ///
+  /// Never throws — a backend error degrades to opening a chat that carries
+  /// the spoken turn + a visible, retryable error bubble.
+  Future<VoiceIntentOutcome> routeVoiceIntent(String transcript) async {
+    String systemPrompt = voiceIntentSystemPrompt;
+    try {
+      final String snapshot = await contextSnapshot();
+      if (snapshot.trim().isNotEmpty) {
+        systemPrompt = '$voiceIntentSystemPrompt\n\n$snapshot';
+      }
+    } catch (_) {
+      systemPrompt = voiceIntentSystemPrompt;
+    }
+
+    final StringBuffer buffer = StringBuffer();
+    try {
+      await for (final ChatDelta delta in backend.streamReply(
+        systemPrompt: systemPrompt,
+        history: <ChatTurn>[
+          ChatTurn(role: MessageRole.user, content: transcript),
+        ],
+      )) {
+        switch (delta) {
+          case ChatDeltaText(:final String text):
+            buffer.write(text);
+          case ChatDeltaError(:final String message):
+            return _voiceToChat(transcript, '$chatErrorMarkerPrefix $message]');
+        }
+      }
+    } catch (e, st) {
+      debugPrint('Voice intent failed: $e\n$st');
+      return _voiceToChat(transcript, '$chatErrorMarkerPrefix $e]');
+    }
+
+    final String rawBody = buffer.toString();
+    // Only treat it as an action when a RECOGNISED tag is present — the model
+    // occasionally invents an unsupported name (e.g. `log_health_log` for the
+    // real `add_health_log`), which would write nothing yet flash a false
+    // "Done". An unknown/absent tag falls through to a chat so the caregiver
+    // always sees a real response.
+    final bool hasKnownAction = _actionPattern
+        .allMatches(rawBody)
+        .map((RegExpMatch m) => m.group(1)!)
+        .any(actions.containsKey);
+    if (hasKnownAction) {
+      await _executeActions(rawBody);
+      final String confirmation = stripActionMarkers(rawBody);
+      return VoiceIntentAction(
+        summary: confirmation.isNotEmpty ? confirmation : 'Done.',
+      );
+    }
+    return _voiceToChat(transcript, rawBody);
+  }
+
+  /// Persist a spoken turn + the coach's [rawBody] reply as a fresh thread
+  /// and return its id, so the mic flow opens the chat with the answer
+  /// already in place (no second model call).
+  Future<VoiceIntentOutcome> _voiceToChat(
+      String transcript, String rawBody) async {
+    final DateTime now = clock();
+    final String conversationId = idFactory();
+    await repository.createConversation(
+      id: conversationId,
+      title: _voiceThreadTitle(transcript),
+      createdAt: now,
+    );
+    await repository.appendMessage(Message(
+      id: idFactory(),
+      conversationId: conversationId,
+      role: MessageRole.user,
+      body: transcript,
+      citations: const <String>[],
+      createdAt: now,
+      streamingDone: true,
+    ));
+    // A conversation reply rarely carries an action, but run any it does so
+    // a mixed reply still writes; the bubble shows the clean prose.
+    final List<_ActionResult> actionResults = await _executeActions(rawBody);
+    await repository.appendMessage(Message(
+      id: idFactory(),
+      conversationId: conversationId,
+      role: MessageRole.assistant,
+      body: stripActionMarkers(rawBody),
+      citations: actionResults
+          .map((_ActionResult r) => r.citation)
+          .toList(growable: false),
+      createdAt: now,
+      streamingDone: true,
+    ));
+    return VoiceIntentChat(conversationId: conversationId);
+  }
+
+  /// A short thread title from the spoken transcript (first ~40 chars).
+  static String _voiceThreadTitle(String transcript) {
+    final String t = transcript.trim();
+    if (t.length <= 40) return t.isEmpty ? 'New chat' : t;
+    return '${t.substring(0, 40).trimRight()}…';
   }
 
   /// Run every recognised `[action:…]` marker the assistant emitted in

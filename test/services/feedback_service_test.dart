@@ -16,6 +16,7 @@ void main() {
     String message = 'It crashed',
     String route = '/medical/medications',
     bool hasScreenshot = false,
+    String logs = '',
     String id = 'fb_1',
   }) =>
       FeedbackReport.create(
@@ -24,6 +25,7 @@ void main() {
         route: route,
         testerName: 'Sam',
         hasScreenshot: hasScreenshot,
+        logs: logs,
         clock: () => fixed,
         idGen: () => id,
       );
@@ -41,12 +43,15 @@ void main() {
       expect(r.platform, isNotEmpty);
       expect(r.demoMode, isFalse); // no DEMO_MODE define in tests
       expect(r.appVersion, '0.1.0+2');
+      expect(r.buildStamp, 'dev'); // no BUILD_STAMP define in tests
+      expect(r.logs, ''); // none attached
     });
 
     test('toJson/fromJson round-trips every field', () {
       final FeedbackReport r = buildReport(
         category: FeedbackCategory.idea,
         hasScreenshot: true,
+        logs: 'line one\nline two',
       );
       final FeedbackReport back = FeedbackReport.fromJson(r.toJson());
       expect(back.id, r.id);
@@ -56,6 +61,8 @@ void main() {
       expect(back.testerName, r.testerName);
       expect(back.demoMode, r.demoMode);
       expect(back.appVersion, r.appVersion);
+      expect(back.buildStamp, r.buildStamp);
+      expect(back.logs, 'line one\nline two');
       expect(back.createdAt, r.createdAt);
       expect(back.hasScreenshot, isTrue);
     });
@@ -131,7 +138,11 @@ void main() {
       final FeedbackSender sender = FeedbackSender(dio: dio);
 
       final bool ok = await sender.send(
-        buildReport(category: FeedbackCategory.confusing, hasScreenshot: true),
+        buildReport(
+          category: FeedbackCategory.confusing,
+          hasScreenshot: true,
+          logs: 'tapped mic\nrouteVoiceIntent -> chat',
+        ),
         Uint8List.fromList(<int>[9, 8, 7]),
       );
 
@@ -141,6 +152,8 @@ void main() {
       expect(adapter.lastBody!['route'], '/medical/medications');
       expect(adapter.lastBody!['screenshot_base64'],
           base64Encode(<int>[9, 8, 7]));
+      // On-device logs ride along for triage context.
+      expect(adapter.lastBody!['logs'], 'tapped mic\nrouteVoiceIntent -> chat');
     });
 
     test('500 → false (left queued)', () async {

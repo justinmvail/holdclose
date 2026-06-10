@@ -35,7 +35,7 @@ class _FakeVoiceCapture implements VoiceCapture {
   final String? transcript;
 
   @override
-  Future<String?> capture() async => transcript;
+  Future<String?> capture({void Function(String partial)? onPartial}) async => transcript;
 }
 
 /// A [PendingChatMessage] notifier seeded with [_seed] so a test can pump

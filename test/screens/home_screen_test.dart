@@ -8,6 +8,7 @@ import 'package:careblazers/routing/router.dart';
 import 'package:careblazers/screens/appointment/appointment_list_screen.dart'
     show appointmentListClockProvider;
 import 'package:careblazers/screens/home_screen.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:careblazers/screens/medication/dose_log_screen.dart';
 import 'package:careblazers/screens/settings/settings_screen.dart';
 import 'package:careblazers/services/appointment_repository.dart';
@@ -119,7 +120,7 @@ void main() {
       expect(find.byType(AppBar), findsNothing);
       expect(find.byKey(HomeScreen.dashboardListKey), findsOneWidget);
       expect(find.byKey(HomeScreen.greetingKey), findsOneWidget);
-      expect(find.byKey(HomeScreen.profileButtonKey), findsOneWidget);
+      expect(find.byKey(PathHeader.profileButtonKey), findsOneWidget);
     });
 
     testWidgets('greeting says "Good morning" before noon',
@@ -144,7 +145,7 @@ void main() {
         (WidgetTester tester) async {
       await _pumpHome(tester, now: DateTime(2026, 6, 1, 9));
       final IconButton button = tester
-          .widget<IconButton>(find.byKey(HomeScreen.profileButtonKey));
+          .widget<IconButton>(find.byKey(PathHeader.profileButtonKey));
       expect((button.icon as Icon).icon, Icons.account_circle_outlined);
       // The Home refactor moved the greeting into a [PathHeader] and pinned
       // the trailing profile affordance to a 24×24 box so the IconButton's
@@ -158,7 +159,7 @@ void main() {
       await _pumpHome(tester, now: DateTime(2026, 6, 1, 9));
 
       expect(find.byType(SettingsScreen), findsNothing);
-      await tester.tap(find.byKey(HomeScreen.profileButtonKey));
+      await tester.tap(find.byKey(PathHeader.profileButtonKey));
       await tester.pumpAndSettle();
       expect(find.byType(SettingsScreen), findsOneWidget);
     });

@@ -148,7 +148,7 @@ class RealVoiceNoteRecorder implements VoiceNoteRecorder {
 /// [VoiceCapturePermissionDeniedException] so the [VoiceButton] flow can
 /// surface the permission snackbar rather than failing silently.
 class RealVoiceCapture implements VoiceCapture {
-  RealVoiceCapture({SpeechToText? speech, this.listenFor})
+  RealVoiceCapture({SpeechToText? speech, this.listenFor, this.pauseFor})
       : _injectedSpeech = speech;
 
   // Lazy for the same reason as the recorder: keep construction
@@ -160,14 +160,22 @@ class RealVoiceCapture implements VoiceCapture {
   SpeechToText get _speech =>
       _injectedSpeech ?? (_lazySpeech ??= SpeechToText());
 
-  /// Hard cap on a single listen session. Null lets `speech_to_text`
-  /// use its own pause-driven default.
+  /// Hard cap on a single listen session. Defaults to 30s.
   final Duration? listenFor;
+
+  /// Silence that ends a session early. Defaults to 3s. CRITICAL: without
+  /// a pauseFor (or listenFor) passed *at the top level* of `listen()`,
+  /// `speech_to_text` calls `_setupListenAndPause(null, null)` and the iOS
+  /// session never auto-finalizes — `finalResult` never fires and
+  /// `capture()` hangs forever (the spinner on the center mic spins with
+  /// no result; fb IMG_0725). The earlier impl only set `listenFor` inside
+  /// `SpeechListenOptions`, which the pause timer ignores — hence the hang.
+  final Duration? pauseFor;
 
   bool _initialized = false;
 
   @override
-  Future<String?> capture() async {
+  Future<String?> capture({void Function(String partial)? onPartial}) async {
     bool permissionDenied = false;
 
     if (!_initialized) {
@@ -196,25 +204,64 @@ class RealVoiceCapture implements VoiceCapture {
       return null;
     }
 
+    final Duration maxListen = listenFor ?? const Duration(seconds: 30);
+    final Duration silence = pauseFor ?? const Duration(seconds: 3);
+
     final Completer<String?> completer = Completer<String?>();
+    // Accumulate partials so we can resolve with the best transcript even
+    // when the session ends via silence/timeout (status update) rather than
+    // a discrete `finalResult` — on iOS the latter is not guaranteed.
+    String lastWords = '';
+    Timer? safety;
+
+    void finish() {
+      if (completer.isCompleted) return;
+      safety?.cancel();
+      _speech.statusListener = null;
+      final String words = lastWords.trim();
+      completer.complete(words.isEmpty ? null : words);
+    }
+
+    // Resolve when the engine stops on its own — pauseFor silence, listenFor
+    // timeout, or the user stopping — so the UI never waits on a final
+    // result that may never arrive.
+    _speech.statusListener = (String status) {
+      if (status == SpeechToText.doneStatus ||
+          status == SpeechToText.notListeningStatus) {
+        finish();
+      }
+    };
 
     await _speech.listen(
       onResult: (SpeechRecognitionResult result) {
-        if (result.finalResult && !completer.isCompleted) {
-          final String words = result.recognizedWords.trim();
-          completer.complete(words.isEmpty ? null : words);
-        }
+        lastWords = result.recognizedWords;
+        // Push the running transcript up so the UI can show live dictation
+        // (Siri-style) while the caregiver is still talking.
+        if (lastWords.trim().isNotEmpty) onPartial?.call(lastWords);
+        if (result.finalResult) finish();
       },
+      // Top-level pauseFor/listenFor — REQUIRED; these (not the options copy)
+      // drive the plugin's pause/timeout timers.
+      listenFor: maxListen,
+      pauseFor: silence,
       listenOptions: SpeechListenOptions(
-        partialResults: false,
+        partialResults: true,
         cancelOnError: true,
-        listenFor: listenFor,
+        listenMode: ListenMode.dictation,
       ),
     );
 
-    // Resolves when the engine emits its final result (the listener
-    // above completes the completer). `cancelOnError: true` ends the
-    // session on a recognizer error so this can't hang indefinitely.
+    // Absolute backstop: even if neither a final result nor a status update
+    // ever lands, stop the session and resolve so the spinner can't hang.
+    safety = Timer(maxListen + const Duration(seconds: 3), () async {
+      try {
+        await _speech.stop();
+      } catch (_) {
+        // Best-effort stop; we resolve regardless below.
+      }
+      finish();
+    });
+
     return completer.future;
   }
 }

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../services/feedback_service.dart'
+    show alphaFeedbackEnabled, feedbackTriggerProvider;
 import '../theme.dart';
 
 /// One segment of a [PathHeader] breadcrumb trail (BUILD_SPEC.md §4.1
@@ -24,22 +27,24 @@ class PathHeaderCrumb {
   bool get isTappable => route != null;
 }
 
-/// Reusable header at the top of every feature page below a hub
-/// (BUILD_SPEC.md §4.1, docs/MENU_LAYOUT_SPEC.md). Renders, top to
-/// bottom:
+/// Reusable header at the top of every feature page (BUILD_SPEC.md §4.1,
+/// docs/MENU_LAYOUT_SPEC.md). Renders, top to bottom:
 ///
-/// 1. A **breadcrumb row** — e.g. `Home › Medical › Medications` — with
-///    `›` separators. Every non-terminal segment is tappable and calls
-///    `context.go(crumb.route)`, so the parent crumb IS the back
-///    affordance — there's no separate "Back" button (that was redundant
-///    with the breadcrumb and was removed).
-/// 2. A **title row** — the page title (`headlineMedium`, navy) with an
-///    optional 24px leading [leadingIcon].
+/// 1. A **title row** — the page title (`headlineMedium`, navy) with an
+///    optional 24px leading [leadingIcon] and the standard top-right
+///    actions cluster (report + profile).
+/// 2. A **breadcrumb row** directly beneath it — e.g.
+///    `Home › Care › Medications` — with `›` separators. Every page's trail
+///    starts from **Home** (prepended automatically when a screen's trail
+///    doesn't already), so the format + position are identical everywhere,
+///    and the tab landings read `Home › Care` / `Home › Chat` etc. Every
+///    non-terminal segment is tappable and calls `context.go(crumb.route)`,
+///    so the parent crumb IS the back affordance — there's no separate
+///    "Back" button (that was redundant with the breadcrumb and was
+///    removed).
 ///
-/// **Hub landings render the title row only.** When [breadcrumbs] has a
-/// single entry the widget is at a top-level landing (Home, Chat,
-/// Community, or the Medical / Care Team hubs themselves), so the
-/// breadcrumb row is suppressed.
+/// **Only the Home root suppresses the breadcrumb** — its trail is just
+/// "Home", a self-referential crumb that adds nothing.
 ///
 /// Brand tokens (BUILD_SPEC.md §3.1): navy ([CareblazersColors.primary])
 /// for crumb + title text, [CareblazersColors.primarySoft] for the `›`
@@ -75,14 +80,34 @@ class PathHeader extends StatelessWidget {
   /// existing call sites still compile; remove in a follow-up cleanup.
   final VoidCallback? onBack;
 
-  /// Optional widget pinned to the right of the title row — typically a
-  /// profile / settings affordance on a tab landing. Sits opposite the
-  /// [leadingIcon] so the title can still expand to fill the middle.
+  /// Optional SCREEN-SPECIFIC action pinned to the right of the title row
+  /// (e.g. an Add button). Sits to the LEFT of the standard top-right
+  /// cluster ([_HeaderActions] — report + profile), which every header
+  /// carries so those affordances are predictable on every screen.
   final Widget? trailing;
 
-  /// A single crumb means this is a top-level landing — suppress the
-  /// breadcrumb row and the Back control.
-  bool get _isHubLanding => breadcrumbs.length == 1;
+  /// Tap targets / test handles for the standard top-right cluster.
+  static const Key profileButtonKey = Key('path-header-profile');
+  static const Key reportButtonKey = Key('path-header-report');
+
+  /// The trail actually rendered — every page starts from Home so the
+  /// format is identical everywhere. A trail that doesn't already begin at
+  /// Home gets a Home crumb (→ `/`) prepended, so the tab landings read
+  /// "Home › Care", "Home › Chat", etc. instead of a bare title.
+  List<PathHeaderCrumb> get _trail {
+    if (breadcrumbs.isNotEmpty && breadcrumbs.first.label == 'Home') {
+      return breadcrumbs;
+    }
+    return <PathHeaderCrumb>[
+      const PathHeaderCrumb(label: 'Home', route: '/'),
+      ...breadcrumbs,
+    ];
+  }
+
+  /// Show the breadcrumb row on every page EXCEPT the Home root itself
+  /// (where the trail is just "Home" — a self-referential crumb adds
+  /// nothing).
+  bool get _showBreadcrumbs => _trail.length > 1;
 
   @override
   Widget build(BuildContext context) {
@@ -91,11 +116,13 @@ class PathHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        if (!_isHubLanding) ...<Widget>[
-          _buildBreadcrumbs(context, textTheme),
-          const SizedBox(height: 8),
-        ],
+        // Heading first, then the breadcrumb trail directly beneath it —
+        // same spot + format on every page.
         _buildTitleRow(context, textTheme),
+        if (_showBreadcrumbs) ...<Widget>[
+          const SizedBox(height: 6),
+          _buildBreadcrumbs(context, textTheme),
+        ],
       ],
     );
   }
@@ -107,10 +134,11 @@ class PathHeader extends StatelessWidget {
       color: context.cb.primarySoft,
     );
 
+    final List<PathHeaderCrumb> trail = _trail;
     final List<Widget> children = <Widget>[];
-    for (int i = 0; i < breadcrumbs.length; i++) {
-      children.add(_buildCrumb(context, breadcrumbs[i], crumbStyle));
-      if (i < breadcrumbs.length - 1) {
+    for (int i = 0; i < trail.length; i++) {
+      children.add(_buildCrumb(context, trail[i], crumbStyle));
+      if (i < trail.length - 1) {
         children.add(Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6),
           child: Text('›', style: separatorStyle),
@@ -160,8 +188,68 @@ class PathHeader extends StatelessWidget {
           const SizedBox(width: 8),
           trailing!,
         ],
+        const SizedBox(width: 4),
+        const _HeaderActions(),
       ],
     );
   }
+}
 
+/// The standard top-right cluster carried by every [PathHeader]: the
+/// alpha-gated report "!" button (left) + the always-present profile /
+/// settings button (right). Mirrors the always-present bottom tab bar —
+/// predictable chrome in a fixed spot on every screen.
+///
+/// Plain [StatelessWidget] so it imposes NO ProviderScope requirement on
+/// the ~30 screens that use [PathHeader] — only the alpha-only report
+/// button needs riverpod, and it lives in its own [ConsumerWidget] that
+/// isn't built unless [alphaFeedbackEnabled].
+class _HeaderActions extends StatelessWidget {
+  const _HeaderActions();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        // Report a problem — alpha only; hidden in production builds.
+        if (alphaFeedbackEnabled) const _ReportButton(),
+        // Profile & settings — always present, top-right on every screen.
+        IconButton(
+          key: PathHeader.profileButtonKey,
+          icon: const Icon(Icons.account_circle_outlined),
+          iconSize: 24,
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+          color: context.cb.primary,
+          tooltip: 'Profile & settings',
+          onPressed: () => context.push('/settings'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The alpha-only report "!" — a [ConsumerWidget] so it can fire the
+/// trigger the screenshot host ([FeedbackOverlay]) listens for. Only built
+/// when [alphaFeedbackEnabled], so the (always-present) ProviderScope of a
+/// real alpha build is the only place it ever mounts.
+class _ReportButton extends ConsumerWidget {
+  const _ReportButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return IconButton(
+      key: PathHeader.reportButtonKey,
+      icon: const Icon(Icons.priority_high),
+      iconSize: 22,
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      color: context.cb.cta,
+      tooltip: 'Report a problem',
+      onPressed: () => ref.read(feedbackTriggerProvider.notifier).fire(),
+    );
+  }
 }

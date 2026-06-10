@@ -10,6 +10,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
+/// The report button now lives in the screen header and fires a provider
+/// the overlay listens for — so tests simulate the press by firing that
+/// trigger directly (the header button itself is alpha-gated off in tests).
+void _fireReport(WidgetTester tester) {
+  ProviderScope.containerOf(
+    tester.element(find.byType(FeedbackOverlay)),
+    listen: false,
+  ).read(feedbackTriggerProvider.notifier).fire();
+}
+
 void main() {
   testWidgets('disabled overlay renders the child verbatim (goldens safe)',
       (WidgetTester tester) async {
@@ -27,11 +37,13 @@ void main() {
       ),
     );
 
+    // Disabled → the child renders verbatim and nothing feedback-related
+    // is mounted (no sheet possible).
     expect(find.byKey(const Key('content')), findsOneWidget);
-    expect(find.byKey(FeedbackOverlay.reportButtonKey), findsNothing);
+    expect(find.byKey(FeedbackSheet.sheetKey), findsNothing);
   });
 
-  testWidgets('enabled overlay shows Report and opens the sheet on tap',
+  testWidgets('firing the report trigger captures + opens the sheet',
       (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -52,50 +64,8 @@ void main() {
     );
     await tester.pump(); // let the post-frame flush() run
 
-    expect(find.byKey(FeedbackOverlay.reportButtonKey), findsOneWidget);
-
-    await tester.tap(find.byKey(FeedbackOverlay.reportButtonKey));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(FeedbackSheet.sheetKey), findsOneWidget);
-  });
-
-  testWidgets('button drags to the other side, persists, and still taps',
-      (WidgetTester tester) async {
-    final _FakeButtonStore buttonStore = _FakeButtonStore();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: <Override>[
-          feedbackControllerProvider.overrideWithValue(_NoopController()),
-          testerNameStoreProvider.overrideWithValue(_FixedNameStore('Sam')),
-          feedbackButtonStoreProvider.overrideWithValue(buttonStore),
-        ],
-        child: MaterialApp(
-          home: FeedbackOverlay(
-            enabled: true,
-            currentRoute: () => '/home',
-            captureOverride: () async => null,
-            child: const Scaffold(body: Text('CONTENT')),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final Finder button = find.byKey(FeedbackOverlay.reportButtonKey);
-    final Offset before = tester.getTopLeft(button);
-
-    // Drag well past center toward the upper-left.
-    await tester.drag(button, const Offset(-500, -150));
-    await tester.pumpAndSettle();
-
-    final Offset after = tester.getTopLeft(button);
-    expect(after.dx, lessThan(before.dx)); // snapped to the left edge
-    expect(after.dy, lessThan(before.dy)); // moved up
-    expect(buttonStore.lastRightEdge, isFalse); // persisted the new side
-
-    // A tap still opens the sheet — drag didn't swallow the tap.
-    await tester.tap(button);
+    expect(find.byKey(FeedbackSheet.sheetKey), findsNothing);
+    _fireReport(tester); // the header button would fire this
     await tester.pumpAndSettle();
     expect(find.byKey(FeedbackSheet.sheetKey), findsOneWidget);
   });
@@ -140,13 +110,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(FeedbackOverlay.reportButtonKey), findsOneWidget);
-    await tester.tap(find.byKey(FeedbackOverlay.reportButtonKey));
+    _fireReport(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(FeedbackSheet.sheetKey), findsOneWidget);
   });
 
-  testWidgets('a repeat tap toggles the sheet closed instead of stacking',
+  testWidgets('a repeat trigger toggles the sheet closed instead of stacking',
       (WidgetTester tester) async {
     // Router wiring so the button floats above the sheet's modal barrier,
     // exactly like production — that's why a repeat tap could reach it and
@@ -184,20 +153,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final Finder button = find.byKey(FeedbackOverlay.reportButtonKey);
-
-    // 1st tap → opens.
-    await tester.tap(button);
+    // 1st fire → opens.
+    _fireReport(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(FeedbackSheet.sheetKey), findsOneWidget);
 
-    // 2nd tap → toggles closed (not a second sheet stacked on top).
-    await tester.tap(button);
+    // 2nd fire → toggles closed (not a second sheet stacked on top).
+    _fireReport(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(FeedbackSheet.sheetKey), findsNothing);
 
-    // 3rd tap → re-opens, and there is exactly one.
-    await tester.tap(button);
+    // 3rd fire → re-opens, and there is exactly one.
+    _fireReport(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(FeedbackSheet.sheetKey), findsOneWidget);
   });

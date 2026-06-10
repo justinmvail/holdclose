@@ -9,6 +9,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 DateTime _fixedNow() => DateTime.utc(2026, 5, 29, 19, 42);
@@ -94,7 +95,7 @@ void main() {
       // the Chat branch back to the conversation list.
       await tester.tap(
         find.descendant(
-          of: find.byType(NavigationBar),
+          of: find.byType(TabScaffoldBar),
           matching: find.text('Chat'),
         ),
       );
@@ -102,6 +103,52 @@ void main() {
 
       expect(find.byType(ConversationListScreen), findsOneWidget);
       expect(find.byType(ChatScreen), findsNothing);
+    });
+
+    testWidgets(
+        'navigating thread→thread shows the NEW thread\'s messages '
+        '(fb_1781035154885086)', (WidgetTester tester) async {
+      // Two distinct threads, each with its own message.
+      await repo.createConversation(
+          id: 'convo-A', title: 'A', createdAt: _fixedNow());
+      await repo.appendMessage(Message(
+        id: 'a1',
+        conversationId: 'convo-A',
+        role: MessageRole.user,
+        body: 'message in thread A',
+        citations: const <String>[],
+        createdAt: _fixedNow(),
+        streamingDone: true,
+      ));
+      await repo.createConversation(
+          id: 'convo-B', title: 'B', createdAt: _fixedNow());
+      await repo.appendMessage(Message(
+        id: 'b1',
+        conversationId: 'convo-B',
+        role: MessageRole.user,
+        body: 'message in thread B',
+        citations: const <String>[],
+        createdAt: _fixedNow(),
+        streamingDone: true,
+      ));
+
+      await _pump(tester, repo: repo, db: db);
+      final GoRouter router =
+          GoRouter.of(tester.element(find.byType(ConversationListScreen)));
+
+      router.go('/chat/convo-A');
+      await tester.pumpAndSettle();
+      // Present (the body shows in the bubble + the derived title/crumb).
+      expect(find.text('message in thread A'), findsWidgets);
+
+      // Jump straight to thread B (what the center mic does when it opens a
+      // fresh thread while one is already open). Before the route was keyed
+      // by id, the ChatScreen was reused and kept showing thread A.
+      router.go('/chat/convo-B');
+      await tester.pumpAndSettle();
+      expect(find.text('message in thread B'), findsWidgets);
+      // The smoking gun: thread A's content is GONE — the screen reloaded.
+      expect(find.text('message in thread A'), findsNothing);
     });
 
     testWidgets("the thread's PathHeader parent crumb returns to the list",

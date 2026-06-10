@@ -130,15 +130,18 @@ void main() {
       );
     });
 
-    testWidgets('is a landing screen — no breadcrumb, no Back control',
+    testWidgets('the landing breadcrumb starts from Home (Home › Care)',
         (WidgetTester tester) async {
       await _pumpHub(tester);
 
-      // The PathHeader is present with the single "Care" crumb...
+      // Every page's trail starts at Home now, so the Care landing reads
+      // "Home › Care" rather than suppressing the breadcrumb.
       expect(find.byType(PathHeader), findsOneWidget);
-      expect(find.text('Care'), findsOneWidget);
-      // ...but a single-crumb landing suppresses the trail + Back chip.
-      expect(find.text('›'), findsNothing);
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('›'), findsOneWidget); // Home › Care
+      // 'Care' is both the title and the terminal crumb.
+      expect(find.text('Care'), findsNWidgets(2));
+      // No legacy Back chevron control.
       expect(find.text('‹'), findsNothing);
     });
 

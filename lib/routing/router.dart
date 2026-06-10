@@ -780,10 +780,19 @@ GoRouter buildRouter({
                   GoRoute(
                     path: ':id',
                     name: CareblazersRoutes.chatThread,
-                    builder: (BuildContext context, GoRouterState state) =>
-                        ChatScreen(
-                      conversationId: state.pathParameters['id'] ?? '',
-                    ),
+                    builder: (BuildContext context, GoRouterState state) {
+                      final String id = state.pathParameters['id'] ?? '';
+                      // Key by conversation id so navigating thread→thread
+                      // (e.g. the center mic opening a fresh thread while
+                      // already viewing one) gives a NEW ChatScreen State
+                      // that loads the right messages — without a key the
+                      // route reuses the prior screen and shows the wrong
+                      // conversation (fb_1781035154885086).
+                      return ChatScreen(
+                        key: ValueKey<String>('chat-$id'),
+                        conversationId: id,
+                      );
+                    },
                   ),
                 ],
               ),

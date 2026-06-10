@@ -39,6 +39,13 @@ const bool _demoMode = bool.fromEnvironment('DEMO_MODE', defaultValue: false);
 const String _appVersion =
     String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0+2');
 
+/// The per-build stamp (same one Settings → About shows). Stamped on every
+/// report so the operator knows EXACTLY which build a tester was on — the
+/// app_version default goes stale, the build stamp doesn't.
+// ignore: do_not_use_environment
+const String _buildStamp =
+    String.fromEnvironment('BUILD_STAMP', defaultValue: 'dev');
+
 /// The shim feedback endpoint, built from the same base URL the LLM shim
 /// uses (so a tester build's `--dart-define=SHIM_URL=...` covers both).
 const String feedbackEndpoint = '$shimBaseUrl/feedback';
@@ -75,6 +82,8 @@ class FeedbackReport {
     required this.appVersion,
     required this.createdAt,
     required this.hasScreenshot,
+    this.buildStamp = 'dev',
+    this.logs = '',
   });
 
   final String id;
@@ -91,6 +100,16 @@ class FeedbackReport {
   final DateTime createdAt;
   final bool hasScreenshot;
 
+  /// Per-build stamp (matches Settings → About) — pins which build the
+  /// tester was running.
+  final String buildStamp;
+
+  /// Snapshot of recent on-device logs ([LogBuffer]) captured when the
+  /// report was filed. Empty when nothing was logged. Stored alongside the
+  /// report so a "works but wrong" bug carries the context telemetry can't
+  /// see.
+  final String logs;
+
   /// Build a report, auto-filling platform/OS/demo/version/id/clock.
   /// [clock] and [idGen] are injectable for deterministic tests.
   factory FeedbackReport.create({
@@ -99,6 +118,7 @@ class FeedbackReport {
     required String route,
     required String testerName,
     required bool hasScreenshot,
+    String logs = '',
     DateTime Function()? clock,
     String Function()? idGen,
   }) {
@@ -115,6 +135,8 @@ class FeedbackReport {
       appVersion: _appVersion,
       createdAt: now,
       hasScreenshot: hasScreenshot,
+      buildStamp: _buildStamp,
+      logs: logs,
     );
   }
 
@@ -128,8 +150,10 @@ class FeedbackReport {
         'os_version': osVersion,
         'demo_mode': demoMode,
         'app_version': appVersion,
+        'build_stamp': buildStamp,
         'created_at': createdAt.toIso8601String(),
         'has_screenshot': hasScreenshot,
+        'logs': logs,
       };
 
   factory FeedbackReport.fromJson(Map<String, dynamic> j) => FeedbackReport(
@@ -148,6 +172,8 @@ class FeedbackReport {
         createdAt: DateTime.tryParse(j['created_at'] as String? ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0),
         hasScreenshot: j['has_screenshot'] as bool? ?? false,
+        buildStamp: j['build_stamp'] as String? ?? 'dev',
+        logs: j['logs'] as String? ?? '',
       );
 }
 
@@ -357,6 +383,23 @@ class FeedbackController {
     return sent;
   }
 }
+
+/// Fired by the in-header report button to ask [FeedbackOverlay] — which
+/// holds the screenshot `RepaintBoundary` — to capture the current screen
+/// and open the report sheet. A monotonically-increasing counter the
+/// overlay listens to: the value is meaningless, the *change* is the
+/// signal. Decouples the button (deep in a screen header) from the capture
+/// host (above the router), since they can't share a context.
+class FeedbackTrigger extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  /// Request a screenshot + report sheet from wherever the overlay lives.
+  void fire() => state = state + 1;
+}
+
+final NotifierProvider<FeedbackTrigger, int> feedbackTriggerProvider =
+    NotifierProvider<FeedbackTrigger, int>(FeedbackTrigger.new);
 
 final Provider<FeedbackOutbox> feedbackOutboxProvider =
     Provider<FeedbackOutbox>((Ref ref) => FeedbackOutbox());

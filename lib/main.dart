@@ -13,11 +13,18 @@ import 'providers/onboarding_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/storage_provider.dart';
 import 'providers/tts_provider.dart';
+import 'services/log_buffer.dart';
 import 'services/seed_repository.dart';
 import 'services/sync_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Tee on-device logs into a small ring buffer so a bug report can carry
+  // recent context (what happened right before the report), not just a
+  // screenshot. Console output is preserved — we wrap, never replace. The
+  // buffer is only ever READ when a report is sent.
+  _captureLogs();
 
   // Preload the persisted onboarding-complete flag BEFORE the first frame
   // so a returning caregiver's router decision is correct on frame zero —
@@ -77,6 +84,32 @@ Future<void> main() async {
       child: const CareblazersApp(),
     ),
   );
+}
+
+/// Tee `debugPrint`, framework errors, and uncaught async errors into
+/// [LogBuffer] (for bug reports) while preserving the normal handlers.
+void _captureLogs() {
+  final originalPrint = debugPrint;
+  debugPrint = (String? message, {int? wrapWidth}) {
+    if (message != null && message.isNotEmpty) {
+      LogBuffer.instance.add(message);
+    }
+    originalPrint(message, wrapWidth: wrapWidth);
+  };
+
+  final priorFlutterOnError = FlutterError.onError;
+  FlutterError.onError = (FlutterErrorDetails details) {
+    LogBuffer.instance.add('FlutterError: ${details.exceptionAsString()}');
+    (priorFlutterOnError ?? FlutterError.presentError)(details);
+  };
+
+  final priorPlatformOnError =
+      WidgetsBinding.instance.platformDispatcher.onError;
+  WidgetsBinding.instance.platformDispatcher.onError =
+      (Object error, StackTrace stack) {
+    LogBuffer.instance.add('Uncaught: $error');
+    return priorPlatformOnError?.call(error, stack) ?? false;
+  };
 }
 
 /// Resolve the active circle, then push+pull once and start the
