@@ -366,6 +366,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
                   TextFormField(
                     key: HealthLogEntryForm.notesFieldKey,
                     controller: _notes,
+                    textCapitalization: TextCapitalization.sentences,
                     maxLines: 5,
                     minLines: 3,
                     decoration: InputDecoration(

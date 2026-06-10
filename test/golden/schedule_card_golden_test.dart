@@ -1,4 +1,5 @@
 import 'package:alchemist/alchemist.dart';
+import 'package:careblazers/models/appointment.dart' show AppointmentStatus;
 import 'package:careblazers/models/care_event.dart';
 import 'package:careblazers/providers/home_clock_provider.dart';
 import 'package:careblazers/providers/patient_timeline_provider.dart';
@@ -116,6 +117,10 @@ void main() {
                 homeClockProvider.overrideWithValue(() => _now),
                 patientTimelineEventsProvider
                     .overrideWith((Ref ref) async => _events),
+                // Avoid hitting the real appointment DB in the golden env.
+                scheduleAppointmentStatusProvider.overrideWith(
+                  (Ref ref) async => const <String, AppointmentStatus>{},
+                ),
               ],
               child: SizedBox(
                 width: 390,

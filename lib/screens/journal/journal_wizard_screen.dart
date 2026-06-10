@@ -336,6 +336,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           child: TextField(
             key: JournalWizardScreen.situationFieldKey,
             controller: _situationController,
+            textCapitalization: TextCapitalization.sentences,
             autofocus: true,
             maxLines: null,
             expands: true,
@@ -545,6 +546,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
         TextField(
           key: JournalWizardScreen.situationFieldKey,
           controller: _situationController,
+          textCapitalization: TextCapitalization.sentences,
           minLines: 5,
           maxLines: 10,
           maxLength: 2000,
@@ -581,6 +583,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
         TextField(
           key: JournalWizardScreen.attemptsFieldKey,
           controller: _attemptsController,
+          textCapitalization: TextCapitalization.sentences,
           minLines: 5,
           maxLines: 10,
           maxLength: 2000,

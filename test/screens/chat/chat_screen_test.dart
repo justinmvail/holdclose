@@ -91,6 +91,24 @@ class _ScriptedBackend implements ChatLLMBackend {
   }
 }
 
+/// Drive the app through a valid background transition. The framework's
+/// lifecycle state machine only allows adjacent moves along
+/// resumed↔inactive↔hidden↔paused, so we can't jump straight to paused.
+Future<void> _background(WidgetTester tester) async {
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+  await tester.pump();
+}
+
+/// Drive the app back to the foreground along the valid reverse chain.
+Future<void> _foreground(WidgetTester tester) async {
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+  await tester.pump();
+}
+
 /// Pumps the chat screen against an in-memory drift DB. Returns the
 /// repo + scripted backend so tests can drive assertions.
 Future<({
@@ -686,6 +704,116 @@ void main() {
             .map((ChatTurn t) => t.content),
         contains('Why is she pacing?'),
       );
+    });
+  });
+
+  group('ChatScreen — survive phone sleep (auto-resume)', () {
+    testWidgets(
+        'a reply interrupted by backgrounding mid-stream auto-recovers on '
+        'resume', (WidgetTester tester) async {
+      // First reply errors (the OS killed the socket when the phone slept);
+      // the post-resume re-send succeeds.
+      final Completer<void> gate = Completer<void>();
+      final ({
+        ChatRepository repo,
+        _ScriptedBackend backend,
+        CareblazersDatabase db,
+      }) p = await _pump(
+        tester,
+        conversationId: 'convo-sleep',
+        gate: gate.future,
+        replyBuilder: (int i) => i == 0
+            ? const <ChatDelta>[ChatDeltaError('connection lost')]
+            : const <ChatDelta>[ChatDeltaText('A short walk can ease pacing.')],
+      );
+
+      await tester.enterText(
+        find.byKey(ChatScreen.inputFieldKey),
+        'Why is she pacing?',
+      );
+      await tester.tap(find.byKey(ChatScreen.sendButtonKey));
+      await tester.pump(); // send dispatched; first reply held at the gate
+
+      // Phone locks mid-stream → app backgrounds.
+      await _background(tester);
+
+      // The suspended connection finally errors out — one call so far, and
+      // the thread persisted a failed assistant turn (asserting via the repo
+      // rather than the UI, which paints differently while backgrounded).
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(p.backend.callCount, 1);
+      List<Message> persisted = await p.repo.loadMessages('convo-sleep');
+      expect(persisted.last.role, MessageRole.assistant);
+      expect(chatBodyHasError(persisted.last.body), isTrue);
+
+      // Caregiver returns to the app — the turn auto-recovers, no manual tap.
+      await _foreground(tester);
+      await tester.pumpAndSettle();
+
+      expect(p.backend.callCount, 2);
+      expect(
+        find.textContaining('A short walk can ease pacing.'),
+        findsOneWidget,
+      );
+      persisted = await p.repo.loadMessages('convo-sleep');
+      expect(persisted.last.role, MessageRole.assistant);
+      expect(persisted.last.body, 'A short walk can ease pacing.');
+    });
+
+    testWidgets('a reply that completed cleanly is NOT re-sent on resume',
+        (WidgetTester tester) async {
+      final Completer<void> gate = Completer<void>();
+      final ({
+        ChatRepository repo,
+        _ScriptedBackend backend,
+        CareblazersDatabase db,
+      }) p = await _pump(
+        tester,
+        conversationId: 'convo-clean',
+        gate: gate.future,
+        deltas: const <ChatDelta>[ChatDeltaText('Here is a gentle idea.')],
+      );
+
+      await tester.enterText(
+        find.byKey(ChatScreen.inputFieldKey),
+        'How do I help her sleep?',
+      );
+      await tester.tap(find.byKey(ChatScreen.sendButtonKey));
+      await tester.pump();
+
+      // Background while the reply is still streaming…
+      await _background(tester);
+      // …but it actually finishes cleanly before we return.
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(p.backend.callCount, 1);
+
+      // Resume must NOT re-fire — the reply already landed.
+      await _foreground(tester);
+      await tester.pumpAndSettle();
+      expect(p.backend.callCount, 1);
+      expect(find.textContaining('Here is a gentle idea.'), findsOneWidget);
+    });
+
+    testWidgets('resume with no in-flight send does nothing',
+        (WidgetTester tester) async {
+      final ({
+        ChatRepository repo,
+        _ScriptedBackend backend,
+        CareblazersDatabase db,
+      }) p = await _pump(
+        tester,
+        conversationId: 'convo-idle',
+        deltas: const <ChatDelta>[ChatDeltaText('reply')],
+      );
+
+      // Foreground/background churn with nothing sending — no spurious call.
+      await _background(tester);
+      await _foreground(tester);
+      await tester.pumpAndSettle();
+
+      expect(p.backend.callCount, 0);
     });
   });
 

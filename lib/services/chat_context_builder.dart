@@ -22,7 +22,12 @@ const int _maxMedications = 12;
 const int _maxWindows = 8;
 const int _maxAppointments = 5;
 const int _maxRoutines = 8;
-const int _maxHealthLog = 4;
+// Health log: the coach kept answering as if it couldn't see what the Health
+// Log screen shows (fb_1781115653912208) — the old cap was 4 AND it only
+// surfaced entries that had free-text notes, silently dropping every vitals
+// reading. Now it lists the full reading (BP/HR/temp/glucose/severity + notes
+// + date) for many more entries, so the coach reads from the same data.
+const int _maxHealthLog = 25;
 
 /// The data the chat context snapshot is rendered from. Gathered fresh
 /// per turn by [gatherChatContext]; rendered by [formatChatContext]. Kept
@@ -162,10 +167,13 @@ Future<ChatContextData> _gatherChatContext(Ref ref) async {
   try {
     final List<HealthLogEntry> entries =
         await ref.read(healthLogRepositoryProvider).listAll();
+    // Newest first so the cap keeps the most recent readings.
+    final List<HealthLogEntry> sorted = <HealthLogEntry>[...entries]
+      ..sort((HealthLogEntry a, HealthLogEntry b) =>
+          b.recordedAt.compareTo(a.recordedAt));
     healthNotes = <String>[
-      for (final HealthLogEntry e in entries)
-        if ((e.notes ?? '').trim().isNotEmpty)
-          '${e.kind.name}: ${e.notes!.trim()}',
+      // Every entry, with its full reading — NOT just notes-bearing ones.
+      for (final HealthLogEntry e in sorted) _describeHealthEntry(e),
     ];
   } catch (_) {
     healthNotes = const <String>[];
@@ -272,14 +280,44 @@ String formatChatContext(ChatContextData data) {
         '${extra > 0 ? '; +$extra more' : ''}.');
   }
 
-  // Recent health-log notes.
+  // Health log — recent readings (vitals, symptoms, notes), newest first.
   if (data.recentHealthNotes.isNotEmpty) {
     final List<String> shown =
         data.recentHealthNotes.take(_maxHealthLog).toList();
-    sb.writeln('Recent health notes: ${shown.join('; ')}.');
+    final int extra = data.recentHealthNotes.length - shown.length;
+    sb.writeln('Health log (newest first): ${shown.join('; ')}'
+        '${extra > 0 ? '; +$extra more on the Health Log screen' : ''}.');
   }
 
   return sb.toString().trimRight();
+}
+
+/// One health-log entry rendered for the snapshot — its date, kind, every
+/// structured reading present (BP / HR / temp / glucose / severity), and any
+/// note. So "vitals: Weight…" style rows the UI shows are no longer dropped
+/// just because they had no free-text note (fb_1781115653912208).
+String _describeHealthEntry(HealthLogEntry e) {
+  final List<String> parts = <String>[];
+  if (e.systolic != null && e.diastolic != null) {
+    parts.add('BP ${e.systolic}/${e.diastolic}');
+  }
+  if (e.heartRate != null) parts.add('HR ${e.heartRate}');
+  if (e.temperatureF != null) parts.add('temp ${e.temperatureF}°F');
+  if (e.glucoseMgDl != null) parts.add('glucose ${e.glucoseMgDl} mg/dL');
+  if (e.severity != null) parts.add('severity ${e.severity}/5');
+  final String note = (e.notes ?? '').trim();
+  if (note.isNotEmpty) parts.add(note);
+  final String body = parts.isEmpty ? '(no details)' : parts.join(', ');
+  return '${_formatDate(e.recordedAt)} ${e.kind.name} — $body';
+}
+
+/// "Jun 20" — compact month + day for a health-log entry's date.
+String _formatDate(DateTime dt) {
+  const List<String> months = <String>[
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return '${months[(dt.month - 1).clamp(0, 11)]} ${dt.day}';
 }
 
 /// "Jun 20 2:00 PM" — compact, year omitted (the snapshot is "right now"

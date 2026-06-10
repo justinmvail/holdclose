@@ -282,6 +282,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
             TextField(
               key: JournalEntryScreen.notesFieldKey,
               controller: _notesController,
+              textCapitalization: TextCapitalization.sentences,
               minLines: 3,
               maxLines: 6,
               style: textTheme.bodyLarge?.copyWith(

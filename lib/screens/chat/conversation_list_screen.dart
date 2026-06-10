@@ -22,11 +22,24 @@ part 'conversation_list_screen.g.dart';
 /// chat thread's [PathHeader] crumb (Phase 14.34) so a tile and the
 /// thread it opens read the same name.
 String conversationDisplayTitle(String? firstUserMessage) {
-  final String? body = firstUserMessage;
-  if (body == null || body.trim().isEmpty) return 'New chat';
-  final String trimmed = body.trim();
-  if (trimmed.length <= 60) return trimmed;
-  return '${trimmed.substring(0, 60)}…';
+  final String body = firstUserMessage?.trim() ?? '';
+  if (body.isEmpty) return 'New chat';
+  // Succinct (fb_1781115614890041 — "auto title is too long"): first line,
+  // capped near ~36 chars at a WORD boundary so it never ends mid-word
+  // ("…loo"). The full message still lives in the thread.
+  return _succinctLabel(body.split('\n').first.trim());
+}
+
+/// Cap [text] near ~36 chars on a word boundary, appending an ellipsis
+/// when it had to be cut. Shared by the derived title and the
+/// custom/coach-set title so both read the same length in the list.
+String _succinctLabel(String text) {
+  final String t = text.trim();
+  if (t.length <= 36) return t;
+  final String cut = t.substring(0, 36);
+  final int lastSpace = cut.lastIndexOf(' ');
+  final String base = lastSpace > 18 ? cut.substring(0, lastSpace) : cut;
+  return '$base…';
 }
 
 /// One tile in the conversation list (BUILD_SPEC.md / TASKS.md Phase
@@ -55,9 +68,18 @@ class ConversationListItem {
   /// messaging app's recent-activity view.
   final String? lastMessage;
 
-  /// Title to display in the tile — first user message's first 60
-  /// chars per spec, or a soft fallback when the thread is empty.
-  String get displayTitle => conversationDisplayTitle(firstUserMessage);
+  /// Title to display in the tile. A coach-generated or caregiver-edited
+  /// name ([Conversation.customTitle]) wins verbatim (capped to one tile
+  /// line); otherwise it's the succinct derivation from the first user
+  /// message, or a soft fallback when the thread is empty
+  /// (fb_1781115614890041).
+  String get displayTitle {
+    final String stored = conversation.title.trim();
+    if (conversation.customTitle && stored.isNotEmpty) {
+      return _succinctLabel(stored.split('\n').first.trim());
+    }
+    return conversationDisplayTitle(firstUserMessage);
+  }
 }
 
 /// Async list of conversations enriched with each thread's first user
@@ -144,10 +166,18 @@ class ConversationListScreen extends ConsumerWidget {
   static const Key deleteConfirmKey = Key('conversation-list-delete-confirm');
   static const Key deleteCancelKey = Key('conversation-list-delete-cancel');
 
+  /// The rename dialog + its field/buttons (per-tile pencil affordance).
+  static const Key renameDialogKey = Key('conversation-list-rename-dialog');
+  static const Key renameFieldKey = Key('conversation-list-rename-field');
+  static const Key renameSaveKey = Key('conversation-list-rename-save');
+  static const Key renameCancelKey = Key('conversation-list-rename-cancel');
+
   static Key tileKey(String conversationId) =>
       Key('conversation-list-tile-$conversationId');
   static Key deleteIconKey(String conversationId) =>
       Key('conversation-list-delete-$conversationId');
+  static Key renameIconKey(String conversationId) =>
+      Key('conversation-list-rename-$conversationId');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -354,6 +384,23 @@ class _ConversationTile extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
+                // Rename affordance — opens a small dialog prefilled with the
+                // current name so the caregiver can correct the coach's
+                // auto-title or set their own (fb_1781115614890041 — "the
+                // user should be able to update it").
+                Semantics(
+                  button: true,
+                  label: 'Rename this chat.',
+                  child: IconButton(
+                    key: ConversationListScreen.renameIconKey(
+                      item.conversation.id,
+                    ),
+                    tooltip: 'Rename chat',
+                    icon: const Icon(Icons.edit_outlined),
+                    color: context.cb.primarySoft,
+                    onPressed: () => _rename(context, ref),
+                  ),
+                ),
                 // Trailing trash affordance — same confirm-then-delete flow
                 // as the long-press, for caregivers who'd rather tap a clear
                 // target than discover the gesture (mirrors the medication
@@ -377,6 +424,24 @@ class _ConversationTile extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Prompt for a new thread name (prefilled with the current display
+  /// title), then persist it as a custom title and refresh the list so the
+  /// tile shows it immediately. Blank input or Cancel is a no-op — the
+  /// existing name stays. The edited title is marked custom so a later
+  /// auto-title pass never clobbers the caregiver's choice
+  /// (fb_1781115614890041).
+  Future<void> _rename(BuildContext context, WidgetRef ref) async {
+    final String? next = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) =>
+          _RenameDialog(initial: item.displayTitle),
+    );
+    if (next == null || next.isEmpty) return;
+    final ChatRepository repo = ref.read(chatRepositoryProvider);
+    await repo.renameConversation(item.conversation.id, next);
+    ref.invalidate(chatConversationListProvider);
   }
 
   /// Confirm, then hard-delete the conversation (its messages cascade via
@@ -410,6 +475,65 @@ class _ConversationTile extends ConsumerWidget {
     final ChatRepository repo = ref.read(chatRepositoryProvider);
     await repo.deleteConversation(item.conversation.id);
     ref.invalidate(chatConversationListProvider);
+  }
+}
+
+/// Rename dialog for a chat thread (fb_1781115614890041). A
+/// [StatefulWidget] so it owns the [TextEditingController]'s lifecycle —
+/// disposing it in [dispose] (after the close animation) rather than in the
+/// caller, which would tear it down mid-animation and crash the field.
+/// Pops the trimmed new name on Save / submit, or null on Cancel.
+class _RenameDialog extends StatefulWidget {
+  const _RenameDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.of(context).pop(_controller.text.trim());
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: ConversationListScreen.renameDialogKey,
+      title: const Text('Rename this chat'),
+      content: TextField(
+        key: ConversationListScreen.renameFieldKey,
+        controller: _controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        maxLength: 60,
+        decoration: const InputDecoration(
+          labelText: 'Chat name',
+          counterText: '',
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: <Widget>[
+        TextButton(
+          key: ConversationListScreen.renameCancelKey,
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          key: ConversationListScreen.renameSaveKey,
+          onPressed: _submit,
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
 

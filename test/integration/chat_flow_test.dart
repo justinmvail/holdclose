@@ -131,6 +131,11 @@ Future<({
     extraOverrides: <Override>[
       chatRepositoryBackendProvider.overrideWithValue(repo),
       chatLLMBackendProvider.overrideWithValue(backend),
+      // Disable the post-first-turn auto-title so `backend.callCount`
+      // reflects only reply round-trips (the title pass reuses this same
+      // backend; production keeps it on via chatTitleGeneratorProvider).
+      chatTitleGeneratorProvider
+          .overrideWithValue((List<ChatTurn> turns) async => null),
     ],
   );
   return (container: container, repo: repo, backend: backend);

@@ -48,6 +48,9 @@ android/.idea/
 .env.local
 google-services.json
 GoogleService-Info.plist
+# Tailscale Funnel TLS cert + key (machine-local secrets — never commit)
+*.ts.net.crt
+*.ts.net.key
 
 # Python shim
 tools/__pycache__/

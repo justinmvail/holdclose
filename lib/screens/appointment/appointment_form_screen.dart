@@ -594,6 +594,7 @@ class _AppointmentFormScreenState
                     child: TextFormField(
                       key: AppointmentFormScreen.locationFieldKey,
                       controller: _location,
+                      textCapitalization: TextCapitalization.sentences,
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         hintText:
@@ -665,6 +666,7 @@ class _AppointmentFormScreenState
                     child: TextFormField(
                       key: AppointmentFormScreen.notesFieldKey,
                       controller: _notes,
+                      textCapitalization: TextCapitalization.sentences,
                       maxLines: 4,
                       minLines: 2,
                       decoration: const InputDecoration(
@@ -734,6 +736,7 @@ class _AppointmentFormScreenState
                   child: TextField(
                     key: AppointmentFormScreen.agendaItemFieldKey(i),
                     controller: _agenda[i],
+                    textCapitalization: TextCapitalization.sentences,
                     decoration: InputDecoration(
                       hintText: 'Agenda item ${i + 1}',
                     ),
@@ -776,6 +779,7 @@ class _AppointmentFormScreenState
             child: TextField(
               key: AppointmentFormScreen.newProviderNameFieldKey,
               controller: _newProviderName,
+              textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(hintText: 'e.g. Dr. Ortega'),
             ),
           ),

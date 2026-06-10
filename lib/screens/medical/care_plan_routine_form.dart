@@ -320,6 +320,7 @@ class _CarePlanRoutineFormState extends ConsumerState<CarePlanRoutineForm> {
               TextFormField(
                 key: CarePlanRoutineForm.titleFieldKey,
                 controller: _title,
+                textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   labelText: 'Title',
                   hintText: 'e.g. Morning hygiene',
@@ -335,6 +336,7 @@ class _CarePlanRoutineFormState extends ConsumerState<CarePlanRoutineForm> {
               TextFormField(
                 key: CarePlanRoutineForm.bodyFieldKey,
                 controller: _body,
+                textCapitalization: TextCapitalization.sentences,
                 maxLines: 4,
                 minLines: 2,
                 decoration: const InputDecoration(

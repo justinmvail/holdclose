@@ -608,6 +608,218 @@ void main() {
     });
   });
 
+  // ---- Auto-title (fb_1781115614890041) ---------------------------------
+
+  group('ChatService.sendMessage — auto-title', () {
+    late CareblazersDatabase db;
+    late ChatRepository repo;
+
+    setUp(() async {
+      db = CareblazersDatabase(NativeDatabase.memory());
+      repo = ChatRepository(db);
+      await repo.createConversation(
+        id: 'convo-1',
+        title: 'New chat',
+        createdAt: _fixedClock(),
+      );
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    // Spin the event loop until [convo-1] is customTitle, or give up — the
+    // title write is fire-and-forget so it lands a few microtasks after the
+    // reply stream closes.
+    Future<Conversation?> awaitTitled() async {
+      for (int i = 0; i < 50; i++) {
+        final Conversation? c = await repo.getConversation('convo-1');
+        if (c == null || c.customTitle) return c;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      return repo.getConversation('convo-1');
+    }
+
+    test('names a fresh thread from its opening exchange', () async {
+      final List<List<ChatTurn>> titleCalls = <List<ChatTurn>>[];
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText('A gentle, reassuring reply.'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        titleGenerator: (List<ChatTurn> turns) async {
+          titleCalls.add(turns);
+          // Returned with junk the sanitizer must strip.
+          return '  "Sundowning At Dinner."  ';
+        },
+      );
+
+      await svc
+          .sendMessage(
+            conversationId: 'convo-1',
+            userText: 'She gets upset every evening at dusk',
+          )
+          .toList();
+
+      final Conversation? convo = await awaitTitled();
+      expect(convo!.title, 'Sundowning At Dinner');
+      expect(convo.customTitle, isTrue);
+      // The generator saw the user turn AND the assistant reply.
+      expect(titleCalls, hasLength(1));
+      expect(
+        titleCalls.single.map((ChatTurn t) => t.role).toList(),
+        <MessageRole>[MessageRole.user, MessageRole.assistant],
+      );
+      expect(
+        titleCalls.single.first.content,
+        'She gets upset every evening at dusk',
+      );
+    });
+
+    test('does NOT auto-title a follow-up turn (only the first)', () async {
+      // Pre-seed a prior exchange so the new send is turn #2.
+      await repo.appendMessage(Message(
+        id: 'pre-user',
+        conversationId: 'convo-1',
+        role: MessageRole.user,
+        body: 'earlier question',
+        citations: const <String>[],
+        createdAt: _fixedClock(),
+        streamingDone: true,
+      ));
+      bool called = false;
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText('Reply.'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        titleGenerator: (List<ChatTurn> turns) async {
+          called = true;
+          return 'Should Not Run';
+        },
+      );
+
+      await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'follow up')
+          .toList();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(called, isFalse);
+      final Conversation? convo = await repo.getConversation('convo-1');
+      expect(convo!.customTitle, isFalse);
+    });
+
+    test('respects an existing custom title — never clobbers a rename',
+        () async {
+      await repo.renameConversation('convo-1', 'My Own Name');
+      bool called = false;
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText('Reply.'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        titleGenerator: (List<ChatTurn> turns) async {
+          called = true;
+          return 'Coach Title';
+        },
+      );
+
+      await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'first message')
+          .toList();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(called, isFalse);
+      final Conversation? convo = await repo.getConversation('convo-1');
+      expect(convo!.title, 'My Own Name');
+    });
+
+    test('a blank/failed title is dropped — derived name stays', () async {
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText('Reply.'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        titleGenerator: (List<ChatTurn> turns) async => '   ',
+      );
+
+      await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'a question')
+          .toList();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      final Conversation? convo = await repo.getConversation('convo-1');
+      expect(convo!.customTitle, isFalse);
+      expect(convo.title, 'New chat');
+    });
+  });
+
+  group('sanitizeChatTitle', () {
+    test('strips wrapping quotes, trailing period, collapses whitespace', () {
+      expect(sanitizeChatTitle('  "Sundowning   At Dinner."  '),
+          'Sundowning At Dinner');
+      expect(sanitizeChatTitle("'Refusing To Bathe'"), 'Refusing To Bathe');
+    });
+
+    test('takes the first non-empty line', () {
+      expect(sanitizeChatTitle('\n\nRepeating Questions\nMore text'),
+          'Repeating Questions');
+    });
+
+    test('null / empty input yields null', () {
+      expect(sanitizeChatTitle(null), isNull);
+      expect(sanitizeChatTitle('   '), isNull);
+      expect(sanitizeChatTitle('".."'), isNull);
+    });
+
+    test('caps an over-long title at a word boundary', () {
+      final String? out = sanitizeChatTitle(
+          'This Is A Very Long Title That Greatly Exceeds The Tile Width');
+      expect(out, isNotNull);
+      expect(out!.length, lessThanOrEqualTo(40));
+      expect(out, isNot(endsWith(' ')));
+      // Whole words only — no mid-word cut.
+      expect('This Is A Very Long Title That Greatly Exceeds The Tile Width'
+          .startsWith(out), isTrue);
+    });
+  });
+
+  group('generateChatTitle', () {
+    test('accumulates the backend text into a raw title', () async {
+      final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+        const ChatDeltaText('Sundowning '),
+        const ChatDeltaText('At Dinner'),
+      ]);
+      final String? title = await generateChatTitle(
+        backend,
+        <ChatTurn>[
+          const ChatTurn(role: MessageRole.user, content: 'evening upset'),
+        ],
+      );
+      expect(title, 'Sundowning At Dinner');
+      expect(backend.lastSystemPrompt, chatTitleSystemPrompt);
+    });
+
+    test('returns null when the backend errors', () async {
+      final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+        const ChatDeltaError('boom'),
+      ]);
+      final String? title = await generateChatTitle(
+        backend,
+        <ChatTurn>[const ChatTurn(role: MessageRole.user, content: 'x')],
+      );
+      expect(title, isNull);
+    });
+  });
+
   // ---- Backend wiring ---------------------------------------------------
 
   group('chatServiceProvider', () {

@@ -133,6 +133,46 @@ class ChatRepository with SyncSinkHost {
         .toList();
   }
 
+  /// Load a single conversation row by id, or null when it's gone.
+  /// Used by [ChatService] to check whether a thread already carries a
+  /// caregiver-set title before it auto-generates one, and by the rename
+  /// flow to read the current name into the edit field.
+  Future<Conversation?> getConversation(String conversationId) async {
+    final ChatConversationsTableData? row =
+        await (_db.select(_db.chatConversationsTable)
+              ..where((t) => t.id.equals(conversationId)))
+            .getSingleOrNull();
+    if (row == null) return null;
+    return Conversation.fromJson(
+      jsonDecode(row.payload) as Map<String, dynamic>,
+    );
+  }
+
+  /// Set a thread's display [title] and mark it [customTitle] so the list
+  /// screen renders it verbatim instead of re-deriving from the first
+  /// message. Used both by the coach's post-first-exchange auto-title and
+  /// the caregiver's manual rename (fb_1781115614890041). A no-op when the
+  /// thread is gone. `updatedAt` is left untouched — a rename is not new
+  /// activity and must not jump the thread to the top of the list.
+  Future<void> renameConversation(
+    String conversationId,
+    String title, {
+    bool custom = true,
+  }) async {
+    final Conversation? existing = await getConversation(conversationId);
+    if (existing == null) return;
+    final Conversation renamed =
+        existing.copyWith(title: title, customTitle: custom);
+    await (_db.update(_db.chatConversationsTable)
+          ..where((t) => t.id.equals(conversationId)))
+        .write(
+      ChatConversationsTableCompanion(
+        payload: Value<String>(jsonEncode(renamed.toJson())),
+      ),
+    );
+    emitUpsert('chat_conversations', renamed.id, renamed.toJson());
+  }
+
   /// Messages for [conversationId], oldest first — the order the
   /// chat screen renders them top-to-bottom.
   Future<List<Message>> loadMessages(String conversationId) async {

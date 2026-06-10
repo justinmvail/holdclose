@@ -307,5 +307,58 @@ void main() {
       final List<Message> b = await repo.loadMessages('b');
       expect(b.map((Message m) => m.id).toList(), <String>['b-1']);
     });
+
+    // ---- rename / custom title (fb_1781115614890041) ---------------------
+
+    test('getConversation round-trips a row, null for an unknown id',
+        () async {
+      final DateTime createdAt = DateTime.utc(2026, 6, 9, 12);
+      await repo.createConversation(
+        id: 'g-1',
+        title: 'New chat',
+        createdAt: createdAt,
+      );
+
+      final Conversation? got = await repo.getConversation('g-1');
+      expect(got, isNotNull);
+      expect(got!.id, 'g-1');
+      expect(got.customTitle, isFalse);
+      expect(await repo.getConversation('nope'), isNull);
+    });
+
+    test('renameConversation sets the title + marks it custom, no updatedAt '
+        'bump', () async {
+      final DateTime createdAt = DateTime.utc(2026, 6, 9, 12);
+      await repo.createConversation(
+        id: 'r-1',
+        title: 'New chat',
+        createdAt: createdAt,
+      );
+      // Bump activity so we can prove rename does NOT touch updatedAt.
+      await repo.appendMessage(Message(
+        id: 'r-1-m1',
+        conversationId: 'r-1',
+        role: MessageRole.user,
+        body: 'hello',
+        citations: const <String>[],
+        createdAt: createdAt.add(const Duration(minutes: 5)),
+        streamingDone: true,
+      ));
+      final DateTime bumped =
+          (await repo.getConversation('r-1'))!.updatedAt;
+
+      await repo.renameConversation('r-1', 'Sundowning At Dinner');
+
+      final Conversation? got = await repo.getConversation('r-1');
+      expect(got!.title, 'Sundowning At Dinner');
+      expect(got.customTitle, isTrue);
+      // A rename is not new activity — ordering must not jump.
+      expect(got.updatedAt, bumped);
+    });
+
+    test('renameConversation on an unknown id is a silent no-op', () async {
+      await repo.renameConversation('ghost', 'Whatever');
+      expect(await repo.getConversation('ghost'), isNull);
+    });
   });
 }

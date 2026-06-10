@@ -1,10 +1,17 @@
+import 'package:careblazers/db/database.dart';
+import 'package:careblazers/models/appointment.dart';
 import 'package:careblazers/models/care_event.dart';
 import 'package:careblazers/providers/home_clock_provider.dart';
 import 'package:careblazers/providers/patient_timeline_provider.dart';
+import 'package:careblazers/services/appointment_repository.dart';
+import 'package:careblazers/services/provider_repository.dart';
 import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/home/schedule_card.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+// hide Provider — clashes with the care-model Provider used to seed the
+// appointment's FK below.
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
@@ -275,6 +282,86 @@ void main() {
       expect(
         band.padding,
         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      );
+    },
+  );
+
+  testWidgets(
+    'an appointment shows a checkable bullet that toggles done '
+    '(fb_1781099457246946)',
+    (WidgetTester tester) async {
+      final DateTime now = DateTime(2026, 6, 1, 11);
+      final CareblazersDatabase db =
+          CareblazersDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      // The appointment FKs to a provider — seed it (same db) first.
+      await ProviderRepository(db).upsertProvider(const Provider(
+        id: 'prov-1',
+        name: 'Dr Smith',
+        role: ProviderRole.other,
+        phone: '',
+        address: '',
+      ));
+      final AppointmentRepository repo = AppointmentRepository(db);
+      await repo.upsertAppointment(Appointment(
+        id: 'appt-1',
+        providerId: 'prov-1',
+        startsAt: DateTime(2026, 6, 1, 14),
+        durationMinutes: 30,
+        location: '',
+        agenda: const <String>[],
+        status: AppointmentStatus.upcoming,
+      ));
+
+      final CareEvent apptEvent = CareEvent(
+        id: 'evt-appt-1',
+        kind: CareEventKind.appointment,
+        title: 'Dr Smith',
+        start: DateTime(2026, 6, 1, 14),
+        patientId: _patient,
+        externalRef: 'appt-1',
+      );
+
+      await tester.binding.setSurfaceSize(const Size(420, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(ProviderScope(
+        overrides: <Override>[
+          homeClockProvider.overrideWithValue(() => now),
+          patientTimelineEventsProvider
+              .overrideWith((Ref ref) async => <CareEvent>[apptEvent]),
+          appointmentRepositoryProvider.overrideWithValue(repo),
+        ],
+        child: MaterialApp(
+          theme: careblazersLightTheme,
+          home: const Scaffold(
+            body: SingleChildScrollView(child: ScheduleCard()),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final Finder checkbox =
+          find.byKey(ScheduleCard.doneCheckboxKey('evt-appt-1'));
+      expect(checkbox, findsOneWidget);
+      // Starts unchecked (upcoming).
+      expect(
+        find.descendant(
+            of: checkbox, matching: find.byIcon(Icons.radio_button_unchecked)),
+        findsOneWidget,
+      );
+
+      await tester.tap(checkbox);
+      await tester.pumpAndSettle();
+
+      // Persisted as completed AND the bullet filled in.
+      final Appointment? after = await repo.getAppointment('appt-1');
+      expect(after?.status, AppointmentStatus.completed);
+      expect(
+        find.descendant(
+          of: find.byKey(ScheduleCard.doneCheckboxKey('evt-appt-1')),
+          matching: find.byIcon(Icons.check_circle),
+        ),
+        findsOneWidget,
       );
     },
   );

@@ -318,6 +318,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
                   child: TextFormField(
                     key: PostComposeScreen.titleFieldKey,
                     controller: _titleController,
+                    textCapitalization: TextCapitalization.sentences,
                     // The title can't change on an edit — the Worker's
                     // `PATCH /posts/:id` only updates the body. Lock it so the
                     // caregiver isn't misled into editing a field that won't
@@ -357,6 +358,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
                   child: TextFormField(
                     key: PostComposeScreen.bodyFieldKey,
                     controller: _bodyController,
+                    textCapitalization: TextCapitalization.sentences,
                     maxLength: postComposeBodyMaxChars,
                     maxLengthEnforcement: MaxLengthEnforcement.enforced,
                     decoration: const InputDecoration(

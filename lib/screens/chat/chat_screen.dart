@@ -104,7 +104,8 @@ class ChatScreen extends ConsumerStatefulWidget {
 /// the keyboard (#fb_1780959745327767).
 const Key _threadTapDismissKey = Key('chat-screen-thread-tap-dismiss');
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with WidgetsBindingObserver {
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
   final Map<String, Message> _messages = <String, Message>{};
@@ -127,10 +128,82 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// re-send it verbatim without the caregiver retyping (#19).
   String? _lastUserText;
 
+  /// Set when the app leaves the foreground while a reply is mid-stream. iOS
+  /// suspends the network socket the moment the phone locks / the app
+  /// backgrounds, so an in-flight reply stalls or errors. On return to the
+  /// foreground we use this to auto-recover the turn (sleep bug) instead of
+  /// leaving a dead/partial bubble the caregiver has to retry by hand.
+  bool _interruptedWhileSending = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadInitial();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        // Note an in-flight send so we can recover it on resume — the OS is
+        // about to suspend our connection.
+        if (_sending) _interruptedWhileSending = true;
+      case AppLifecycleState.resumed:
+        unawaited(_resumeInterruptedSend());
+    }
+  }
+
+  /// Recover a reply that was interrupted by the phone sleeping / the app
+  /// backgrounding mid-stream. On return to the foreground, if the last turn
+  /// never completed cleanly — a failed or still-partial assistant bubble, or
+  /// a stream still hung on the dead socket — re-send the caregiver's
+  /// question once (the same path the inline "Try again" uses). A reply that
+  /// DID land cleanly is left untouched, and the one-shot flag bounds this to
+  /// a single auto-attempt per interruption so a persistently-down backend
+  /// can't loop.
+  Future<void> _resumeInterruptedSend() async {
+    if (!_interruptedWhileSending) return;
+    _interruptedWhileSending = false;
+
+    final Message? last = _latestMessage();
+    final bool replyComplete = last != null &&
+        last.role == MessageRole.assistant &&
+        last.streamingDone &&
+        !chatBodyHasError(last.body);
+    if (replyComplete) return;
+
+    final String? text = _lastUserText ?? _lastUserMessageBody();
+    if (text == null || text.isEmpty) return;
+
+    // The interrupted stream may still be hung on a dead socket, leaving
+    // `_sending` true. Drop it so `_dispatch`'s in-flight guard doesn't
+    // no-op the recovery, then re-send.
+    if (_sending) {
+      await _sendSubscription?.cancel();
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _streamingAssistantId = null;
+        });
+      }
+    }
+    await _dispatch(text);
+  }
+
+  /// The most-recently appended message in the rendered thread, or null when
+  /// the thread is empty. Used to decide whether an interrupted send already
+  /// recovered on its own before the app returned to the foreground.
+  Message? _latestMessage() {
+    for (final String id in _order.reversed) {
+      final Message? m = _messages[id];
+      if (m != null) return m;
+    }
+    return null;
   }
 
   Future<void> _loadInitial() async {
@@ -164,6 +237,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _sendSubscription?.cancel();
     _streamingBodyController?.close();
     _input.dispose();

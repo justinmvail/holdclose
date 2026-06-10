@@ -348,6 +348,77 @@ String _defaultChatIdFactory() {
   return 'chat-$ms-$rand';
 }
 
+/// Produces a short thread title from its opening [turns], or null when
+/// none could be made (backend error, empty output). Injected into
+/// [ChatService.titleGenerator]; production wires [generateChatTitle].
+typedef ChatTitleGenerator = Future<String?> Function(List<ChatTurn> turns);
+
+/// System prompt for the one-shot title pass (fb_1781115614890041). Asks
+/// for a tiny, plain label — no "AI"/coach framing leaks since the output
+/// is just the thread's name. Kept deliberately terse so the model returns
+/// a few words, not a sentence; [sanitizeChatTitle] hardens whatever comes
+/// back (strips quotes/punctuation, caps the length at a word boundary).
+const String chatTitleSystemPrompt =
+    'You name a saved conversation for a dementia caregiver. Reply with ONLY '
+    'a short, specific title of 2 to 5 words that captures what the caregiver '
+    'is asking about. Title Case. No quotes, no punctuation, no emoji, no '
+    'trailing period. Examples: Sundowning At Dinner, Refusing To Bathe, '
+    'Repeating The Same Question.';
+
+/// Clean a raw model-produced title into a tile-ready label, or null when
+/// nothing usable remains. Takes the first line, strips wrapping quotes and
+/// stray trailing punctuation, collapses whitespace, and caps the length at
+/// a word boundary (~40 chars) so it never overflows the tile.
+String? sanitizeChatTitle(String? raw) {
+  if (raw == null) return null;
+  String t = raw.trim();
+  if (t.isEmpty) return null;
+  // First non-empty line only — the model occasionally adds a preamble.
+  t = t
+      .split('\n')
+      .map((String l) => l.trim())
+      .firstWhere((String l) => l.isNotEmpty, orElse: () => '');
+  if (t.isEmpty) return null;
+  // Strip a matched pair of wrapping quotes.
+  if (t.length >= 2 &&
+      ((t.startsWith('"') && t.endsWith('"')) ||
+          (t.startsWith("'") && t.endsWith("'")))) {
+    t = t.substring(1, t.length - 1).trim();
+  }
+  // Drop stray leading/trailing punctuation + collapse inner whitespace.
+  t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
+  t = t.replaceAll(RegExp(r'^[\s\-–—:"' "'" r'.]+|[\s\-–—:"' "'" r'.]+$'), '');
+  if (t.isEmpty) return null;
+  if (t.length <= 40) return t;
+  final String cut = t.substring(0, 40);
+  final int lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > 20 ? cut.substring(0, lastSpace) : cut).trim();
+}
+
+/// Production [ChatTitleGenerator]: one non-streaming pass over [backend]
+/// with [chatTitleSystemPrompt] to name a thread from its opening [turns].
+/// Returns the raw title text (the caller sanitizes) or null on any backend
+/// error so auto-titling silently degrades to the derived succinct name.
+Future<String?> generateChatTitle(
+  ChatLLMBackend backend,
+  List<ChatTurn> turns,
+) async {
+  final StringBuffer buffer = StringBuffer();
+  await for (final ChatDelta delta in backend.streamReply(
+    systemPrompt: chatTitleSystemPrompt,
+    history: turns,
+  )) {
+    switch (delta) {
+      case ChatDeltaText(:final String text):
+        buffer.write(text);
+      case ChatDeltaError():
+        return null;
+    }
+  }
+  final String out = buffer.toString().trim();
+  return out.isEmpty ? null : out;
+}
+
 /// Default [ChatService.contextSnapshot] — no data injected. Keeps the
 /// service unit-testable (the prompt equals [chatSystemPrompt] unchanged)
 /// and chat-only surfaces wiring-free.
@@ -426,6 +497,7 @@ class ChatService {
     Future<String> Function()? contextSnapshot,
     ChatIdFactory? idFactory,
     DateTime Function()? clock,
+    this.titleGenerator,
   })  : actions = actions ?? const <String, ChatActionExecutor>{},
         contextSnapshot = contextSnapshot ?? _emptyContextSnapshot,
         idFactory = idFactory ?? _defaultChatIdFactory,
@@ -455,6 +527,16 @@ class ChatService {
 
   final ChatIdFactory idFactory;
   final DateTime Function() clock;
+
+  /// Produces a short display title from a thread's opening turns, or null
+  /// when no title could be made. Fired ONCE — fire-and-forget after the
+  /// first assistant reply lands — so the conversation list shows a real
+  /// coach-written name instead of a raw truncation of the first message
+  /// (fb_1781115614890041). Null disables auto-titling: unit + widget tests
+  /// leave it unset so a `sendMessage` never makes a second backend call
+  /// (callCount/idFactory assertions stay exact). Production wires
+  /// [generateChatTitle] via [chatServiceProvider].
+  final ChatTitleGenerator? titleGenerator;
 
   /// Send [userText] in the existing [conversationId] thread and stream
   /// the assistant's reply. Yields [Message] snapshots as each repo
@@ -499,6 +581,10 @@ class ChatService {
       final List<ChatTurn> turns = history
           .map((Message m) => ChatTurn(role: m.role, content: m.body))
           .toList(growable: false);
+      // First exchange in a brand-new thread → history is just the
+      // user turn we appended above. Used to fire the one-shot auto-title
+      // once the reply lands.
+      final bool isFirstTurn = turns.length == 1;
 
       await repository.appendMessage(assistant);
       yield assistant;
@@ -562,6 +648,13 @@ class ChatService {
       );
       await repository.appendMessage(assistant);
       yield assistant;
+
+      // Name the thread from its opening exchange — fire-and-forget so the
+      // title write never delays the visible reply. Only on the first turn,
+      // and only when a generator is wired (production); tests leave it null.
+      if (isFirstTurn && titleGenerator != null) {
+        unawaited(_autoTitle(conversationId, userText, cleanBody));
+      }
     } catch (e, st) {
       // Never let a turn fail SILENTLY (alpha bug: "nothing happens after
       // I hit send"). Any exception after the user message — loadMessages,
@@ -580,6 +673,32 @@ class ChatService {
         // Best-effort persist; the in-memory yield still surfaces it.
       }
       yield errorMessage;
+    }
+  }
+
+  /// Best-effort: ask [titleGenerator] for a short name from the opening
+  /// exchange and persist it as the thread's [Conversation.customTitle].
+  /// Skips a thread the caregiver has already named (customTitle already
+  /// set) so a rename is never clobbered. Never throws — a failed or empty
+  /// title just leaves the derived succinct name in place.
+  Future<void> _autoTitle(
+    String conversationId,
+    String userText,
+    String assistantText,
+  ) async {
+    try {
+      final Conversation? convo =
+          await repository.getConversation(conversationId);
+      if (convo == null || convo.customTitle) return;
+      final String? raw = await titleGenerator!(<ChatTurn>[
+        ChatTurn(role: MessageRole.user, content: userText),
+        ChatTurn(role: MessageRole.assistant, content: assistantText),
+      ]);
+      final String? title = sanitizeChatTitle(raw);
+      if (title == null) return;
+      await repository.renameConversation(conversationId, title, custom: true);
+    } catch (_) {
+      // Auto-titling is a nicety, never a turn-failing path.
     }
   }
 
@@ -815,4 +934,17 @@ ChatService chatService(Ref ref) => ChatService(
       // CURRENT DATA block the coach reads.
       contextSnapshot: () async =>
           formatChatContext(await gatherChatContext(ref)),
+      titleGenerator: ref.watch(chatTitleGeneratorProvider),
     );
+
+/// The auto-title generator wired into [chatService] (fb_1781115614890041).
+/// A separate, overridable seam so a fresh thread is named from its opening
+/// exchange in production WITHOUT the title's extra backend round-trip
+/// polluting tests that count reply calls — flow/integration tests override
+/// this with a no-op (or null) to keep `backend.callCount` equal to the
+/// number of reply round-trips. Reuses the same chat backend the replies
+/// stream through, so a Settings backend override flows through here too.
+@Riverpod(keepAlive: true)
+ChatTitleGenerator chatTitleGenerator(Ref ref) =>
+    (List<ChatTurn> turns) =>
+        generateChatTitle(ref.read(chatLLMBackendProvider), turns);

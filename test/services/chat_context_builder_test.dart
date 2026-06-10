@@ -93,7 +93,7 @@ void main() {
       expect(out, contains('Upcoming appointments: Neurology — Jun 20 '
           '2:00 PM at Clinic.'));
       expect(out, contains('Routines: Morning hygiene 7:30 AM.'));
-      expect(out, contains('Recent health notes: vitals: BP 128 over 82.'));
+      expect(out, contains('Health log (newest first): vitals: BP 128 over 82.'));
     });
 
     test('as-needed window renders without a clock time', () {
@@ -136,7 +136,7 @@ void main() {
       expect(out, contains('Upcoming appointments: none scheduled.'));
       // Routines / health-log lines are omitted entirely when empty.
       expect(out, isNot(contains('Routines:')));
-      expect(out, isNot(contains('Recent health notes:')));
+      expect(out, isNot(contains('Health log')));
     });
   });
 }

@@ -1,12 +1,51 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/appointment.dart';
 import '../../models/care_event.dart';
 import '../../providers/home_clock_provider.dart';
 import '../../providers/patient_timeline_provider.dart';
+import '../../services/appointment_repository.dart';
 import '../../theme.dart';
 import '../schedule_grouping.dart';
+
+/// Completed-status of every appointment, keyed by id — so the schedule can
+/// render + toggle a "done" checkbox without the read-only [CareEvent]
+/// projection having to carry it (fb_1781099457246946). autoDispose so it
+/// refetches when invalidated after a toggle.
+final scheduleAppointmentStatusProvider =
+    FutureProvider.autoDispose<Map<String, AppointmentStatus>>((Ref ref) async {
+  // Defensive: a checkbox decoration must never crash the schedule render.
+  // If the appointment store is unreachable (e.g. a golden/test environment
+  // with no DB), fall back to "no statuses" — the rows just show unchecked.
+  try {
+    final List<Appointment> appts =
+        await ref.watch(appointmentRepositoryProvider).listAppointments();
+    return <String, AppointmentStatus>{
+      for (final Appointment a in appts) a.id: a.status,
+    };
+  } catch (_) {
+    return const <String, AppointmentStatus>{};
+  }
+});
+
+/// Flip an appointment between completed and upcoming, persist it, and
+/// refresh the schedule's status + the timeline so the checkbox + any
+/// dependent UI update. Defensive: a missing appointment is a no-op.
+Future<void> _toggleAppointmentDone(WidgetRef ref, String appointmentId) async {
+  final AppointmentRepository repo = ref.read(appointmentRepositoryProvider);
+  final Appointment? appt = await repo.getAppointment(appointmentId);
+  if (appt == null) return;
+  final AppointmentStatus next = appt.status == AppointmentStatus.completed
+      ? AppointmentStatus.upcoming
+      : AppointmentStatus.completed;
+  await repo.upsertAppointment(appt.copyWith(status: next));
+  ref.invalidate(scheduleAppointmentStatusProvider);
+  ref.invalidate(patientTimelineEventsProvider);
+}
 
 /// The "Schedule" dashboard card — the caregiver's at-a-glance view of
 /// what's happening with the patient **today** and **tomorrow**. Replaces
@@ -35,6 +74,8 @@ class ScheduleCard extends ConsumerWidget {
   static const Key viewCalendarKey = Key('home-schedule-view-calendar');
   static const Key moreRowKey = Key('home-schedule-more');
   static Key rowKey(String eventId) => Key('home-schedule-row-$eventId');
+  static Key doneCheckboxKey(String eventId) =>
+      Key('home-schedule-done-$eventId');
 
   /// Maximum **rows** surfaced per section — a medication window counts as
   /// one row, so a window's meds are never split or dropped by the cap.
@@ -52,6 +93,17 @@ class ScheduleCard extends ConsumerWidget {
     final AsyncValue<List<CareEvent>> async =
         ref.watch(patientTimelineEventsProvider);
     final DateTime now = ref.watch(homeClockProvider)();
+
+    // Which appointments are marked done (for the checkable bullet). Empty
+    // while loading — the row just shows an unchecked box until it lands.
+    final Map<String, AppointmentStatus> apptStatus =
+        ref.watch(scheduleAppointmentStatusProvider).asData?.value ??
+            const <String, AppointmentStatus>{};
+    final Set<String> doneApptIds = <String>{
+      for (final MapEntry<String, AppointmentStatus> e in apptStatus.entries)
+        if (e.value == AppointmentStatus.completed) e.key,
+    };
+    void toggleAppt(String id) => unawaited(_toggleAppointmentDone(ref, id));
 
     final Widget body = async.when(
       loading: () => const _Skeleton(),
@@ -72,6 +124,8 @@ class ScheduleCard extends ConsumerWidget {
                 events: b.today,
                 maxRows: _maxRowsPerSection,
                 now: now,
+                doneApptIds: doneApptIds,
+                onToggleAppt: toggleAppt,
               ),
             if (b.tomorrow.isNotEmpty) ...<Widget>[
               if (b.today.isNotEmpty) const SizedBox(height: 12),
@@ -81,6 +135,8 @@ class ScheduleCard extends ConsumerWidget {
                 events: b.tomorrow,
                 maxRows: _maxRowsPerSection,
                 now: now,
+                doneApptIds: doneApptIds,
+                onToggleAppt: toggleAppt,
               ),
             ],
           ],
@@ -150,12 +206,20 @@ class _Section extends StatelessWidget {
     required this.events,
     required this.maxRows,
     required this.now,
+    required this.doneApptIds,
+    required this.onToggleAppt,
   });
 
   final String label;
   final List<CareEvent> events;
   final int maxRows;
   final DateTime now;
+
+  /// Ids of appointments currently marked done (drives the checkbox).
+  final Set<String> doneApptIds;
+
+  /// Toggle an appointment's done state by id.
+  final void Function(String appointmentId) onToggleAppt;
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +263,12 @@ class _Section extends StatelessWidget {
         for (final ScheduleRow r in rows)
           r is DoseGroupRow
               ? _GroupedRow(model: r.group, now: now)
-              : _Row(event: (r as EventRow).event, now: now),
+              : _Row(
+                  event: (r as EventRow).event,
+                  now: now,
+                  doneApptIds: doneApptIds,
+                  onToggleAppt: onToggleAppt,
+                ),
         if (hidden > 0) _MoreRow(count: hidden),
       ],
     );
@@ -284,33 +353,41 @@ class _GroupedRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
+              // Blank leading slot so the window's time lines up with the
+              // appointment rows' checkbox-led times (the window itself isn't
+              // a single checkable item — its meds carry their own marks).
+              const SizedBox(width: _leadingSlot),
               Expanded(
                 child: Text.rich(
                   label == null
                       ? TextSpan(
                           text: time,
                           style: tt.bodyMedium?.copyWith(
-                            color: labelColor,
+                            color: timeColor,
                             fontWeight: FontWeight.w700,
                           ),
                         )
                       : TextSpan(
                           children: <InlineSpan>[
+                            // TIME first, then the window name
+                            // ("8:00 AM · Morning Medication") so the dose
+                            // group matches every other row
+                            // (fb_1781099457246946).
+                            TextSpan(
+                              text: time,
+                              style: tt.bodyMedium?.copyWith(
+                                color: timeColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                             TextSpan(
                               // "Medication" appended to the window name so a
                               // dose group reads unambiguously as meds among
                               // the appointments + other events the schedule
                               // mixes in — "Morning Medication" not "Morning".
-                              text: '$label Medication',
+                              text: '  ·  $label Medication',
                               style: tt.bodyMedium?.copyWith(
                                 color: labelColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            TextSpan(
-                              text: '  ·  $time',
-                              style: tt.bodyMedium?.copyWith(
-                                color: timeColor,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -387,11 +464,22 @@ class _DoseStatusMark extends StatelessWidget {
   }
 }
 
+/// Width of the leading "mark done" slot — a checkbox on completable rows,
+/// an equal-width blank on the rest, so every row's time stays aligned.
+const double _leadingSlot = 30;
+
 class _Row extends StatelessWidget {
-  const _Row({required this.event, required this.now});
+  const _Row({
+    required this.event,
+    required this.now,
+    required this.doneApptIds,
+    required this.onToggleAppt,
+  });
 
   final CareEvent event;
   final DateTime now;
+  final Set<String> doneApptIds;
+  final void Function(String appointmentId) onToggleAppt;
 
   @override
   Widget build(BuildContext context) {
@@ -402,16 +490,34 @@ class _Row extends StatelessWidget {
     final VoidCallback? onTap = route == null
         ? null
         : () => GoRouter.of(context).push(route);
-    // Same header format as a medication window — "Title  ·  Time", title
-    // navy/bold + time soft/bold, no leading kind-dot — so every schedule
-    // entry reads identically (fb_1781045816196914). A single event just
-    // has no sub-rows beneath it.
+    // TIME first, then title ("8:00 AM · Dr Smith"), no leading kind-dot — so
+    // every schedule entry reads identically (fb_1781045816196914 /
+    // fb_1781099457246946).
     final Color labelColor = past
         ? context.cb.primary.withValues(alpha: 0.55)
         : context.cb.primary;
     final Color timeColor = past
         ? context.cb.primarySoft.withValues(alpha: 0.55)
         : context.cb.primarySoft;
+
+    // Only items with a real "done" state are checkable — appointments here
+    // (doses live in their own grouped rows). Past-record kinds (journal,
+    // health log) get a blank slot so their time still lines up.
+    final String? apptId = event.kind == CareEventKind.appointment
+        ? event.externalRef
+        : null;
+    final Widget leading = apptId == null
+        ? const SizedBox(width: _leadingSlot)
+        : SizedBox(
+            width: _leadingSlot,
+            child: _DoneCheckbox(
+              key: ScheduleCard.doneCheckboxKey(event.id),
+              done: doneApptIds.contains(apptId),
+              dimmed: past,
+              onTap: () => onToggleAppt(apptId),
+            ),
+          );
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: InkWell(
@@ -423,21 +529,22 @@ class _Row extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
+              leading,
               Expanded(
                 child: Text.rich(
                   TextSpan(
                     children: <InlineSpan>[
                       TextSpan(
-                        text: event.title,
+                        text: time,
                         style: tt.bodyMedium?.copyWith(
-                          color: labelColor,
+                          color: timeColor,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       TextSpan(
-                        text: '  ·  $time',
+                        text: '  ·  ${event.title}',
                         style: tt.bodyMedium?.copyWith(
-                          color: timeColor,
+                          color: labelColor,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -456,6 +563,35 @@ class _Row extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A tappable "mark as done" bullet — a hollow circle that fills to a check.
+/// Its own tap target so it doesn't trigger the row's navigation.
+class _DoneCheckbox extends StatelessWidget {
+  const _DoneCheckbox({
+    super.key,
+    required this.done,
+    required this.onTap,
+    this.dimmed = false,
+  });
+
+  final bool done;
+  final VoidCallback onTap;
+  final bool dimmed;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color c = done ? context.cb.success : context.cb.primarySoft;
+    return InkResponse(
+      onTap: onTap,
+      radius: 20,
+      child: Icon(
+        done ? Icons.check_circle : Icons.radio_button_unchecked,
+        size: 22,
+        color: dimmed ? c.withValues(alpha: 0.55) : c,
       ),
     );
   }

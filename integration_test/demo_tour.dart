@@ -22,6 +22,7 @@ import 'package:careblazers/screens/chat/conversation_list_screen.dart';
 import 'package:careblazers/screens/community/community_feed_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/medical/care_plan_routines_screen.dart';
+import 'package:careblazers/widgets/path_header.dart';
 import 'package:careblazers/screens/medical/emergency_card_screen.dart';
 import 'package:careblazers/screens/medical/health_log_entry_form.dart';
 import 'package:careblazers/screens/medical/health_log_screen.dart';
@@ -246,7 +247,7 @@ void main() {
       await _capture(tester, '01_home');
 
       // ---- Profile icon → Settings → close back to Home --------------------
-      await tester.tap(find.byKey(HomeScreen.profileButtonKey));
+      await tester.tap(find.byKey(PathHeader.profileButtonKey));
       await tester.pumpAndSettle();
       expect(find.byKey(SettingsScreen.readAloudToggleKey), findsOneWidget);
       expect(find.text('Settings'), findsOneWidget);

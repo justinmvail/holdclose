@@ -190,26 +190,23 @@ void main() {
         findsOneWidget,
       );
 
-      // Tile titles derive from the first user message's first 60 chars.
-      // The "new" message is under 60 chars and renders verbatim.
+      // Tile titles derive from the first user message via the succinct
+      // formatter — assert the tile shows exactly what the formatter returns.
       expect(
         find.descendant(
           of: find.byKey(ConversationListScreen.tileKey('convo-new')),
-          matching: find.text(
+          matching: find.text(conversationDisplayTitle(
             'When she says she wants to go home, what do I say?',
-          ),
+          )),
         ),
         findsOneWidget,
       );
-      // The "old" title runs over 60 chars and gets the ellipsis suffix.
-      const String oldExpected =
-          'What is sundowning and why does she get so agitated at dusk?';
       expect(
         find.descendant(
           of: find.byKey(ConversationListScreen.tileKey('convo-old')),
-          matching: find.text(oldExpected.length <= 60
-              ? oldExpected
-              : '${oldExpected.substring(0, 60)}…'),
+          matching: find.text(conversationDisplayTitle(
+            'What is sundowning and why does she get so agitated at dusk?',
+          )),
         ),
         findsOneWidget,
       );
@@ -348,7 +345,7 @@ void main() {
         hasSemanticsLabel(
           tester,
           RegExp(
-            '${RegExp.escape("How do I respond when he asks for his mother?")}.*'
+            '${RegExp.escape(conversationDisplayTitle("How do I respond when he asks for his mother?"))}.*'
             'Double-tap to open this chat',
           ),
         ),
@@ -358,8 +355,8 @@ void main() {
   });
 
   group('ConversationListScreen — title derivation', () {
-    test('ConversationListItem.displayTitle returns first 60 chars + ellipsis '
-        'when the message is long', () {
+    test('ConversationListItem.displayTitle yields a succinct, word-boundary '
+        'truncation when the message is long', () {
       const String body =
           'What do I do when sundowning hits and nothing else seems to work for her?';
       final ConversationListItem item = ConversationListItem(
@@ -373,11 +370,20 @@ void main() {
         lastMessage: body,
       );
 
-      expect(item.displayTitle, '${body.substring(0, 60)}…');
+      final String title = item.displayTitle;
+      // Succinct: short enough for a single tile line.
+      expect(title.length, lessThanOrEqualTo(37));
+      // Truncated long bodies end with an ellipsis.
+      expect(title, endsWith('…'));
+      // No mid-word cut — the visible prefix is whole words of the body.
+      final String visible = title.substring(0, title.length - 1);
+      expect(body.startsWith(visible), isTrue);
+      expect(visible.endsWith(' '), isFalse);
+      expect(title, conversationDisplayTitle(body));
     });
 
     test('ConversationListItem.displayTitle returns the body verbatim when '
-        'shorter than 60 chars', () {
+        'short enough to fit', () {
       const String body = 'short question';
       final ConversationListItem item = ConversationListItem(
         conversation: Conversation(
@@ -619,6 +625,118 @@ void main() {
         find.byKey(ConversationListScreen.tileKey('convo-b')),
         findsNothing,
       );
+    });
+  });
+
+  group('ConversationListScreen — rename a chat (fb_1781115614890041)', () {
+    testWidgets('a custom title is shown verbatim instead of the derived name',
+        (WidgetTester tester) async {
+      await repo.createConversation(
+        id: 'convo-ct',
+        title: 'New chat',
+        createdAt: _fixedNow(),
+      );
+      await repo.appendMessage(Message(
+        id: 'ct-1',
+        conversationId: 'convo-ct',
+        role: MessageRole.user,
+        body: 'A long opening question the derived title would truncate badly.',
+        citations: const <String>[],
+        createdAt: _fixedNow(),
+        streamingDone: true,
+      ));
+      // Coach/caregiver-set name.
+      await repo.renameConversation('convo-ct', 'Sundowning At Dinner');
+
+      await _pump(tester, repo: repo, db: db);
+
+      expect(find.text('Sundowning At Dinner'), findsOneWidget);
+      // The derived succinct title is NOT used once a custom title is set
+      // (the full body still appears as the dim subtitle — that's expected).
+      final String derived = conversationDisplayTitle(
+        'A long opening question the derived title would truncate badly.',
+      );
+      expect(find.text(derived), findsNothing);
+    });
+
+    testWidgets('the pencil icon opens a prefilled dialog and Save persists '
+        'the new name', (WidgetTester tester) async {
+      await repo.createConversation(
+        id: 'convo-rn',
+        title: 'New chat',
+        createdAt: _fixedNow(),
+      );
+      await repo.appendMessage(Message(
+        id: 'rn-1',
+        conversationId: 'convo-rn',
+        role: MessageRole.user,
+        body: 'How do I handle bathing refusal?',
+        citations: const <String>[],
+        createdAt: _fixedNow(),
+        streamingDone: true,
+      ));
+
+      await _pump(tester, repo: repo, db: db);
+
+      await tester.tap(
+        find.byKey(ConversationListScreen.renameIconKey('convo-rn')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ConversationListScreen.renameDialogKey),
+        findsOneWidget,
+      );
+      // Field is prefilled with the current (derived) display title.
+      expect(
+        find.widgetWithText(TextField, 'How do I handle bathing refusal?'),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+        find.byKey(ConversationListScreen.renameFieldKey),
+        'Bathing Refusal',
+      );
+      await tester.tap(find.byKey(ConversationListScreen.renameSaveKey));
+      await tester.pumpAndSettle();
+
+      final Conversation? convo = await repo.getConversation('convo-rn');
+      expect(convo!.title, 'Bathing Refusal');
+      expect(convo.customTitle, isTrue);
+      expect(find.text('Bathing Refusal'), findsOneWidget);
+    });
+
+    testWidgets('Cancel leaves the name unchanged', (WidgetTester tester) async {
+      await repo.createConversation(
+        id: 'convo-rc',
+        title: 'New chat',
+        createdAt: _fixedNow(),
+      );
+      await repo.appendMessage(Message(
+        id: 'rc-1',
+        conversationId: 'convo-rc',
+        role: MessageRole.user,
+        body: 'Original question',
+        citations: const <String>[],
+        createdAt: _fixedNow(),
+        streamingDone: true,
+      ));
+
+      await _pump(tester, repo: repo, db: db);
+
+      await tester.tap(
+        find.byKey(ConversationListScreen.renameIconKey('convo-rc')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(ConversationListScreen.renameFieldKey),
+        'Discarded',
+      );
+      await tester.tap(find.byKey(ConversationListScreen.renameCancelKey));
+      await tester.pumpAndSettle();
+
+      final Conversation? convo = await repo.getConversation('convo-rc');
+      expect(convo!.customTitle, isFalse);
+      expect(convo.title, 'New chat');
     });
   });
 

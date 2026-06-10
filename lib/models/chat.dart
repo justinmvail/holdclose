@@ -19,8 +19,12 @@ enum MessageRole {
 /// A single dementia-care chat thread persisted in drift
 /// (TASKS.md Phase 11.1 + 11.2).
 ///
-/// [title] is derived by [ChatService] from the first user message's
-/// first 60 chars (per Phase 11.4 spec for the conversation list).
+/// [title] is the thread's display name. By default the list screen
+/// DERIVES a succinct name from the first user message; once the coach
+/// generates a real title after the first exchange, or the caregiver
+/// renames the thread, that text is stored in [title] and [customTitle]
+/// flips true so the derived name no longer wins (fb_1781115614890041 —
+/// "make a succinct title with ai … the user should be able to update it").
 /// [createdAt] is set at insert; [updatedAt] is bumped each time a
 /// new [Message] is appended so the conversation list can sort by
 /// recency.
@@ -31,6 +35,12 @@ abstract class Conversation with _$Conversation {
     required String title,
     required DateTime createdAt,
     required DateTime updatedAt,
+    // True once [title] holds an explicit name — coach-generated after the
+    // first exchange OR caregiver-edited — so the list tile shows it
+    // verbatim instead of re-deriving from the first message. Defaults
+    // false (older rows + freshly-created threads) so the derived succinct
+    // title remains the fallback. JSON-optional → no schema bump.
+    @Default(false) bool customTitle,
   }) = _Conversation;
 
   factory Conversation.fromJson(Map<String, dynamic> json) =>
