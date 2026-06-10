@@ -91,3 +91,6 @@ test/**/failures/**/*.*
 
 # Claude Code session/harness state (lock files, etc.)
 .claude/
+
+# Local dev secrets sourced by tools/seed_demo.sh (never commit)
+tools/dev_defines.sh

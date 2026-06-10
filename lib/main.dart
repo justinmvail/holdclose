@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
 import 'models/settings.dart';
@@ -13,9 +14,26 @@ import 'providers/onboarding_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/storage_provider.dart';
 import 'providers/tts_provider.dart';
+import 'seed/demo_dataset.dart';
 import 'services/log_buffer.dart';
 import 'services/seed_repository.dart';
 import 'services/sync_service.dart';
+
+/// Build-time switch for the comprehensive test-data seed
+/// (`--dart-define=SEED_DEMO=true`). Off by default — only the
+/// `tools/seed_demo.sh` builds set it. Distinct from `DEMO_MODE` (the pitch
+/// demo's reset-to-Mary), so a normal build never wipes a tester's data.
+const bool _seedDemoEnabled = bool.fromEnvironment('SEED_DEMO');
+
+/// A unique token the seeding script stamps into each build
+/// (`--dart-define=SEED_TOKEN=<ts>`). The seed runs once per distinct token —
+/// it's stored after a successful seed, so the same installed build never
+/// re-wipes on subsequent cold launches. Rerun the script (fresh token) to
+/// get a fresh dataset.
+const String _seedDemoToken = String.fromEnvironment('SEED_TOKEN');
+
+/// SharedPreferences key holding the last [_seedDemoToken] that was applied.
+const String seedDemoTokenPrefsKey = 'careblazers.seed_demo_token';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,6 +84,12 @@ Future<void> main() async {
   // the journal stream watch fires, and screens never see the pre-
   // reset state flash through.
   await maybeResetForDemo(container, demoMode: demoModeEnabled);
+
+  // Comprehensive test-data seed (tools/seed_demo.sh). One-shot per build:
+  // wipes the database and lays down six months of every data type, guarded
+  // by a token so it seeds exactly once per script run and then leaves the
+  // tester's edits alone on later launches.
+  await maybeSeedDemoDataset(container);
 
   // Server-authoritative sync: kick the engine AFTER the first frame so
   // launch is never blocked on the network. The lifecycle observer also
@@ -183,4 +207,32 @@ Future<void> maybeResetForDemo(
   // non-destructive: a no-op once Mary exists, and it never touches
   // journal or medication data.
   await container.read(seedRepositoryProvider).ensurePatient();
+}
+
+/// Comprehensive test-data seed wiring (`tools/seed_demo.sh`).
+///
+/// When [_seedDemoEnabled] is set AND a non-empty [_seedDemoToken] is baked
+/// in that DIFFERS from the last-applied token in SharedPreferences, this
+/// wipes the whole database and lays down six months of realistic data across
+/// every data type (see [seedDemoDataset]), then records the token so it
+/// never re-runs for this build. A no-op when the flag/token is absent or the
+/// token has already been applied — so a tester's own edits survive relaunch.
+/// Returns true when a seed actually ran. Runs before [runApp] so screens
+/// render against the seeded data on frame zero.
+@visibleForTesting
+Future<bool> maybeSeedDemoDataset(
+  ProviderContainer container, {
+  Future<SharedPreferences> Function()? prefs,
+  DateTime Function()? clock,
+}) async {
+  if (!_seedDemoEnabled || _seedDemoToken.isEmpty) return false;
+  final SharedPreferences store =
+      await (prefs ?? SharedPreferences.getInstance)();
+  if (store.getString(seedDemoTokenPrefsKey) == _seedDemoToken) return false;
+
+  final StorageProvider storage = container.read(storageProvider);
+  await storage.reset();
+  await seedDemoDataset(container, clock: clock);
+  await store.setString(seedDemoTokenPrefsKey, _seedDemoToken);
+  return true;
 }
