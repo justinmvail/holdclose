@@ -349,7 +349,15 @@ class SyncController {
       }
     }
 
-    await syncNow();
+    // Drain the ENTIRE outbox in this run — push() only sends one batch
+    // (_syncPushBatch) at a time, and a one-shot resync can't rely on the 30s
+    // interval (the app may background right after launch). Loop until empty
+    // (capped well above any real dataset), then pull once.
+    for (int i = 0; i < 100; i++) {
+      await push();
+      if ((await _outbox.listPending(limit: 1)).isEmpty) break;
+    }
+    await pull();
   }
 
   /// Drain the outbox to the backend. No circle → return. Network failure
