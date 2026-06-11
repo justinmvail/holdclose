@@ -49,7 +49,17 @@ HOST = os.environ.get("SHIM_HOST", "127.0.0.1")
 # Shared secret. When set, every request must carry
 # `Authorization: Bearer <SHIM_TOKEN>` (the app sends it via
 # --dart-define=SHIM_TOKEN=...). Empty = open (fine for localhost only).
-SHIM_TOKEN = os.environ.get("SHIM_TOKEN", "")
+#
+# Comma-separated = a ROTATION GRACE WINDOW: the shim accepts ANY listed
+# token. Because the token is baked into each app build, rotating it
+# would otherwise 401 every phone still on the old build the instant the
+# shim restarts (exactly the outage seen 2026-06-11). To rotate safely:
+# set `SHIM_TOKEN=<new>,<old>`, ship the new build to every tester, then
+# drop `<old>` once they've all updated. Whitespace around entries is
+# trimmed; empty entries are ignored.
+SHIM_TOKENS = [
+    t.strip() for t in os.environ.get("SHIM_TOKEN", "").split(",") if t.strip()
+]
 CLAUDE_CMD = "claude"
 # Neutral, EMPTY working dir for the one-shot chat calls. Running `claude`
 # in the project dir made every chat reply load this repo's CLAUDE.md
@@ -66,13 +76,19 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(msg.encode())
 
     def _authorized(self):
-        # Open when no token is configured; otherwise require the bearer.
-        if not SHIM_TOKEN:
+        # Open when no token is configured; otherwise the bearer must
+        # match ANY configured token (the rotation grace window).
+        if not SHIM_TOKENS:
             return True
         supplied = self.headers.get("Authorization") or ""
-        # Constant-time compare — == short-circuits on the first
-        # mismatching byte, leaking a timing side-channel on the token.
-        return hmac.compare_digest(supplied, f"Bearer {SHIM_TOKEN}")
+        # Constant-time compare against EVERY candidate — and never
+        # short-circuit on a match, so the number of comparisons (and
+        # thus timing) doesn't leak which/whether a token matched.
+        ok = False
+        for token in SHIM_TOKENS:
+            if hmac.compare_digest(supplied, f"Bearer {token}"):
+                ok = True
+        return ok
 
     def _read_body(self, max_bytes):
         """Read the request body, bounded by [max_bytes].
@@ -392,7 +408,9 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     print(f"[shim] Careblazers LLM shim listening on http://{HOST}:{PORT}")
     print(f"[shim] Uses local `{CLAUDE_CMD}` binary (your Claude Max subscription).")
-    if not SHIM_TOKEN:
+    if SHIM_TOKENS:
+        print(f"[shim] Accepting {len(SHIM_TOKENS)} bearer token(s).")
+    if not SHIM_TOKENS:
         # Unconditional — a Tailscale Funnel forwards PUBLIC traffic to
         # 127.0.0.1, so "bound locally" is NOT "reachable locally only".
         # A tokenless shim behind a funnel is an open door to your

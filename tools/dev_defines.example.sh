@@ -8,6 +8,12 @@
 #   # then edit tools/dev_defines.sh
 
 # Local LLM shim (tools/claude_shim.py) behind your Tailscale Funnel.
+# SHIM_TOKEN is baked into each app build, so a build only works while
+# the shim still accepts its token. ROTATING the token strands every
+# phone still on the old build — to rotate safely, set the shim's
+# SHIM_TOKEN to a comma-separated "<new>,<old>" list (the shim accepts
+# any listed token), ship the new build to all testers, then drop the
+# old one. The app build itself always bakes a SINGLE token (this one).
 export SHIM_URL="https://<your-tailnet-host>.ts.net"
 export SHIM_TOKEN="<shim bearer token>"
 
