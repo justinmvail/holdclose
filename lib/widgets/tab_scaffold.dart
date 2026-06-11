@@ -147,32 +147,39 @@ class TabScaffoldBar extends StatelessWidget {
       elevation: 8,
       child: SafeArea(
         top: false,
-        child: SizedBox(
-          height: 64,
-          child: Row(
-            children: <Widget>[
-              _TabItem(
-                destination: destinations[0],
-                selected: currentIndex == 0,
-                onTap: () => onDestinationSelected(0),
-              ),
-              _TabItem(
-                destination: destinations[1],
-                selected: currentIndex == 1,
-                onTap: () => onDestinationSelected(1),
-              ),
-              const Expanded(child: Center(child: _CenterVoiceButton())),
-              _TabItem(
-                destination: destinations[2],
-                selected: currentIndex == 2,
-                onTap: () => onDestinationSelected(2),
-              ),
-              _TabItem(
-                destination: destinations[3],
-                selected: currentIndex == 3,
-                onTap: () => onDestinationSelected(3),
-              ),
-            ],
+        child: Padding(
+          // Nudge the whole row down so the icons + labels aren't biased to
+          // the top of the bar, sitting closer to vertical-centre of the
+          // visible bar above the home-indicator inset (fb_1781135834656216 /
+          // fb_1781138782074336).
+          padding: const EdgeInsets.only(top: 10),
+          child: SizedBox(
+            height: 64,
+            child: Row(
+              children: <Widget>[
+                _TabItem(
+                  destination: destinations[0],
+                  selected: currentIndex == 0,
+                  onTap: () => onDestinationSelected(0),
+                ),
+                _TabItem(
+                  destination: destinations[1],
+                  selected: currentIndex == 1,
+                  onTap: () => onDestinationSelected(1),
+                ),
+                const Expanded(child: Center(child: _CenterVoiceButton())),
+                _TabItem(
+                  destination: destinations[2],
+                  selected: currentIndex == 2,
+                  onTap: () => onDestinationSelected(2),
+                ),
+                _TabItem(
+                  destination: destinations[3],
+                  selected: currentIndex == 3,
+                  onTap: () => onDestinationSelected(3),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -272,8 +279,8 @@ class _CenterVoiceButtonState extends ConsumerState<_CenterVoiceButton> {
   bool _busy = false;
   bool _cancelled = false;
   OverlayEntry? _overlay;
-  final ValueNotifier<_MicOverlayData> _data =
-      ValueNotifier<_MicOverlayData>(const _MicOverlayData(_MicPhase.listening, ''));
+  final ValueNotifier<_MicOverlayData> _data = ValueNotifier<_MicOverlayData>(
+      const _MicOverlayData(_MicPhase.listening, ''));
 
   @override
   void dispose() {
@@ -398,8 +405,7 @@ class _CenterVoiceButtonState extends ConsumerState<_CenterVoiceButton> {
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.white),
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
                   : const Icon(Icons.mic_none, size: 26, color: Colors.white),
@@ -466,7 +472,8 @@ class _MicOverlayCard extends StatelessWidget {
                 style: TextStyle(
                   color: context.cb.primary,
                   fontSize: 16,
-                  fontStyle: d.text.isEmpty ? FontStyle.italic : FontStyle.normal,
+                  fontStyle:
+                      d.text.isEmpty ? FontStyle.italic : FontStyle.normal,
                 ),
               ),
             ),

@@ -220,6 +220,11 @@ class ConversationListScreen extends ConsumerWidget {
           ],
         ),
       ),
+      // The FAB only appears once the conversation list finishes loading
+      // (null → present), which makes the Scaffold play its default scale-in.
+      // Suppress that one-shot entrance animation so the Quick Chat button is
+      // simply THERE when the list renders, no pop-in.
+      floatingActionButtonAnimator: FloatingActionButtonAnimator.noAnimation,
       floatingActionButton: async.maybeWhen(
         data: (List<ConversationListItem> items) {
           if (items.isEmpty) return null;
