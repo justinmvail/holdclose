@@ -145,9 +145,37 @@ Future<void> _bootstrapSync(ProviderContainer container) async {
     await sync.bootstrapCircle();
     sync.startInterval();
     await sync.syncNow();
+    // After the circle is bound, optionally force-push EVERY local row up
+    // (tools/seed_demo.sh data is written before the circle exists, so it
+    // never auto-syncs). One-shot per token.
+    await maybeResyncAll(container, sync);
   } catch (_) {
     // Sync is additive — a failure here must never affect the app.
   }
+}
+
+/// Build-time switch to force a full local→backend resync once
+/// (`--dart-define=RESYNC_ALL=true --dart-define=RESYNC_TOKEN=<ts>`). Pushes
+/// everything on the device up to the bound circle's backend — used to get
+/// seed data (written before the circle existed) onto the server so a circle
+/// member can pull it. Runs once per distinct token.
+const bool _resyncAllEnabled = bool.fromEnvironment('RESYNC_ALL');
+const String _resyncAllToken = String.fromEnvironment('RESYNC_TOKEN');
+const String resyncAllTokenPrefsKey = 'careblazers.resync_all_token';
+
+@visibleForTesting
+Future<bool> maybeResyncAll(
+  ProviderContainer container,
+  SyncController sync, {
+  Future<SharedPreferences> Function()? prefs,
+}) async {
+  if (!_resyncAllEnabled || _resyncAllToken.isEmpty) return false;
+  final SharedPreferences store =
+      await (prefs ?? SharedPreferences.getInstance)();
+  if (store.getString(resyncAllTokenPrefsKey) == _resyncAllToken) return false;
+  await sync.resyncAllLocal();
+  await store.setString(resyncAllTokenPrefsKey, _resyncAllToken);
+  return true;
 }
 
 /// Re-runs a sync on `AppLifecycleState.resumed` so a phone returning to

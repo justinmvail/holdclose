@@ -249,6 +249,109 @@ class SyncController {
     );
   }
 
+  /// Force-enqueue EVERY local row across every collection (and push the
+  /// patient), then sync. Recovers data that was written to the local DB
+  /// while no circle was bound — e.g. the demo seed, which runs before sync
+  /// bootstraps the circle, so its writes never hit the outbox. One-shot,
+  /// idempotent at the server (LWW by id). No circle → no-op.
+  Future<void> resyncAllLocal() async {
+    final String? circleId = await _circleId();
+    if (circleId == null) return;
+
+    Future<void> enq(String c, String id, Map<String, dynamic> j) =>
+        enqueueUpsert(c, id, j);
+
+    for (final JournalEntry e in await _storage.listAllJournalEntries()) {
+      await enq(SyncCollections.journalEntry, e.id, e.toJson());
+    }
+
+    final List<Medication> meds = await _medications.listMedications();
+    for (final Medication m in meds) {
+      await enq(SyncCollections.medication, m.id, m.toJson());
+    }
+    final Patient? patient = await _storage.getPatient();
+    if (patient != null) {
+      for (final DoseWindow w
+          in await _medications.windowsForPatient(patient.id)) {
+        await enq(SyncCollections.doseWindow, w.id, w.toJson());
+        for (final MedicationWindowEntry me
+            in await _medications.entriesForWindow(w.id)) {
+          await enq(SyncCollections.medicationWindowEntry, me.id, me.toJson());
+        }
+      }
+    }
+    for (final Medication m in meds) {
+      for (final DoseLog l in await _medications.logsFor(m.id)) {
+        await enq(SyncCollections.doseLog, l.id, l.toJson());
+      }
+    }
+
+    for (final Appointment a in await _appointments.listAppointments()) {
+      await enq(SyncCollections.appointment, a.id, a.toJson());
+    }
+    for (final Provider p in await _providers.listProviders()) {
+      await enq(SyncCollections.provider, p.id, p.toJson());
+    }
+    for (final HealthLogEntry h in await _healthLog.listAll()) {
+      await enq(SyncCollections.healthLogEntry, h.id, h.toJson());
+    }
+    for (final CarePlanRoutine r in await _carePlan.listAll()) {
+      await enq(SyncCollections.carePlanRoutine, r.id, r.toJson());
+    }
+    for (final CareEvent ev in await _careEvents.listEvents()) {
+      await enq(SyncCollections.careEvent, ev.id, ev.toJson());
+    }
+    for (final CareTask t in await _careTasks.listTasks()) {
+      await enq(SyncCollections.careTask, t.id, t.toJson());
+    }
+    for (final CareShift s in await _careShifts.listShifts()) {
+      await enq(SyncCollections.careShift, s.id, s.toJson());
+    }
+    for (final Expense x in await _expenses.listExpenses()) {
+      await enq(SyncCollections.expense, x.id, x.toJson());
+    }
+    for (final Caregiver cg in await _careCircle.listCaregivers()) {
+      await enq(SyncCollections.caregiver, cg.id, cg.toJson());
+    }
+    for (final CareCircleMembership mem in await _careCircle.listMemberships()) {
+      await enq(SyncCollections.careCircleMembership, mem.id, mem.toJson());
+    }
+    for (final EmergencyCard c in await _documents.listEmergencyCards()) {
+      await enq(SyncCollections.emergencyCard, c.id, c.toJson());
+    }
+    for (final PowerOfAttorneyDoc d in await _documents.listPoa()) {
+      await enq(SyncCollections.powerOfAttorneyDoc, d.id, d.toJson());
+    }
+    for (final IdentificationDoc d in await _documents.listIds()) {
+      await enq(SyncCollections.identificationDoc, d.id, d.toJson());
+    }
+    for (final Conversation conv in await _chat.listConversations()) {
+      await enq(SyncCollections.chatConversation, conv.id, conv.toJson());
+      for (final Message msg in await _chat.loadMessages(conv.id)) {
+        await enq(SyncCollections.chatMessage, msg.id, msg.toJson());
+      }
+    }
+
+    // The patient is pushed via the dedicated `patient` field, not the outbox.
+    if (patient != null) {
+      try {
+        await _client.syncPush(
+          circleId,
+          patient: SyncPatientWrite(
+            payload: patient.toJson(),
+            clientUpdatedAt: _clock().millisecondsSinceEpoch,
+            deleted: false,
+          ),
+          docs: const <SyncDocWrite>[],
+        );
+      } catch (_) {
+        // Best-effort; the docs still drain below.
+      }
+    }
+
+    await syncNow();
+  }
+
   /// Drain the outbox to the backend. No circle → return. Network failure
   /// → swallow, leaving the batch queued for the next attempt.
   Future<void> push() async {

@@ -484,6 +484,55 @@ void main() {
     });
   });
 
+  group('resyncAllLocal — recover data written before the circle was bound',
+      () {
+    test('pushes local rows that never enqueued so a member can pull them',
+        () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final CircleDto circle = await backend.createCircle('Mary');
+      await d.stateStore.setCircleId(circle.id);
+
+      // Local writes WITHOUT enqueuing — exactly what the seed does (it runs
+      // before sync binds the circle).
+      await d.medications.applyingRemote(
+          () => d.medications.upsertMedication(_med('m1', 'Donepezil')));
+      await d.providers
+          .applyingRemote(() => d.providers.upsertProvider(_provider('pr1')));
+      expect((await SyncOutbox(d.db).listPending()).isEmpty, isTrue,
+          reason: 'seed-style writes never hit the outbox');
+
+      // Backend has neither yet.
+      final SyncPullResult pre = await backend.syncPull(circle.id, since: 0);
+      expect(pre.docs.where((SyncDoc x) => x.collection == 'medication'),
+          isEmpty);
+
+      await d.controller.resyncAllLocal();
+
+      // Now both are on the backend — a circle member's pull would get them.
+      final SyncPullResult post = await backend.syncPull(circle.id, since: 0);
+      expect(
+          post.docs.any(
+              (SyncDoc x) => x.collection == 'medication' && x.id == 'm1'),
+          isTrue);
+      expect(
+          post.docs
+              .any((SyncDoc x) => x.collection == 'providers' && x.id == 'pr1'),
+          isTrue);
+    });
+
+    test('no circle bound → no-op', () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      await d.medications.applyingRemote(
+          () => d.medications.upsertMedication(_med('m1', 'Donepezil')));
+      await d.controller.resyncAllLocal(); // must not throw
+      expect((await SyncOutbox(d.db).listPending()).isEmpty, isTrue);
+    });
+  });
+
   group('tombstone deletes locally', () {
     test('a pulled deleted med doc removes the local row', () async {
       final FakeForumApiClient backend = FakeForumApiClient();
