@@ -11,15 +11,33 @@ Usage:
 """
 
 import base64
+import hmac
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-PORT = 8765
+# Listen port; overridable so a second instance (tests, a staging copy)
+# can run beside the live one.
+PORT = int(os.environ.get("SHIM_PORT", "8765"))
+
+# Per-route request-body ceilings (bytes). Content-Length is
+# attacker-controlled on a Funnel-exposed endpoint — without a cap one
+# request could balloon memory (and /feedback writes to disk). Prompts
+# run a few tens of KB; feedback carries a base64 phone screenshot.
+MAX_GENERATE_BYTES = 256 * 1024
+MAX_FEEDBACK_BYTES = 6 * 1024 * 1024
+MAX_PHONEMIZE_BYTES = 64 * 1024
+
+# Hard wall-clock ceiling on one `claude` invocation. A hung CLI (auth
+# prompt, network stall) otherwise pins a worker thread + child process
+# forever — ThreadingHTTPServer threads are unbounded, so repeated hangs
+# leak both. Generous: a long streamed reply finishes well inside it.
+GENERATE_TIMEOUT_SECONDS = int(os.environ.get("SHIM_GENERATE_TIMEOUT", "180"))
 # Where alpha-tester bug reports land (POST /feedback). One <id>.json +
 # optional <id>.png per report, plus a rolling feedback.jsonl. Relative to
 # the shim's CWD (the project dir) by default; override with FEEDBACK_DIR.
@@ -51,7 +69,27 @@ class Handler(BaseHTTPRequestHandler):
         # Open when no token is configured; otherwise require the bearer.
         if not SHIM_TOKEN:
             return True
-        return self.headers.get("Authorization") == f"Bearer {SHIM_TOKEN}"
+        supplied = self.headers.get("Authorization") or ""
+        # Constant-time compare — == short-circuits on the first
+        # mismatching byte, leaking a timing side-channel on the token.
+        return hmac.compare_digest(supplied, f"Bearer {SHIM_TOKEN}")
+
+    def _read_body(self, max_bytes):
+        """Read the request body, bounded by [max_bytes].
+
+        Returns the bytes, or None after answering 413/400 — the
+        declared Content-Length is client-controlled and must never be
+        trusted as a read size on a publicly-reachable endpoint.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            self._bad(400, "bad request: invalid Content-Length")
+            return None
+        if length < 0 or length > max_bytes:
+            self._bad(413, "request body too large")
+            return None
+        return self.rfile.read(length)
 
     def do_POST(self):
         if not self._authorized():
@@ -62,8 +100,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._phonemize()
         if self.path != "/generate":
             return self._bad(404, "Not Found")
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
+        body = self._read_body(MAX_GENERATE_BYTES)
+        if body is None:
+            return
         try:
             payload = json.loads(body)
             system = payload["system"]
@@ -128,17 +167,61 @@ class Handler(BaseHTTPRequestHandler):
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, bufsize=1, cwd=CHAT_CWD, env=env,
             )
-            for line in proc.stdout:
-                line = line.rstrip("\n")
-                if not line:
-                    continue
-                self.wfile.write(f"data: {line}\n\n".encode())
-                self.wfile.flush()
-            proc.wait()
-            if proc.returncode != 0:
-                err = proc.stderr.read()
+
+            # Drain stderr CONCURRENTLY. Reading it only after stdout
+            # closes deadlocks when the CLI fills the ~64KB stderr pipe
+            # while we're blocked on stdout (and vice versa).
+            stderr_lines = []
+
+            def _drain_stderr():
+                try:
+                    for err_line in proc.stderr:
+                        stderr_lines.append(err_line)
+                except Exception:
+                    pass
+
+            stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
+            stderr_thread.start()
+
+            # Watchdog: a hung `claude` (auth prompt, network stall) must
+            # not pin this worker thread + child forever. The kill makes
+            # the stdout iterator below terminate.
+            timed_out = threading.Event()
+
+            def _kill_on_timeout():
+                timed_out.set()
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
+            watchdog = threading.Timer(GENERATE_TIMEOUT_SECONDS, _kill_on_timeout)
+            watchdog.daemon = True
+            watchdog.start()
+            try:
+                for line in proc.stdout:
+                    line = line.rstrip("\n")
+                    if not line:
+                        continue
+                    self.wfile.write(f"data: {line}\n\n".encode())
+                    self.wfile.flush()
+                proc.wait()
+            finally:
+                watchdog.cancel()
+                stderr_thread.join(timeout=5)
+            if timed_out.is_set():
                 self.wfile.write(
-                    f"data: {json.dumps({'error': err})}\n\n".encode()
+                    f"data: {json.dumps({'error': 'the reply timed out'})}\n\n".encode()
+                )
+            elif proc.returncode != 0:
+                # The raw stderr can carry local paths / auth detail —
+                # log it server-side, hand the client a generic line.
+                sys.stderr.write(
+                    "[shim] claude exited %s: %s\n"
+                    % (proc.returncode, "".join(stderr_lines).strip()[:2000])
+                )
+                self.wfile.write(
+                    f"data: {json.dumps({'error': 'the coach backend hit an error'})}\n\n".encode()
                 )
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
@@ -147,8 +230,9 @@ class Handler(BaseHTTPRequestHandler):
                 f"data: {json.dumps({'error': 'claude binary not found on PATH'})}\n\n".encode()
             )
         except Exception as exc:
+            sys.stderr.write(f"[shim] generate failed: {exc}\n")
             self.wfile.write(
-                f"data: {json.dumps({'error': str(exc)})}\n\n".encode()
+                f"data: {json.dumps({'error': 'the coach backend hit an error'})}\n\n".encode()
             )
 
     def _feedback(self):
@@ -161,8 +245,9 @@ class Handler(BaseHTTPRequestHandler):
           - FEEDBACK_DIR/feedback.jsonl (one line appended per report)
         Returns 200 {"stored": "<id>"}. No `claude` call — pure storage.
         """
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
+        body = self._read_body(MAX_FEEDBACK_BYTES)
+        if body is None:
+            return
         try:
             payload = json.loads(body)
         except Exception as exc:
@@ -246,8 +331,9 @@ class Handler(BaseHTTPRequestHandler):
         purely for the /generate endpoint isn't penalized by the
         ~20 MB native lib load.
         """
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
+        body = self._read_body(MAX_PHONEMIZE_BYTES)
+        if body is None:
+            return
         try:
             payload = json.loads(body)
             text = payload["text"]
@@ -306,11 +392,16 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     print(f"[shim] Careblazers LLM shim listening on http://{HOST}:{PORT}")
     print(f"[shim] Uses local `{CLAUDE_CMD}` binary (your Claude Max subscription).")
-    if HOST != "127.0.0.1" and not SHIM_TOKEN:
+    if not SHIM_TOKEN:
+        # Unconditional — a Tailscale Funnel forwards PUBLIC traffic to
+        # 127.0.0.1, so "bound locally" is NOT "reachable locally only".
+        # A tokenless shim behind a funnel is an open door to your
+        # subscription and the feedback store.
         print(
-            "[shim] WARNING: bound to a non-local address with NO SHIM_TOKEN — "
-            "anyone who reaches this port can spend your Claude subscription. "
-            "Set SHIM_TOKEN to require a bearer token.",
+            "[shim] WARNING: SHIM_TOKEN is not set — every endpoint is OPEN. "
+            "That is fine for purely-local dev, but a Tailscale Funnel (or "
+            "any port forward) reaches this process even on 127.0.0.1. "
+            "Set SHIM_TOKEN before exposing it.",
             file=sys.stderr,
         )
     # Threaded so a couple of testers don't fully serialize behind one

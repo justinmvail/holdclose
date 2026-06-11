@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Hono } from 'hono';
 
@@ -23,7 +23,10 @@ export type CirclesVariables = AuthVariables;
 
 const NAME_MIN = 1;
 const NAME_MAX = 60;
-const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// 48h (was 7 days): an invite is a key to the loved one's medical data —
+// it should not outlive the "text it to your sister, she taps it tonight"
+// window by much. Invites are also single-use (consumed on join).
+const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
 
 type Db = ReturnType<typeof drizzle>;
 
@@ -143,7 +146,11 @@ export const circlesRouter = () => {
       const p = patientInput as Record<string, unknown>;
       if (
         typeof p.payload !== 'string' ||
-        typeof p.client_updated_at !== 'number'
+        typeof p.client_updated_at !== 'number' ||
+        // JSON `1e999` parses to Infinity — typeof 'number' alone lets it
+        // through to a D1 constraint error (the onError test leans on
+        // that); reject it as the client mistake it is.
+        !Number.isFinite(p.client_updated_at)
       ) {
         return c.json({ error: 'invalid_body' }, 400);
       }
@@ -294,6 +301,25 @@ export const circlesRouter = () => {
         ),
       );
     if (!existing) {
+      // Single-use: CLAIM the invite atomically before admitting the new
+      // member. The conditional `used_at IS NULL` update means two racing
+      // redeemers can't both get in — exactly one UPDATE wins; the loser
+      // sees zero rows and gets `invite_used`. Existing members short-
+      // circuit above without consuming (re-tapping an old link after
+      // you've already joined is benign and idempotent).
+      const claimed = await db
+        .update(circleInvites)
+        .set({ usedAt: new Date(), usedByProfileId: profile.id })
+        .where(
+          and(
+            eq(circleInvites.token, token),
+            isNull(circleInvites.usedAt),
+          ),
+        )
+        .returning({ token: circleInvites.token });
+      if (claimed.length === 0) {
+        return c.json({ error: 'invite_used' }, 410);
+      }
       await db.insert(circleMembers).values({
         circleId: invite.circleId,
         profileId: profile.id,

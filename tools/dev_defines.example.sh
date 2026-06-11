@@ -12,8 +12,10 @@ export SHIM_URL="https://<your-tailnet-host>.ts.net"
 export SHIM_TOKEN="<shim bearer token>"
 
 # Cloudflare Worker forum/sync backend behind the same Funnel (port 8443).
+# NOTE (2026-06-11): the app no longer takes FORUM_JWT_SECRET — session
+# tokens are minted BY the Worker after Google sign-in. The secret lives
+# only on the Worker (`wrangler secret put FORUM_JWT_SECRET`).
 export FORUM_API_URL="https://<your-tailnet-host>.ts.net:8443"
-export FORUM_JWT_SECRET="<forum jwt shared secret>"
 
 # Google Sign-In OAuth client ids.
 export GOOGLE_SERVER_CLIENT_ID="<web oauth client id>.apps.googleusercontent.com"

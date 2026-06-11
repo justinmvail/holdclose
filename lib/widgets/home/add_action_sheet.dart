@@ -13,12 +13,6 @@ import '../voice_button.dart';
 export '../../services/voice_intake.dart'
     show AddSheetKind, AddSheetTranscript;
 
-/// The Add-sheet's teal accent. The brand palette (BUILD_SPEC.md §3.1)
-/// carries no teal token; this teal reads as a calm, affirmative
-/// "done/taken" color, and the quick-add FAB reuses it so "add something"
-/// stays in that same affirmative color family.
-const Color addSheetTeal = Color(0xFF1F8A70);
-
 /// Static description of one Add-sheet row: its label, leading glyph, and
 /// the destination route a tap (or a captured transcript) pushes.
 @immutable
@@ -91,7 +85,10 @@ class AddActionFab extends StatelessWidget {
       height: _diameter,
       child: FloatingActionButton(
         key: fabKey,
-        backgroundColor: addSheetTeal,
+        // The calm, affirmative "add something" accent — the `link` brand
+        // token (the same token the shared calendar gives dose events),
+        // resolved through `context.cb` so it follows the active theme.
+        backgroundColor: context.cb.link,
         foregroundColor: context.cb.background,
         shape: const CircleBorder(),
         tooltip: 'Add',

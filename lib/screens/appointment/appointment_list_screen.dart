@@ -9,6 +9,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../models/appointment.dart';
 import '../../services/appointment_repository.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/path_header.dart';
 
 part 'appointment_list_screen.g.dart';
@@ -188,7 +190,8 @@ class AppointmentListScreen extends ConsumerWidget {
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load the appointment list.\n$e"),
                 data: (AppointmentListData data) {
                   if (data.isEmpty) return const _EmptyState();
                   return _PopulatedList(data: data, now: now);
@@ -283,31 +286,62 @@ class _PopulatedList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<Widget> children = <Widget>[];
-    if (data.upcoming.isNotEmpty) {
-      children.add(const _SectionHeader(
-        key: AppointmentListScreen.upcomingSectionKey,
-        label: 'Upcoming',
-      ));
-      for (final AppointmentListItem item in data.upcoming) {
-        children.add(_AppointmentCard(item: item, now: now));
-      }
-    }
-    if (data.past.isNotEmpty) {
-      children.add(const _SectionHeader(
-        key: AppointmentListScreen.pastSectionKey,
-        label: 'Past',
-      ));
-      for (final AppointmentListItem item in data.past) {
-        children.add(_AppointmentCard(item: item, now: now));
-      }
-    }
-    return ListView(
+    // Flatten the two sections into one item list so the (unbounded)
+    // history builds its rows lazily. Render order is unchanged: the
+    // Upcoming header + its cards, then the Past header + its cards.
+    final List<_ListRow> rows = <_ListRow>[
+      if (data.upcoming.isNotEmpty) ...<_ListRow>[
+        const _HeaderRow(
+          headerKey: AppointmentListScreen.upcomingSectionKey,
+          label: 'Upcoming',
+        ),
+        for (final AppointmentListItem item in data.upcoming) _CardRow(item),
+      ],
+      if (data.past.isNotEmpty) ...<_ListRow>[
+        const _HeaderRow(
+          headerKey: AppointmentListScreen.pastSectionKey,
+          label: 'Past',
+        ),
+        for (final AppointmentListItem item in data.past) _CardRow(item),
+      ],
+    ];
+    return ListView.builder(
       key: AppointmentListScreen.listKey,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-      children: children,
+      itemCount: rows.length,
+      itemBuilder: (BuildContext context, int i) {
+        switch (rows[i]) {
+          case _HeaderRow(
+              headerKey: final Key headerKey,
+              label: final String label,
+            ):
+            return _SectionHeader(key: headerKey, label: label);
+          case _CardRow(item: final AppointmentListItem item):
+            return _AppointmentCard(item: item, now: now);
+        }
+      },
     );
   }
+}
+
+/// One row in the flattened list — a section header or an appointment
+/// card — so a single lazy ListView scrolls both sections.
+sealed class _ListRow {
+  const _ListRow();
+}
+
+class _HeaderRow extends _ListRow {
+  const _HeaderRow({required this.headerKey, required this.label});
+
+  /// Stable key forwarded onto the rendered header (tests target
+  /// [AppointmentListScreen.upcomingSectionKey] / `pastSectionKey`).
+  final Key headerKey;
+  final String label;
+}
+
+class _CardRow extends _ListRow {
+  const _CardRow(this.item);
+  final AppointmentListItem item;
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -471,43 +505,9 @@ class _AddAppointmentFab extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load the appointment list.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
-
-const List<String> _monthsShort = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-String _formatClock(DateTime t) {
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '$hour:$minute $suffix';
-}
 
 /// "Today, 2:30 PM" / "Tomorrow, 2:30 PM" / "Jun 15, 2:30 PM" — uses
 /// "Today" / "Tomorrow" for the two nearest days and falls back to a
@@ -517,10 +517,10 @@ String _formatWhen(DateTime at, DateTime now) {
   final DateTime today = DateTime(now.year, now.month, now.day);
   final DateTime tomorrow = today.add(const Duration(days: 1));
   final DateTime atDay = DateTime(at.year, at.month, at.day);
-  final String clock = _formatClock(at);
+  final String clock = formatClock12h(at);
   if (atDay == today) return 'Today, $clock';
   if (atDay == tomorrow) return 'Tomorrow, $clock';
-  final String month = _monthsShort[at.month - 1];
+  final String month = monthAbbreviations[at.month - 1];
   return '$month ${at.day}, $clock';
 }
 

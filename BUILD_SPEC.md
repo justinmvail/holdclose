@@ -30,24 +30,35 @@ pre-staged content beyond the seed-data scaffolding.
 
 - **Language**: Dart 3.5+, Flutter 3.24+.
 - **Platforms**: iOS 16.0+, Android API 26+ (Android 8.0).
-- **State management**: `flutter_riverpod` 2.6+ with
-  `riverpod_generator`. No alternatives.
+- **State management**: `flutter_riverpod` 3.x (`>=3.0.0 <3.2.0`) with
+  `riverpod_annotation` 4.x / `riverpod_generator` 4.x (the 3.x/4.x
+  pairing resolves the analyzer-7 incompatibility the pre-3 chain had —
+  see pubspec.yaml). No alternatives.
 - **Routing**: `go_router` 14+. Per CLAUDE.md navigation invariants.
-- **Local persistence**: `drift` 2.20+ (SQLite). `flutter_secure_storage`
-  for auth tokens only.
-- **Models**: `freezed` 2.5+ + `json_serializable` 6.8+.
+- **Local persistence**: `drift` 2.20+ (SQLite) opened via
+  `drift_flutter` 0.2+, with `path_provider`/`path` for the database
+  location. `flutter_secure_storage` for auth/session tokens only;
+  `shared_preferences` for non-secret flags (onboarding, sync cursor,
+  seed tokens).
+- **Models**: `freezed` 3.x + `json_serializable` 6.8+.
 - **HTTP**: `dio` 5.7+ for the LLM shim calls and the forum API client
   (Phase 13.9).
-- **Crypto**: `crypto` 3+ — promoted from transitive to a direct
-  dependency in Phase 13.9 so `lib/providers/forum_jwt_provider.dart`
-  can mint HS256 JWTs against the shared secret without pulling a
-  fourth-party JWT library. Used only for `Hmac(sha256, ...)`.
+- **Crypto**: no direct dependency (2026-06-11). The Phase 13.9
+  client-minted-JWT scheme is RETIRED — the Worker mints session
+  tokens in `POST /auth/google` after Google ID-token verification,
+  and the app stores the opaque token (`ForumSessionManager` in
+  `lib/providers/forum_jwt_provider.dart`). No signing key ships in
+  the binary. (`crypto` remains transitively present via drift/http.)
 - **TTS**: `flutter_tts` 4.2+ (wraps iOS AVSpeechSynthesizer +
   Android TextToSpeech) — fallback path.
-- **Bundled neural TTS**: `onnxruntime` 1.4+ (the Flutter community
-  plugin on pub.dev; its version tracks the wrapped Microsoft ONNX
-  Runtime 1.18.x native lib). Drives the on-device Piper voice via
-  the iOS/Android bridges (TASKS.md Phase 9). Primary TTS path post-Phase 9.
+- **Bundled neural TTS**: ONNX Runtime bundled NATIVELY per platform —
+  NOT the Dart community plugin (it pins onnxruntime-objc 1.15.1,
+  conflicting with the bridge's ~> 1.18 requirement). iOS pulls
+  `onnxruntime-objc ~> 1.18.0` via ios/Podfile; Android pulls
+  `com.microsoft.onnxruntime:onnxruntime-android` via Gradle. The
+  Dart-side `BundledTTSProvider` is a MethodChannel proxy only.
+  Drives the on-device Piper voice (TASKS.md Phase 9). Primary TTS
+  path post-Phase 9.
 - **Typography**: `google_fonts` 6.2+ for Lato + Montserrat.
 - **Auth**: `google_sign_in` 6.2+ and `sign_in_with_apple` 6.1+.
 - **PDF**: `pdf` 3.11+ + `printing` 5.13+ (doctor-visit packet).
@@ -338,7 +349,7 @@ careblazers/
 | `primary` | `#1f2a44` | AppBar, H1 headings, primary text on light surfaces |
 | `primarySoft` | `#2a3b61` | Sub-headings, navigation icons |
 | `text` | `#33373d` | Body text (warmer than pure black) |
-| `cta` | `#ff6900` | Primary action button (the big "What's happening right now?" button, decoder result CTAs) |
+| `cta` | `#C97458` | Primary action button (decoder result CTAs, send buttons, the center mic). Salmon — a deliberate rebrand to match careblazers.com (commit 33d497f); the original spec value was `#ff6900` orange. |
 | `accentDeep` | `#cc3366` | Warning highlights ("Don't say…"), rare emphasis |
 | `surfaceWarm` | `#f8f6f3` | Section backgrounds, secondary surfaces |
 | `background` | `#ffffff` | Page base |
@@ -1690,44 +1701,37 @@ note that Phase 8 polish needs to refine each one.
 
 ### 10.1 integration_test/demo_tour.dart
 
-A scripted walkthrough that taps through three full decoder flows
-back-to-back, then visits the journal, the Community library, the
-emergency card, and settings. Runs against `FakeLLMProvider` (no shim
-required).
+(Rewritten 2026-06-11 against the four-tab IA — Home / Care / Chat /
+Community on the custom `TabScaffoldBar`; the original 2026-05 script
+below it predates the IA refactor and is superseded.)
+
+A scripted walkthrough over the live app. Runs against
+`FakeLLMProvider` (decoder) + `DemoChatBackend` (chat) — fully
+offline, no shim required.
 
 **Pre-conditions**:
 - `DEMO_MODE=true` build define set.
-- App launches into welcome carousel → 3 swipes → "Get started" →
-  "Skip — explore as Mary's caregiver" (FakeAuthProvider).
-- Seed data populated.
+- App launches into welcome carousel → CTA taps → sign-in →
+  DEMO_MODE "skip" CTA (FakeAuthProvider) → Home.
+- Seed data populated (Mary Henderson + meds/windows + chat threads).
 
-**The tour** (each "step" is one `tester.tap()` + `pumpAndSettle()`
-+ assertion):
+**The tour** (each step taps + settles + asserts something visual,
+capturing a screenshot per tab):
 
-1. **Home** — assert "What's happening right now?" visible. Tap it.
-2. **Behavior picker** — assert all 8 cards. Tap "Sundowning".
-3. **Triage Q1** — tap "Late afternoon / evening", tap Next.
-4. **Triage Q2** — tap "Nothing", tap Next.
-5. **Triage Q3** — tap "Talked to them about it", tap Next.
-6. **Decoder result** — assert FakeLLM's sundowning script renders
-   (3 "say" lines + 1 tweak + 1 dont_say). Tap "That helped".
-7. **Home** (returned) — assert visible again.
-8. Tap home button again → **Behavior picker** → tap "Accusing me".
-9. **Triage** — answer (Late afternoon, Nothing, Tried to explain).
-10. **Decoder result** — assert accusing script renders. Tap "That
-    helped".
-11. **Home** → tap again → behavior picker → tap "I want to go home".
-12. **Triage** — answer (Evening, Nothing, Walked away).
-13. **Decoder result** — assert wants-home script. Tap "That helped".
-14. **Journal** (opened from Home) — assert week summary shows 3
-    incidents + "Sundowning" pattern flag (because seed data already
-    had 3 + this decoder run made it 4).
-15. **Community → Learn** — assert "Today's card" visible. Tap
-    "Sundowning".
-16. **Learn card detail** — assert body text + PLAY button.
-17. **Medical → Emergency Card** — assert Mary Henderson loaded.
-18. **Settings (via gear from Home)** — toggle "Read scripts aloud"
-    OFF, assert; toggle ON; close.
+1. **Home** — greeting + Schedule card (`01_home`); profile icon →
+   Settings (read-aloud toggle asserted) → back via PathHeader.
+2. **Dose-log detour** — tap the Donepezil row in the Schedule card's
+   Morning group → dose-log list asserted → Home via the breadcrumb.
+3. **Care tab** — hub tiles asserted (`02_care`); Health Log tile →
+   add a vitals entry (HR 72) → save → back; Routines tile → back;
+   Emergency Card tile → Mary Henderson asserted → back.
+4. **Care Circle** — entered via the Care hub's `/team` tile
+   (`03_care-circle`); People tile → roster + connect actions → back.
+5. **Chat tab** — two seeded threads (`04_chat`); open the sundowning
+   thread, send a message, assert the deterministic DemoChatBackend
+   reply bubble → back.
+6. **Community tab** — feed + sub-nav (`05_community`); cycle
+   Feed → Learn → Support → Feed segments.
 
 Each step asserts something visual (text, key, or widget type) so
 the tour fails loudly on regression rather than silently passing

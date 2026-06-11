@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 // `Provider` in [models/appointment.dart] collides with riverpod's
 // own `Provider` class — `hide` keeps the model name resolvable in
@@ -15,6 +13,10 @@ import '../../services/appointment_repository.dart';
 import '../../services/notification_scheduler.dart';
 import '../../services/provider_repository.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
+import '../../widgets/form/id_factory.dart';
+import '../../widgets/form/labelled_field.dart';
 import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
 import 'appointment_detail_screen.dart';
@@ -27,11 +29,7 @@ part 'appointment_form_screen.g.dart';
 /// deterministic — same shape as [MedicationFormScreen]'s id factory.
 typedef AppointmentIdFactory = String Function();
 
-String _defaultAppointmentIdFactory() {
-  final int ms = DateTime.now().millisecondsSinceEpoch;
-  final int rand = math.Random().nextInt(1 << 32);
-  return '$ms-$rand';
-}
+String _defaultAppointmentIdFactory() => mintId('');
 
 /// ID factory the form screen uses. Tests override this with a
 /// monotonic counter so the appointment-id and provider-id pair is
@@ -511,7 +509,8 @@ class _AppointmentFormScreenState
             Expanded(
               child: hydration.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load this appointment.\n$e"),
                 data: (AppointmentDetailData? data) {
                   _hydrateFromAppointment(data);
                   return Form(
@@ -521,7 +520,7 @@ class _AppointmentFormScreenState
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                       children: <Widget>[
                   const SizedBox(height: 4),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Provider',
                     child: providersAsync.when(
                       loading: () => const Padding(
@@ -548,27 +547,27 @@ class _AppointmentFormScreenState
                     _buildNewProviderForm(textTheme),
                   ],
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Date',
                     child: _PickerField(
                       fieldKey: AppointmentFormScreen.dateFieldKey,
                       icon: Icons.calendar_today,
-                      label: _formatDate(_startsAt),
+                      label: formatMonthDayYear(_startsAt),
                       onTap: _pickDate,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Time',
                     child: _PickerField(
                       fieldKey: AppointmentFormScreen.timeFieldKey,
                       icon: Icons.access_time,
-                      label: _formatTime(_startsAt),
+                      label: formatClock12h(_startsAt),
                       onTap: _pickTime,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Duration (minutes)',
                     child: TextFormField(
                       key: AppointmentFormScreen.durationFieldKey,
@@ -589,7 +588,7 @@ class _AppointmentFormScreenState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Location',
                     child: TextFormField(
                       key: AppointmentFormScreen.locationFieldKey,
@@ -603,7 +602,7 @@ class _AppointmentFormScreenState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Status',
                     child: DropdownButtonFormField<AppointmentStatus>(
                       key: AppointmentFormScreen.statusDropdownKey,
@@ -661,7 +660,7 @@ class _AppointmentFormScreenState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Notes (optional)',
                     child: TextFormField(
                       key: AppointmentFormScreen.notesFieldKey,
@@ -774,7 +773,7 @@ class _AppointmentFormScreenState
             ),
           ),
           const SizedBox(height: 8),
-          _LabelledField(
+          LabelledField(
             label: 'Name',
             child: TextField(
               key: AppointmentFormScreen.newProviderNameFieldKey,
@@ -784,7 +783,7 @@ class _AppointmentFormScreenState
             ),
           ),
           const SizedBox(height: 12),
-          _LabelledField(
+          LabelledField(
             label: 'Role',
             child: DropdownButtonFormField<ProviderRole>(
               key: AppointmentFormScreen.newProviderRoleKey,
@@ -815,7 +814,7 @@ class _AppointmentFormScreenState
             ),
           ),
           const SizedBox(height: 12),
-          _LabelledField(
+          LabelledField(
             label: 'Phone',
             child: TextField(
               key: AppointmentFormScreen.newProviderPhoneFieldKey,
@@ -827,7 +826,7 @@ class _AppointmentFormScreenState
             ),
           ),
           const SizedBox(height: 12),
-          _LabelledField(
+          LabelledField(
             label: 'Address',
             child: TextField(
               key: AppointmentFormScreen.newProviderAddressFieldKey,
@@ -838,7 +837,7 @@ class _AppointmentFormScreenState
             ),
           ),
           const SizedBox(height: 12),
-          _LabelledField(
+          LabelledField(
             label: 'Notes (optional)',
             child: TextField(
               key: AppointmentFormScreen.newProviderNotesFieldKey,
@@ -978,29 +977,6 @@ class _ProviderPicker extends StatelessWidget {
   }
 }
 
-class _LabelledField extends StatelessWidget {
-  const _LabelledField({required this.label, required this.child});
-
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          label,
-          style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 4),
-        child,
-      ],
-    );
-  }
-}
-
 class _PickerField extends StatelessWidget {
   const _PickerField({
     required this.fieldKey,
@@ -1046,43 +1022,3 @@ class _PickerField extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load this appointment.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Formatting helpers
-// ---------------------------------------------------------------------------
-
-const List<String> _months = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-String _formatDate(DateTime t) =>
-    '${_months[t.month - 1]} ${t.day}, ${t.year}';
-
-String _formatTime(DateTime t) {
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '$hour:$minute $suffix';
-}

@@ -1,5 +1,7 @@
 import 'package:careblazers/models/settings.dart';
 import 'package:careblazers/providers/bundled_tts_provider.dart';
+import 'package:careblazers/providers/storage_provider.dart'
+    show InMemoryStorageProvider, storageBackendProvider;
 import 'package:careblazers/providers/tts_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -200,6 +202,13 @@ void main() {
         overrides: <Override>[
           ttsSettingsProvider.overrideWithValue(settings),
           ttsClockProvider.overrideWithValue(() => now),
+          // The tts selector watches the minute-polling QuietHoursActive
+          // tick (2026-06-11, mid-session boundary crossing), whose
+          // settings read would otherwise open the real drift database
+          // in this unit-test container.
+          storageBackendProvider.overrideWithValue(
+            InMemoryStorageProvider(),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -266,7 +275,13 @@ void main() {
       // hour: read it once and ensure it's one of the three expected
       // types (no exceptions, no NPEs from the riverpod_generator
       // wiring).
-      final ProviderContainer container = ProviderContainer();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[
+          storageBackendProvider.overrideWithValue(
+            InMemoryStorageProvider(),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
       final TTSProvider impl = container.read(ttsProvider);
       expect(

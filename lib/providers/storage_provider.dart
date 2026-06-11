@@ -226,6 +226,11 @@ class DriftStorageProvider with SyncSinkHost implements StorageProvider {
             payload: jsonEncode(patient.toJson()),
           ),
         );
+    // Loved-one edits sync like every other collection (2026-06-11) —
+    // the push path routes the 'patient' collection onto the protocol's
+    // dedicated patient field. Suppressed by applyingRemote when this
+    // write IS a pulled doc (the echo-loop guard).
+    emitUpsert('patient', patient.id, patient.toJson());
   }
 
   @override
@@ -398,6 +403,8 @@ class InMemoryStorageProvider with SyncSinkHost implements StorageProvider {
   @override
   Future<void> upsertPatient(Patient patient) async {
     _patients[patient.id] = patient;
+    // Mirrors DriftStorageProvider: loved-one edits flow to the circle.
+    emitUpsert('patient', patient.id, patient.toJson());
   }
 
   @override

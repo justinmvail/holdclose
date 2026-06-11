@@ -284,6 +284,19 @@ Map<String, String> shimAuthHeaders() =>
       'Authorization': 'Bearer $shimToken',
     };
 
+/// Bounded [Dio] for shim calls — a bare `Dio()` has NO timeouts, so a
+/// hung shim / dropped Funnel mid-stream would strand the decoder, chat,
+/// or voice intent awaiting forever (bad for an app whose core promise
+/// is "what do I do RIGHT NOW"). For `ResponseType.stream` requests Dio
+/// applies `receiveTimeout` between chunks, so the generous 120s bounds
+/// a stall without cutting off a long, healthy generation. Shared by the
+/// decoder + chat backends.
+Dio buildShimDio() => Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      sendTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 120),
+    ));
+
 /// Real, shim-backed provider (BUILD_SPEC.md §6.1 + §7.3).
 ///
 /// POSTs `{system, user}` to [claudeShimEndpoint], consumes the SSE
@@ -356,7 +369,7 @@ class ClaudeCLIProvider implements LLMProvider {
     required PatientContext patient,
     required int attempt,
   }) async* {
-    final Dio dio = _injectedDio ?? Dio();
+    final Dio dio = _injectedDio ?? buildShimDio();
     final String userMessage = buildUserMessage(
       behavior: behavior,
       triage: triage,
@@ -406,10 +419,14 @@ class ClaudeCLIProvider implements LLMProvider {
           final int sep = _indexOfDoubleNewline(rawBuffer);
           if (sep == -1) break;
           final List<int> eventBytes = rawBuffer.sublist(0, sep);
-          rawBuffer.removeRange(0, sep + 2);
+          rawBuffer.removeRange(0, sep + _eventBoundaryLength(rawBuffer, sep));
           final String event = utf8.decode(eventBytes);
 
-          for (final String line in event.split('\n')) {
+          for (final String rawLine in event.split('\n')) {
+            // CRLF tolerance: strip a trailing \r left by \r\n events.
+            final String line = rawLine.endsWith('\r')
+                ? rawLine.substring(0, rawLine.length - 1)
+                : rawLine;
             if (!line.startsWith('data:')) continue;
             // `data:`/`data: ` — strip the prefix + optional space.
             final String payload =
@@ -444,7 +461,10 @@ class ClaudeCLIProvider implements LLMProvider {
       if (rawBuffer.isNotEmpty) {
         final String trailing = utf8.decode(rawBuffer);
         rawBuffer.clear();
-        for (final String line in trailing.split('\n')) {
+        for (final String rawTrailing in trailing.split('\n')) {
+          final String line = rawTrailing.endsWith('\r')
+              ? rawTrailing.substring(0, rawTrailing.length - 1)
+              : rawTrailing;
           if (!line.startsWith('data:')) continue;
           final String payload =
               line.substring(5).startsWith(' ')
@@ -491,7 +511,14 @@ class ClaudeCLIProvider implements LLMProvider {
         );
         return;
       }
-      yield DecoderChunk.done(result: _toResult(parsed));
+      final DecoderResult? result = _resultFromMap(parsed);
+      if (result == null) {
+        yield const DecoderChunk.error(
+          message: 'decoder output was missing required script fields',
+        );
+        return;
+      }
+      yield DecoderChunk.done(result: result);
     } on FormatException catch (e) {
       yield DecoderChunk.error(message: 'decoder JSON parse failed: ${e.message}');
     }
@@ -510,7 +537,7 @@ class ClaudeCLIProvider implements LLMProvider {
       return;
     }
 
-    final Dio dio = _injectedDio ?? Dio();
+    final Dio dio = _injectedDio ?? buildShimDio();
     final String userMessage = buildActivityUserMessage(
       lastNHours: lastNHours,
       events: events,
@@ -591,7 +618,7 @@ class ClaudeCLIProvider implements LLMProvider {
         final int sep = _indexOfDoubleNewline(rawBuffer);
         if (sep == -1) break;
         final List<int> eventBytes = rawBuffer.sublist(0, sep);
-        rawBuffer.removeRange(0, sep + 2);
+        rawBuffer.removeRange(0, sep + _eventBoundaryLength(rawBuffer, sep));
         yield* _deltasFromEvent(utf8.decode(eventBytes));
       }
     }
@@ -604,7 +631,11 @@ class ClaudeCLIProvider implements LLMProvider {
   /// Extract text deltas from one raw SSE event block — skips non-`data:`
   /// lines and the `[DONE]` terminator, throws on a shim error payload.
   static Stream<String> _deltasFromEvent(String event) async* {
-    for (final String line in event.split('\n')) {
+    for (final String rawLine in event.split('\n')) {
+      // CRLF tolerance: strip a trailing \r left by \r\n events.
+      final String line = rawLine.endsWith('\r')
+          ? rawLine.substring(0, rawLine.length - 1)
+          : rawLine;
       if (!line.startsWith('data:')) continue;
       final String payload = line.substring(5).startsWith(' ')
           ? line.substring(6)
@@ -633,27 +664,41 @@ class ClaudeCLIProvider implements LLMProvider {
   }
 
   /// Try parsing [text] as a [DecoderResult]. Returns null if the JSON
-  /// is partial (still growing) or doesn't yet contain the required
-  /// `say`/`tweak`/`dont_say` keys.
+  /// is partial (still growing), doesn't yet contain the required
+  /// `say`/`tweak`/`dont_say` keys, or fails the content contract:
+  /// `say` AND `dont_say` must be NON-EMPTY lists of strings. The
+  /// "don't say" warning is part of the decoder's non-negotiable
+  /// guardrail output (CLAUDE.md) — a reply with `"dont_say": []` is a
+  /// malformed result, not a successful one, so the stream keeps
+  /// waiting / surfaces the parse error instead of rendering a script
+  /// with the safety rail missing.
   DecoderResult? _tryParse(String text) {
     try {
       final dynamic parsed = json.decode(_extractJsonObject(text));
       if (parsed is! Map<String, dynamic>) return null;
-      if (parsed['say'] is! List ||
-          parsed['tweak'] is! List ||
-          parsed['dont_say'] is! List) {
-        return null;
-      }
-      return _toResult(parsed);
+      return _resultFromMap(parsed);
     } on FormatException {
       return null;
     }
   }
 
-  DecoderResult _toResult(Map<String, dynamic> parsed) {
-    final List<String> say = _stringList(parsed['say']);
-    final List<String> tweak = _stringList(parsed['tweak']);
-    final List<String> dontSay = _stringList(parsed['dont_say']);
+  /// Construct a [DecoderResult] from decoded JSON, enforcing the content
+  /// contract (see [_tryParse]). Null when the shape or content is
+  /// malformed. Shared by the incremental parse and the final
+  /// stream-close parse so both paths apply identical strictness.
+  DecoderResult? _resultFromMap(Map<String, dynamic> parsed) {
+    if (parsed['say'] is! List ||
+        parsed['tweak'] is! List ||
+        parsed['dont_say'] is! List) {
+      return null;
+    }
+    final List<String>? say = _stringList(parsed['say']);
+    final List<String>? tweak = _stringList(parsed['tweak']);
+    final List<String>? dontSay = _stringList(parsed['dont_say']);
+    // Non-string elements (nested objects/arrays) are a malformed
+    // reply, not data to `toString()` into the caregiver's script.
+    if (say == null || tweak == null || dontSay == null) return null;
+    if (say.isEmpty || dontSay.isEmpty) return null;
     return DecoderResult(
       say: say,
       tweak: tweak,
@@ -662,19 +707,40 @@ class ClaudeCLIProvider implements LLMProvider {
     );
   }
 
-  static List<String> _stringList(dynamic raw) {
-    if (raw is! List) return const <String>[];
-    return raw.map((dynamic e) => e.toString()).toList(growable: false);
+  /// Strict string-list extraction: null when [raw] isn't a list or any
+  /// element isn't a plain string (a Map's `toString()` is Dart debug
+  /// text, never something to read aloud to a caregiver). Empty strings
+  /// are dropped.
+  static List<String>? _stringList(dynamic raw) {
+    if (raw is! List) return null;
+    final List<String> out = <String>[];
+    for (final dynamic e in raw) {
+      if (e is! String) return null;
+      final String trimmed = e.trim();
+      if (trimmed.isNotEmpty) out.add(trimmed);
+    }
+    return out;
   }
 
   /// Index of the first `\n\n` (0x0A 0x0A) byte pair in [bytes], or
   /// -1 if no event boundary has arrived yet.
   static int _indexOfDoubleNewline(List<int> bytes) {
     for (int i = 0; i < bytes.length - 1; i++) {
-      if (bytes[i] == 0x0A && bytes[i + 1] == 0x0A) return i;
+      if (bytes[i] != 0x0A) continue;
+      if (bytes[i + 1] == 0x0A) return i;
+      if (i < bytes.length - 2 &&
+          bytes[i + 1] == 0x0D &&
+          bytes[i + 2] == 0x0A) {
+        return i;
+      }
     }
     return -1;
   }
+
+  /// Length of the separator found at [sep] by [_indexOfDoubleNewline]
+  /// (2 for `\n\n`, 3 for `\n\r\n` — i.e. CRLF-normalised events).
+  static int _eventBoundaryLength(List<int> bytes, int sep) =>
+      bytes[sep + 1] == 0x0A ? 2 : 3;
 
   /// Extract a text delta (or error) from one SSE event payload. The
   /// shim forwards `claude --print --output-format stream-json` events
@@ -802,6 +868,13 @@ bool get _isUnderFlutterTest {
     return false;
   }
 }
+
+/// Public view of the fake-engine selection for SIBLING backends — the
+/// chat/voice backend keys off the same rule so a `USE_FAKE_LLM=true`
+/// demo build (and every `flutter test` run) is deterministic across
+/// the decoder AND chat, not just the decoder (2026-06-11; previously
+/// a DEMO_MODE run's chat still hit the live shim).
+bool get useFakeLLMEngine => _useFakeLLM;
 
 /// Riverpod-wired backend selection. Widgets and services read
 /// `ref.watch(llmProvider)` and get whichever impl the build mode

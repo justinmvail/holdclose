@@ -12,6 +12,7 @@ import '../../providers/photo_attacher_provider.dart';
 import '../../providers/storage_provider.dart';
 import '../../providers/voice_note_recorder_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/path_header.dart';
 
 /// Journal entry detail (BUILD_SPEC.md §5.6).
@@ -684,15 +685,5 @@ class _PhotoRow extends StatelessWidget {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const List<String> _monthAbbrev = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-String _formatHeaderDateTime(DateTime t) {
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '${_monthAbbrev[t.month - 1]} ${t.day} · $hour:$minute $suffix';
-}
+String _formatHeaderDateTime(DateTime t) =>
+    '${monthAbbreviations[t.month - 1]} ${t.day} · ${formatClock12h(t)}';

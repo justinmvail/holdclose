@@ -12,6 +12,7 @@ import { reportsRouter } from './routes/reports';
 import { syncRouter } from './routes/sync';
 import { votesRouter } from './routes/votes';
 import { handleScheduled, type WatchdogEnv } from './watchdog';
+import type { Context } from 'hono';
 
 export type Bindings = AuthBindings & {
   FORUM_DB: D1Database;
@@ -28,6 +29,21 @@ export type Bindings = AuthBindings & {
 export type Variables = AuthVariables;
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// Last-resort error boundary. Anything a route or middleware lets escape
+// (D1 failures, JWKS fetch outages, deliberate rethrows from the auth
+// layers) lands here — including errors thrown inside the sub-app mounted
+// below, which bubble up to the parent handler. Log the real error
+// server-side; the response body stays generic so internals (stack
+// frames, SQL text, token contents) never reach a client. Exported so a
+// test can pin the genericity property without depending on a specific
+// route's validation gap as the throw vector.
+export function handleAppError(err: Error, c: Context): Response {
+  console.error('unhandled error', err);
+  return c.json({ error: 'internal' }, 500);
+}
+
+app.onError(handleAppError);
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 

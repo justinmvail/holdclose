@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../models/health_log_entry.dart';
 import '../../providers/health_log_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/path_header.dart';
 
 /// Health Log list at `/medical/health-log` (TASKS.md Phase 14.17,
@@ -66,7 +68,8 @@ class HealthLogScreen extends ConsumerWidget {
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load the health log.\n$e"),
                 data: (List<HealthLogEntry> entries) {
                   if (entries.isEmpty) return const _EmptyState();
                   return _GroupedList(
@@ -164,22 +167,48 @@ class _GroupedList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<Widget> children = <Widget>[];
-    for (final _DayGroup group in groups) {
-      children.add(_DayHeader(
-        key: HealthLogScreen.daySectionKey(group.day),
-        label: group.label,
-      ));
-      for (final HealthLogEntry entry in group.entries) {
-        children.add(_EntryRow(entry: entry, now: now));
-      }
-    }
-    return ListView(
+    // Flatten the day groups into one item list so the (unbounded)
+    // history builds rows lazily. Render order is unchanged: each day
+    // header followed by that day's entries.
+    final List<_LogRow> rows = <_LogRow>[
+      for (final _DayGroup group in groups) ...<_LogRow>[
+        _HeaderRow(group),
+        for (final HealthLogEntry entry in group.entries) _EntryItemRow(entry),
+      ],
+    ];
+    return ListView.builder(
       key: HealthLogScreen.listKey,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      children: children,
+      itemCount: rows.length,
+      itemBuilder: (BuildContext context, int i) {
+        switch (rows[i]) {
+          case _HeaderRow(group: final _DayGroup group):
+            return _DayHeader(
+              key: HealthLogScreen.daySectionKey(group.day),
+              label: group.label,
+            );
+          case _EntryItemRow(entry: final HealthLogEntry entry):
+            return _EntryRow(entry: entry, now: now);
+        }
+      },
     );
   }
+}
+
+/// One row in the flattened health-log list — a day header or an entry —
+/// so a single lazy ListView scrolls the whole history.
+sealed class _LogRow {
+  const _LogRow();
+}
+
+class _HeaderRow extends _LogRow {
+  const _HeaderRow(this.group);
+  final _DayGroup group;
+}
+
+class _EntryItemRow extends _LogRow {
+  const _EntryItemRow(this.entry);
+  final HealthLogEntry entry;
 }
 
 class _DayHeader extends StatelessWidget {
@@ -310,27 +339,6 @@ class _AddEntryFab extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load the health log.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Grouping + formatting helpers
 // ---------------------------------------------------------------------------
@@ -382,11 +390,6 @@ List<_DayGroup> _groupByDay(List<HealthLogEntry> entries, DateTime now) {
   return groups;
 }
 
-const List<String> _monthsShort = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
 const List<String> _weekdaysShort = <String>[
   'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
 ];
@@ -399,7 +402,7 @@ String _dayLabel(DateTime day, DateTime now) {
   if (day == today) return 'Today';
   if (day == yesterday) return 'Yesterday';
   return '${_weekdaysShort[day.weekday - 1]}, '
-      '${_monthsShort[day.month - 1]} ${day.day}';
+      '${monthAbbreviations[day.month - 1]} ${day.day}';
 }
 
 /// "just now" / "5m ago" / "3h ago" within the last day, otherwise the
@@ -410,15 +413,7 @@ String _relativeTime(DateTime at, DateTime now) {
   if (delta.inMinutes < 1) return 'just now';
   if (delta.inMinutes < 60) return '${delta.inMinutes}m ago';
   if (delta.inHours < 24) return '${delta.inHours}h ago';
-  return _formatClock(at.toLocal());
-}
-
-String _formatClock(DateTime t) {
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '$hour:$minute $suffix';
+  return formatClock12h(at.toLocal());
 }
 
 /// One-line summary the row shows for [entry], keyed off its kind

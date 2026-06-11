@@ -1,240 +1,289 @@
-import 'dart:convert';
-
-import 'package:careblazers/providers/forum_jwt_provider.dart';
-import 'package:crypto/crypto.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+import 'package:careblazers/providers/forum_jwt_provider.dart';
 
-  // ---- ForumSecretStore ---------------------------------------------------
+/// In-memory [FlutterSecureStorage] stand-in. Only the members the
+/// session store touches are overridden; everything else inherits the
+/// (throwing) noSuchMethod from [Fake].
+class _FakeSecureStorage extends Fake implements FlutterSecureStorage {
+  final Map<String, String> values = <String, String>{};
 
-  group('ForumSecretStore — Phase 13.9 secure-storage seeding', () {
-    const MethodChannel channel =
-        MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
-    final Map<String, String> store = <String, String>{};
-    final List<MethodCall> calls = <MethodCall>[];
+  @override
+  Future<String?> read({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async =>
+      values[key];
 
-    setUp(() {
-      store.clear();
-      calls.clear();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (MethodCall call) async {
-        calls.add(call);
-        final Map<dynamic, dynamic> args =
-            (call.arguments as Map<dynamic, dynamic>?) ??
-                <dynamic, dynamic>{};
-        final String? key = args['key'] as String?;
-        switch (call.method) {
-          case 'write':
-            if (key != null) store[key] = args['value'] as String? ?? '';
-            return null;
-          case 'read':
-            return store[key];
-          case 'delete':
-            if (key != null) store.remove(key);
-            return null;
-          case 'containsKey':
-            return store.containsKey(key);
-          case 'deleteAll':
-            store.clear();
-            return null;
-        }
-        return null;
-      });
-    });
-
-    tearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, null);
-    });
-
-    test('seeds from the compile-time define on first load', () async {
-      final ForumSecretStore secretStore = ForumSecretStore(
-        storage: const FlutterSecureStorage(),
-        compileTimeSecret: 'super-secret-build-define',
-      );
-      final String loaded = await secretStore.load();
-      expect(loaded, 'super-secret-build-define');
-      expect(store[forumSecretStorageKey], 'super-secret-build-define');
-    });
-
-    test('subsequent loads come from secure storage, NOT the define',
-        () async {
-      store[forumSecretStorageKey] = 'rotated-via-out-of-band-write';
-      final ForumSecretStore secretStore = ForumSecretStore(
-        storage: const FlutterSecureStorage(),
-        compileTimeSecret: 'should-not-be-used',
-      );
-      final String loaded = await secretStore.load();
-      expect(loaded, 'rotated-via-out-of-band-write');
-      // No write call — already-cached value should not re-seed.
-      expect(calls.where((MethodCall c) => c.method == 'write'), isEmpty);
-    });
-
-    test('throws StateError when neither secure storage nor the define '
-        'carry a value', () async {
-      final ForumSecretStore secretStore = ForumSecretStore(
-        storage: const FlutterSecureStorage(),
-        compileTimeSecret: '',
-      );
-      await expectLater(secretStore.load(), throwsStateError);
-    });
-  });
-
-  // ---- ForumJwtMinter -----------------------------------------------------
-
-  group('ForumJwtMinter — Phase 13.9 HS256 + refresh', () {
-    const String secret = 'shared-secret-the-worker-also-knows';
-    const String userId = 'careblazers-user-42';
-    final DateTime baseTime = DateTime.utc(2026, 5, 30, 12);
-
-    DateTime Function() fixedClock() => () => baseTime;
-
-    ForumJwtMinter buildMinter({
-      DateTime Function()? clock,
-      ForumUserIdLoader? userIdLoader,
-      Duration ttl = const Duration(hours: 1),
-      Duration refreshThreshold = const Duration(minutes: 5),
-    }) {
-      return ForumJwtMinter(
-        secretLoader: () async => secret,
-        userIdLoader: userIdLoader ?? (() async => userId),
-        ttl: ttl,
-        refreshThreshold: refreshThreshold,
-        clock: clock ?? fixedClock(),
-      );
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (value == null) {
+      values.remove(key);
+    } else {
+      values[key] = value;
     }
+  }
 
-    test('produces a 3-segment HS256 JWT', () async {
-      final ForumJwtMinter minter = buildMinter();
-      final String token = await minter.currentToken();
-      final List<String> segments = token.split('.');
-      expect(segments, hasLength(3));
-      // Header decodes to {alg: HS256, typ: JWT}.
-      final Map<String, dynamic> header =
-          json.decode(utf8.decode(_b64uDecode(segments[0])))
-              as Map<String, dynamic>;
-      expect(header['alg'], 'HS256');
-      expect(header['typ'], 'JWT');
-    });
-
-    test('signs payload {sub, iat, exp} matching the clock + ttl', () async {
-      final ForumJwtMinter minter = buildMinter(
-        ttl: const Duration(minutes: 30),
-      );
-      final String token = await minter.currentToken();
-      final List<String> segments = token.split('.');
-      final Map<String, dynamic> payload =
-          json.decode(utf8.decode(_b64uDecode(segments[1])))
-              as Map<String, dynamic>;
-      expect(payload['sub'], userId);
-      expect(
-        payload['iat'],
-        baseTime.millisecondsSinceEpoch ~/ 1000,
-      );
-      expect(
-        payload['exp'],
-        baseTime.add(const Duration(minutes: 30)).millisecondsSinceEpoch ~/ 1000,
-      );
-    });
-
-    test('signature verifies under the shared secret', () async {
-      final ForumJwtMinter minter = buildMinter();
-      final String token = await minter.currentToken();
-      final List<String> segments = token.split('.');
-      final String signingInput = '${segments[0]}.${segments[1]}';
-      final Digest expected =
-          Hmac(sha256, utf8.encode(secret)).convert(utf8.encode(signingInput));
-      final List<int> actualBytes = _b64uDecode(segments[2]);
-      expect(actualBytes, expected.bytes);
-    });
-
-    test('reuses the cached token while it is far from expiry', () async {
-      final ForumJwtMinter minter = buildMinter();
-      final String first = await minter.currentToken();
-      final String second = await minter.currentToken();
-      expect(identical(first, second), isTrue);
-    });
-
-    test('mints a fresh token when the cached one is inside the '
-        'refresh threshold', () async {
-      // Use a mutable clock so the second call lands inside the
-      // refresh window.
-      DateTime now = baseTime;
-      final ForumJwtMinter minter = buildMinter(
-        clock: () => now,
-        ttl: const Duration(minutes: 10),
-        refreshThreshold: const Duration(minutes: 2),
-      );
-      final String first = await minter.currentToken();
-      // Jump to 9 minutes in — only 1 minute of TTL left, inside the
-      // 2-minute refresh window.
-      now = baseTime.add(const Duration(minutes: 9));
-      final String second = await minter.currentToken();
-      expect(second, isNot(equals(first)));
-      // The new token's exp should be a fresh ttl beyond the new clock.
-      final Map<String, dynamic> payload =
-          json.decode(utf8.decode(_b64uDecode(second.split('.')[1])))
-              as Map<String, dynamic>;
-      expect(
-        payload['exp'],
-        now.add(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000,
-      );
-    });
-
-    test('invalidates the cache when the signed-in user changes', () async {
-      String currentUser = 'first-user';
-      final ForumJwtMinter minter = buildMinter(
-        userIdLoader: () async => currentUser,
-      );
-      final String first = await minter.currentToken();
-      currentUser = 'second-user';
-      final String second = await minter.currentToken();
-      expect(second, isNot(equals(first)));
-      final Map<String, dynamic> payload =
-          json.decode(utf8.decode(_b64uDecode(second.split('.')[1])))
-              as Map<String, dynamic>;
-      expect(payload['sub'], 'second-user');
-    });
-
-    test('throws StateError when no user is signed in', () async {
-      final ForumJwtMinter minter = buildMinter(
-        userIdLoader: () async => null,
-      );
-      await expectLater(minter.currentToken(), throwsStateError);
-    });
-
-    test('invalidate() forces the next call to mint fresh', () async {
-      final ForumJwtMinter minter = buildMinter();
-      final String first = await minter.currentToken();
-      minter.invalidate();
-      expect(minter.cachedExpiresAt, isNull);
-      final String second = await minter.currentToken();
-      // Same time, same user, same secret → token bytes are identical
-      // even though the cache was cleared. Verify by checking the
-      // minter actually re-signed (cache was repopulated).
-      expect(minter.cachedExpiresAt, isNotNull);
-      expect(second, equals(first));
-    });
-
-    test('refuses to sign when the secret loader returns an empty string',
-        () async {
-      final ForumJwtMinter minter = ForumJwtMinter(
-        secretLoader: () async => '',
-        userIdLoader: () async => userId,
-      );
-      await expectLater(minter.currentToken(), throwsStateError);
-    });
-  });
+  @override
+  Future<void> delete({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    values.remove(key);
+  }
 }
 
-/// Decode a base64url segment, restoring `=` padding the JWT emitter
-/// strips per RFC 7515 §2.
-List<int> _b64uDecode(String segment) {
-  final int rem = segment.length % 4;
-  final String padded = rem == 0 ? segment : segment + '=' * (4 - rem);
-  return base64Url.decode(padded);
+ForumSession _session(String token, DateTime expiresAt) =>
+    ForumSession(token: token, expiresAt: expiresAt);
+
+void main() {
+  final DateTime now = DateTime.utc(2026, 6, 11, 12);
+  DateTime clock() => now;
+
+  group('ForumSessionStore — secure-storage persistence', () {
+    test('round-trips a session (token + epoch-seconds expiry)', () async {
+      final _FakeSecureStorage storage = _FakeSecureStorage();
+      final ForumSessionStore store = ForumSessionStore(storage: storage);
+
+      final DateTime expiry = DateTime.utc(2026, 7, 11);
+      await store.write(_session('tok-123', expiry));
+      final ForumSession? read = await store.read();
+
+      expect(read, isNotNull);
+      expect(read!.token, 'tok-123');
+      expect(read.expiresAt, expiry);
+    });
+
+    test('returns null when nothing is stored or expiry is corrupt',
+        () async {
+      final _FakeSecureStorage storage = _FakeSecureStorage();
+      final ForumSessionStore store = ForumSessionStore(storage: storage);
+      expect(await store.read(), isNull);
+
+      storage.values[forumSessionTokenStorageKey] = 'tok';
+      storage.values[forumSessionExpiryStorageKey] = 'not-a-number';
+      expect(await store.read(), isNull);
+    });
+
+    test('write and clear both shed the LEGACY on-device signing secret',
+        () async {
+      final _FakeSecureStorage storage = _FakeSecureStorage();
+      storage.values[forumSecretStorageKey] = 'legacy-shared-secret';
+      final ForumSessionStore store = ForumSessionStore(storage: storage);
+
+      await store.write(_session('tok', DateTime.utc(2026, 7, 1)));
+      expect(storage.values.containsKey(forumSecretStorageKey), isFalse);
+
+      storage.values[forumSecretStorageKey] = 'legacy-shared-secret';
+      await store.clear();
+      expect(storage.values.containsKey(forumSecretStorageKey), isFalse);
+      expect(storage.values.containsKey(forumSessionTokenStorageKey), isFalse);
+      expect(
+        storage.values.containsKey(forumSessionExpiryStorageKey),
+        isFalse,
+      );
+    });
+  });
+
+  group('ForumSessionManager — token lifecycle', () {
+    test('returns the stored token while it is far from expiry — '
+        'no refresh call', () async {
+      final ForumSessionStore store =
+          ForumSessionStore(storage: _FakeSecureStorage());
+      await store.write(_session('fresh', now.add(const Duration(days: 20))));
+      int refreshes = 0;
+      final ForumSessionManager manager = ForumSessionManager(
+        store: store,
+        refresher: () async {
+          refreshes += 1;
+          return null;
+        },
+        clock: clock,
+      );
+
+      expect(await manager.currentToken(), 'fresh');
+      expect(refreshes, 0);
+    });
+
+    test('refreshes when inside the refresh-ahead window, '
+        'persisting the new session', () async {
+      final _FakeSecureStorage storage = _FakeSecureStorage();
+      final ForumSessionStore store = ForumSessionStore(storage: storage);
+      await store.write(_session('aging', now.add(const Duration(days: 2))));
+      final ForumSessionManager manager = ForumSessionManager(
+        store: store,
+        refresher: () async =>
+            _session('renewed', now.add(const Duration(days: 30))),
+        clock: clock,
+      );
+
+      expect(await manager.currentToken(), 'renewed');
+      expect(storage.values[forumSessionTokenStorageKey], 'renewed');
+    });
+
+    test('falls back to the stored (still-valid) token when refresh fails',
+        () async {
+      final ForumSessionStore store =
+          ForumSessionStore(storage: _FakeSecureStorage());
+      await store.write(_session('aging', now.add(const Duration(days: 2))));
+      final ForumSessionManager manager = ForumSessionManager(
+        store: store,
+        refresher: () async => null,
+        clock: clock,
+      );
+
+      expect(await manager.currentToken(), 'aging');
+    });
+
+    test('refreshes when the stored token is expired', () async {
+      final ForumSessionStore store =
+          ForumSessionStore(storage: _FakeSecureStorage());
+      await store
+          .write(_session('dead', now.subtract(const Duration(hours: 1))));
+      final ForumSessionManager manager = ForumSessionManager(
+        store: store,
+        refresher: () async =>
+            _session('reborn', now.add(const Duration(days: 30))),
+        clock: clock,
+      );
+
+      expect(await manager.currentToken(), 'reborn');
+    });
+
+    test('throws StateError when no token exists and refresh yields nothing',
+        () async {
+      final ForumSessionManager manager = ForumSessionManager(
+        store: ForumSessionStore(storage: _FakeSecureStorage()),
+        refresher: () async => null,
+        clock: clock,
+      );
+
+      expect(manager.currentToken, throwsStateError);
+    });
+
+    test('a throwing refresher is swallowed — surfaces as StateError, '
+        'not the refresher error', () async {
+      final ForumSessionManager manager = ForumSessionManager(
+        store: ForumSessionStore(storage: _FakeSecureStorage()),
+        refresher: () async => throw Exception('network down'),
+        clock: clock,
+      );
+
+      expect(manager.currentToken, throwsStateError);
+    });
+
+    test('concurrent expired-token calls share ONE refresh exchange',
+        () async {
+      int refreshes = 0;
+      final ForumSessionManager manager = ForumSessionManager(
+        store: ForumSessionStore(storage: _FakeSecureStorage()),
+        refresher: () async {
+          refreshes += 1;
+          await Future<void>.delayed(Duration.zero);
+          return _session('shared', now.add(const Duration(days: 30)));
+        },
+        clock: clock,
+      );
+
+      final List<String> tokens = await Future.wait(<Future<String>>[
+        manager.currentToken(),
+        manager.currentToken(),
+        manager.currentToken(),
+      ]);
+      expect(tokens, everyElement('shared'));
+      expect(refreshes, 1);
+    });
+
+    test('adoptSession caches + persists the sign-in token', () async {
+      final _FakeSecureStorage storage = _FakeSecureStorage();
+      int refreshes = 0;
+      final ForumSessionManager manager = ForumSessionManager(
+        store: ForumSessionStore(storage: storage),
+        refresher: () async {
+          refreshes += 1;
+          return null;
+        },
+        clock: clock,
+      );
+
+      await manager.adoptSession(
+        _session('adopted', now.add(const Duration(days: 30))),
+      );
+      expect(await manager.currentToken(), 'adopted');
+      expect(refreshes, 0);
+      expect(storage.values[forumSessionTokenStorageKey], 'adopted');
+    });
+
+    test('recoverFromExpiry drops the dead token, re-exchanges, '
+        'and reports success', () async {
+      final _FakeSecureStorage storage = _FakeSecureStorage();
+      final ForumSessionStore store = ForumSessionStore(storage: storage);
+      await store.write(
+        _session('rejected-by-server', now.add(const Duration(days: 20))),
+      );
+      final ForumSessionManager manager = ForumSessionManager(
+        store: store,
+        refresher: () async =>
+            _session('recovered', now.add(const Duration(days: 30))),
+        clock: clock,
+      );
+
+      expect(await manager.recoverFromExpiry(), isTrue);
+      expect(await manager.currentToken(), 'recovered');
+    });
+
+    test('recoverFromExpiry reports failure when no refresh is possible '
+        '(and the dead token stays gone)', () async {
+      final _FakeSecureStorage storage = _FakeSecureStorage();
+      final ForumSessionStore store = ForumSessionStore(storage: storage);
+      await store.write(
+        _session('rejected-by-server', now.add(const Duration(days: 20))),
+      );
+      final ForumSessionManager manager = ForumSessionManager(
+        store: store,
+        refresher: () async => null,
+        clock: clock,
+      );
+
+      expect(await manager.recoverFromExpiry(), isFalse);
+      expect(storage.values.containsKey(forumSessionTokenStorageKey), isFalse);
+    });
+
+    test('clear() (sign-out) forgets cache + storage', () async {
+      final _FakeSecureStorage storage = _FakeSecureStorage();
+      final ForumSessionManager manager = ForumSessionManager(
+        store: ForumSessionStore(storage: storage),
+        refresher: () async => null,
+        clock: clock,
+      );
+      await manager.adoptSession(
+        _session('signed-in', now.add(const Duration(days: 30))),
+      );
+
+      await manager.clear();
+
+      expect(storage.values, isEmpty);
+      expect(manager.currentToken, throwsStateError);
+    });
+  });
 }

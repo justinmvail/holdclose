@@ -21,6 +21,20 @@ class CircleJoinStashed extends CircleJoinOutcome {
   const CircleJoinStashed();
 }
 
+/// The link carries a valid-looking invite token and the caregiver is
+/// signed in — but joining is GATED on explicit consent. The UI must ask
+/// ("Join this care circle?") and only then call
+/// [CircleDeepLinkHandler.confirmJoin] with [token]. Nothing has been
+/// sent to the backend yet; dismissing the prompt abandons the token.
+///
+/// This gate is the defense against a tapped `careblazers://join/<x>`
+/// link silently re-binding the device to an attacker's circle (which
+/// would sync the caregiver's data to strangers). No join without a yes.
+class CircleJoinConfirmationRequired extends CircleJoinOutcome {
+  const CircleJoinConfirmationRequired(this.token);
+  final String token;
+}
+
 /// The link didn't carry one of our tokens (ignored, no UI).
 class CircleJoinNotALink extends CircleJoinOutcome {
   const CircleJoinNotALink();
@@ -67,22 +81,24 @@ class CircleDeepLinkHandler {
   }
 
   /// Handle a parsed invite [token]: stash it when signed out, otherwise
-  /// redeem it now. Never throws.
+  /// ask the UI to CONFIRM before any join happens. Never throws, never
+  /// joins on its own — redemption only occurs through [confirmJoin].
   Future<CircleJoinOutcome> handleToken(String token) async {
     if (!await _isSignedIn()) {
       _pendingToken = token;
       return const CircleJoinStashed();
     }
-    return _join(token);
+    return CircleJoinConfirmationRequired(token);
   }
 
   /// Replay a stashed token after sign-in completes. No-op (returns null)
-  /// when nothing is pending.
+  /// when nothing is pending. Like the live path, this only surfaces the
+  /// confirmation request — the join still waits for an explicit yes.
   Future<CircleJoinOutcome?> processPending() async {
     final String? token = _pendingToken;
     if (token == null) return null;
     _pendingToken = null;
-    return _join(token);
+    return CircleJoinConfirmationRequired(token);
   }
 
   Future<bool> _isSignedIn() async {
@@ -97,7 +113,9 @@ class CircleDeepLinkHandler {
     }
   }
 
-  Future<CircleJoinOutcome> _join(String token) async {
+  /// Redeem [token] after the caregiver explicitly confirmed the join in
+  /// the UI. This is the ONLY path that talks to the backend.
+  Future<CircleJoinOutcome> confirmJoin(String token) async {
     final ForumApiClient client = _ref.read(forumApiClientProvider);
     try {
       final CircleDto circle = await client.joinCircle(token);
@@ -116,6 +134,8 @@ class CircleDeepLinkHandler {
       return CircleJoinFailed(switch (e.error) {
         'invite_expired' => 'That invite has expired. Ask for a new link.',
         'invite_not_found' => "That invite isn't valid anymore.",
+        'invite_used' =>
+          'That invite has already been used. Ask for a new link.',
         _ => "We couldn't join that circle. Please try again.",
       });
     } catch (_) {

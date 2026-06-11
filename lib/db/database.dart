@@ -125,7 +125,16 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       CareblazersDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
+
+  /// One-shot repair for the rows v15 stranded (see the v20 migration
+  /// step): window entries whose dose window no longer exists. Visible
+  /// so the repair can be unit-tested against a hand-built orphan state
+  /// without re-running a version upgrade.
+  @visibleForTesting
+  static const String cleanupOrphanedWindowEntriesSql =
+      'DELETE FROM medication_window_entries '
+      'WHERE window_id NOT IN (SELECT id FROM dose_windows)';
 
   /// Migration handler. Four responsibilities:
   ///
@@ -318,6 +327,28 @@ class CareblazersDatabase extends _$CareblazersDatabase {
             // page so Community renders the last-seen posts offline instead of
             // a "couldn't load" error. Lights up empty; fills on first load.
             await m.createTable(forumPostCacheTable);
+          }
+          if (from < 20) {
+            // (a) Secondary indices on the hot FK/sort columns. SQLite
+            // does NOT auto-index FK children, so every chat-thread
+            // load, dose query, and ON DELETE CASCADE was a full table
+            // scan over tables that grow for the life of the install.
+            // Fresh installs get these from the @TableIndex annotations
+            // at create time; this step backfills upgrades.
+            await m.createIndex(chatMessagesConversationIdx);
+            await m.createIndex(medicationWindowEntriesWindowIdx);
+            await m.createIndex(medicationWindowEntriesMedicationIdx);
+            await m.createIndex(doseLogsMedicationScheduledIdx);
+            await m.createIndex(journalEntriesCreatedIdx);
+            await m.createIndex(healthLogEntriesPatientRecordedIdx);
+            // (b) Repair v15's orphans. v15 deleted the seeded windows
+            // assuming "FK cascade wipes any medication entries linked
+            // to those windows" — but `PRAGMA foreign_keys = ON` runs in
+            // beforeOpen, AFTER onUpgrade, so the cascade never fired
+            // during that migration and the window entries became
+            // permanent orphans (invisible to window-driven reads but
+            // still returned by entriesForMedication).
+            await customStatement(cleanupOrphanedWindowEntriesSql);
           }
         },
         beforeOpen: (OpeningDetails details) async {

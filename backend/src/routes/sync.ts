@@ -24,6 +24,69 @@ type Db = ReturnType<typeof drizzle>;
 
 const MAX_PUSH_DOCS = 500;
 
+/**
+ * Per-document payload byte ceiling (also applied to the patient payload).
+ * Care docs are small JSON blobs — a journal entry, a med schedule — so a
+ * quarter megabyte is generous. Without a cap a hostile client could park
+ * multi-MB strings in D1 rows that every circle member then re-downloads
+ * on each delta pull. An oversized payload rejects the WHOLE push (the
+ * client treats 4xx as retry-later; silently dropping single docs would
+ * strand them in the outbox as phantom "synced" data).
+ */
+const MAX_DOC_PAYLOAD_BYTES = 256 * 1024;
+
+/**
+ * The collections the client actually pushes — mirror of SyncCollections
+ * in lib/services/sync_service.dart. An unknown collection is a client
+ * bug or a probe; reject it instead of storing arbitrary namespaces.
+ * 'patient' travels via the dedicated `patient` field rather than `docs`,
+ * but stays in the list for forward-compat.
+ */
+const ALLOWED_COLLECTIONS = new Set([
+  'patient',
+  'medication',
+  'dose_window',
+  'medication_window_entry',
+  'dose_log',
+  'journal_entries',
+  'chat_conversations',
+  'chat_messages',
+  'appointments',
+  'providers',
+  'health_log_entries',
+  'care_plan_routines',
+  'care_events',
+  'care_tasks',
+  'care_shifts',
+  'expenses',
+  'caregivers',
+  'care_circle_memberships',
+  'emergency_cards',
+  'power_of_attorney_docs',
+  'identification_docs',
+]);
+
+// Payloads are JSON strings; the cap is on UTF-8 bytes (what D1 stores),
+// not UTF-16 code units, so multibyte text can't slip past it.
+function utf8ByteLength(s: string): number {
+  return new TextEncoder().encode(s).byteLength;
+}
+
+/**
+ * LWW trusts the client's `client_updated_at`, so an absurd future
+ * timestamp (buggy or hostile clock) would otherwise win every future
+ * conflict FOREVER — permanently locking other members out of editing
+ * that row. Cap accepted values at server-now plus a generous skew
+ * allowance; the write is still accepted (no data loss), it just can't
+ * project itself into the far future.
+ */
+const MAX_CLIENT_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
+
+function clampClientUpdatedAt(claimed: number, nowMs: number): number {
+  const max = nowMs + MAX_CLIENT_CLOCK_SKEW_MS;
+  return claimed > max ? max : claimed;
+}
+
 async function loadProfileByUserId(
   db: Db,
   careblazersUserId: string,
@@ -92,6 +155,7 @@ function parsePatient(raw: unknown): IncomingPatient | null | undefined {
   if (
     typeof p.payload !== 'string' ||
     typeof p.client_updated_at !== 'number' ||
+    !Number.isFinite(p.client_updated_at) ||
     (p.deleted !== undefined && typeof p.deleted !== 'boolean')
   ) {
     return null;
@@ -113,6 +177,7 @@ function parseDoc(raw: unknown): IncomingDoc | null {
     d.collection.length === 0 ||
     typeof d.payload !== 'string' ||
     typeof d.client_updated_at !== 'number' ||
+    !Number.isFinite(d.client_updated_at) ||
     (d.deleted !== undefined && typeof d.deleted !== 'boolean')
   ) {
     return null;
@@ -228,6 +293,12 @@ export const syncRouter = () => {
     if (incomingPatient === null) {
       return c.json({ error: 'invalid_body' }, 400);
     }
+    if (
+      incomingPatient &&
+      utf8ByteLength(incomingPatient.payload) > MAX_DOC_PAYLOAD_BYTES
+    ) {
+      return c.json({ error: 'payload_too_large' }, 400);
+    }
 
     const docsRaw = body.docs;
     if (docsRaw !== undefined && !Array.isArray(docsRaw)) {
@@ -237,16 +308,26 @@ export const syncRouter = () => {
     if (docsArr.length > MAX_PUSH_DOCS) {
       return c.json({ error: 'invalid_body' }, 400);
     }
+    // All docs are validated BEFORE any write below, so a bad batch is
+    // all-or-nothing — no doc from a rejected push is partially applied.
     const parsedDocs: IncomingDoc[] = [];
     for (const d of docsArr) {
       const parsed = parseDoc(d);
       if (!parsed) {
         return c.json({ error: 'invalid_body' }, 400);
       }
+      if (!ALLOWED_COLLECTIONS.has(parsed.collection)) {
+        return c.json({ error: 'invalid_body' }, 400);
+      }
+      if (utf8ByteLength(parsed.payload) > MAX_DOC_PAYLOAD_BYTES) {
+        return c.json({ error: 'payload_too_large' }, 400);
+      }
       parsedDocs.push(parsed);
     }
 
-    // Patient: LWW upsert.
+    const nowMs = Date.now();
+
+    // Patient: LWW upsert (clock-clamped — see MAX_CLIENT_CLOCK_SKEW_MS).
     let authoritativePatient: Patient | undefined;
     {
       const [stored] = await db
@@ -255,14 +336,18 @@ export const syncRouter = () => {
         .where(eq(patients.circleId, circleId));
       authoritativePatient = stored;
       if (incomingPatient) {
-        if (!stored || incomingPatient.client_updated_at >= stored.clientUpdatedAt) {
+        const effectiveUpdatedAt = clampClientUpdatedAt(
+          incomingPatient.client_updated_at,
+          nowMs,
+        );
+        if (!stored || effectiveUpdatedAt >= stored.clientUpdatedAt) {
           const rev = await nextRev(db, circleId);
           if (stored) {
             const [updated] = await db
               .update(patients)
               .set({
                 payload: incomingPatient.payload,
-                clientUpdatedAt: incomingPatient.client_updated_at,
+                clientUpdatedAt: effectiveUpdatedAt,
                 deleted: incomingPatient.deleted ?? false,
                 rev,
               })
@@ -275,7 +360,7 @@ export const syncRouter = () => {
               .values({
                 circleId,
                 payload: incomingPatient.payload,
-                clientUpdatedAt: incomingPatient.client_updated_at,
+                clientUpdatedAt: effectiveUpdatedAt,
                 deleted: incomingPatient.deleted ?? false,
                 rev,
               })
@@ -286,15 +371,24 @@ export const syncRouter = () => {
       }
     }
 
-    // Docs: LWW upsert per id.
+    // Docs: LWW upsert per id, ALWAYS scoped to the authorized circle.
+    // Doc ids are client-minted and only unique per circle (composite
+    // PK), so an unscoped lookup here would let one circle's push read
+    // or overwrite another circle's row that happens to share an id.
     const applied: { id: string; rev: number; accepted: boolean }[] = [];
     for (const doc of parsedDocs) {
       const [stored] = await db
         .select()
         .from(careDocs)
-        .where(eq(careDocs.id, doc.id));
+        .where(
+          and(eq(careDocs.id, doc.id), eq(careDocs.circleId, circleId)),
+        );
+      const effectiveUpdatedAt = clampClientUpdatedAt(
+        doc.client_updated_at,
+        nowMs,
+      );
       const accept =
-        !stored || doc.client_updated_at >= stored.clientUpdatedAt;
+        !stored || effectiveUpdatedAt >= stored.clientUpdatedAt;
       if (accept) {
         const rev = await nextRev(db, circleId);
         if (stored) {
@@ -303,18 +397,20 @@ export const syncRouter = () => {
             .set({
               collection: doc.collection,
               payload: doc.payload,
-              clientUpdatedAt: doc.client_updated_at,
+              clientUpdatedAt: effectiveUpdatedAt,
               deleted: doc.deleted ?? false,
               rev,
             })
-            .where(eq(careDocs.id, doc.id));
+            .where(
+              and(eq(careDocs.id, doc.id), eq(careDocs.circleId, circleId)),
+            );
         } else {
           await db.insert(careDocs).values({
             id: doc.id,
             circleId,
             collection: doc.collection,
             payload: doc.payload,
-            clientUpdatedAt: doc.client_updated_at,
+            clientUpdatedAt: effectiveUpdatedAt,
             deleted: doc.deleted ?? false,
             rev,
           });

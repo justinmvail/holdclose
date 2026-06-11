@@ -37,12 +37,15 @@ part 'patient_configured_provider.g.dart';
 class PatientConfigured extends _$PatientConfigured {
   @override
   bool build() {
-    // Kick off the async resolve; until it lands the redirect sees
-    // `false`. Starting false (not true) keeps a fresh real-mode install
-    // — where no patient exists — on the setup wizard rather than
-    // briefly flashing Home before the load resolves.
+    // Kick off the async resolve; until it lands the redirect sees the
+    // PRELOADED answer (main() reads storage before runApp — the same
+    // frame-zero pattern as the onboarding flag and the alpha user), so
+    // a fully-set-up caregiver no longer gets a /setup flash on every
+    // cold launch while the SQLite read resolves. Null preload (tests,
+    // resolve-at-runtime) starts false: a fresh install belongs on the
+    // setup wizard, never a Home flash.
     _resolve();
-    return false;
+    return preloadedPatientConfigured ?? false;
   }
 
   Future<void> _resolve() async {
@@ -63,3 +66,12 @@ class PatientConfigured extends _$PatientConfigured {
   /// evaluation.
   Future<void> reload() => _resolve();
 }
+
+/// The frame-zero answer to "is a loved one on file", read by `main()`
+/// BEFORE `runApp` (after the demo reset/seed have run) so a returning
+/// caregiver's very first router evaluation is correct — no transient
+/// `/setup` redirect while the async storage read resolves. Mirrors
+/// `preloadedAlphaUser` in `auth_provider.dart`. Null in tests and in
+/// any path that skips the preload; [PatientConfigured] then resolves
+/// asynchronously exactly as before.
+bool? preloadedPatientConfigured;

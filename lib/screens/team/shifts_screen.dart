@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -9,6 +7,9 @@ import '../../models/caregiver.dart';
 import '../../providers/active_patient_provider.dart';
 import '../../providers/care_shifts_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
+import '../../widgets/form/id_factory.dart';
 import '../../widgets/path_header.dart';
 
 part 'shifts_screen.g.dart';
@@ -18,11 +19,7 @@ part 'shifts_screen.g.dart';
 /// invite / appointment id factories.
 typedef ShiftIdFactory = String Function();
 
-String _defaultShiftIdFactory() {
-  final int ms = DateTime.now().millisecondsSinceEpoch;
-  final int rand = math.Random().nextInt(1 << 32);
-  return 'shift-$ms-$rand';
-}
+String _defaultShiftIdFactory() => mintId('shift');
 
 /// Id factory the schedule sheet uses. Tests override this with a monotonic
 /// counter so the minted ids are stable across runs.
@@ -32,17 +29,16 @@ ShiftIdFactory shiftIdFactory(Ref ref) => _defaultShiftIdFactory;
 /// Per-caregiver band colors for the coverage bar (TASKS.md Phase 14.31).
 /// Assigned by the caregiver's index in the week's roster so a caregiver
 /// keeps one color across all seven days. Drawn from the brand tokens
-/// (BUILD_SPEC.md §3.1) — the most visually distinct ones first.
-// Top-level (no BuildContext) — uses the light const fallback. The band
-// colors are brand-fixed hues, so they read acceptably on both canvases.
-final List<Color> _bandPalette = <Color>[
-  careblazersColors.link,
-  careblazersColors.success,
-  careblazersColors.cta,
-  careblazersColors.accentDeep,
-  careblazersColors.primary,
-  careblazersColors.primarySoft,
-];
+/// (BUILD_SPEC.md §3.1) — the most visually distinct ones first — and
+/// resolved through `context.cb` so the bands follow the active theme.
+List<Color> _bandPalette(BuildContext context) => <Color>[
+      context.cb.link,
+      context.cb.success,
+      context.cb.cta,
+      context.cb.accentDeep,
+      context.cb.primary,
+      context.cb.primarySoft,
+    ];
 
 /// Care Circle → Shifts at `/team/shifts` (TASKS.md Phase 14.31, BUILD_SPEC.md
 /// §5.14).
@@ -119,10 +115,11 @@ class ShiftsScreen extends ConsumerWidget {
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load the shifts.\n$e"),
                 data: (List<DayCoverage> days) => _WeekStrip(
                   days: days,
-                  bandColors: _bandColorsFor(days),
+                  bandColors: _bandColorsFor(context, days),
                   caregivers: caregivers,
                 ),
               ),
@@ -145,7 +142,9 @@ class ShiftsScreen extends ConsumerWidget {
 
   /// Assign each caregiver appearing anywhere in the week a stable band
   /// color, ordered by id so the mapping is deterministic across rebuilds.
-  Map<String, Color> _bandColorsFor(List<DayCoverage> days) {
+  Map<String, Color> _bandColorsFor(
+      BuildContext context, List<DayCoverage> days) {
+    final List<Color> palette = _bandPalette(context);
     final Set<String> ids = <String>{
       for (final DayCoverage d in days)
         for (final CareShift s in d.shifts) s.caregiverId,
@@ -153,7 +152,7 @@ class ShiftsScreen extends ConsumerWidget {
     final List<String> sorted = ids.toList()..sort();
     return <String, Color>{
       for (int i = 0; i < sorted.length; i++)
-        sorted[i]: _bandPalette[i % _bandPalette.length],
+        sorted[i]: palette[i % palette.length],
     };
   }
 
@@ -931,27 +930,6 @@ class _CaregiverChoice extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load the shifts.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
@@ -960,15 +938,10 @@ const List<String> _weekdaysShort = <String>[
   'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat',
 ];
 
-const List<String> _monthsShort = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
 /// "Today · Sun Jun 1" for the lead day, "Mon Jun 2" otherwise.
 String _dayLabel(DateTime day, {required bool isToday}) {
   final String weekday = _weekdaysShort[day.weekday % 7];
-  final String month = _monthsShort[day.month - 1];
+  final String month = monthAbbreviations[day.month - 1];
   final String date = '$weekday $month ${day.day}';
   return isToday ? 'Today · $date' : date;
 }
@@ -1009,11 +982,5 @@ String _durationLabel(Duration d) {
 }
 
 /// "Jun 1, 9:00 AM" — the full moment shown on a start/end picker button.
-String _momentLabel(DateTime t) {
-  final String month = _monthsShort[t.month - 1];
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '$month ${t.day}, $hour:$minute $suffix';
-}
+String _momentLabel(DateTime t) =>
+    '${monthAbbreviations[t.month - 1]} ${t.day}, ${formatClock12h(t)}';

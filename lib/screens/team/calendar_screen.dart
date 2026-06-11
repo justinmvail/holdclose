@@ -10,6 +10,8 @@ import '../../providers/care_tasks_provider.dart'
 import '../../providers/patient_timeline_provider.dart';
 import '../../theme.dart';
 import '../appointment/appointment_list_screen.dart' show appointmentAddDebounce;
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/path_header.dart';
 import '../../widgets/schedule_grouping.dart';
 
@@ -261,7 +263,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load the calendar.\n$e"),
                 data: (List<CareEvent> events) =>
                     _body(context, events, selected, today),
               ),
@@ -1074,27 +1077,6 @@ class _EmptyDay extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load the calendar.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Formatting + color helpers
 // ---------------------------------------------------------------------------
@@ -1161,26 +1143,21 @@ const List<String> _weekdaysLong = <String>[
   'Thursday', 'Friday', 'Saturday',
 ];
 
-const List<String> _monthsShort = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
 /// "Jun 1 – 7" within a month, "May 31 – Jun 6" across one.
 String _formatWeekLabel(DateTime weekStart) {
   final DateTime weekEnd = weekStart.add(const Duration(days: 6));
-  final String startMonth = _monthsShort[weekStart.month - 1];
+  final String startMonth = monthAbbreviations[weekStart.month - 1];
   if (weekStart.month == weekEnd.month) {
     return '$startMonth ${weekStart.day} – ${weekEnd.day}';
   }
-  final String endMonth = _monthsShort[weekEnd.month - 1];
+  final String endMonth = monthAbbreviations[weekEnd.month - 1];
   return '$startMonth ${weekStart.day} – $endMonth ${weekEnd.day}';
 }
 
 /// "Wed, Jun 3" — used as the empty-day subtitle.
 String _formatLongDate(DateTime d) {
   final String weekday = _weekdaysLong[d.weekday % 7];
-  final String month = _monthsShort[d.month - 1];
+  final String month = monthAbbreviations[d.month - 1];
   return '$weekday, $month ${d.day}';
 }
 

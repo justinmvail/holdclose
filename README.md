@@ -14,31 +14,37 @@ This is the **v1 demo build** for a partnership pitch to Dr. Natali.
   say + an environmental tweak + a "don't say" warning. See
   [`BUILD_SPEC.md`](BUILD_SPEC.md) §5.2–§5.4.
 - **Chat coach** — multi-turn dementia-care companion for the
-  longer-form questions the decoder doesn't fit (e.g. *"what's
-  sundowning?"*, *"she asked for her mother again — what's
-  happening?"*). Replies cite the Library cards inline as
-  tap-to-read chips, keeping the model's voice anchored to Dr. Natali's
-  vetted content. Hideable via Settings → `chatEnabled`. See
+  longer-form questions the decoder doesn't fit, with a hands-free
+  center-mic voice intent ("log that she didn't sleep") and action
+  tags that record meds/doses/appointments/journal entries on the
+  caregiver's behalf. Destructive actions (delete/cancel) always go
+  through an in-thread confirm card. See
   [`docs/CHAT_FEATURE.md`](docs/CHAT_FEATURE.md).
 - **Journal** — auto-fills every time the decoder runs. Pattern
-  detector surfaces "3+ falls this week" / "sundowning is hitting
-  hard" / similar caregiver-visible alerts.
-- **Library** — 12 topical primers in Dr. Natali's voice
-  (anosognosia, sundowning, the 5 Causes, caregiver guilt, …).
-- **Crisis card** — single-screen patient handoff for paramedics /
-  ER staff; printable, with QR.
+  detector surfaces "3+ falls this week" / similar alerts.
+- **Care (hub tab)** — health log, care plan routines, medications +
+  dose windows + dose log, appointments, Emergency Card (the
+  paramedic/ER handoff sheet), and Cards & Docs scans.
+- **Care Circle** — share caregiving across devices: server-backed
+  sync (Cloudflare Worker, `backend/`), single-use invite links/QR
+  with an explicit join confirmation, shared calendar/tasks/shifts/
+  expenses/activity.
+- **Community** — caregiver forum (posts, comments, votes,
+  moderation, crisis-keyword watchdog) plus the Learn primers and
+  Support resources as in-page segments.
 
 ## What's in this repo
 
 | File | Purpose |
 |---|---|
-| [`BUILD_SPEC.md`](BUILD_SPEC.md) | The contract. Every design decision, screen, interface, and acceptance criterion. Read this before any non-trivial change. |
-| [`TASKS.md`](TASKS.md) | Autoloop task queue. 35+ atomic tasks across 8 phases. |
+| [`BUILD_SPEC.md`](BUILD_SPEC.md) | The contract. Every design decision, screen, interface, and acceptance criterion. Read this before any non-trivial change (some sections lag the code; the code wins). |
+| [`TASKS.md`](TASKS.md) | Historical autoloop task queue. |
 | [`CLAUDE.md`](CLAUDE.md) | Project context loaded by Claude into every session. Code style, layout, invariants. |
 | `lib/` | Flutter source. |
-| `test/` | Unit + widget tests. Required for every screen, service, provider. |
-| `integration_test/demo_tour.dart` | Scripted walkthrough for the Dr. Natali pitch demo. |
-| `tools/claude_shim.py` | Local HTTP shim that wraps the `claude` CLI for dev-mode LLM calls. |
+| `test/` | Unit + widget + golden tests. Required for every screen, service, provider. |
+| `integration_test/demo_tour.dart` | Scripted walkthrough for the Dr. Natali pitch demo (4-tab IA). |
+| `backend/` | Cloudflare Worker (Hono + drizzle + D1 + R2): auth, care-circle sync, forum, documents, crisis watchdog. `cd backend && npm test`. |
+| `tools/claude_shim.py` | Local HTTP shim that wraps the `claude` CLI for dev-mode LLM calls (bearer auth, size caps, subprocess watchdog). |
 
 ## Building
 
@@ -68,12 +74,12 @@ and streams the response back.
 flutter test integration_test/demo_tour.dart --dart-define=DEMO_MODE=true
 ```
 
-Uses `FakeLLMProvider` with deterministic per-behavior responses. Clean
-state on every launch.
+Uses `FakeLLMProvider` (decoder) + `DemoChatBackend` (chat) for
+deterministic, offline responses. Clean state on every launch.
 
 ## Audio
 
-The decoder result screen and library cards read scripts aloud via a
+The decoder result screen reads scripts aloud via a
 bundled on-device neural voice (Piper Amy, ~30 MB, shipped under
 `assets/tts/en_US-amy-medium/`). Settings → **High-quality bundled
 voice** toggles between that path and the OS engine (`flutter_tts` —
@@ -86,9 +92,10 @@ full story (catalog swap, latency matrix, failure fallback).
 ## Tests
 
 ```bash
-flutter test                          # unit + widget
-flutter test integration_test/        # end-to-end (uses FakeLLMProvider)
+flutter test                          # unit + widget + golden
+flutter test integration_test/ --dart-define=DEMO_MODE=true   # end-to-end
 flutter analyze                       # static
+cd backend && npm test                # Worker vitest suite
 ```
 
 ## What this is NOT
@@ -113,17 +120,19 @@ retrospect."
 3. `flutter test` — must be green. If a golden fails, regenerate
    only after confirming the visual change is intentional
    (`flutter test --update-goldens test/golden/`).
-4. In one terminal: `python3 tools/claude_shim.py` — confirm the
-   "listening on localhost:8765" line prints and the `claude` CLI
-   is logged in (`claude --version` works).
+4. In one terminal: `SHIM_TOKEN=<token> python3 tools/claude_shim.py`
+   — confirm the "listening on localhost:8765" line prints and the
+   `claude` CLI is logged in (`claude --version` works). (For a
+   fully offline demo, skip the shim and build with
+   `--dart-define=USE_FAKE_LLM=true` — decoder AND chat run canned.)
 5. In another terminal: `flutter run -d <ios-sim>` — pick the
    demo sim (`flutter devices` to list).
-6. Confirm the home screen renders: navy header, orange "Decode
-   a behavior" CTA, Mary Henderson seeded as the active loved
-   one.
-7. Settings → **Reset on launch** is ON. This wipes the journal
-   and decoder history on each cold start so the demo always
-   begins from a clean slate.
+6. Confirm Home renders: greeting + schedule card, Mary Henderson
+   seeded as the active loved one, four tabs (Home / Care / Chat /
+   Community) with the salmon center mic.
+7. Settings → **Reset on launch** is ON (the toggle only appears in
+   DEMO_MODE builds; it defaults off). This wipes local data on each
+   cold start so the demo always begins from a clean slate.
 8. Record a backup video with QuickTime (File → New Movie
    Recording → select the iOS sim). If the live demo wedges,
    you can fall back to the recording without losing the room.

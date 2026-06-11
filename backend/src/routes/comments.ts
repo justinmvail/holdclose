@@ -88,7 +88,9 @@ function commentResponse(
     vote_count: c.voteCount,
     depth: c.depth,
     hidden: false,
-    crisis_flagged: c.crisisFlagged,
+    // crisis_flagged is deliberately NOT exposed — see postResponse in
+    // posts.ts (the triage state is private to the author, moderators,
+    // and the watchdog).
   };
 }
 

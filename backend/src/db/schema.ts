@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -75,7 +76,12 @@ export const patients = sqliteTable(
 export const careDocs = sqliteTable(
   'care_docs',
   {
-    id: text().primaryKey(),
+    // Doc ids are CLIENT-minted, so they are only unique within the
+    // pushing device's world — two circles can legitimately carry the
+    // same id (e.g. seeded demo datasets). The primary key is therefore
+    // composite (id, circle_id): every circle owns its own namespace and
+    // a push can never read or overwrite another circle's row.
+    id: text().notNull(),
     circleId: text('circle_id')
       .notNull()
       .references(() => circles.id, { onDelete: 'cascade' }),
@@ -86,6 +92,7 @@ export const careDocs = sqliteTable(
     deleted: integer({ mode: 'boolean' }).notNull().default(false),
   },
   (t) => [
+    primaryKey({ columns: [t.id, t.circleId] }),
     index('care_docs_circle_rev_idx').on(t.circleId, t.rev),
     index('care_docs_circle_collection_idx').on(t.circleId, t.collection),
   ],
@@ -131,6 +138,15 @@ export const circleInvites = sqliteTable(
     createdAt: timestampColumn('created_at').notNull(),
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
     revoked: integer({ mode: 'boolean' }).notNull().default(false),
+    // Single-use consumption (2026-06-11): set atomically when a NEW
+    // member redeems the invite. A consumed invite admits no one else —
+    // a forwarded/leaked link can't quietly grow the circle. Null =
+    // still redeemable.
+    usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+    usedByProfileId: text('used_by_profile_id').references(
+      () => profiles.id,
+      { onDelete: 'set null' },
+    ),
   },
   (t) => [index('circle_invites_circle_id_idx').on(t.circleId)],
 );

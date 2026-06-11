@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../db/database.dart';
@@ -221,17 +222,22 @@ class SyncController {
   /// Enqueue a local upsert for [collection]/[id] with the model's
   /// [json]. **No-op when no circle is active** — the write already
   /// landed locally; there's just nothing to sync to.
+  ///
+  /// [clientUpdatedAt] defaults to now (a live local edit). The resync
+  /// backfill passes 0 instead — "insert if the server has nothing,
+  /// never beat a real edit" (see [resyncAllLocal]).
   Future<void> enqueueUpsert(
     String collection,
     String id,
-    Map<String, dynamic> json,
-  ) async {
+    Map<String, dynamic> json, {
+    int? clientUpdatedAt,
+  }) async {
     if (await _circleId() == null) return;
     await _outbox.enqueue(
       collection: collection,
       docId: id,
       payload: json,
-      clientUpdatedAt: _clock().millisecondsSinceEpoch,
+      clientUpdatedAt: clientUpdatedAt ?? _clock().millisecondsSinceEpoch,
       deleted: false,
     );
   }
@@ -254,12 +260,31 @@ class SyncController {
   /// while no circle was bound — e.g. the demo seed, which runs before sync
   /// bootstraps the circle, so its writes never hit the outbox. One-shot,
   /// idempotent at the server (LWW by id). No circle → no-op.
-  Future<void> resyncAllLocal() async {
+  ///
+  /// BACKFILL, NEVER OVERWRITE (2026-06-11): every row is stamped
+  /// `clientUpdatedAt: 0`, so the server's `>=` LWW accepts it only when
+  /// it holds nothing newer. A stale device running RESYNC_ALL can no
+  /// longer clobber every other member's recent edits across all 21
+  /// collections. Rows with a real un-pushed local edit already in the
+  /// outbox are skipped — the newer-stamped pending row must not be
+  /// coalesced down to the backfill stamp.
+  ///
+  /// Runs in the [_inFlight] slot so a concurrent interval/resume sync
+  /// can't interleave pushes with the drain loop.
+  Future<void> resyncAllLocal() {
+    return _runExclusive(() => _resyncAllLocalBody());
+  }
+
+  Future<void> _resyncAllLocalBody() async {
     final String? circleId = await _circleId();
     if (circleId == null) return;
 
-    Future<void> enq(String c, String id, Map<String, dynamic> j) =>
-        enqueueUpsert(c, id, j);
+    Future<void> enq(String c, String id, Map<String, dynamic> j) async {
+      // A live local edit is already queued with a real timestamp —
+      // don't downgrade it to the backfill stamp.
+      if (await _outbox.hasPending(c, id)) return;
+      await enqueueUpsert(c, id, j, clientUpdatedAt: 0);
+    }
 
     for (final JournalEntry e in await _storage.listAllJournalEntries()) {
       await enq(SyncCollections.journalEntry, e.id, e.toJson());
@@ -332,14 +357,15 @@ class SyncController {
       }
     }
 
-    // The patient is pushed via the dedicated `patient` field, not the outbox.
+    // The patient is pushed via the dedicated `patient` field, not the
+    // outbox. Backfill stamp here too: never beat another member's edit.
     if (patient != null) {
       try {
         await _client.syncPush(
           circleId,
           patient: SyncPatientWrite(
             payload: patient.toJson(),
-            clientUpdatedAt: _clock().millisecondsSinceEpoch,
+            clientUpdatedAt: 0,
             deleted: false,
           ),
           docs: const <SyncDocWrite>[],
@@ -352,16 +378,31 @@ class SyncController {
     // Drain the ENTIRE outbox in this run — push() only sends one batch
     // (_syncPushBatch) at a time, and a one-shot resync can't rely on the 30s
     // interval (the app may background right after launch). Loop until empty
-    // (capped well above any real dataset), then pull once.
+    // (capped well above any real dataset) — but STOP as soon as a push
+    // makes no progress (the head row survives a round-trip: offline or
+    // rejecting), so this can't spin 100 failing HTTP calls back to back.
+    // Then pull once.
+    int? lastHeadSeq;
     for (int i = 0; i < 100; i++) {
+      final List<SyncOutboxTableData> head =
+          await _outbox.listPending(limit: 1);
+      if (head.isEmpty) break;
+      if (lastHeadSeq != null && head.first.seq == lastHeadSeq) break;
+      lastHeadSeq = head.first.seq;
       await push();
-      if ((await _outbox.listPending(limit: 1)).isEmpty) break;
     }
     await pull();
   }
 
   /// Drain the outbox to the backend. No circle → return. Network failure
   /// → swallow, leaving the batch queued for the next attempt.
+  ///
+  /// Outbox rows in the `patient` collection are split out and sent on
+  /// the protocol's dedicated `patient` field (the server stores the
+  /// loved one in its own per-circle row, not in `care_docs`) — this is
+  /// what makes a crisis-card / profile edit reach the rest of the
+  /// circle (2026-06-11; previously the patient never synced after
+  /// creation).
   Future<void> push() async {
     final String? circleId = await _circleId();
     if (circleId == null) return;
@@ -369,17 +410,40 @@ class SyncController {
       final List<SyncOutboxTableData> pending =
           await _outbox.listPending(limit: _syncPushBatch);
       if (pending.isEmpty) return;
-      final List<SyncDocWrite> docs = pending
-          .map((SyncOutboxTableData r) => SyncDocWrite(
-                id: r.docId,
-                collection: r.collection,
-                payload:
-                    jsonDecode(r.payload) as Map<String, dynamic>,
-                clientUpdatedAt: r.clientUpdatedAt,
-                deleted: r.deleted != 0,
-              ))
-          .toList(growable: false);
-      await _client.syncPush(circleId, docs: docs);
+
+      SyncOutboxTableData? patientRow;
+      final List<SyncDocWrite> docs = <SyncDocWrite>[];
+      for (final SyncOutboxTableData r in pending) {
+        if (r.collection == SyncCollections.patient) {
+          // Coalescing enqueue keeps at most one patient row per id; if
+          // several ids ever queue, the newest stamp wins the field.
+          if (patientRow == null ||
+              r.clientUpdatedAt >= patientRow.clientUpdatedAt) {
+            patientRow = r;
+          }
+          continue;
+        }
+        docs.add(SyncDocWrite(
+          id: r.docId,
+          collection: r.collection,
+          payload: jsonDecode(r.payload) as Map<String, dynamic>,
+          clientUpdatedAt: r.clientUpdatedAt,
+          deleted: r.deleted != 0,
+        ));
+      }
+
+      await _client.syncPush(
+        circleId,
+        patient: patientRow == null
+            ? null
+            : SyncPatientWrite(
+                payload: jsonDecode(patientRow.payload)
+                    as Map<String, dynamic>,
+                clientUpdatedAt: patientRow.clientUpdatedAt,
+                deleted: patientRow.deleted != 0,
+              ),
+        docs: docs,
+      );
       // The server applies LWW; whether each doc was accepted or rejected
       // as stale, it has now seen our value, so drop the whole batch from
       // the outbox. (A rejected-as-stale doc means the server already holds
@@ -387,13 +451,61 @@ class SyncController {
       await _outbox.deleteSeqs(
         pending.map((SyncOutboxTableData r) => r.seq).toList(growable: false),
       );
-    } catch (_) {
-      // Offline / backend unreachable / token error — leave queued.
+    } catch (e) {
+      // Offline / backend unreachable / token error — leave queued. The
+      // breadcrumb rides debugPrint into LogBuffer so a feedback report
+      // shows WHY "my circle isn't seeing my data".
+      debugPrint('sync: push failed (batch left queued): $e');
     }
   }
 
+  /// Parents-before-children apply order. Server revs are assigned in
+  /// push order, which does NOT respect FK dependencies (a message can
+  /// carry a lower rev than the conversation it references after the
+  /// conversation is bumped) — so a fresh joiner applying in rev order
+  /// would hit FK violations deterministically. Lower rank applies
+  /// first; unknown collections sink to the end (they're ignored by the
+  /// dispatcher anyway).
+  static const Map<String, int> _applyRank = <String, int>{
+    // Referenced by other rows.
+    SyncCollections.provider: 0,
+    SyncCollections.caregiver: 0,
+    // Standalone / parent rows.
+    SyncCollections.patient: 1,
+    SyncCollections.medication: 1,
+    SyncCollections.doseWindow: 1,
+    SyncCollections.chatConversation: 1,
+    SyncCollections.appointment: 1,
+    SyncCollections.journalEntry: 1,
+    SyncCollections.healthLogEntry: 1,
+    SyncCollections.carePlanRoutine: 1,
+    SyncCollections.careEvent: 1,
+    SyncCollections.careTask: 1,
+    SyncCollections.careShift: 1,
+    SyncCollections.expense: 1,
+    SyncCollections.careCircleMembership: 1,
+    SyncCollections.emergencyCard: 1,
+    SyncCollections.powerOfAttorneyDoc: 1,
+    SyncCollections.identificationDoc: 1,
+    // Children with FKs into the rows above.
+    SyncCollections.medicationWindowEntry: 2,
+    SyncCollections.doseLog: 2,
+    SyncCollections.chatMessage: 2,
+  };
+
   /// Pull remote changes since the stored cursor and apply them locally.
   /// No circle → return. Network failure → swallow.
+  ///
+  /// Apply semantics (2026-06-11):
+  ///  * docs apply parents-first ([_applyRank]), rev-ascending within a
+  ///    rank, so a fresh joiner's chat/med-schedule history can't hit FK
+  ///    violations;
+  ///  * each doc applies in ISOLATION — one malformed/conflicting doc is
+  ///    retried once at the end of the batch (its parent may have been
+  ///    later in the batch) and then skipped with a breadcrumb, instead
+  ///    of aborting the whole pull and pinning the cursor forever;
+  ///  * the cursor advances after the batch regardless, so a
+  ///    deterministically-failing doc can't brick sync for the device.
   Future<void> pull() async {
     final String? circleId = await _circleId();
     if (circleId == null) return;
@@ -404,12 +516,42 @@ class SyncController {
       if (result.patient != null) {
         await _applyPatient(result.patient!);
       }
-      for (final SyncDoc doc in result.docs) {
-        await _applyDoc(doc);
+
+      final List<SyncDoc> ordered = List<SyncDoc>.of(result.docs)
+        ..sort((SyncDoc a, SyncDoc b) {
+          final int rankA = _applyRank[a.collection] ?? 3;
+          final int rankB = _applyRank[b.collection] ?? 3;
+          if (rankA != rankB) return rankA - rankB;
+          return a.rev - b.rev;
+        });
+
+      final List<SyncDoc> failed = <SyncDoc>[];
+      for (final SyncDoc doc in ordered) {
+        try {
+          await _applyDoc(doc);
+        } catch (_) {
+          failed.add(doc);
+        }
+      }
+      // One retry pass: a first-pass failure may have been waiting on a
+      // sibling applied later in the same batch.
+      for (final SyncDoc doc in failed) {
+        try {
+          await _applyDoc(doc);
+        } catch (e) {
+          // Skipped — the row stays absent locally until its next rev
+          // bump. The breadcrumb lands in LogBuffer (debugPrint is teed)
+          // so a feedback report shows WHICH doc refused to apply.
+          debugPrint(
+            'sync: apply failed for ${doc.collection}/${doc.id} '
+            '(rev ${doc.rev}): $e',
+          );
+        }
       }
       await _stateStore.setCursor(circleId, result.cursor);
-    } catch (_) {
+    } catch (e) {
       // Offline / backend unreachable — try again next tick.
+      debugPrint('sync: pull failed (will retry): $e');
     }
   }
 
@@ -422,6 +564,32 @@ class SyncController {
       try {
         await push();
         await pull();
+      } finally {
+        _inFlight = null;
+      }
+    }();
+    _inFlight = run;
+    return run;
+  }
+
+  /// Claim the [_inFlight] slot EXCLUSIVELY for [body] — waits for any
+  /// running cycle first, then holds the slot so interval/resume/debounce
+  /// triggers join this run instead of interleaving with it. Used by the
+  /// multi-batch operations (resync, adopt) whose internal push/pull
+  /// sequence must not be raced by a concurrent syncNow.
+  Future<void> _runExclusive(Future<void> Function() body) async {
+    while (true) {
+      final Future<void>? running = _inFlight;
+      if (running == null) break;
+      try {
+        await running;
+      } catch (_) {
+        // The prior cycle's failure is its own concern.
+      }
+    }
+    final Future<void> run = () async {
+      try {
+        await body();
       } finally {
         _inFlight = null;
       }
@@ -459,10 +627,11 @@ class SyncController {
           if (first.patient != null) {
             await _applyPatient(first.patient!);
           }
-          await _stateStore.setCursor(
-            first.id,
-            first.patient?.rev ?? 0,
-          );
+          // Cursor starts at 0 — "highest rev APPLIED", and only the
+          // patient was applied here. Seeding it with the patient's rev
+          // (the old behavior) permanently skipped every doc the server
+          // assigned a lower rev than the patient.
+          await _stateStore.setCursor(first.id, 0);
           return;
         }
       } catch (_) {
@@ -497,9 +666,12 @@ class SyncController {
         ),
       );
       await _stateStore.setCircleId(circle.id);
-      await _stateStore.setCursor(circle.id, circle.patient?.rev ?? 0);
-    } catch (_) {
+      // Cursor 0 (see bootstrapCircle) — the first pull re-fetches the
+      // patient we just pushed, which applies idempotently.
+      await _stateStore.setCursor(circle.id, 0);
+    } catch (e) {
       // Offline / no backend — stay local-only; retried next bootstrap.
+      debugPrint('sync: ensureCircleForActivePatient failed: $e');
     }
   }
 
@@ -511,20 +683,24 @@ class SyncController {
   Future<void> adoptJoinedCircle(CircleDto circle) async {
     try {
       await _stateStore.setCircleId(circle.id);
-      int cursor = 0;
       final SyncPatient? p = circle.patient;
       if (p != null && !p.deleted && p.payload.isNotEmpty) {
         final Patient parsed = Patient.fromJson(
           jsonDecode(p.payload) as Map<String, dynamic>,
         );
-        await _storage.upsertPatient(parsed);
+        // applyingRemote: this is a remote-sourced write — it must not
+        // bounce back through the patient sync sink as a local edit.
+        await _storage.applyingRemote(() => _storage.upsertPatient(parsed));
         await _storage.setActivePatientId(parsed.id);
-        cursor = p.rev;
       }
-      await _stateStore.setCursor(circle.id, cursor);
-      await pull();
-    } catch (_) {
+      // Cursor 0, NOT the patient's rev: only the patient has been
+      // applied. Seeding the cursor past unseen docs made a joiner
+      // permanently miss every doc with a rev below the patient's.
+      await _stateStore.setCursor(circle.id, 0);
+      await syncNow();
+    } catch (e) {
       // Local patient (if any) already saved by the join path — safe.
+      debugPrint('sync: adoptJoinedCircle follow-up failed: $e');
     }
   }
 
@@ -587,7 +763,9 @@ class SyncController {
     switch (doc.collection) {
       case SyncCollections.patient:
         if (doc.deleted) return; // patient tombstones handled via _applyPatient
-        await _storage.upsertPatient(Patient.fromJson(payload));
+        await _storage.applyingRemote(
+          () => _storage.upsertPatient(Patient.fromJson(payload)),
+        );
       case SyncCollections.medication:
         await _medications.applyingRemote(() async {
           if (doc.deleted) {
@@ -776,7 +954,15 @@ class SyncController {
     final Map<String, dynamic> json =
         jsonDecode(patient.payload) as Map<String, dynamic>;
     final Patient parsed = Patient.fromJson(json);
-    await _storage.upsertPatient(parsed);
+    // Same local-first conflict guard as _applyDoc: an UNPUSHED local
+    // patient edit is authoritative until the server has seen it — a
+    // pulled (possibly older) copy must not clobber the crisis-card
+    // edit a caregiver just made.
+    if (await _outbox.hasPending(SyncCollections.patient, parsed.id)) {
+      return;
+    }
+    // applyingRemote: never bounce a pulled patient back into the outbox.
+    await _storage.applyingRemote(() => _storage.upsertPatient(parsed));
   }
 }
 
@@ -884,5 +1070,13 @@ SyncController syncController(Ref ref) {
     storage.syncSink = const SyncSink();
     controller.dispose();
   });
+
+  // The controller OWNS its poll: starting the interval here (not only
+  // in main's one-shot bootstrap) means a provider rebuild — e.g. the
+  // demo-forum toggle swapping the API client — hands the REPLACEMENT
+  // controller a live timer too, instead of silently ending polling for
+  // the session. Idempotent with main's startInterval call; free when
+  // local-only (each tick's syncNow no-ops without a circle).
+  controller.startInterval();
   return controller;
 }

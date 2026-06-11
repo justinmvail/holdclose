@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +8,8 @@ import '../../models/health_log_entry.dart';
 import '../../providers/active_patient_provider.dart';
 import '../../providers/health_log_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/id_factory.dart';
 import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
 
@@ -27,11 +27,7 @@ const String _fallbackPatientId = 'demo-patient-mary';
 /// shape as the appointment / medication form id factories.
 typedef HealthLogIdFactory = String Function();
 
-String _defaultHealthLogIdFactory() {
-  final int ms = DateTime.now().millisecondsSinceEpoch;
-  final int rand = math.Random().nextInt(1 << 32);
-  return 'hl-$ms-$rand';
-}
+String _defaultHealthLogIdFactory() => mintId('hl');
 
 /// ID factory the form screen uses. Tests override this with a monotonic
 /// counter so the inserted id is stable across runs.
@@ -340,7 +336,8 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
             Expanded(
               child: hydration.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load this entry.\n$e"),
                 data: (HealthLogFormData data) {
                   _hydrate(data);
                   return Form(
@@ -764,27 +761,6 @@ class _FieldLabel extends StatelessWidget {
       style: textTheme.bodyLarge?.copyWith(
         color: context.cb.primary,
         fontWeight: FontWeight.w700,
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load this entry.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
       ),
     );
   }

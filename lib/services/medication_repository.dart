@@ -518,6 +518,19 @@ class MedicationRepository with SyncSinkHost {
       for (final Medication m in meds) m.id: m,
     };
     final List<DoseWindow> windows = await windowsForPatient(patientId);
+    // Fetch + key each medication's log history ONCE per expansion.
+    // The previous shape re-ran `logsFor(med.id)` (the med's ENTIRE
+    // history) inside the per-entry loop — the same med scheduled into
+    // three windows re-fetched and re-mapped its logs three times, on
+    // the query backing the Home schedule card, the calendar, and the
+    // today view.
+    final Map<String, Map<int, DoseLog>> logsByMedMs =
+        <String, Map<int, DoseLog>>{};
+    Future<Map<int, DoseLog>> logsFor_(String medId) async =>
+        logsByMedMs[medId] ??= <int, DoseLog>{
+          for (final DoseLog l in await logsFor(medId))
+            l.scheduledFor.millisecondsSinceEpoch: l,
+        };
     final List<ScheduledDose> out = <ScheduledDose>[];
     for (final DoseWindow window in windows) {
       if (window.isAsNeeded) continue;
@@ -526,11 +539,7 @@ class MedicationRepository with SyncSinkHost {
       for (final MedicationWindowEntry entry in entries) {
         final Medication? med = medsById[entry.medicationId];
         if (med == null) continue; // soft-deleted or wiped
-        final List<DoseLog> logs = await logsFor(med.id);
-        final Map<int, DoseLog> logsByMs = <int, DoseLog>{
-          for (final DoseLog l in logs)
-            l.scheduledFor.millisecondsSinceEpoch: l,
-        };
+        final Map<int, DoseLog> logsByMs = await logsFor_(med.id);
         // Clamp the upper bound of the expansion at the medication's
         // [Medication.endsAt] so a future-ending med doesn't project
         // ghost doses past the day the caregiver expects it to stop.

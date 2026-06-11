@@ -20,7 +20,8 @@ import '../providers/care_tasks_provider.dart';
 import '../providers/health_log_provider.dart';
 import '../providers/journal_entries_provider.dart';
 import '../services/appointment_repository.dart';
-import '../screens/medication/dose_log_screen.dart' show dosesTodayProvider;
+import '../screens/medication/dose_log_screen.dart'
+    show dosesTodayProvider, doseLogClockProvider;
 import '../services/medication_repository.dart'
     show MedicationRepository, ScheduledDose, medicationRepositoryProvider;
 import '../widgets/home/catch_me_up_card.dart' show catchMeUpEventsProvider;
@@ -199,16 +200,15 @@ const Duration _forecastHorizon = Duration(days: 30);
 /// ([CareEventKind.doseScheduled]).
 @riverpod
 Future<List<CareEvent>> patientDoseEvents(Ref ref) async {
-  // The wall-clock anchor for the forecast window. Reads via the
-  // medication-repo wiring of [calendarClockProvider] would be cleaner
-  // but the repo doesn't expose a clock seam; `DateTime.now()` is
-  // overridable per-test by `MedicationRepository(clock:)` in the
-  // backend provider, and that's the same path `dosesTodayProvider`
-  // already takes — same source of "now" for both.
+  // The wall-clock anchor for the forecast window. Reads the same
+  // overridable [doseLogClockProvider] the dose-log screen uses, so a
+  // test can PIN "now" (2026-06-11 — previously this used a bare
+  // `DateTime.now()` with no seam, so a run crossing midnight changed
+  // which day "today" resolved to between seed and assert).
   final MedicationRepository repo =
       ref.watch(medicationRepositoryProvider);
   final String patientId = await ref.watch(activePatientIdProvider.future);
-  final DateTime now = DateTime.now();
+  final DateTime now = ref.watch(doseLogClockProvider)();
   final DateTime today = DateTime(now.year, now.month, now.day);
   final DateTime from = today.subtract(const Duration(days: 1));
   final DateTime to = today.add(_forecastHorizon);

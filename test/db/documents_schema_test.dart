@@ -124,8 +124,8 @@ void main() {
       expect(await db.select(db.identificationDocsTable).get(), isEmpty);
     });
 
-    test('schemaVersion is 19 (forum-post local-first cache migration step)', () {
-      expect(db.schemaVersion, 19);
+    test('schemaVersion is 20 (v20: hot-column indices + v15 orphan repair)', () {
+      expect(db.schemaVersion, 20);
     });
   });
 }

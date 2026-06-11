@@ -455,6 +455,214 @@ void main() {
       expect(stored.last.citations, isEmpty);
     });
 
+    test('a quoted arg value containing "]" no longer truncates the tag',
+        () async {
+      // Regression: the old args pattern stopped at the first ']', so a
+      // bracket inside a quoted value garbled the parse and the write.
+      final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+        const ChatDeltaText('On the list.\n'
+            '[action:add_task title="Pick up [urgent] refill" body="today"]'),
+      ]);
+      Map<String, String>? captured;
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: backend,
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        actions: <String, ChatActionExecutor>{
+          'add_task': (Map<String, String> args) async {
+            captured = args;
+            return null;
+          },
+        },
+      );
+
+      final List<Message> emitted = await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'add it')
+          .toList();
+      expect(captured, isNotNull);
+      expect(captured!['title'], 'Pick up [urgent] refill');
+      expect(captured!['body'], 'today');
+      expect(emitted.last.body, 'On the list.');
+    });
+
+    test('an identical repeated tag executes ONCE (model stutter)', () async {
+      const String tag = '[action:log_journal situation="x" attempts="y"]';
+      final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+        const ChatDeltaText('Logged.\n$tag\n$tag'),
+      ]);
+      int executions = 0;
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: backend,
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        actions: <String, ChatActionExecutor>{
+          'log_journal': (Map<String, String> args) async {
+            executions += 1;
+            return null;
+          },
+        },
+      );
+
+      await svc.sendMessage(conversationId: 'convo-1', userText: 'log').toList();
+      expect(executions, 1);
+    });
+
+    group('destructive actions — confirm-before-commit (2026-06-11)', () {
+      ChatService buildService({
+        required _ScriptedChatBackend backend,
+        required List<String> deletions,
+      }) {
+        return ChatService(
+          repository: repo,
+          backend: backend,
+          idFactory: _idFactory(),
+          clock: _fixedClock,
+          actions: <String, ChatActionExecutor>{
+            'delete_medication': (Map<String, String> args) async {
+              deletions.add(args['name'] ?? '');
+              return null;
+            },
+          },
+        );
+      }
+
+      const String deleteTag =
+          '[action:delete_medication name="Donepezil"]';
+
+      test('a delete tag is NEVER auto-executed — it parks as a '
+          'pending_action citation', () async {
+        final List<String> deletions = <String>[];
+        final ChatService svc = buildService(
+          backend: _ScriptedChatBackend(<ChatDelta>[
+            const ChatDeltaText('Confirm below and I\'ll take it off.\n'
+                '$deleteTag'),
+          ]),
+          deletions: deletions,
+        );
+
+        final List<Message> emitted = await svc
+            .sendMessage(conversationId: 'convo-1', userText: 'remove it')
+            .toList();
+
+        // The write did NOT happen.
+        expect(deletions, isEmpty);
+        // The tag is stripped from the visible body but parked in the
+        // citations for the confirm card.
+        expect(emitted.last.body, "Confirm below and I'll take it off.");
+        expect(emitted.last.citations, <String>[
+          '${ChatService.pendingActionCitationPrefix}$deleteTag',
+        ]);
+        expect(
+          ChatService.describePendingAction(emitted.last.citations.single),
+          'Remove the medication “Donepezil” from the list?',
+        );
+      });
+
+      test('confirmPendingAction runs the executor and clears the card',
+          () async {
+        final List<String> deletions = <String>[];
+        final ChatService svc = buildService(
+          backend: _ScriptedChatBackend(<ChatDelta>[
+            const ChatDeltaText('Confirm below.\n$deleteTag'),
+          ]),
+          deletions: deletions,
+        );
+        final List<Message> emitted = await svc
+            .sendMessage(conversationId: 'convo-1', userText: 'remove it')
+            .toList();
+        final Message assistant = emitted.last;
+        final String pending = assistant.citations.single;
+
+        final bool ran = await svc.confirmPendingAction(
+          conversationId: 'convo-1',
+          messageId: assistant.id,
+          citation: pending,
+        );
+
+        expect(ran, isTrue);
+        expect(deletions, <String>['Donepezil']);
+        final List<Message> stored = await repo.loadMessages('convo-1');
+        expect(stored.last.id, assistant.id);
+        expect(stored.last.citations, isEmpty);
+
+        // A second confirm of the now-gone citation is a no-op (no
+        // double delete from a double tap).
+        final bool again = await svc.confirmPendingAction(
+          conversationId: 'convo-1',
+          messageId: assistant.id,
+          citation: pending,
+        );
+        expect(again, isTrue); // executor ran (idempotence is its concern)…
+        expect(deletions, hasLength(2)); // …but the UI card was already gone
+      });
+
+      test('declinePendingAction discards the card without executing',
+          () async {
+        final List<String> deletions = <String>[];
+        final ChatService svc = buildService(
+          backend: _ScriptedChatBackend(<ChatDelta>[
+            const ChatDeltaText('Confirm below.\n$deleteTag'),
+          ]),
+          deletions: deletions,
+        );
+        final List<Message> emitted = await svc
+            .sendMessage(conversationId: 'convo-1', userText: 'remove it')
+            .toList();
+        final Message assistant = emitted.last;
+
+        await svc.declinePendingAction(
+          conversationId: 'convo-1',
+          messageId: assistant.id,
+          citation: assistant.citations.single,
+        );
+
+        expect(deletions, isEmpty);
+        final List<Message> stored = await repo.loadMessages('convo-1');
+        expect(stored.last.citations, isEmpty);
+      });
+
+      test('a mixed reply executes the additive action and parks only the '
+          'destructive one', () async {
+        final List<String> deletions = <String>[];
+        final List<String> journals = <String>[];
+        final ChatService svc = ChatService(
+          repository: repo,
+          backend: _ScriptedChatBackend(<ChatDelta>[
+            const ChatDeltaText('Done and one to confirm.\n'
+                '[action:log_journal situation="calm walk" attempts="none yet"]\n'
+                '$deleteTag'),
+          ]),
+          idFactory: _idFactory(),
+          clock: _fixedClock,
+          actions: <String, ChatActionExecutor>{
+            'log_journal': (Map<String, String> args) async {
+              journals.add(args['situation'] ?? '');
+              return null;
+            },
+            'delete_medication': (Map<String, String> args) async {
+              deletions.add(args['name'] ?? '');
+              return null;
+            },
+          },
+        );
+
+        final List<Message> emitted = await svc
+            .sendMessage(conversationId: 'convo-1', userText: 'both')
+            .toList();
+
+        expect(journals, <String>['calm walk']);
+        expect(deletions, isEmpty);
+        expect(
+          emitted.last.citations
+              .where(ChatService.isPendingActionCitation)
+              .length,
+          1,
+        );
+      });
+    });
+
     // ---- Error path ------------------------------------------------------
 
     test('error delta closes the assistant message with streamingDone=true',
@@ -628,18 +836,6 @@ void main() {
       await db.close();
     });
 
-    // Spin the event loop until [convo-1] is customTitle, or give up — the
-    // title write is fire-and-forget so it lands a few microtasks after the
-    // reply stream closes.
-    Future<Conversation?> awaitTitled() async {
-      for (int i = 0; i < 50; i++) {
-        final Conversation? c = await repo.getConversation('convo-1');
-        if (c == null || c.customTitle) return c;
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
-      return repo.getConversation('convo-1');
-    }
-
     test('names a fresh thread from its opening exchange', () async {
       final List<List<ChatTurn>> titleCalls = <List<ChatTurn>>[];
       final ChatService svc = ChatService(
@@ -663,7 +859,10 @@ void main() {
           )
           .toList();
 
-      final Conversation? convo = await awaitTitled();
+      // Await the fire-and-forget title attempt deterministically (no
+      // wall-clock polling) via the test-only completion hook.
+      await svc.debugAutoTitleSettled;
+      final Conversation? convo = await repo.getConversation('convo-1');
       expect(convo!.title, 'Sundowning At Dinner');
       expect(convo.customTitle, isTrue);
       // The generator saw the user turn AND the assistant reply.
@@ -706,8 +905,10 @@ void main() {
       await svc
           .sendMessage(conversationId: 'convo-1', userText: 'follow up')
           .toList();
-      await Future<void>.delayed(const Duration(milliseconds: 20));
 
+      // Deterministic: a follow-up turn launches NO auto-title attempt,
+      // so the hook stays null (no sleep, no late-fire false pass).
+      expect(svc.debugAutoTitleSettled, isNull);
       expect(called, isFalse);
       final Conversation? convo = await repo.getConversation('convo-1');
       expect(convo!.customTitle, isFalse);
@@ -733,8 +934,10 @@ void main() {
       await svc
           .sendMessage(conversationId: 'convo-1', userText: 'first message')
           .toList();
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await svc.debugAutoTitleSettled;
 
+      // The attempt ran but bailed on the existing custom title — the
+      // generator was never called and the rename is untouched.
       expect(called, isFalse);
       final Conversation? convo = await repo.getConversation('convo-1');
       expect(convo!.title, 'My Own Name');
@@ -754,7 +957,7 @@ void main() {
       await svc
           .sendMessage(conversationId: 'convo-1', userText: 'a question')
           .toList();
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await svc.debugAutoTitleSettled;
 
       final Conversation? convo = await repo.getConversation('convo-1');
       expect(convo!.customTitle, isFalse);
@@ -959,6 +1162,33 @@ void main() {
       expect(texts.map((ChatDeltaText t) => t.text).toList(),
           <String>['First fragment. ', 'Second fragment.']);
       // No error events.
+      expect(deltas.whereType<ChatDeltaError>(), isEmpty);
+    });
+
+    test('a CRLF-normalised stream (\\r\\n\\r\\n delimiters) still parses '
+        '(proxy line-ending rewrite, 2026-06-11)', () async {
+      final _CannedSseAdapter adapter = _CannedSseAdapter(<String>[
+        _assistantEvent('Through the proxy. ')
+            .replaceAll('\n', '\r\n'),
+        _assistantEvent('Still intact.').replaceAll('\n', '\r\n'),
+        'data: [DONE]\r\n\r\n',
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ClaudeShimChatBackend backend = ClaudeShimChatBackend(dio: dio);
+
+      final List<ChatDelta> deltas = await backend
+          .streamReply(
+            systemPrompt: 'SYS',
+            history: const <ChatTurn>[
+              ChatTurn(role: MessageRole.user, content: 'q'),
+            ],
+          )
+          .toList();
+
+      final List<ChatDeltaText> texts =
+          deltas.whereType<ChatDeltaText>().toList();
+      expect(texts.map((ChatDeltaText t) => t.text).toList(),
+          <String>['Through the proxy. ', 'Still intact.']);
       expect(deltas.whereType<ChatDeltaError>(), isEmpty);
     });
 
@@ -1172,6 +1402,42 @@ void main() {
       final VoiceIntentOutcome outcome =
           await svc.routeVoiceIntent('teleport her home');
       expect(outcome, isA<VoiceIntentChat>());
+    });
+
+    test('a DESTRUCTIVE spoken intent never completes hands-free — it '
+        'opens a thread with the pending confirm card (2026-06-11)',
+        () async {
+      final List<String> deletions = <String>[];
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText(
+            'Confirm below and I\'ll take Donepezil off the list.\n'
+            '[action:delete_medication name="Donepezil"]',
+          ),
+        ]),
+        actions: <String, ChatActionExecutor>{
+          'delete_medication': (Map<String, String> args) async {
+            deletions.add(args['name'] ?? '');
+            return null;
+          },
+        },
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+      );
+
+      final VoiceIntentOutcome outcome =
+          await svc.routeVoiceIntent('remove the donepezil');
+
+      // NOT a hands-free "Done" — a thread carrying the confirm card.
+      expect(outcome, isA<VoiceIntentChat>());
+      expect(deletions, isEmpty);
+      final List<Message> msgs =
+          await repo.loadMessages((outcome as VoiceIntentChat).conversationId);
+      expect(
+        msgs.last.citations.where(ChatService.isPendingActionCitation),
+        hasLength(1),
+      );
     });
 
     test('a backend error opens a retryable thread instead of throwing',

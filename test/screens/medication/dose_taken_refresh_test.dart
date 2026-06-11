@@ -45,10 +45,12 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(440, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    // Pin the screen's clock to real "now" so the dose it shows for "today"
-    // lines up with what `patientDoseEventsProvider` (which windows off the
-    // real `DateTime.now()`) projects for today.
-    final DateTime now = DateTime.now();
+    // Pin BOTH the screen and the timeline provider to a FIXED clock via
+    // doseLogClockProvider. patientDoseEventsProvider now reads that same
+    // seam (2026-06-11), so the dose it projects for "today" and the dose
+    // the screen shows agree deterministically — a run crossing midnight
+    // can no longer change which day "today" resolves to mid-test.
+    final DateTime now = DateTime(2026, 6, 11, 9, 30);
     final DateTime today8 = DateTime(now.year, now.month, now.day, 8, 0);
 
     // A daily 8am dose for one med.

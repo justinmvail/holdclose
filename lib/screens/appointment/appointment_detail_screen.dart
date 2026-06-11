@@ -12,6 +12,8 @@ import '../../providers/patient_timeline_provider.dart'
     show invalidatePatientTimeline;
 import '../../services/appointment_repository.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/path_header.dart';
 import 'appointment_list_screen.dart';
 
@@ -228,7 +230,8 @@ class _AppointmentDetailScreenState
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load this appointment.\n$e"),
                 data: (AppointmentDetailData? data) {
                   if (data == null) return const _NotFoundView();
                   _hydrateNotes(data.appointment);
@@ -299,7 +302,7 @@ class _DetailBody extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          _formatClock(appt.startsAt),
+          formatClock12h(appt.startsAt),
           style: textTheme.titleLarge?.copyWith(
             color: context.cb.primarySoft,
           ),
@@ -693,27 +696,6 @@ class _NotFoundView extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load this appointment.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
@@ -730,14 +712,6 @@ const List<String> _months = <String>[
 
 String _formatFullDate(DateTime t) =>
     '${_weekdays[t.weekday - 1]}, ${_months[t.month - 1]} ${t.day}';
-
-String _formatClock(DateTime t) {
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '$hour:$minute $suffix';
-}
 
 String _statusLabel(AppointmentStatus status) {
   switch (status) {

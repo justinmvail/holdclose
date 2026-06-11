@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +11,7 @@ import '../../providers/care_tasks_provider.dart';
 import '../../providers/patient_timeline_provider.dart'
     show invalidatePatientTimeline;
 import '../../theme.dart';
+import '../../widgets/form/id_factory.dart';
 import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
 
@@ -150,9 +149,7 @@ class _CarePlanRoutineFormState extends ConsumerState<CarePlanRoutineForm> {
     if (!validateAndScrollToFirstError(_formKey)) return;
     setState(() => _submitting = true);
 
-    final String id = widget.routineId ??
-        'routine-${DateTime.now().millisecondsSinceEpoch}-'
-            '${math.Random().nextInt(1 << 32)}';
+    final String id = widget.routineId ?? mintId('routine');
     // A new routine is filed under the active loved one's id (was a
     // hard-coded 'demo-patient-mary') so it follows whichever person is
     // selected (multi-patient, Issue #6). On the edit path keep the routine's
@@ -215,8 +212,7 @@ class _CarePlanRoutineFormState extends ConsumerState<CarePlanRoutineForm> {
       }
     }
     for (final String title in _taskTitles) {
-      final String taskId = 'task-${DateTime.now().millisecondsSinceEpoch}-'
-          '${math.Random().nextInt(1 << 32)}';
+      final String taskId = mintId('task');
       await repo.upsertTask(CareTask(
         id: taskId,
         title: title,

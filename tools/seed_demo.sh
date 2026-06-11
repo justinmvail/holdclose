@@ -50,6 +50,5 @@ exec flutter run --release -d "$DEVICE" --no-pub \
   --dart-define=SHIM_URL="${SHIM_URL:-}" \
   --dart-define=SHIM_TOKEN="${SHIM_TOKEN:-}" \
   --dart-define=FORUM_API_URL="${FORUM_API_URL:-}" \
-  --dart-define=FORUM_JWT_SECRET="${FORUM_JWT_SECRET:-}" \
   --dart-define=GOOGLE_SERVER_CLIENT_ID="${GOOGLE_SERVER_CLIENT_ID:-}" \
   --dart-define=GOOGLE_IOS_CLIENT_ID="${GOOGLE_IOS_CLIENT_ID:-}"

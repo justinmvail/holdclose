@@ -11,8 +11,12 @@ grounded in Dr. Natali Edmonds' (Dementia Careblazers) coaching
 framework. The wedge is the **Behavior Decoder**: tap a behavior, answer
 three triage questions, get a Dr. Natali–style script with 2–3 things to
 say + an environmental tweak + a "don't say" warning. Everything else
-in the app (Journal, Library, Crisis card) is a byproduct of repeated
-decoder use.
+in the app (Journal, the Community tab's Learn primers, the Emergency
+Card) is a byproduct of repeated decoder use. Since the original spec,
+the app has grown a full caregiving suite (medications + dose windows,
+appointments, care circle with server sync, community forum, chat
+coach with voice intents) and a Cloudflare Worker backend under
+`backend/`.
 
 This is the V1 demo build for a pitch to Dr. Natali. Full functional
 app — every screen real, every flow live — built first; the demo runs
@@ -50,79 +54,79 @@ as an automated `integration_test/` walkthrough over the same code. See
 
 ## Project layout
 
+(Regenerated 2026-06-11 — directory-level map; representative files only.
+Run `ls` for the full inventory rather than trusting an inline tree.)
+
 ```
 careblazers/
-  BUILD_SPEC.md
-  TASKS.md
-  CLAUDE.md
-  README.md
-  pubspec.yaml
+  BUILD_SPEC.md             # the contract (some sections lag the code; code wins)
+  TASKS.md                  # autoloop task queue (do not edit)
+  CLAUDE.md / README.md
+  pubspec.yaml / l10n.yaml / analysis_options.yaml
   lib/
-    main.dart
-    app.dart                # MaterialApp + theme + router
-    theme.dart              # brand tokens (navy + orange + Lato/Montserrat)
-    routing/
-      router.dart           # go_router config
-    providers/              # riverpod providers + interfaces
-      llm_provider.dart
-      storage_provider.dart
-      tts_provider.dart
-      auth_provider.dart
-      analytics_provider.dart
-      settings_provider.dart
-    models/                 # freezed data classes
-      behavior.dart
-      triage.dart
-      decoder_result.dart
-      journal_entry.dart
-      patient.dart
-      script.dart
-      settings.dart
-    services/
-      decoder_service.dart  # orchestrates LLM + storage
-      pattern_detector.dart # flags in journal
-      pdf_exporter.dart     # doctor-visit packet
+    main.dart               # bootstrap: preloads (onboarding, alpha user,
+                            # patient-configured), demo reset/seed, sync kick
+    app.dart                # MaterialApp.router + deep-link/notification-tap wiring
+    theme.dart              # brand tokens (navy #1f2a44, salmon CTA #C97458,
+                            # warm white #f8f6f3) via CareblazersColors/context.cb
+    routing/router.dart     # go_router: 4-tab StatefulShellRoute + redirects
+    l10n/                   # gen-l10n ARB (onboarding screens only so far)
+    providers/              # ~42 riverpod providers + backend interfaces
+                            # (llm, storage, tts ×3, auth ×3, analytics,
+                            # notifications ×2, capture, settings, sync state,
+                            # forum session, quiet hours, patient-configured, …)
+    models/                 # 20 freezed data classes (patient, medication,
+                            # appointment, chat, forum, document, expense, …)
+    services/               # 25 services: chat_service + chat_actions +
+                            # chat_context_builder (LLM chat + action tags),
+                            # decoder_service, sync_service + sync_sink (outbox
+                            # engine), forum_api_client + fake_forum_api_client,
+                            # medication/appointment/chat/provider repositories,
+                            # pdf_exporter, pattern_detector, feedback_service,
+                            # notification_scheduler, circle_deep_link_handler, …
     screens/
-      home_screen.dart
-      decoder/
-        behavior_picker_screen.dart
-        triage_screen.dart
-        decoder_result_screen.dart
-      journal/
-        journal_screen.dart
-        journal_entry_screen.dart
-      medical/
-        medical_screen.dart
-      team/
-        team_screen.dart
-      settings/
-        settings_screen.dart
-      onboarding/
-        welcome_carousel.dart
-        sign_in_screen.dart
-    widgets/                # reusable
-      brand_button.dart
-      voice_button.dart
-      caption_fade.dart
-      tab_scaffold.dart
-    db/                     # drift database
-      database.dart
-      tables.dart
-    seed/                   # demo seed data
-      mary_henderson.dart
-      sample_journal.dart
-  test/                     # unit + widget tests
-    providers/
-    services/
-    screens/
-    widgets/
-  integration_test/         # demo automation
-    demo_tour.dart
+      home_screen.dart      # chat-root dashboard (greeting + schedule card)
+      decoder/              # behavior_picker, triage, decoder_result (the wedge)
+      journal/              # journal, journal_entry, journal_wizard
+      medical/              # Care-tab hub: medical_hub, health_log (+form),
+                            # care_plan_routines (+form), emergency_card (+edit)
+      medication/           # medication_list/form, dose_log, dose_window_list
+      appointment/          # appointment list/detail/form
+      team/                 # Care Circle hub: care_team_hub, care_circle,
+                            # calendar, tasks, shifts, expenses, activity,
+                            # circle_qr/scan, username
+      chat/                 # conversation_list, chat_screen
+      community/            # feed, post detail/compose, learn, support,
+                            # guidelines, admin_reports
+      settings/             # settings, loved_ones
+      onboarding/           # welcome_carousel, sign_in, loved_one_setup
+    widgets/                # tab_scaffold (custom 4-tab bar + center mic),
+                            # path_header, message_body, caption_fade,
+                            # hub_tile, segmented_subnav, voice_button,
+                            # home/ (schedule_card, catch_me_up_card, …),
+                            # community/, feedback/, form/ (shared form kit)
+    db/                     # drift: database.dart (migrations, v20),
+                            # tables.dart (+ @TableIndex on hot columns)
+    seed/                   # mary_henderson, sample_journal, demo_dataset,
+                            # system prompts (system_prompt, chat_system_prompt,
+                            # activity_summary_prompt), fake_llm_seeds,
+                            # learn/support/guidelines content
+  test/                     # mirrors lib/: providers/ services/ screens/
+                            # widgets/ db/ routing/ integration/ golden/
+  integration_test/         # demo_tour.dart (pitch walkthrough, 4-tab IA),
+                            # critical_path_smoke_test.dart
+  backend/                  # Cloudflare Worker (Hono + drizzle + D1 + R2):
+                            # src/routes/ (auth, circles, join, sync, posts,
+                            # comments, votes, profiles, reports, documents),
+                            # src/middleware/auth.ts (HS256 session JWTs —
+                            # minted SERVER-side in routes/auth.ts),
+                            # crisis watchdog, drizzle/ migrations, vitest suite
   tools/
-    claude_shim.py          # local HTTP → claude CLI
-    pdf_template.html       # doctor-visit packet template
-  ios/
-  android/
+    claude_shim.py          # local HTTP → claude CLI (auth, size caps, watchdog)
+    dev_defines.example.sh  # template for tools/dev_defines.sh (gitignored)
+    seed_demo.sh / refresh_funnel_cert.sh / vendor_espeak_ng.sh
+  docs/                     # MENU_LAYOUT_SPEC, CHAT_FEATURE, TTS_BUNDLED
+  ios/ android/
 ```
 
 ## Architectural invariants (don't violate)
@@ -149,15 +153,40 @@ careblazers/
   now shows only the app version. AI is now mentioned nowhere in the UI;
   if a disclosure is needed later it should live in a privacy/terms doc,
   not a Settings card.
-- **Demo mode resets state on every launch by default.** Settings
-  has a toggle to disable that for testing. The real-user app NEVER
-  resets — that toggle is hidden behind a debug flag.
+- **Demo mode can reset state on launch; real builds never reset.**
+  In a `DEMO_MODE` build, Settings shows a "Reset on launch" toggle
+  (default **off** — `AppSettings.defaults().resetOnLaunchDemo ==
+  false`); when on, every cold start wipes + reseeds Mary Henderson.
+  When off, the demo still backfills Mary's profile if no loved one is
+  on file (`ensurePatient`) so patient-dependent screens aren't empty.
+  Non-demo builds never render the toggle and never reset. (Wording
+  corrected 2026-06-11 to match the code — the old "resets by default"
+  phrasing had drifted.)
 - **No memory exercises for the patient. No symptom checker.
   No general longevity tips.** Per dossier §7 analysis.
 - **Medical-advice guardrails are non-negotiable.** Every decoder
-  output includes a footer reminder. The LLM system prompt
-  explicitly forbids medication dosing recommendations, prognosis
-  claims, and "your loved one has X condition" diagnoses.
+  output includes a footer reminder; the chat screen carries a
+  trusted, code-side disclaimer line under the composer. The LLM
+  system prompt explicitly forbids medication dosing recommendations,
+  prognosis claims, and "your loved one has X condition" diagnoses.
+- **Security invariants (2026-06-11 hardening — do not regress):**
+  - The app NEVER holds a signing secret. Session JWTs are minted by
+    the Worker in `POST /auth/google` after Google ID-token
+    verification; the client stores the opaque token
+    (`ForumSessionManager`) and silently re-exchanges on expiry.
+  - Care-circle joins ALWAYS require an explicit in-app confirmation
+    (deep link, sign-in replay, and QR scan paths alike). Invites are
+    single-use with a 48h TTL.
+  - Destructive chat actions (`delete_medication`,
+    `cancel_appointment`, `delete_task`) NEVER auto-execute — they
+    park as `pending_action:` citations and run only from the
+    in-thread confirm card. Voice mode included.
+  - Data interpolated into LLM prompts is sanitized + delimited
+    (`<current_data>` + fullwidth-bracket substitution in
+    `chat_context_builder.dart`); treat any new prompt interpolation
+    the same way.
+  - Android backups stay OFF (`allowBackup="false"` — the local DB is
+    plaintext PHI).
 - **Bottom tab bar is always exactly four items in this order —
   Home, Care, Chat, Community — never collapsed or conditionally
   hidden.** (IA refactor 2026-06-06: "Medical" was renamed **Care**;
@@ -165,9 +194,11 @@ careblazers/
   The Care branch's route path stays `/medical` internally and the
   former team routes stay `/team/*` — only the labels + tab structure
   changed.)
-- **Every feature page below a hub uses `PathHeader` with breadcrumb
-  + word-labeled Back. No screen below a hub relies on the OS back
-  button alone.**
+- **Every feature page below a hub uses `PathHeader` with tappable
+  breadcrumbs + a back arrow. No screen below a hub relies on the OS
+  back button alone.** (The separate word-labeled "Back to X" control
+  was removed; `PathHeader.backLabel`/`onBack` params are inert,
+  retained for source compatibility.)
 - **Maximum two levels deep below a tab landing. Additional depth
   uses in-page tabs / segmented controls, not another tile grid.**
 
@@ -200,16 +231,28 @@ cost). `ClaudeCLIProvider` POSTs to it.
 ### Running the demo tour
 
 ```bash
-# Demo mode: clean state, deterministic LLM responses (no shim needed)
+# Demo mode: clean state, deterministic LLM responses (no shim needed;
+# chat uses DemoChatBackend, the decoder uses FakeLLMProvider)
 flutter test integration_test/demo_tour.dart --dart-define=DEMO_MODE=true
+```
+
+### Backend (Cloudflare Worker)
+
+```bash
+cd backend
+npm test              # vitest suite (D1 via wrangler test harness)
+npx tsc --noEmit      # type-check
+npx drizzle-kit generate --name=<change>   # after editing src/db/schema.ts
+# Deploys (operator-run): wrangler deploy + wrangler d1 migrations apply
 ```
 
 ## What NOT to do
 
-- Don't propose any git action — the autoloop handles all git ops.
-  Don't run `git commit`, `git push`, etc.
-- Don't run the full test suite as part of a task — the autoloop's
-  test gate runs after each iter.
+- Git actions (commit/push) only when the user asks — there is no
+  auto gate anymore; run the FULL test suite yourself
+  (`flutter analyze` + `flutter test` + `cd backend && npm test`)
+  before declaring work done. (Updated 2026-06-11: the Argus autoloop
+  era is over; refinement is direct.)
 - Don't edit TASKS.md.
 - Don't add a new top-level dependency without updating BUILD_SPEC.md.
 - Don't make the app talk to `api.anthropic.com` directly in v1 —
@@ -226,8 +269,10 @@ flutter test integration_test/demo_tour.dart --dart-define=DEMO_MODE=true
   Emojis are OK on behavior cards (visual affordances) and crisis
   card sections (📞, ⚠) — not on buttons.
 - Don't ship default Material colors. The brand tokens in
-  `lib/theme.dart` (navy `#1f2a44` + orange `#ff6900` + warm white
-  `#f8f6f3`) override every relevant ColorScheme field.
+  `lib/theme.dart` (navy `#1f2a44`, **salmon CTA `#C97458`** — a
+  deliberate rebrand to match careblazers.com, replacing the original
+  orange — + warm white `#f8f6f3`) override every relevant
+  ColorScheme field. Reach colors through `context.cb`, never raw hex.
 
 ## When in doubt
 

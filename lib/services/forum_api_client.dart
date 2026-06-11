@@ -67,21 +67,27 @@ class ForumApiException implements Exception {
 
 /// Decoded `POST /api/v1/auth/google` success body (the Google sign-in
 /// bootstrap). The backend verifies the Google ID token, provisions /
-/// finds the account, and returns the stable spine identity the forum
-/// JWT's `sub` is minted from. [username] is null until the caregiver
-/// claims a `@handle`.
+/// finds the account, and returns the stable spine identity PLUS the
+/// SERVER-minted session JWT ([token], expiring at [tokenExpiresAt]
+/// epoch seconds) that authenticates every subsequent call. [username]
+/// is null until the caregiver claims a `@handle`. [token] is nullable
+/// only for tolerance of an older backend during rollout.
 class GoogleAuthResult {
   const GoogleAuthResult({
     required this.userId,
     required this.email,
     required this.name,
     this.username,
+    this.token,
+    this.tokenExpiresAt,
   });
 
   final String userId;
   final String email;
   final String name;
   final String? username;
+  final String? token;
+  final int? tokenExpiresAt;
 
   factory GoogleAuthResult.fromJson(Map<String, Object?> json) =>
       GoogleAuthResult(
@@ -89,6 +95,8 @@ class GoogleAuthResult {
         email: json['email'] as String? ?? '',
         name: json['name'] as String? ?? '',
         username: json['username'] as String?,
+        token: json['token'] as String?,
+        tokenExpiresAt: (json['token_expires_at'] as num?)?.toInt(),
       );
 }
 
@@ -292,20 +300,26 @@ class SyncPushResult {
 }
 
 /// Async producer of a bearer token for the Authorization header.
-/// Production wires this to [ForumJwtMinter.currentToken]; tests
-/// inject a constant closure so the API client tests stay independent
-/// of the JWT signing path (which has its own coverage in
-/// `test/providers/forum_jwt_provider_test.dart`).
+/// Production wires this to `ForumSessionManager.currentToken` (the
+/// SERVER-minted session token); tests inject a constant closure so the
+/// API client tests stay independent of the session machinery (which
+/// has its own coverage in `test/providers/forum_jwt_provider_test.dart`).
 typedef ForumTokenLoader = Future<String> Function();
+
+/// Invoked when the Worker rejects a call with 401 + `Token-Expired:
+/// true`. Production wires this to `ForumSessionManager.recoverFromExpiry`
+/// (drop the dead token, silently re-exchange). Returns true when a
+/// usable token now exists — the client then retries the request ONCE.
+typedef ForumTokenExpiredRecovery = Future<bool> Function();
 
 /// Dio-backed thin wrapper around the Cloudflare Worker forum API
 /// (BUILD_SPEC.md §13 / Phase 13.9). One method per Worker route.
 ///
 /// Read endpoints (`GET /posts`, `GET /posts/:id`, `GET
 /// /posts/:postId/comments`) skip the Authorization header to match
-/// the Worker's anonymous-read posture. Every other endpoint pulls a
-/// JWT via [tokenLoader] (defaulting to [ForumJwtMinter.currentToken]
-/// in the riverpod wiring).
+/// the Worker's anonymous-read posture. Every other endpoint pulls the
+/// server-minted session JWT via [tokenLoader] (wired to
+/// `ForumSessionManager.currentToken` in the riverpod wiring).
 ///
 /// On non-2xx the client raises [ForumApiException] with the Worker's
 /// `{error: '...'}` payload extracted; callers should NOT need to
@@ -313,13 +327,26 @@ typedef ForumTokenLoader = Future<String> Function();
 class ForumApiClient {
   ForumApiClient({
     required ForumTokenLoader tokenLoader,
+    ForumTokenExpiredRecovery? onTokenExpired,
     Dio? dio,
     String baseUrl = _compileTimeForumApiUrl,
   })  : _tokenLoader = tokenLoader,
-        _dio = dio ?? Dio(),
+        _onTokenExpired = onTokenExpired,
+        // A bare Dio() has NO timeouts — one black-holed request (the
+        // backend is a Funnel to a laptop) would otherwise wedge the
+        // sync engine's in-flight slot until app restart. Send/receive
+        // are generous enough for the 8 MB document-blob ceiling on a
+        // slow uplink, but finite.
+        _dio = dio ??
+            Dio(BaseOptions(
+              connectTimeout: const Duration(seconds: 10),
+              sendTimeout: const Duration(seconds: 120),
+              receiveTimeout: const Duration(seconds: 60),
+            )),
         _baseUrl = _trimTrailingSlash(baseUrl);
 
   final ForumTokenLoader _tokenLoader;
+  final ForumTokenExpiredRecovery? _onTokenExpired;
   final Dio _dio;
   final String _baseUrl;
 
@@ -850,6 +877,7 @@ class ForumApiClient {
     Object? data,
     Map<String, Object?>? query,
     bool anonymous = false,
+    bool retryOnExpiredToken = true,
   }) async {
     final Map<String, Object> headers = <String, Object>{
       Headers.acceptHeader: Headers.jsonContentType,
@@ -873,6 +901,26 @@ class ForumApiClient {
           validateStatus: (int? _) => true,
         ),
       ).then(_throwIfError);
+    } on ForumApiException catch (e) {
+      // Expired session token: recover (drop + silent re-exchange) and
+      // retry the request exactly once. `retryOnExpiredToken: false` on
+      // the retry guarantees no loop when the fresh token is also bad.
+      if (!anonymous &&
+          retryOnExpiredToken &&
+          e.tokenExpired &&
+          _onTokenExpired != null) {
+        final bool recovered = await _onTokenExpired();
+        if (recovered) {
+          return _send(
+            method: method,
+            url: url,
+            data: data,
+            query: query,
+            retryOnExpiredToken: false,
+          );
+        }
+      }
+      rethrow;
     } on DioException catch (e) {
       // Transport-level failure (DNS, TCP refused, TLS, timeout) —
       // bubble as a synthetic 0/error so callers don't have to learn
@@ -966,13 +1014,25 @@ class ForumApiClient {
 ///
 /// Watches [settingsProvider.useDemoForum] so the Settings → "Use
 /// demo forum" flip flows through every community surface without a
-/// hot restart. `keepAlive: true` because the underlying [ForumJwtMinter]
-/// caches the minted JWT and the demo client owns its in-memory state
-/// — re-creating either per consumer would discard those caches on
-/// every screen mount.
+/// hot restart. `keepAlive: true` because the session manager caches
+/// the server-minted token and the demo client owns its in-memory
+/// state — re-creating either per consumer would discard those caches
+/// on every screen mount.
+/// The demo-forum flag as its OWN provider, so [forumApiClient] (and the
+/// whole sync graph above it) rebuilds only when this bool actually
+/// flips. Watching the whole settings object here meant any settings
+/// mutation (font-size notch, TTS toggle, quiet hours…) re-created the
+/// client + SyncController, silently killing the sync poll's interval
+/// timer for the rest of the session. A derived bool provider notifies
+/// dependents only on value CHANGE — the riverpod-codegen equivalent of
+/// `.select`.
+@Riverpod(keepAlive: true)
+bool useDemoForumSetting(Ref ref) =>
+    ref.watch(settingsProvider).useDemoForum;
+
 @Riverpod(keepAlive: true)
 ForumApiClient forumApiClient(Ref ref) {
-  final bool useDemo = ref.watch(settingsProvider).useDemoForum;
+  final bool useDemo = ref.watch(useDemoForumSettingProvider);
   // A real backend URL baked into the build (the alpha test builds set
   // `--dart-define=FORUM_API_URL=...`) OVERRIDES the demo toggle — alpha
   // testers shouldn't have to find a Settings switch to make care circles
@@ -984,6 +1044,9 @@ ForumApiClient forumApiClient(Ref ref) {
   if (useDemo && !hasBackend) {
     return FakeForumApiClient();
   }
-  final ForumJwtMinter minter = ref.watch(forumJwtMinterProvider);
-  return ForumApiClient(tokenLoader: minter.currentToken);
+  final ForumSessionManager session = ref.watch(forumSessionManagerProvider);
+  return ForumApiClient(
+    tokenLoader: session.currentToken,
+    onTokenExpired: session.recoverFromExpiry,
+  );
 }

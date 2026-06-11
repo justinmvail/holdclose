@@ -9,6 +9,7 @@ import '../../models/chat.dart';
 import '../../services/chat_repository.dart';
 import '../../services/chat_service.dart' show ChatService;
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
 import '../../widgets/path_header.dart';
 
 part 'conversation_list_screen.g.dart';
@@ -208,7 +209,8 @@ class ConversationListScreen extends ConsumerWidget {
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load your chats.\n$e"),
                 data: (List<ConversationListItem> items) {
                   if (items.isEmpty) {
                     return _EmptyState(onStart: () => _start(context, ref));
@@ -565,27 +567,6 @@ class _QuickChatFab extends StatelessWidget {
               .textTheme
               .labelLarge
               ?.copyWith(color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load your chats.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
         ),
       ),
     );

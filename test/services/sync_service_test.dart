@@ -1,3 +1,5 @@
+import 'dart:convert' show jsonDecode;
+
 import 'package:careblazers/models/appointment.dart';
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/care_circle_membership.dart';
@@ -1278,6 +1280,279 @@ void main() {
       final ProviderContainer container = ProviderContainer();
       addTearDown(container.dispose);
       expect(container.read(currentCaregiverIdProvider), 'user-abc');
+    });
+  });
+
+  group('pull hardening (2026-06-11) — isolation + dependency ordering', () {
+    test('a chat MESSAGE whose rev is below its conversation still applies '
+        '(parents-first ordering beats rev order)', () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final CircleDto circle = await backend.createCircle('Mary');
+
+      // Server revs follow PUSH order: the message lands first (rev
+      // below), the conversation second (rev above) — exactly the shape
+      // a conversation bump after each message produces. A rev-ordered
+      // apply would insert the message before its FK parent exists.
+      await backend.syncPush(circle.id, docs: <SyncDocWrite>[
+        SyncDocWrite(
+          id: 'msg-1',
+          collection: 'chat_messages',
+          payload: _message('msg-1', 'convo-1').toJson(),
+          clientUpdatedAt: 1000,
+        ),
+      ]);
+      await backend.syncPush(circle.id, docs: <SyncDocWrite>[
+        SyncDocWrite(
+          id: 'convo-1',
+          collection: 'chat_conversations',
+          payload: _convo('convo-1').toJson(),
+          clientUpdatedAt: 1001,
+        ),
+      ]);
+
+      await d.stateStore.setCircleId(circle.id);
+      await d.controller.pull();
+
+      // The fresh joiner has the whole thread — no FK wedge.
+      expect((await d.chat.listConversations()).single.id, 'convo-1');
+      expect((await d.chat.loadMessages('convo-1')).single.id, 'msg-1');
+    });
+
+    test('one malformed doc neither aborts the batch nor pins the cursor',
+        () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final CircleDto circle = await backend.createCircle('Mary');
+
+      await backend.syncPush(circle.id, docs: <SyncDocWrite>[
+        // Garbage payload — Medication.fromJson throws on apply, every
+        // time, deterministically.
+        const SyncDocWrite(
+          id: 'poison',
+          collection: 'medication',
+          payload: <String, dynamic>{'garbage': true},
+          clientUpdatedAt: 1000,
+        ),
+        SyncDocWrite(
+          id: 'j1',
+          collection: 'journal_entries',
+          payload: _journal('j1').toJson(),
+          clientUpdatedAt: 1001,
+        ),
+      ]);
+
+      await d.stateStore.setCircleId(circle.id);
+      await d.controller.pull();
+
+      // The good doc applied…
+      expect(
+        (await d.storage.listAllJournalEntries()).single.id,
+        'j1',
+      );
+      // …and the cursor advanced PAST the poison doc, so sync is not
+      // bricked: the next pull is an empty delta, not a repeat failure.
+      final int cursor = await d.stateStore.getCursor(circle.id);
+      expect(cursor, greaterThan(0));
+      final SyncPullResult delta =
+          await backend.syncPull(circle.id, since: cursor);
+      expect(delta.docs, isEmpty);
+    });
+  });
+
+  group('patient sync (2026-06-11) — loved-one edits reach the circle', () {
+    test('upsertPatient enqueues; push routes it onto the dedicated '
+        'patient field', () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final CircleDto circle = await backend.createCircle(
+        'Mary',
+        patient: SyncPatientWrite(
+          payload: _patient().toJson(),
+          clientUpdatedAt: 1000,
+        ),
+      );
+      await d.stateStore.setCircleId(circle.id);
+
+      // A crisis-card style edit on this device.
+      await d.storage.upsertPatient(_patient(name: 'Mary Updated'));
+      await pumpEventQueue();
+      expect(await SyncOutbox(d.db).hasPending('patient', 'p1'), isTrue);
+
+      await d.controller.push();
+
+      // The circle's patient row now carries the edit; the outbox drained.
+      final SyncPullResult pulled = await backend.syncPull(circle.id, since: 0);
+      expect(pulled.patient, isNotNull);
+      expect(
+        (jsonDecode(pulled.patient!.payload)
+            as Map<String, dynamic>)['name'],
+        'Mary Updated',
+      );
+      expect((await SyncOutbox(d.db).listPending()).isEmpty, isTrue);
+    });
+
+    test('a pulled patient does NOT clobber an unpushed local edit',
+        () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final CircleDto circle = await backend.createCircle(
+        'Mary',
+        patient: SyncPatientWrite(
+          payload: _patient(name: 'Server Copy').toJson(),
+          clientUpdatedAt: 5000,
+        ),
+      );
+      await d.stateStore.setCircleId(circle.id);
+
+      // Local edit queued but not yet pushed.
+      await d.storage.upsertPatient(_patient(name: 'Local Edit'));
+      await pumpEventQueue();
+
+      await d.controller.pull();
+
+      // The local-first guard preserved the unpushed edit.
+      expect((await d.storage.getPatient())?.name, 'Local Edit');
+    });
+
+    test('applying a pulled patient does not echo back into the outbox',
+        () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final CircleDto circle = await backend.createCircle(
+        'Mary',
+        patient: SyncPatientWrite(
+          payload: _patient(name: 'Remote').toJson(),
+          clientUpdatedAt: 5000,
+        ),
+      );
+      await d.stateStore.setCircleId(circle.id);
+
+      await d.controller.pull();
+
+      expect((await d.storage.getPatient())?.name, 'Remote');
+      await pumpEventQueue();
+      expect((await SyncOutbox(d.db).listPending()).isEmpty, isTrue,
+          reason: 'a pulled patient is a remote apply, never a local edit');
+    });
+  });
+
+  group('adopt/bootstrap cursor (2026-06-11) — never skip unseen docs', () {
+    test('adoptJoinedCircle pulls docs whose rev is BELOW the patient rev',
+        () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+
+      // History: circle created with a patient, a journal doc pushed,
+      // then the patient re-pushed — its rev now exceeds the doc's.
+      await backend.createCircle(
+        'Mary',
+        patient: SyncPatientWrite(
+          payload: _patient().toJson(),
+          clientUpdatedAt: 1000,
+        ),
+      );
+      final CircleDto created = (await backend.listCircles()).single;
+      await backend.syncPush(created.id, docs: <SyncDocWrite>[
+        SyncDocWrite(
+          id: 'j1',
+          collection: 'journal_entries',
+          payload: _journal('j1').toJson(),
+          clientUpdatedAt: 1001,
+        ),
+      ]);
+      await backend.syncPush(
+        created.id,
+        patient: SyncPatientWrite(
+          payload: _patient(name: 'Mary Renamed').toJson(),
+          clientUpdatedAt: 2000,
+        ),
+        docs: const <SyncDocWrite>[],
+      );
+      final CircleDto dto = (await backend.listCircles()).single;
+      expect(dto.patient!.rev, greaterThan(1),
+          reason: 'precondition: patient rev sits above the journal doc');
+
+      await d.controller.adoptJoinedCircle(dto);
+
+      // The doc below the patient's rev arrived — the old cursor seeding
+      // (cursor = patient.rev) skipped it forever.
+      expect((await d.storage.listAllJournalEntries()).single.id, 'j1');
+      expect((await d.storage.getPatient())?.name, 'Mary Renamed');
+    });
+  });
+
+  group('resyncAllLocal (2026-06-11) — backfill, never overwrite', () {
+    test('resync rows are stamped 0 and cannot beat another member\'s edit',
+        () async {
+      final FakeForumBackend shared = FakeForumBackend();
+      final FakeForumApiClient clientA = FakeForumApiClient(backend: shared);
+      final FakeForumApiClient clientB = FakeForumApiClient(backend: shared);
+      final _Device a = _Device(clientA);
+      final _Device b = _Device(clientB);
+      addTearDown(a.dispose);
+      addTearDown(b.dispose);
+
+      // A creates the circle and pushes a RECENT edit of med m1.
+      final CircleDto circle = await clientA.createCircle('Mary');
+      await a.stateStore.setCircleId(circle.id);
+      await a.medications.upsertMedication(_med('m1', 'Donepezil 23mg NEW'));
+      await pumpEventQueue();
+      await a.controller.push();
+
+      // B holds a STALE local copy written before any circle existed
+      // (no outbox row), then joins and force-resyncs.
+      await b.medications.applyingRemote(
+        () => b.medications.upsertMedication(_med('m1', 'Donepezil OLD')),
+      );
+      await b.stateStore.setCircleId(circle.id);
+      await b.controller.resyncAllLocal();
+
+      // The circle still holds A's newer edit — the backfill lost LWW —
+      // and B's own pull during resync brought the newer copy down.
+      final SyncPullResult pulled = await clientA.syncPull(circle.id, since: 0);
+      final SyncDoc med = pulled.docs
+          .firstWhere((SyncDoc x) => x.collection == 'medication');
+      expect(
+        (jsonDecode(med.payload) as Map<String, dynamic>)['name'],
+        'Donepezil 23mg NEW',
+      );
+      expect(
+        (await b.medications.listMedications()).single.name,
+        'Donepezil 23mg NEW',
+      );
+    });
+
+    test('resync does NOT downgrade a pending real edit to the backfill '
+        'stamp', () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final CircleDto circle = await backend.createCircle('Mary');
+      await d.stateStore.setCircleId(circle.id);
+
+      // A live local edit sits in the outbox with a real timestamp.
+      await d.medications.upsertMedication(_med('m1', 'Fresh Edit'));
+      await pumpEventQueue();
+
+      await d.controller.resyncAllLocal();
+
+      // The pushed doc kept its real (non-zero) stamp — a resync running
+      // over a pending edit must not weaken it to 0.
+      final SyncPullResult pulled = await backend.syncPull(circle.id, since: 0);
+      final SyncDoc med = pulled.docs
+          .firstWhere((SyncDoc x) => x.collection == 'medication');
+      expect(med.clientUpdatedAt, greaterThan(0));
+      expect(
+        (jsonDecode(med.payload) as Map<String, dynamic>)['name'],
+        'Fresh Edit',
+      );
     });
   });
 }

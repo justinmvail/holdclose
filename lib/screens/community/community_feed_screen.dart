@@ -13,6 +13,7 @@ import '../../providers/my_forum_profile_provider.dart';
 import '../../routing/router.dart' show CareblazersRoutes;
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/network_error_view.dart';
 import '../../widgets/path_header.dart';
 import '../../widgets/segmented_subnav.dart';
@@ -776,19 +777,5 @@ String relativeTime(DateTime when, DateTime now) {
   if (delta.inMinutes < 60) return '${delta.inMinutes}m ago';
   if (delta.inHours < 24) return '${delta.inHours}h ago';
   if (delta.inDays < 30) return '${delta.inDays}d ago';
-  const List<String> months = <String>[
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return '${months[when.month - 1]} ${when.day}';
+  return '${monthAbbreviations[when.month - 1]} ${when.day}';
 }

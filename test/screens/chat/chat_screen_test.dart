@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/chat.dart';
 import 'package:careblazers/providers/pending_chat_message_provider.dart';
+import 'package:careblazers/services/chat_actions.dart'
+    show ChatActionExecutor;
 import 'package:careblazers/providers/voice_capture_provider.dart';
 import 'package:careblazers/screens/chat/chat_screen.dart';
 import 'package:careblazers/screens/chat/conversation_list_screen.dart'
@@ -150,6 +152,7 @@ Future<({
   VoiceCapture? voiceCapture,
   ({String conversationId, String text})? pendingMessage,
   String? customTitle,
+  Map<String, ChatActionExecutor>? actions,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -175,6 +178,7 @@ Future<({
     backend: backend,
     idFactory: _idFactory(),
     clock: _fixedNow,
+    actions: actions,
   );
 
   final GlobalKey<NavigatorState> rootKey = GlobalKey<NavigatorState>();
@@ -1234,6 +1238,124 @@ void main() {
       expect(find.byKey(ChatScreen.emptyHintKey), findsOneWidget);
       final List<Message> persisted = await p.repo.loadMessages('convo-mine');
       expect(persisted, isEmpty);
+    });
+  });
+
+  group('ChatScreen — destructive-action confirm card (2026-06-11)', () {
+    const String pendingCitation =
+        '${ChatService.pendingActionCitationPrefix}'
+        '[action:delete_medication name="Donepezil"]';
+
+    Message pendingMessage(String conversationId) => Message(
+          id: 'pending-1',
+          conversationId: conversationId,
+          role: MessageRole.assistant,
+          body: "Confirm below and I'll take it off the list.",
+          citations: const <String>[pendingCitation],
+          createdAt: _fixedNow(),
+          streamingDone: true,
+        );
+
+    testWidgets('renders the card with the human question + both buttons',
+        (WidgetTester tester) async {
+      await _pump(
+        tester,
+        conversationId: 'convo-card',
+        initialMessages: <Message>[pendingMessage('convo-card')],
+      );
+
+      expect(
+        find.byKey(ChatScreen.pendingActionCardKey(pendingCitation)),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Remove the medication “Donepezil” from the list?'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ChatScreen.pendingActionConfirmKey(pendingCitation)),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ChatScreen.pendingActionDeclineKey(pendingCitation)),
+        findsOneWidget,
+      );
+      // The raw marker never renders as prose.
+      expect(find.textContaining('[action:'), findsNothing);
+    });
+
+    testWidgets('Confirm runs the executor once and the card disappears',
+        (WidgetTester tester) async {
+      final List<String> deletions = <String>[];
+      await _pump(
+        tester,
+        conversationId: 'convo-confirm',
+        initialMessages: <Message>[pendingMessage('convo-confirm')],
+        actions: <String, ChatActionExecutor>{
+          'delete_medication': (Map<String, String> args) async {
+            deletions.add(args['name'] ?? '');
+            return null;
+          },
+        },
+      );
+
+      await tester.tap(
+        find.byKey(ChatScreen.pendingActionConfirmKey(pendingCitation)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(deletions, <String>['Donepezil']);
+      expect(
+        find.byKey(ChatScreen.pendingActionCardKey(pendingCitation)),
+        findsNothing,
+      );
+      expect(find.text('Done.'), findsOneWidget); // confirmation SnackBar
+    });
+
+    testWidgets('Keep it discards the card and writes nothing',
+        (WidgetTester tester) async {
+      final List<String> deletions = <String>[];
+      await _pump(
+        tester,
+        conversationId: 'convo-decline',
+        initialMessages: <Message>[pendingMessage('convo-decline')],
+        actions: <String, ChatActionExecutor>{
+          'delete_medication': (Map<String, String> args) async {
+            deletions.add(args['name'] ?? '');
+            return null;
+          },
+        },
+      );
+
+      await tester.tap(
+        find.byKey(ChatScreen.pendingActionDeclineKey(pendingCitation)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(deletions, isEmpty);
+      expect(
+        find.byKey(ChatScreen.pendingActionCardKey(pendingCitation)),
+        findsNothing,
+      );
+      // The coach's prose stays in the thread.
+      expect(
+        find.textContaining("Confirm below and I'll take it off"),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('ChatScreen — trusted disclaimer line (2026-06-11)', () {
+    testWidgets('the medical-advice disclaimer is always under the composer',
+        (WidgetTester tester) async {
+      await _pump(
+        tester,
+        conversationId: 'convo-disclaimer',
+        deltas: const <ChatDelta>[],
+      );
+
+      expect(find.byKey(ChatScreen.disclaimerKey), findsOneWidget);
+      expect(find.text(ChatScreen.disclaimerText), findsOneWidget);
     });
   });
 }

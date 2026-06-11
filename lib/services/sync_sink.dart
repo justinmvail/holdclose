@@ -1,3 +1,5 @@
+import 'dart:async';
+
 /// Reusable enqueue seam for server-authoritative sync.
 ///
 /// A repository (or the [StorageProvider]) holds one [SyncSink] and calls
@@ -58,23 +60,27 @@ mixin SyncSinkHost {
   /// local.
   SyncSink syncSink = const SyncSink();
 
-  /// When true the [syncSink] is bypassed for every write. The sync
-  /// controller flips this on (via [applyingRemote]) while it applies a
-  /// *pulled* doc so the apply doesn't re-enqueue the change and bounce it
-  /// back to the server.
-  bool _suppressSync = false;
+  /// Zone key marking "this async flow is applying a PULLED doc".
+  ///
+  /// Zone-scoped (2026-06-11), not a plain instance bool: [applyingRemote]
+  /// awaits DB writes, and a USER save to the same repository can
+  /// interleave on the event loop mid-apply. With an instance flag the
+  /// interleaved local edit saw `suppress == true`, silently skipped its
+  /// enqueue, and never reached the circle until the row was edited
+  /// again. A zone value follows ONLY the apply's own async flow — the
+  /// interleaved user write runs in the root zone and enqueues normally.
+  static final Object _applyingRemoteZoneKey = Object();
+
+  bool get _suppressSync => Zone.current[_applyingRemoteZoneKey] == true;
 
   /// Run [action] with the [syncSink] suppressed — used by the sync
   /// controller's apply dispatcher so applying a pulled write goes
   /// straight to local storage without re-enqueuing it.
-  Future<T> applyingRemote<T>(Future<T> Function() action) async {
-    final bool prior = _suppressSync;
-    _suppressSync = true;
-    try {
-      return await action();
-    } finally {
-      _suppressSync = prior;
-    }
+  Future<T> applyingRemote<T>(Future<T> Function() action) {
+    return runZoned<Future<T>>(
+      action,
+      zoneValues: <Object, Object>{_applyingRemoteZoneKey: true},
+    );
   }
 
   /// Route a local upsert through the sink, unless we're applying a

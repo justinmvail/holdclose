@@ -43,6 +43,7 @@ class FeedbackSheet extends ConsumerStatefulWidget {
   static const Key messageFieldKey = Key('alpha-feedback-message');
   static const Key micKey = Key('alpha-feedback-mic');
   static const Key screenshotToggleKey = Key('alpha-feedback-screenshot-toggle');
+  static const Key logsToggleKey = Key('alpha-feedback-logs-toggle');
   static const Key sendButtonKey = Key('alpha-feedback-send');
 
   static Key categoryKey(FeedbackCategory c) =>
@@ -62,6 +63,13 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
   /// (fb_1781129218678980 — "let me use voice to text when filing a bug").
   bool _dictating = false;
   bool _includeScreenshot = true;
+
+  /// Whether the recent-log snapshot rides along with the report. Same
+  /// consent posture as the screenshot (2026-06-11): on by default —
+  /// the logs are what make "works but wrong" reports diagnosable — but
+  /// visible and declinable, because the buffer can carry whatever any
+  /// log line happened to print.
+  bool _includeLogs = true;
   bool _submitting = false;
 
   @override
@@ -171,8 +179,9 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
       testerName: name,
       hasScreenshot: attach,
       // Snapshot recent on-device logs so the report carries context that
-      // a screenshot + sentence can't (the "works but wrong" class).
-      logs: LogBuffer.instance.snapshot(),
+      // a screenshot + sentence can't (the "works but wrong" class) —
+      // but ONLY with the tester's visible consent (the toggle below).
+      logs: _includeLogs ? LogBuffer.instance.snapshot() : '',
     );
     final bool delivered =
         await ref.read(feedbackControllerProvider).submit(
@@ -328,6 +337,26 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
                 ],
               ),
             ],
+            const SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                Icon(Icons.receipt_long_outlined,
+                    size: 20, color: context.cb.primarySoft),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Include recent app activity logs',
+                    style: textTheme.bodyMedium?.copyWith(fontSize: 14),
+                  ),
+                ),
+                Switch(
+                  key: FeedbackSheet.logsToggleKey,
+                  value: _includeLogs,
+                  activeThumbColor: context.cb.primary,
+                  onChanged: (bool v) => setState(() => _includeLogs = v),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,

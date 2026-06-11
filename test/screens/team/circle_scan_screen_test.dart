@@ -47,11 +47,33 @@ Future<State<CircleScanScreen>> _pump(
 
 /// Drive the screen's (visibleForTesting) payload handler reflectively
 /// via its dynamic State so the camera never has to fire.
-Future<void> _scan(WidgetTester tester, State<CircleScanScreen> state,
-    String? payload) async {
+///
+/// Valid payloads now open a consent dialog before any join (2026-06-11);
+/// [confirm] picks the button to tap — true = "Join circle", false =
+/// "Not now". The handler future only completes once the dialog resolves,
+/// so it must NOT be awaited before pumping the dialog into existence.
+Future<void> _scan(
+  WidgetTester tester,
+  State<CircleScanScreen> state,
+  String? payload, {
+  bool confirm = true,
+}) async {
   // ignore: avoid_dynamic_calls
-  await (state as dynamic).debugHandlePayload(payload);
+  final Future<void> done =
+      (state as dynamic).debugHandlePayload(payload) as Future<void>;
+  await tester.pump();
+  final Finder dialog = find.byKey(const Key('circle_scan_confirm_dialog'));
+  if (dialog.evaluate().isNotEmpty) {
+    await tester.tap(
+      find.byKey(
+        Key(
+          confirm ? 'circle_scan_confirm_accept' : 'circle_scan_confirm_cancel',
+        ),
+      ),
+    );
+  }
   await tester.pumpAndSettle();
+  await done;
 }
 
 void main() {
@@ -62,7 +84,7 @@ void main() {
     expect(find.byKey(CircleScanScreen.scannerKey), findsNothing);
   });
 
-  testWidgets('valid payload joins the circle and shows success',
+  testWidgets('valid payload asks for consent, then joins and shows success',
       (tester) async {
     final FakeForumApiClient client = FakeForumApiClient();
     // Seed a circle + invite to redeem.
@@ -73,6 +95,46 @@ void main() {
     await _scan(tester, state, circleQrPayload(invite.token));
 
     expect(find.byKey(CircleScanScreen.statusKey), findsOneWidget);
+    expect(find.text('Joined Test circle.'), findsOneWidget);
+  });
+
+  testWidgets('the consent dialog is shown before joining', (tester) async {
+    final FakeForumApiClient client = FakeForumApiClient();
+    final CircleDto circle = await client.createCircle('Test circle');
+    final CircleInviteDto invite = await client.createInvite(circle.id);
+
+    final State<CircleScanScreen> state = await _pump(tester, client);
+    // ignore: avoid_dynamic_calls
+    final Future<void> done = (state as dynamic)
+        .debugHandlePayload(circleQrPayload(invite.token)) as Future<void>;
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('circle_scan_confirm_dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('Join this care circle?'), findsOneWidget);
+    // Nothing has been joined while the dialog is up.
+    expect(find.text('Joined Test circle.'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('circle_scan_confirm_accept')));
+    await tester.pumpAndSettle();
+    await done;
+    expect(find.text('Joined Test circle.'), findsOneWidget);
+  });
+
+  testWidgets('declining the consent dialog joins nothing and resumes '
+      'scanning', (tester) async {
+    final FakeForumApiClient client = FakeForumApiClient();
+    final CircleDto circle = await client.createCircle('Test circle');
+    final CircleInviteDto invite = await client.createInvite(circle.id);
+
+    final State<CircleScanScreen> state = await _pump(tester, client);
+    await _scan(tester, state, circleQrPayload(invite.token), confirm: false);
+
+    expect(find.text('Joined Test circle.'), findsNothing);
+    // Declining re-arms the scanner: a second scan can still join.
+    await _scan(tester, state, circleQrPayload(invite.token));
     expect(find.text('Joined Test circle.'), findsOneWidget);
   });
 

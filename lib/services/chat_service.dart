@@ -4,12 +4,12 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/chat.dart';
 import '../providers/llm_provider.dart'
-    show claudeShimEndpoint, shimAuthHeaders;
+    show buildShimDio, claudeShimEndpoint, shimAuthHeaders, useFakeLLMEngine;
 import '../seed/chat_system_prompt.dart';
 import 'chat_actions.dart';
 import 'chat_context_builder.dart';
@@ -146,7 +146,11 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
         final String label = turn.role == MessageRole.user
             ? 'Careblazer'
             : 'Coach';
-        sb.writeln('$label: ${turn.content}');
+        // Indent continuation lines so multi-line content can never put
+        // "Coach:" / "Careblazer:" at column 0 and spoof a turn boundary
+        // (role labels are only ever at the start of an unindented line).
+        final String content = turn.content.replaceAll('\n', '\n  ');
+        sb.writeln('$label: $content');
       }
       sb.writeln();
     }
@@ -160,7 +164,7 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
     required String systemPrompt,
     required List<ChatTurn> history,
   }) async* {
-    final Dio dio = _injectedDio ?? Dio();
+    final Dio dio = _injectedDio ?? buildShimDio();
     final String userMessage = formatHistory(history);
 
     Response<ResponseBody> response;
@@ -209,7 +213,7 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
           final int sep = _indexOfDoubleNewline(rawBuffer);
           if (sep == -1) break;
           final List<int> eventBytes = rawBuffer.sublist(0, sep);
-          rawBuffer.removeRange(0, sep + 2);
+          rawBuffer.removeRange(0, sep + _eventBoundaryLength(rawBuffer, sep));
           final String event = utf8.decode(eventBytes);
           for (final ChatDelta d in _deltasFromBlock(event, sawPartial)) {
             yield d;
@@ -241,7 +245,11 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
   /// (init line, `[DONE]`, untyped payloads) yield nothing.
   static Iterable<ChatDelta> _deltasFromBlock(
       String block, List<bool> sawPartial) sync* {
-    for (final String line in block.split('\n')) {
+    for (final String rawLine in block.split('\n')) {
+      // CRLF tolerance: strip a trailing \r left by \r\n events.
+      final String line = rawLine.endsWith('\r')
+          ? rawLine.substring(0, rawLine.length - 1)
+          : rawLine;
       if (!line.startsWith('data:')) continue;
       final String payload = line.substring(5).startsWith(' ')
           ? line.substring(6)
@@ -267,10 +275,21 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
 
   static int _indexOfDoubleNewline(List<int> bytes) {
     for (int i = 0; i < bytes.length - 1; i++) {
-      if (bytes[i] == 0x0A && bytes[i + 1] == 0x0A) return i;
+      if (bytes[i] != 0x0A) continue;
+      if (bytes[i + 1] == 0x0A) return i;
+      if (i < bytes.length - 2 &&
+          bytes[i + 1] == 0x0D &&
+          bytes[i + 2] == 0x0A) {
+        return i;
+      }
     }
     return -1;
   }
+
+  /// Length of the separator found at [sep] by [_indexOfDoubleNewline]
+  /// (2 for `\n\n`, 3 for `\n\r\n` — i.e. CRLF-normalised events).
+  static int _eventBoundaryLength(List<int> bytes, int sep) =>
+      bytes[sep + 1] == 0x0A ? 2 : 3;
 
   /// Extract a text delta (or error) from one SSE event payload.
   /// Mirrors [ClaudeCLIProvider]'s `assistant`-event handler — the
@@ -425,14 +444,17 @@ Future<String?> generateChatTitle(
 Future<String> _emptyContextSnapshot() async => '';
 
 /// Pattern for `[action:<name> key="value" …]` tool-call markers in a
-/// finished assistant reply. v1 surfaces a single action — `log_journal`
-/// — but the parser is generic so a second action only needs an
-/// executor wired in [ChatService].
+/// finished assistant reply.
 ///
-/// `body` group: the action name (e.g. `log_journal`).
-/// `args` group: the raw "key=value …" tail to feed [_parseActionArgs].
+/// Quote-aware on purpose: values are matched as full `"…"` strings
+/// (with `\"` escapes) or bare tokens, so a quoted value containing a
+/// literal `]` (e.g. `title="Pick up [urgent] refill"`) no longer
+/// truncates the tag mid-parse and garbles the write.
+///
+/// Group 1: the action name (e.g. `log_journal`).
+/// Group 2: the raw `key="value" …` tail to feed [_parseActionArgs].
 final RegExp _actionPattern = RegExp(
-  r'\[action:([a-z_]+)\s+([^\]]+)\]',
+  r'\[action:([a-z_]+)((?:\s+[a-z_]+\s*=\s*(?:"(?:[^"\\]|\\.)*"|[^\s\]"]+))+)\s*\]',
 );
 
 /// Action-execution result the orchestrator stamps into the assistant
@@ -441,6 +463,28 @@ final RegExp _actionPattern = RegExp(
 class _ActionResult {
   const _ActionResult({required this.citation});
   final String citation;
+}
+
+/// Outcome of one action pass over a finished reply: the citations of
+/// executed actions plus the RAW markers of destructive actions that
+/// were parsed but deliberately NOT executed (they await the
+/// caregiver's explicit in-app confirmation).
+class _ActionPass {
+  const _ActionPass({
+    this.results = const <_ActionResult>[],
+    this.pendingMarkers = const <String>[],
+  });
+
+  final List<_ActionResult> results;
+  final List<String> pendingMarkers;
+
+  /// Message citations for this pass: executed-action citations first,
+  /// then one `pending_action:` citation per unconfirmed marker.
+  List<String> toCitations() => <String>[
+        for (final _ActionResult r in results) r.citation,
+        for (final String marker in pendingMarkers)
+          '${ChatService.pendingActionCitationPrefix}$marker',
+      ];
 }
 
 /// Result of [ChatService.routeVoiceIntent] — the hands-free center mic
@@ -537,6 +581,14 @@ class ChatService {
   /// (callCount/idFactory assertions stay exact). Production wires
   /// [generateChatTitle] via [chatServiceProvider].
   final ChatTitleGenerator? titleGenerator;
+
+  /// Test-only handle on the fire-and-forget auto-title attempt for the
+  /// most recent [sendMessage]. Null until an attempt is launched (so a
+  /// test can assert "auto-title was NOT attempted" by checking it stayed
+  /// null), then completes when the attempt finishes — letting tests
+  /// await a deterministic signal instead of a wall-clock sleep.
+  @visibleForTesting
+  Future<void>? debugAutoTitleSettled;
 
   /// Send [userText] in the existing [conversationId] thread and stream
   /// the assistant's reply. Yields [Message] snapshots as each repo
@@ -636,14 +688,12 @@ class ChatService {
       if (errored) return;
 
       final String rawBody = buffer.toString();
-      final List<_ActionResult> actionResults = await _executeActions(rawBody);
+      final _ActionPass actionPass = await _executeActions(rawBody);
       final String cleanBody = stripActionMarkers(rawBody);
 
       assistant = assistant.copyWith(
         body: cleanBody,
-        citations: actionResults
-            .map((_ActionResult r) => r.citation)
-            .toList(growable: false),
+        citations: actionPass.toCitations(),
         streamingDone: true,
       );
       await repository.appendMessage(assistant);
@@ -652,8 +702,15 @@ class ChatService {
       // Name the thread from its opening exchange — fire-and-forget so the
       // title write never delays the visible reply. Only on the first turn,
       // and only when a generator is wired (production); tests leave it null.
+      // The attempt's future is parked on [debugAutoTitleSettled] so a test
+      // can await its completion deterministically instead of sleeping a
+      // guessed interval (and assert it was NOT attempted by checking the
+      // field stayed null).
       if (isFirstTurn && titleGenerator != null) {
-        unawaited(_autoTitle(conversationId, userText, cleanBody));
+        final Future<void> attempt =
+            _autoTitle(conversationId, userText, cleanBody);
+        debugAutoTitleSettled = attempt;
+        unawaited(attempt);
       }
     } catch (e, st) {
       // Never let a turn fail SILENTLY (alpha bug: "nothing happens after
@@ -750,11 +807,16 @@ class ChatService {
     // real `add_health_log`), which would write nothing yet flash a false
     // "Done". An unknown/absent tag falls through to a chat so the caregiver
     // always sees a real response.
-    final bool hasKnownAction = _actionPattern
+    final List<String> knownNames = _actionPattern
         .allMatches(rawBody)
         .map((RegExpMatch m) => m.group(1)!)
-        .any(actions.containsKey);
-    if (hasKnownAction) {
+        .where(actions.containsKey)
+        .toList(growable: false);
+    // Destructive intents NEVER complete hands-free: the turn opens as a
+    // chat whose reply carries the pending confirm card, so removing a
+    // medication / cancelling a visit always takes a deliberate tap.
+    final bool hasDestructive = knownNames.any(destructiveActionNames.contains);
+    if (knownNames.isNotEmpty && !hasDestructive) {
       await _executeActions(rawBody);
       final String confirmation = stripActionMarkers(rawBody);
       return VoiceIntentAction(
@@ -787,15 +849,14 @@ class ChatService {
     ));
     // A conversation reply rarely carries an action, but run any it does so
     // a mixed reply still writes; the bubble shows the clean prose.
-    final List<_ActionResult> actionResults = await _executeActions(rawBody);
+    // Destructive tags surface here as pending confirm cards in the thread.
+    final _ActionPass actionPass = await _executeActions(rawBody);
     await repository.appendMessage(Message(
       id: idFactory(),
       conversationId: conversationId,
       role: MessageRole.assistant,
       body: stripActionMarkers(rawBody),
-      citations: actionResults
-          .map((_ActionResult r) => r.citation)
-          .toList(growable: false),
+      citations: actionPass.toCitations(),
       createdAt: now,
       streamingDone: true,
     ));
@@ -809,17 +870,80 @@ class ChatService {
     return '${t.substring(0, 40).trimRight()}…';
   }
 
+  /// Actions that REMOVE or CANCEL the caregiver's data. These are never
+  /// auto-executed from a model reply — in a dementia-care app a silently
+  /// deleted medication or cancelled appointment is a safety event, and
+  /// a crafted journal/med name synced from a circle peer could otherwise
+  /// smuggle such a tag into the prompt (indirect injection). They are
+  /// parked as `pending_action:` citations and run only through
+  /// [confirmPendingAction] after an explicit in-app tap.
+  static const Set<String> destructiveActionNames = <String>{
+    'delete_medication',
+    'cancel_appointment',
+    'delete_task',
+  };
+
+  /// Citation prefix marking a parsed-but-not-executed destructive action
+  /// awaiting confirmation. The remainder of the citation is the raw
+  /// `[action:…]` marker, re-parsed on confirm.
+  static const String pendingActionCitationPrefix = 'pending_action:';
+
+  /// True when [citation] is a pending-confirmation action chip.
+  static bool isPendingActionCitation(String citation) =>
+      citation.startsWith(pendingActionCitationPrefix);
+
+  /// Human description of a pending action citation for the confirm card
+  /// ("Remove the medication “Ibuprofen”?"). Null when the citation isn't
+  /// a parseable pending action (the card then renders a generic label).
+  static String? describePendingAction(String citation) {
+    if (!isPendingActionCitation(citation)) return null;
+    final String marker =
+        citation.substring(pendingActionCitationPrefix.length);
+    final RegExpMatch? m = _actionPattern.firstMatch(marker);
+    if (m == null) return null;
+    final Map<String, String> args = _parseActionArgs(m.group(2)!);
+    switch (m.group(1)) {
+      case 'delete_medication':
+        final String? name = args['name'];
+        return name == null || name.trim().isEmpty
+            ? 'Remove this medication from the list?'
+            : 'Remove the medication “${name.trim()}” from the list?';
+      case 'cancel_appointment':
+        final String? provider = args['provider_name'];
+        return provider == null || provider.trim().isEmpty
+            ? 'Cancel this appointment?'
+            : 'Cancel the appointment with ${provider.trim()}?';
+      case 'delete_task':
+        final String? title = args['title'];
+        return title == null || title.trim().isEmpty
+            ? 'Delete this task?'
+            : 'Delete the task “${title.trim()}”?';
+    }
+    return null;
+  }
+
   /// Run every recognised `[action:…]` marker the assistant emitted in
   /// [body] against the wired executors. Unrecognised actions are
   /// silently dropped (the marker still gets stripped from the
   /// displayed body via [stripActionMarkers]) — better to lose a tool
-  /// call than to fail the whole turn.
-  Future<List<_ActionResult>> _executeActions(String body) async {
+  /// call than to fail the whole turn. Destructive actions are NOT run:
+  /// they come back in [_ActionPass.pendingMarkers] for the confirm-card
+  /// flow. Identical repeated tags are deduplicated (a model that
+  /// stutters the same tag twice must not double-write).
+  Future<_ActionPass> _executeActions(String body) async {
     final List<_ActionResult> results = <_ActionResult>[];
+    final List<String> pendingMarkers = <String>[];
+    final Set<String> seenMarkers = <String>{};
     for (final RegExpMatch m in _actionPattern.allMatches(body)) {
+      final String raw = m.group(0)!;
+      if (!seenMarkers.add(raw)) continue; // duplicate tag — run once
       final String name = m.group(1)!;
       final ChatActionExecutor? executor = actions[name];
       if (executor == null) continue; // unknown / unwired tool — skip
+      if (destructiveActionNames.contains(name)) {
+        pendingMarkers.add(raw);
+        continue;
+      }
       final Map<String, String> args = _parseActionArgs(m.group(2)!);
       try {
         final ChatActionOutcome? outcome = await executor(args);
@@ -833,7 +957,84 @@ class ChatService {
         // would derail the conversation. The marker is still stripped.
       }
     }
-    return results;
+    return _ActionPass(results: results, pendingMarkers: pendingMarkers);
+  }
+
+  /// Execute a destructive action the caregiver just CONFIRMED via its
+  /// in-thread card. Re-parses the marker stored in [citation], runs the
+  /// executor, and rewrites the message's citations — the pending chip is
+  /// removed either way (one decision per card), and a successful
+  /// execution contributes the executor's own citation when it has one.
+  /// Returns true when the action actually ran.
+  Future<bool> confirmPendingAction({
+    required String conversationId,
+    required String messageId,
+    required String citation,
+  }) async {
+    final String marker = isPendingActionCitation(citation)
+        ? citation.substring(pendingActionCitationPrefix.length)
+        : citation;
+    final RegExpMatch? m = _actionPattern.firstMatch(marker);
+    bool ran = false;
+    String? executedCitation;
+    if (m != null) {
+      final ChatActionExecutor? executor = actions[m.group(1)!];
+      if (executor != null) {
+        try {
+          final ChatActionOutcome? outcome =
+              await executor(_parseActionArgs(m.group(2)!));
+          executedCitation = outcome?.citation;
+          ran = true;
+        } catch (_) {
+          ran = false;
+        }
+      }
+    }
+    await _replaceCitation(
+      conversationId: conversationId,
+      messageId: messageId,
+      citation: citation,
+      replacement: executedCitation,
+    );
+    return ran;
+  }
+
+  /// The caregiver declined the confirm card — drop the pending citation
+  /// without executing anything. Idempotent.
+  Future<void> declinePendingAction({
+    required String conversationId,
+    required String messageId,
+    required String citation,
+  }) =>
+      _replaceCitation(
+        conversationId: conversationId,
+        messageId: messageId,
+        citation: citation,
+        replacement: null,
+      );
+
+  /// Rewrite one message's citations: remove [citation], append
+  /// [replacement] when non-null. No-op when the message or citation is
+  /// already gone (double-tap, stale UI).
+  Future<void> _replaceCitation({
+    required String conversationId,
+    required String messageId,
+    required String citation,
+    required String? replacement,
+  }) async {
+    final List<Message> messages =
+        await repository.loadMessages(conversationId);
+    for (final Message message in messages) {
+      if (message.id != messageId) continue;
+      if (!message.citations.contains(citation)) return;
+      final List<String> updated = <String>[
+        for (final String c in message.citations)
+          if (c != citation) c,
+        if (replacement != null) replacement,
+      ];
+      await repository.appendMessage(message.copyWith(citations: updated));
+      return;
+    }
   }
 
   /// Strip every recognised `[action:…]` marker from [body] so the
@@ -907,12 +1108,83 @@ class ChatService {
 
 }
 
-/// Riverpod-wired chat backend (TASKS.md Phase 11.3). Defaults to the
-/// real [ClaudeShimChatBackend] so `flutter run` with the local shim
-/// up streams real replies; test harnesses override this provider
-/// with their own scripted backend.
+/// Deterministic, offline [ChatLLMBackend] for demo + test builds —
+/// the chat counterpart of [FakeLLMProvider]. Streams a short, canned,
+/// Dr.-Natali-voiced reply in word chunks (so the streaming UI animates
+/// exactly as live) chosen by simple keyword so the pitch demo feels
+/// responsive without a network, a shim, or nondeterminism. Never emits
+/// an `[action:…]` tag — demo chat reads, it doesn't write.
+class DemoChatBackend implements ChatLLMBackend {
+  const DemoChatBackend({this.chunkDelay = const Duration(milliseconds: 40)});
+
+  final Duration chunkDelay;
+
+  static const String _sleepReply =
+      'Nights are the hardest shift of all — you are not doing this '
+      'wrong. Try a low light and a calm line: "You\'re safe. I\'m '
+      'right here with you." Keep the room boring on purpose; '
+      'stimulation reads as morning. If tonight stays rough, rest when '
+      'she rests tomorrow — the chores can wait.';
+
+  static const String _eatingReply =
+      'Appetite fades before hunger does — this is the disease, not '
+      'your cooking. Offer one food at a time on a plain plate, and '
+      'sit and eat WITH her: "I made us a little something." Finger '
+      'foods beat cutlery on hard days. Note what she does eat and '
+      'bring the list to her doctor.';
+
+  static const String _defaultReply =
+      'That sounds like a heavy moment, and you handled it by being '
+      'there — that counts. Step into her reality rather than '
+      'correcting it: "You\'re safe. I\'ve got it handled." Then '
+      'redirect to something familiar — a photo, a song, folding warm '
+      'towels. You are doing better than you think.';
+
+  static String replyFor(String latestUserText) {
+    final String t = latestUserText.toLowerCase();
+    if (t.contains('sleep') || t.contains('night') || t.contains('awake')) {
+      return _sleepReply;
+    }
+    if (t.contains('eat') || t.contains('food') || t.contains('meal')) {
+      return _eatingReply;
+    }
+    return _defaultReply;
+  }
+
+  @override
+  Stream<ChatDelta> streamReply({
+    required String systemPrompt,
+    required List<ChatTurn> history,
+  }) async* {
+    final String latest = history.isEmpty ? '' : history.last.content;
+    final String reply = replyFor(latest);
+    final List<String> words = reply.split(' ');
+    final StringBuffer chunk = StringBuffer();
+    for (int i = 0; i < words.length; i++) {
+      chunk.write(words[i]);
+      if (i < words.length - 1) chunk.write(' ');
+      if ((i + 1) % 4 == 0 || i == words.length - 1) {
+        yield ChatDeltaText(chunk.toString());
+        chunk.clear();
+        if (i < words.length - 1) {
+          await Future<void>.delayed(chunkDelay);
+        }
+      }
+    }
+  }
+}
+
+/// Riverpod-wired chat backend (TASKS.md Phase 11.3). Real shim-backed
+/// impl by default; the deterministic [DemoChatBackend] under the same
+/// fake-engine rule the decoder uses (`flutter test`, or an explicit
+/// `--dart-define=USE_FAKE_LLM=true` — the DEMO_MODE pitch build sets
+/// it), so a demo run's chat never depends on the network. Test
+/// harnesses still override this provider with their own scripted
+/// backends.
 @Riverpod(keepAlive: true)
-ChatLLMBackend chatLLMBackend(Ref ref) => const ClaudeShimChatBackend();
+ChatLLMBackend chatLLMBackend(Ref ref) => useFakeLLMEngine
+    ? const DemoChatBackend()
+    : const ClaudeShimChatBackend();
 
 /// Riverpod-wired singleton (TASKS.md Phase 11.3). Screens and tests
 /// that want the chat orchestrator read `ref.watch(chatServiceProvider)`

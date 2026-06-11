@@ -556,10 +556,12 @@ describe('POST /api/v1/posts', () => {
       body: 'every afternoon, like clockwork',
       vote_count: 0,
       hidden: false,
-      crisis_flagged: false,
     });
     expect(typeof body.id).toBe('string');
     expect(body.crisis_resources).toBeUndefined();
+    // The triage flag is private (author/moderators/watchdog only) —
+    // it must not appear on any response (2026-06-11).
+    expect(body.crisis_flagged).toBeUndefined();
 
     const db = drizzle(env.FORUM_DB);
     const rows = await db.select().from(posts);
@@ -581,13 +583,15 @@ describe('POST /api/v1/posts', () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
       id: string;
-      crisis_flagged: boolean;
+      crisis_flagged?: boolean;
       crisis_resources?: {
         crisis_card_url: string;
         hotlines: Array<{ number: string }>;
       };
     };
-    expect(body.crisis_flagged).toBe(true);
+    // The flag stays server-side; the author's banner is driven by
+    // crisis_resources on THIS create response only (2026-06-11).
+    expect(body.crisis_flagged).toBeUndefined();
     expect(body.crisis_resources).toBeDefined();
     expect(body.crisis_resources!.crisis_card_url).toBe('/crisis');
     expect(body.crisis_resources!.hotlines.length).toBeGreaterThan(0);

@@ -117,21 +117,21 @@ class ActivityDoseEntry {
   final DoseStatus status;
 }
 
-/// The category-dot hue (Phase 14.32). Dose / note / appointment match the
-/// Home Recent Activity card's hues so the two surfaces share one color
-/// language; task / shift / expense map onto the §3.1 brand tokens the
-/// shared calendar already uses (task → `link`, shift → `success`), with
-/// expense on brand navy. Exposed so tests assert the mapping without
-/// reaching into private state.
+/// The category-dot hue (Phase 14.32). Every category resolves through
+/// the §3.1 brand tokens via `context.cb`, matching the shared calendar's
+/// `_kindColor` mapping for the same event kinds (dose → `link`, note →
+/// `accentDeep`, appointment → `cta`, task → `link`, shift → `success`),
+/// with expense on brand navy. Exposed so tests assert the mapping
+/// without reaching into private state.
 @visibleForTesting
 Color activityCategoryColor(BuildContext context, ActivityCategory category) {
   switch (category) {
     case ActivityCategory.dose:
-      return ActivityScreen.doseColor; // teal
+      return context.cb.link;
     case ActivityCategory.note:
-      return ActivityScreen.noteColor; // plum
+      return context.cb.accentDeep;
     case ActivityCategory.appointment:
-      return ActivityScreen.appointmentColor; // coral
+      return context.cb.cta;
     case ActivityCategory.task:
       return context.cb.link; // cool blue
     case ActivityCategory.shift:
@@ -420,14 +420,6 @@ DateTime Function() activityClock(Ref ref) => DateTime.now;
 /// detail. Pull-to-refresh re-queries the source providers.
 class ActivityScreen extends ConsumerStatefulWidget {
   const ActivityScreen({super.key});
-
-  // Category-dot hues. Dose teal / note plum / appointment coral match the
-  // Home Recent Activity card so the dashboard + feed share one color
-  // language; task / shift / expense resolve to brand tokens (see
-  // [activityCategoryColor]).
-  static const Color doseColor = Color(0xFF1F8A70); // teal
-  static const Color noteColor = Color(0xFF7B4B94); // plum
-  static const Color appointmentColor = Color(0xFFE5573F); // coral
 
   /// The "All" chip.
   static const Key allChipKey = Key('activity-chip-all');

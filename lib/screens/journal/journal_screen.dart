@@ -7,6 +7,8 @@ import '../../models/journal_entry.dart';
 import '../../providers/journal_entries_provider.dart';
 import '../../providers/pattern_detector_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/path_header.dart';
 import 'journal_wizard_screen.dart' show JournalWizardArgs;
 
@@ -111,8 +113,8 @@ class JournalScreen extends ConsumerWidget {
                 // wedge `pumpAndSettle` in widget tests that don't override
                 // storage (e.g. the route-registration probes).
                 loading: () => const SizedBox.shrink(),
-                error: (Object error, StackTrace _) =>
-                    _ErrorView(message: '$error'),
+                error: (Object error, StackTrace _) => FormErrorView(
+                    message: "We couldn't load the journal.\n$error"),
                 data: (List<JournalEntry> entries) {
                   if (entries.isEmpty) {
                     return const _EmptyState();
@@ -261,26 +263,76 @@ class _PopulatedView extends StatelessWidget {
     final _GroupedEntries grouped = _GroupedEntries.from(entries, now);
     final _WeekStats stats = _WeekStats.from(entries, now);
 
-    return ListView(
+    // Flatten the summary card + grouped sections into one item list
+    // (same shape as the calendar's _GroupedAgenda) so the unbounded
+    // entry history builds lazily instead of all at once.
+    final List<_JournalListItem> items = <_JournalListItem>[
+      const _SummaryItem(),
+      if (alerts.isNotEmpty) ...<_JournalListItem>[
+        const _GapItem(12),
+        const _AlertsItem(),
+      ],
+      const _GapItem(20),
+      for (final _GroupedSection section in grouped.sections)
+        ...<_JournalListItem>[
+          _HeaderItem(section.label),
+          const _GapItem(8),
+          for (final JournalEntry entry in section.entries) _EntryItem(entry),
+          const _GapItem(16),
+        ],
+    ];
+
+    return ListView.builder(
       key: JournalScreen.entriesListKey,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-      children: <Widget>[
-        _WeekSummaryCard(stats: stats),
-        if (alerts.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 12),
-          _PatternAlertCard(alerts: alerts),
-        ],
-        const SizedBox(height: 20),
-        for (final _GroupedSection section in grouped.sections) ...<Widget>[
-          _GroupHeader(label: section.label),
-          const SizedBox(height: 8),
-          for (final JournalEntry entry in section.entries)
-            _EntryTile(entry: entry, now: now),
-          const SizedBox(height: 16),
-        ],
-      ],
+      itemCount: items.length,
+      itemBuilder: (BuildContext context, int i) {
+        switch (items[i]) {
+          case _SummaryItem():
+            return _WeekSummaryCard(stats: stats);
+          case _AlertsItem():
+            return _PatternAlertCard(alerts: alerts);
+          case _GapItem(height: final double height):
+            return SizedBox(height: height);
+          case _HeaderItem(label: final String label):
+            return _GroupHeader(label: label);
+          case _EntryItem(entry: final JournalEntry entry):
+            return _EntryTile(entry: entry, now: now);
+        }
+      },
     );
   }
+}
+
+/// One row in the flattened journal list — the summary card, the alerts
+/// card, a fixed-height gap, a group header, or an entry tile. Mirrors
+/// the calendar's `_UpcomingItem` flatten so the ListView can build
+/// rows lazily without changing the rendered order or spacing.
+sealed class _JournalListItem {
+  const _JournalListItem();
+}
+
+class _SummaryItem extends _JournalListItem {
+  const _SummaryItem();
+}
+
+class _AlertsItem extends _JournalListItem {
+  const _AlertsItem();
+}
+
+class _GapItem extends _JournalListItem {
+  const _GapItem(this.height);
+  final double height;
+}
+
+class _HeaderItem extends _JournalListItem {
+  const _HeaderItem(this.label);
+  final String label;
+}
+
+class _EntryItem extends _JournalListItem {
+  const _EntryItem(this.entry);
+  final JournalEntry entry;
 }
 
 // ---------------------------------------------------------------------------
@@ -434,7 +486,7 @@ class _EntryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final String time = _formatClock(entry.createdAt);
+    final String time = formatClock12h(entry.createdAt);
     final String? whatWorked = _whatWorkedSub(entry);
 
     return Semantics(
@@ -494,45 +546,8 @@ class _EntryTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Error fallback
-// ---------------------------------------------------------------------------
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load the journal.\n$message",
-          style: textTheme.bodyLarge?.copyWith(
-            color: context.cb.text,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Pretty-prints [t] as "7:42 PM" — 12-hour clock with no leading zero
-/// on the hour to keep the entry tile's leading column narrow.
-String _formatClock(DateTime t) {
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '$hour:$minute $suffix';
-}
 
 /// "What worked" sub-line for an entry tile (BUILD_SPEC.md §5.5).
 ///

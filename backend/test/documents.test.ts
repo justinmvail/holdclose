@@ -163,3 +163,104 @@ describe('documents blob storage', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('documents blob hardening', () => {
+  it.each([
+    ['text/html'],
+    ['image/svg+xml'],
+    ['application/javascript'],
+  ])('rejects a %s upload with 415 and stores nothing', async (type) => {
+    await bootstrap('cb-doc-mime');
+    const circle = await createCircle('cb-doc-mime');
+
+    const res = await authedFetch(
+      `/api/v1/documents/blob/${circle.id}/sneaky.html`,
+      {
+        method: 'PUT',
+        sub: 'cb-doc-mime',
+        headers: { 'Content-Type': type },
+        body: new Uint8Array([60, 104, 116, 109, 108, 62]),
+      },
+    );
+    expect(res.status).toBe(415);
+    expect(await res.json()).toEqual({ error: 'unsupported_media_type' });
+
+    // The rejected blob must not exist.
+    const get = await authedFetch(
+      `/api/v1/documents/blob/${circle.id}/sneaky.html`,
+      { sub: 'cb-doc-mime' },
+    );
+    expect(get.status).toBe(404);
+  });
+
+  it('accepts application/pdf', async () => {
+    await bootstrap('cb-doc-pdf');
+    const circle = await createCircle('cb-doc-pdf');
+
+    const res = await authedFetch(
+      `/api/v1/documents/blob/${circle.id}/poa.pdf`,
+      {
+        method: 'PUT',
+        sub: 'cb-doc-pdf',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('normalizes a parameterized/cased Content-Type before the check', async () => {
+    await bootstrap('cb-doc-param');
+    const circle = await createCircle('cb-doc-param');
+
+    const res = await authedFetch(
+      `/api/v1/documents/blob/${circle.id}/scan.jpg`,
+      {
+        method: 'PUT',
+        sub: 'cb-doc-param',
+        headers: { 'Content-Type': 'IMAGE/JPEG; charset=utf-8' },
+        body: new Uint8Array([1, 2, 3]),
+      },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('treats a missing Content-Type as application/octet-stream', async () => {
+    await bootstrap('cb-doc-notype');
+    const circle = await createCircle('cb-doc-notype');
+
+    // fetch() adds no default Content-Type for a raw Uint8Array body.
+    const res = await authedFetch(
+      `/api/v1/documents/blob/${circle.id}/raw.bin`,
+      {
+        method: 'PUT',
+        sub: 'cb-doc-notype',
+        body: new Uint8Array([7, 7, 7]),
+      },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('serves downloads with nosniff + attachment headers', async () => {
+    await bootstrap('cb-doc-headers');
+    const circle = await createCircle('cb-doc-headers');
+
+    await authedFetch(`/api/v1/documents/blob/${circle.id}/card.png`, {
+      method: 'PUT',
+      sub: 'cb-doc-headers',
+      headers: { 'Content-Type': 'image/png' },
+      body: new Uint8Array([137, 80, 78, 71]),
+    });
+
+    const res = await authedFetch(
+      `/api/v1/documents/blob/${circle.id}/card.png`,
+      { sub: 'cb-doc-headers' },
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('Content-Disposition')).toBe('attachment');
+    expect(res.headers.get('Content-Type')).toBe('image/png');
+    // Drain the R2 stream so no storage handle outlives the test.
+    await res.arrayBuffer();
+  });
+});

@@ -135,8 +135,10 @@ class CommunityFeed extends _$CommunityFeed {
   @override
   CommunityFeedState build() {
     // Local-first: paint the last-seen page from the on-device cache FIRST
-    // (instant + offline), then refresh from the backend. Riverpod handles
-    // disposal — `state =` no-ops after teardown via the `mounted` guard.
+    // (instant + offline), then refresh from the backend. Every async path
+    // re-checks `ref.mounted` before writing state — this notifier is
+    // autoDispose (tab switch tears it down mid-fetch) and Riverpod 3
+    // THROWS on a post-dispose state write.
     unawaited(_init());
     return const CommunityFeedState.initial();
   }
@@ -147,6 +149,7 @@ class CommunityFeed extends _$CommunityFeed {
   /// refreshing, and a successful load replaces the cache with fresh posts.
   Future<void> _init() async {
     final List<ForumPost> cached = await _readCache(ForumPostSort.hot);
+    if (!ref.mounted) return;
     if (cached.isNotEmpty && _stillHot()) {
       state = state.copyWith(posts: cached);
     }
@@ -222,6 +225,7 @@ class CommunityFeed extends _$CommunityFeed {
         before: before,
         limit: communityFeedPageSize,
       );
+      if (!ref.mounted) return;
       final List<ForumPost> merged = append
           ? <ForumPost>[...state.posts, ...page]
           : page;
@@ -238,6 +242,7 @@ class CommunityFeed extends _$CommunityFeed {
         unawaited(_writeCache(sort, page));
       }
     } catch (error) {
+      if (!ref.mounted) return;
       // Offline / backend down. Local-first: prefer showing CONTENT over an
       // error. On a first-page load, keep whatever's already on screen, or
       // fall back to the cached first page, so the feed stays readable with no
@@ -245,6 +250,7 @@ class CommunityFeed extends _$CommunityFeed {
       if (!append) {
         List<ForumPost> show = state.posts;
         if (show.isEmpty) show = await _readCache(sort);
+        if (!ref.mounted) return;
         if (show.isNotEmpty) {
           state = state.copyWith(
             sort: sort,

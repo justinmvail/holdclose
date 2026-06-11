@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:careblazers/providers/auth_provider.dart';
 import 'package:careblazers/providers/voice_capture_provider.dart';
 import 'package:careblazers/services/feedback_service.dart';
+import 'package:careblazers/services/log_buffer.dart';
 import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/feedback/feedback_sheet.dart';
 import 'package:flutter/material.dart';
@@ -169,6 +170,50 @@ void main() {
 
     expect(controller.submitted!.hasScreenshot, isFalse);
     expect(controller.lastScreenshot, isNull);
+  });
+
+  testWidgets('the log-snapshot consent toggle is visible and ON by default',
+      (WidgetTester tester) async {
+    final _RecordingController controller = _RecordingController();
+    LogBuffer.instance.add('a line the default consent includes');
+    await tester.pumpWidget(host(
+      controller: controller,
+      nameStore: _FakeNameStore('Sam'),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(FeedbackSheet.logsToggleKey), findsOneWidget);
+    await tester.enterText(
+        find.byKey(FeedbackSheet.messageFieldKey), 'context attached');
+    await tester.pump();
+    await tester.tap(find.byKey(FeedbackSheet.sendButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(controller.submitted!.logs, isNotEmpty);
+  });
+
+  testWidgets('logs toggle off drops the log snapshot from the submission '
+      '(2026-06-11 consent)', (WidgetTester tester) async {
+    final _RecordingController controller = _RecordingController();
+    // Make sure there IS something in the buffer to decline.
+    LogBuffer.instance.add('a line that must NOT ride along when declined');
+    await tester.pumpWidget(host(
+      controller: controller,
+      nameStore: _FakeNameStore('Sam'),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(FeedbackSheet.messageFieldKey), 'no logs please');
+    await tester.pump();
+    await tester.tap(find.byKey(FeedbackSheet.logsToggleKey));
+    await tester.pump();
+    await tester.tap(find.byKey(FeedbackSheet.sendButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(controller.submitted!.logs, isEmpty);
   });
 
   testWidgets('mic dictates the report into the message field '

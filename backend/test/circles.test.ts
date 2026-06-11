@@ -194,7 +194,7 @@ describe('POST /api/v1/circles/:id/invites', () => {
     expect(await res.json()).toEqual({ error: 'forbidden' });
   });
 
-  it('mints an invite token with a 7-day expiry', async () => {
+  it('mints an invite token with a 48-hour expiry', async () => {
     await bootstrap('cb-inv-mint');
     const circle = (await (
       await authedFetch('/api/v1/circles', {
@@ -218,9 +218,9 @@ describe('POST /api/v1/circles/:id/invites', () => {
     expect(typeof body.token).toBe('string');
     expect(body.circle_id).toBe(circle.id);
     const ttl = new Date(body.expires_at).getTime() - Date.now();
-    // ~7 days, allow generous slack for test timing.
-    expect(ttl).toBeGreaterThan(6.9 * 24 * 60 * 60 * 1000);
-    expect(ttl).toBeLessThan(7.1 * 24 * 60 * 60 * 1000);
+    // ~48h, allow generous slack for test timing.
+    expect(ttl).toBeGreaterThan(47.5 * 60 * 60 * 1000);
+    expect(ttl).toBeLessThan(48.5 * 60 * 60 * 1000);
   });
 });
 
@@ -337,5 +337,72 @@ describe('POST /api/v1/circles/join', () => {
     });
     expect(res.status).toBe(410);
     expect(await res.json()).toEqual({ error: 'invite_expired' });
+  });
+
+  it('invites are SINGLE-USE — a second (different) user gets 410 '
+      + 'invite_used', async () => {
+    const { token } = await ownerWithInvite();
+    await bootstrap('cb-join-first');
+    await bootstrap('cb-join-second');
+
+    const first = await authedFetch('/api/v1/circles/join', {
+      method: 'POST',
+      sub: 'cb-join-first',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    expect(first.status).toBe(200);
+
+    const second = await authedFetch('/api/v1/circles/join', {
+      method: 'POST',
+      sub: 'cb-join-second',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    expect(second.status).toBe(410);
+    expect(await second.json()).toEqual({ error: 'invite_used' });
+  });
+
+  it('records the consumption (used_at + used_by) on join', async () => {
+    const { token } = await ownerWithInvite();
+    const joiner = await bootstrap('cb-join-consume');
+
+    await authedFetch('/api/v1/circles/join', {
+      method: 'POST',
+      sub: 'cb-join-consume',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+
+    const db = drizzle(env.FORUM_DB);
+    const [invite] = await db
+      .select()
+      .from(circleInvites)
+      .where(eq(circleInvites.token, token));
+    expect(invite.usedAt).not.toBeNull();
+    expect(invite.usedByProfileId).toBe(joiner.id);
+  });
+
+  it('an EXISTING member re-tapping a consumed invite still gets the '
+      + 'circle back (idempotent, not an error)', async () => {
+    const { circle, token } = await ownerWithInvite();
+    await bootstrap('cb-join-again');
+
+    await authedFetch('/api/v1/circles/join', {
+      method: 'POST',
+      sub: 'cb-join-again',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    // The invite is now consumed by this same user — re-redeeming must
+    // short-circuit on the existing membership, not 410.
+    const again = await authedFetch('/api/v1/circles/join', {
+      method: 'POST',
+      sub: 'cb-join-again',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { id: string }).id).toBe(circle.id);
   });
 });

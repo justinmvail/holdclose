@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -9,6 +7,9 @@ import '../../providers/active_patient_provider.dart';
 import '../../providers/patient_timeline_provider.dart';
 import '../../services/medication_repository.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
+import '../../widgets/form/id_factory.dart';
 import '../../widgets/path_header.dart';
 
 part 'dose_log_screen.g.dart';
@@ -27,11 +28,7 @@ DateTime Function() doseLogClock(Ref ref) => DateTime.now;
 /// dose-log rows compare equal across runs.
 typedef DoseLogIdFactory = String Function();
 
-String _defaultDoseLogIdFactory() {
-  final int ms = DateTime.now().millisecondsSinceEpoch;
-  final int rand = math.Random().nextInt(1 << 32);
-  return 'log-$ms-$rand';
-}
+String _defaultDoseLogIdFactory() => mintId('log');
 
 @Riverpod(keepAlive: true)
 DoseLogIdFactory doseLogIdFactory(Ref ref) => _defaultDoseLogIdFactory;
@@ -190,7 +187,8 @@ class _DoseLogScreenState extends ConsumerState<DoseLogScreen> {
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load today's doses.\n$e"),
                 data: (List<ScheduledDose> doses) {
                   final Widget content = doses.isEmpty
                       ? const _EmptyState()
@@ -504,7 +502,7 @@ class _DoseRow extends ConsumerWidget {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: <Widget>[
                             Text(
-                              _formatClock(dose.scheduledFor),
+                              formatClock12h(dose.scheduledFor),
                               style: textTheme.bodyMedium?.copyWith(
                                 color: context.cb.primarySoft,
                                 fontWeight: FontWeight.w700,
@@ -798,38 +796,9 @@ class _LateBadge extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load today's doses.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Formatting + label helpers
 // ---------------------------------------------------------------------------
-
-String _formatClock(DateTime t) {
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '$hour:$minute $suffix';
-}
 
 String _labelFor(DoseStatus status) {
   switch (status) {
@@ -870,7 +839,7 @@ Color _colorFor(BuildContext context, DoseStatus status) {
 }
 
 String _rowSemanticsLabel(ScheduledDose dose) {
-  final String clock = _formatClock(dose.scheduledFor);
+  final String clock = formatClock12h(dose.scheduledFor);
   final Medication med = dose.medication;
   final DoseLog? log = dose.log;
   if (log == null) {

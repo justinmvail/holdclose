@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +12,9 @@ import '../../providers/care_tasks_provider.dart' show currentCaregiverIdProvide
 import '../../providers/expenses_provider.dart';
 import '../../providers/photo_attacher_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
+import '../../widgets/form/id_factory.dart';
 import '../../widgets/path_header.dart';
 
 part 'expenses_screen.g.dart';
@@ -22,11 +24,7 @@ part 'expenses_screen.g.dart';
 /// invite / appointment form id factories.
 typedef ExpenseIdFactory = String Function();
 
-String _defaultExpenseIdFactory() {
-  final int ms = DateTime.now().millisecondsSinceEpoch;
-  final int rand = math.Random().nextInt(1 << 32);
-  return 'expense-$ms-$rand';
-}
+String _defaultExpenseIdFactory() => mintId('expense');
 
 /// Id factory the create form uses. Tests override this with a monotonic
 /// counter so the minted ids are stable across runs.
@@ -94,7 +92,8 @@ class ExpensesScreen extends ConsumerWidget {
       body: SafeArea(
         child: async.when(
           loading: () => const SizedBox.shrink(),
-          error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+          error: (Object e, StackTrace _) => FormErrorView(
+              message: "We couldn't load the expenses.\n$e"),
           data: (List<ExpenseMonthGroup> groups) {
             final int currentTotal = groups
                 .where((ExpenseMonthGroup g) => g.monthKey == currentMonthKey)
@@ -235,13 +234,14 @@ class _Ledger extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
+    // Builder form so the (unbounded) ledger builds month sections
+    // lazily; render order and widgets are unchanged.
+    return ListView.builder(
       key: ExpensesScreen.listKey,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      children: <Widget>[
-        for (final ExpenseMonthGroup group in groups)
-          _MonthSection(group: group, me: me),
-      ],
+      itemCount: groups.length,
+      itemBuilder: (BuildContext context, int i) =>
+          _MonthSection(group: groups[i], me: me),
     );
   }
 }
@@ -503,25 +503,52 @@ class _ReceiptChip extends StatelessWidget {
   }
 }
 
-class _MiniAvatar extends StatelessWidget {
+class _MiniAvatar extends StatefulWidget {
   const _MiniAvatar({required this.name, this.avatarPath});
 
   final String name;
   final String? avatarPath;
 
   @override
+  State<_MiniAvatar> createState() => _MiniAvatarState();
+}
+
+class _MiniAvatarState extends State<_MiniAvatar> {
+  /// Whether [_MiniAvatar.avatarPath] points at a real file — resolved
+  /// once per path (initState / path change) instead of stat-ing the
+  /// filesystem on every build.
+  bool _hasPhoto = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolvePhoto();
+  }
+
+  @override
+  void didUpdateWidget(_MiniAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.avatarPath != widget.avatarPath) _resolvePhoto();
+  }
+
+  void _resolvePhoto() {
+    final String? path = widget.avatarPath;
+    _hasPhoto = path != null && File(path).existsSync();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final String? path = avatarPath;
-    final bool hasPhoto = path != null && File(path).existsSync();
+    final String? path = widget.avatarPath;
+    final bool hasPhoto = _hasPhoto;
     return CircleAvatar(
       radius: 12,
       backgroundColor: context.cb.primarySoft.withValues(alpha: 0.14),
-      backgroundImage: hasPhoto ? FileImage(File(path)) : null,
+      backgroundImage: hasPhoto ? FileImage(File(path!)) : null,
       child: hasPhoto
           ? null
           : Text(
-              initials(name),
+              initials(widget.name),
               style: textTheme.bodyMedium?.copyWith(
                 color: context.cb.primary,
                 fontWeight: FontWeight.w700,
@@ -890,7 +917,7 @@ class _PaidDateRow extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Semantics(
       button: true,
-      label: 'Paid on ${formatDate(paidAt)}. Change the paid date.',
+      label: 'Paid on ${formatMonthDayYear(paidAt)}. Change the paid date.',
       child: OutlinedButton.icon(
         key: ExpensesScreen.paidDateButtonKey,
         onPressed: onPick,
@@ -898,7 +925,7 @@ class _PaidDateRow extends StatelessWidget {
         label: Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            'Paid ${formatDate(paidAt)}',
+            'Paid ${formatMonthDayYear(paidAt)}',
             style: textTheme.labelLarge?.copyWith(color: context.cb.link),
           ),
         ),
@@ -916,23 +943,50 @@ class _PaidDateRow extends StatelessWidget {
 /// the journal entry's `_PhotoRow`: an outlined "Attach receipt" /
 /// "Replace receipt" button next to a thumbnail once a path is set. The
 /// underlying picker is the shared [photoAttacherProvider] seam.
-class _ReceiptRow extends StatelessWidget {
+class _ReceiptRow extends StatefulWidget {
   const _ReceiptRow({required this.path, required this.onPick});
 
   final String? path;
   final VoidCallback onPick;
 
   @override
+  State<_ReceiptRow> createState() => _ReceiptRowState();
+}
+
+class _ReceiptRowState extends State<_ReceiptRow> {
+  /// Whether [_ReceiptRow.path] points at a real file — resolved once
+  /// per path (initState / attach / replace) instead of stat-ing the
+  /// filesystem on every build.
+  bool _hasPhoto = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolvePhoto();
+  }
+
+  @override
+  void didUpdateWidget(_ReceiptRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path) _resolvePhoto();
+  }
+
+  void _resolvePhoto() {
+    final String? path = widget.path;
+    _hasPhoto = path != null && File(path).existsSync();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    final bool hasPhoto =
-        path != null && File(path!).existsSync();
+    final String? path = widget.path;
+    final bool hasPhoto = _hasPhoto;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
         OutlinedButton.icon(
           key: ExpensesScreen.receiptButtonKey,
-          onPressed: onPick,
+          onPressed: widget.onPick,
           icon: Icon(
             Icons.photo_camera_outlined,
             color: context.cb.primary,
@@ -961,7 +1015,7 @@ class _ReceiptRow extends StatelessWidget {
               ),
             ),
             child: hasPhoto
-                ? Image.file(File(path!), fit: BoxFit.cover)
+                ? Image.file(File(path), fit: BoxFit.cover)
                 : Icon(
                     Icons.receipt_long_outlined,
                     color: context.cb.primarySoft,
@@ -1021,27 +1075,6 @@ class _ChoicePill extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load the expenses.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -1068,15 +1101,6 @@ String monthLabel(String monthKey) {
   }
   return '${_monthsLong[month - 1]} $year';
 }
-
-const List<String> _monthsShort = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-/// "Jun 3, 2026" — the paid date shown on the create form's date button.
-String formatDate(DateTime date) =>
-    '${_monthsShort[date.month - 1]} ${date.day}, ${date.year}';
 
 /// Format integer [cents] as money in [currency]. USD renders with a `$`
 /// and thousands separators ("$1,234.56"); any other currency prefixes its

@@ -96,6 +96,24 @@ class ChatScreen extends ConsumerStatefulWidget {
   /// bubble exists. Lets the caregiver know something's happening.
   static const Key typingIndicatorKey = Key('chat-screen-typing-indicator');
 
+  /// The always-visible one-line disclaimer under the composer — the
+  /// trusted, code-side counterpart of the decoder result's footer
+  /// (CLAUDE.md: medical-advice guardrails are non-negotiable).
+  static const Key disclaimerKey = Key('chat-screen-disclaimer');
+
+  /// Disclaimer copy. Short, brand-voiced, no exclamation marks.
+  static const String disclaimerText =
+      'Coaching support, not medical advice. In an emergency, call 911.';
+
+  /// Confirm-card keys for a pending destructive action (delete/cancel)
+  /// the coach proposed — the action runs ONLY via the confirm button.
+  static Key pendingActionCardKey(String citation) =>
+      Key('chat-pending-action-$citation');
+  static Key pendingActionConfirmKey(String citation) =>
+      Key('chat-pending-action-confirm-$citation');
+  static Key pendingActionDeclineKey(String citation) =>
+      Key('chat-pending-action-decline-$citation');
+
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
@@ -490,6 +508,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           // race) and on every non-final bubble.
                           onRetry:
                               (!_sending && isLast) ? _retryLast : null,
+                          onPendingDecision: (String citation,
+                                  {required bool confirmed}) =>
+                              _resolvePendingAction(
+                            m,
+                            citation,
+                            confirmed: confirmed,
+                          ),
                         );
                       },
                     ),
@@ -501,10 +526,71 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               sending: _sending,
               onSend: _send,
             ),
+            // Trusted, code-side medical-advice reminder — the chat/voice
+            // counterpart of the decoder result's footer. Always visible;
+            // never sourced from model output.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                ChatScreen.disclaimerText,
+                key: ChatScreen.disclaimerKey,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.cb.primarySoft,
+                    ),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  /// Resolve a pending destructive-action confirm card: run it (confirm)
+  /// or discard it (keep) through the service, then refresh this thread's
+  /// messages from the repository so the card disappears in place.
+  Future<void> _resolvePendingAction(
+    Message message,
+    String citation, {
+    required bool confirmed,
+  }) async {
+    final ChatService service = ref.read(chatServiceProvider);
+    bool ran = false;
+    if (confirmed) {
+      ran = await service.confirmPendingAction(
+        conversationId: message.conversationId,
+        messageId: message.id,
+        citation: citation,
+      );
+    } else {
+      await service.declinePendingAction(
+        conversationId: message.conversationId,
+        messageId: message.id,
+        citation: citation,
+      );
+    }
+    final List<Message> fresh =
+        await service.repository.loadMessages(message.conversationId);
+    if (!mounted) return;
+    setState(() {
+      for (final Message m in fresh) {
+        if (_messages.containsKey(m.id)) _messages[m.id] = m;
+      }
+    });
+    if (!confirmed) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            ran
+                ? 'Done.'
+                : "We couldn't make that change. Please try it from its "
+                    'screen.',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
   }
 }
 
@@ -598,6 +684,7 @@ class _MessageRow extends StatelessWidget {
     required this.streamingBodyStream,
     required this.isStreaming,
     this.onRetry,
+    this.onPendingDecision,
   });
 
   final Message message;
@@ -608,6 +695,11 @@ class _MessageRow extends StatelessWidget {
   /// allowed (no stream in flight); the bubble itself decides whether to
   /// show the affordance based on [chatBodyHasError].
   final VoidCallback? onRetry;
+
+  /// Resolve a pending destructive-action confirm card on this message
+  /// (confirmed = run it, false = keep things as they are).
+  final void Function(String citation, {required bool confirmed})?
+      onPendingDecision;
 
   @override
   Widget build(BuildContext context) {
@@ -628,6 +720,7 @@ class _MessageRow extends StatelessWidget {
         streamingBodyStream: streamingBodyStream,
         isStreaming: isStreaming,
         onRetry: onRetry,
+        onPendingDecision: onPendingDecision,
         textStyle: textTheme.bodyLarge?.copyWith(
           color: context.cb.primary,
           height: 1.4,
@@ -717,6 +810,7 @@ class _AssistantBubble extends StatelessWidget {
     required this.isStreaming,
     required this.textStyle,
     this.onRetry,
+    this.onPendingDecision,
   });
 
   final Message message;
@@ -728,6 +822,10 @@ class _AssistantBubble extends StatelessWidget {
   /// row only when this is a finalised, errored bubble and a retry is
   /// currently allowed.
   final VoidCallback? onRetry;
+
+  /// Resolve a pending destructive-action confirm card (run / keep).
+  final void Function(String citation, {required bool confirmed})?
+      onPendingDecision;
 
   @override
   Widget build(BuildContext context) {
@@ -787,6 +885,19 @@ class _AssistantBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             body,
+            // Pending destructive actions (delete / cancel) the coach
+            // proposed: each renders a confirm card and runs ONLY on an
+            // explicit "Confirm" tap. Suppressed mid-stream (citations
+            // land at finalisation).
+            if (!isStreaming)
+              for (final String citation in message.citations)
+                if (ChatService.isPendingActionCitation(citation)) ...<Widget>[
+                  const SizedBox(height: 10),
+                  _PendingActionCard(
+                    citation: citation,
+                    onDecision: onPendingDecision,
+                  ),
+                ],
             if (showRetry) ...<Widget>[
               const SizedBox(height: 8),
               Align(
@@ -814,6 +925,83 @@ class _AssistantBubble extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// In-thread confirm card for a destructive action the coach proposed
+/// (delete a medication, cancel an appointment, delete a task). The
+/// write happens ONLY on the Confirm tap — never from the model reply
+/// alone — so neither a typed request, a voice intent, nor injected
+/// content in synced data can silently remove the caregiver's records.
+class _PendingActionCard extends StatelessWidget {
+  const _PendingActionCard({
+    required this.citation,
+    required this.onDecision,
+  });
+
+  final String citation;
+  final void Function(String citation, {required bool confirmed})? onDecision;
+
+  @override
+  Widget build(BuildContext context) {
+    final String question = ChatService.describePendingAction(citation) ??
+        'Make this change?';
+    return Container(
+      key: ChatScreen.pendingActionCardKey(citation),
+      decoration: BoxDecoration(
+        color: context.cb.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.cb.cta, width: 1.2),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.warning_amber_rounded,
+                  size: 18, color: context.cb.cta),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  question,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.cb.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: <Widget>[
+              TextButton(
+                key: ChatScreen.pendingActionDeclineKey(citation),
+                onPressed: onDecision == null
+                    ? null
+                    : () => onDecision!(citation, confirmed: false),
+                child: const Text('Keep it'),
+              ),
+              const SizedBox(width: 4),
+              FilledButton(
+                key: ChatScreen.pendingActionConfirmKey(citation),
+                style: FilledButton.styleFrom(
+                  backgroundColor: context.cb.cta,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: onDecision == null
+                    ? null
+                    : () => onDecision!(citation, confirmed: true),
+                child: const Text('Confirm'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

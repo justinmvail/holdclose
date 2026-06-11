@@ -44,6 +44,148 @@ void main() {
     });
   });
 
+  // ---- Expired-session recovery (server-minted token, 2026-06-11) ---------
+
+  group('expired-token recovery — 401 + Token-Expired retries ONCE', () {
+    Map<String, Object?> profileJson() => <String, Object?>{
+          'id': 'profile-1',
+          'careblazers_user_id': 'user-1',
+          'display_name': 'Caregiver_abc123',
+          'avatar_url': null,
+          'joined_at': '2026-05-30T12:00:00.000Z',
+          'role': 'user',
+        };
+
+    test('recovers, retries with the refreshed token, and succeeds',
+        () async {
+      final _SequenceAdapter adapter = _SequenceAdapter(<_CannedResponse>[
+        _CannedResponse.json(
+          <String, Object?>{'error': 'token_expired'},
+          statusCode: 401,
+          extraHeaders: <String, List<String>>{
+            'Token-Expired': <String>['true'],
+          },
+        ),
+        _CannedResponse.json(profileJson()),
+      ]);
+      final List<String> servedTokens = <String>['stale-token', 'fresh-token'];
+      int tokenCalls = 0;
+      int recoveries = 0;
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ForumApiClient client = ForumApiClient(
+        tokenLoader: () async => servedTokens[tokenCalls++],
+        onTokenExpired: () async {
+          recoveries += 1;
+          return true;
+        },
+        dio: dio,
+        baseUrl: 'https://forum-api.workers.dev',
+      );
+
+      final ForumProfile profile = await client.bootstrapProfile();
+
+      expect(profile.id, 'profile-1');
+      expect(recoveries, 1);
+      expect(adapter.requests, hasLength(2));
+      expect(
+        adapter.requests.first.headers['Authorization'],
+        'Bearer stale-token',
+      );
+      expect(
+        adapter.requests.last.headers['Authorization'],
+        'Bearer fresh-token',
+      );
+    });
+
+    test('failed recovery rethrows the original token-expired error '
+        'without retrying', () async {
+      final _SequenceAdapter adapter = _SequenceAdapter(<_CannedResponse>[
+        _CannedResponse.json(
+          <String, Object?>{'error': 'token_expired'},
+          statusCode: 401,
+          extraHeaders: <String, List<String>>{
+            'Token-Expired': <String>['true'],
+          },
+        ),
+      ]);
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ForumApiClient client = ForumApiClient(
+        tokenLoader: () async => 'stale-token',
+        onTokenExpired: () async => false,
+        dio: dio,
+        baseUrl: 'https://forum-api.workers.dev',
+      );
+
+      await expectLater(
+        client.bootstrapProfile(),
+        throwsA(isA<ForumApiException>()
+            .having((ForumApiException e) => e.tokenExpired, 'tokenExpired',
+                isTrue)),
+      );
+      expect(adapter.requests, hasLength(1));
+    });
+
+    test('a second consecutive Token-Expired does NOT loop — exactly one '
+        'retry, then the error surfaces', () async {
+      _CannedResponse expired() => _CannedResponse.json(
+            <String, Object?>{'error': 'token_expired'},
+            statusCode: 401,
+            extraHeaders: <String, List<String>>{
+              'Token-Expired': <String>['true'],
+            },
+          );
+      final _SequenceAdapter adapter =
+          _SequenceAdapter(<_CannedResponse>[expired(), expired()]);
+      int recoveries = 0;
+      final Dio dio = Dio()..httpClientAdapter = adapter;
+      final ForumApiClient client = ForumApiClient(
+        tokenLoader: () async => 'always-stale',
+        onTokenExpired: () async {
+          recoveries += 1;
+          return true;
+        },
+        dio: dio,
+        baseUrl: 'https://forum-api.workers.dev',
+      );
+
+      await expectLater(
+        client.bootstrapProfile(),
+        throwsA(isA<ForumApiException>()
+            .having((ForumApiException e) => e.tokenExpired, 'tokenExpired',
+                isTrue)),
+      );
+      expect(recoveries, 1);
+      expect(adapter.requests, hasLength(2));
+    });
+  });
+
+  group('GoogleAuthResult — server-minted session token parsing', () {
+    test('parses token + token_expires_at from the auth/google body', () {
+      final GoogleAuthResult result =
+          GoogleAuthResult.fromJson(<String, Object?>{
+        'user_id': 'user-1',
+        'email': 'c@example.com',
+        'name': 'Caregiver',
+        'username': null,
+        'token': 'minted.by.server',
+        'token_expires_at': 1783794304,
+      });
+      expect(result.token, 'minted.by.server');
+      expect(result.tokenExpiresAt, 1783794304);
+    });
+
+    test('tolerates an older backend that omits the token fields', () {
+      final GoogleAuthResult result =
+          GoogleAuthResult.fromJson(<String, Object?>{
+        'user_id': 'user-1',
+        'email': 'c@example.com',
+        'name': 'Caregiver',
+      });
+      expect(result.token, isNull);
+      expect(result.tokenExpiresAt, isNull);
+    });
+  });
+
   // ---- Auth header presence ------------------------------------------------
 
   group('Authorization header — Phase 13.9 contract', () {
@@ -878,6 +1020,53 @@ class _RecordingAdapter implements HttpClientAdapter {
       headers: <String, List<String>>{
         Headers.contentTypeHeader: <String>[contentType],
         ...extraHeaders,
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// A canned response for [_SequenceAdapter].
+class _CannedResponse {
+  _CannedResponse.json(
+    Object jsonBody, {
+    this.statusCode = 200,
+    this.extraHeaders = const <String, List<String>>{},
+  }) : bodyBytes = utf8.encode(json.encode(jsonBody));
+
+  final List<int> bodyBytes;
+  final int statusCode;
+  final Map<String, List<String>> extraHeaders;
+}
+
+/// HttpClientAdapter replaying a SEQUENCE of canned responses (one per
+/// request, in order) — used for the expired-token retry contract where
+/// the first call 401s and the retry succeeds.
+class _SequenceAdapter implements HttpClientAdapter {
+  _SequenceAdapter(this.responses);
+
+  final List<_CannedResponse> responses;
+  final List<RequestOptions> requests = <RequestOptions>[];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    final _CannedResponse canned = responses[
+        requests.length <= responses.length
+            ? requests.length - 1
+            : responses.length - 1];
+    return ResponseBody.fromBytes(
+      canned.bodyBytes,
+      canned.statusCode,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+        ...canned.extraHeaders,
       },
     );
   }

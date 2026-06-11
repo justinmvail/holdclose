@@ -10,7 +10,14 @@ import {
   verifyGoogleIdToken,
   type JwksFetcher,
 } from '../src/auth/google';
-import { authRouter, type AuthRouteBindings } from '../src/routes/auth';
+import { verify as verifyJwt } from 'hono/jwt';
+
+import { auth } from '../src/middleware/auth';
+import {
+  authRouter,
+  SESSION_TTL_SECONDS,
+  type AuthRouteBindings,
+} from '../src/routes/auth';
 import { profiles } from '../src/db/schema';
 
 const CLIENT_ID = 'test-google-web-client-id.apps.googleusercontent.com';
@@ -257,9 +264,12 @@ function makeApp(jwksFetcher: JwksFetcher) {
   return app;
 }
 
+const SESSION_SECRET = 'test-forum-session-secret';
+
 const ROUTE_ENV = () => ({
   FORUM_DB: env.FORUM_DB,
   GOOGLE_CLIENT_ID: CLIENT_ID,
+  FORUM_JWT_SECRET: SESSION_SECRET,
 });
 
 async function postGoogle(
@@ -315,6 +325,8 @@ describe('POST /api/v1/auth/google', () => {
       email: 'new@example.com',
       name: 'New Caregiver',
       username: null,
+      token: expect.any(String),
+      token_expires_at: expect.any(Number),
     });
 
     const rows = await drizzle(env.FORUM_DB)
@@ -323,6 +335,85 @@ describe('POST /api/v1/auth/google', () => {
       .where(eq(profiles.careblazersUserId, 'google-sub-new'));
     expect(rows).toHaveLength(1);
     expect(rows[0].displayName).toBe('New Caregiver');
+  });
+
+  it('mints a session JWT signed with FORUM_JWT_SECRET carrying sub + ~30d exp', async () => {
+    const { pair, jwksFetcher } = await makeWorld();
+    const idToken = await signToken(pair.privateKey, {
+      sub: 'google-sub-session',
+      email: 'session@example.com',
+      email_verified: true,
+      name: 'Session Caregiver',
+    });
+    const before = Math.floor(Date.now() / 1000);
+    const res = await postGoogle(makeApp(jwksFetcher), { id_token: idToken });
+    const after = Math.floor(Date.now() / 1000);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      token: string;
+      token_expires_at: number;
+    };
+
+    // The token must verify against the SERVER secret and carry the
+    // verified Google sub — the client never signs anything itself.
+    const payload = await verifyJwt(body.token, SESSION_SECRET, 'HS256');
+    expect(payload.sub).toBe('google-sub-session');
+    expect(payload.exp).toBe(body.token_expires_at);
+    expect(body.token_expires_at).toBeGreaterThanOrEqual(
+      before + SESSION_TTL_SECONDS,
+    );
+    expect(body.token_expires_at).toBeLessThanOrEqual(
+      after + SESSION_TTL_SECONDS,
+    );
+  });
+
+  it('minted session token is accepted by the auth middleware', async () => {
+    const { pair, jwksFetcher } = await makeWorld();
+    const idToken = await signToken(pair.privateKey, {
+      sub: 'google-sub-roundtrip',
+      email: 'roundtrip@example.com',
+      email_verified: true,
+      name: 'Roundtrip Caregiver',
+    });
+    const res = await postGoogle(makeApp(jwksFetcher), { id_token: idToken });
+    expect(res.status).toBe(200);
+    const { token } = (await res.json()) as { token: string };
+
+    const guarded = new Hono<{
+      Bindings: { FORUM_JWT_SECRET: string };
+      Variables: { userId: string };
+    }>();
+    guarded.use('*', auth());
+    guarded.get('/whoami', (c) => c.json({ user_id: c.get('userId') }));
+
+    const who = await guarded.request(
+      '/whoami',
+      { headers: { Authorization: `Bearer ${token}` } },
+      { FORUM_JWT_SECRET: SESSION_SECRET },
+    );
+    expect(who.status).toBe(200);
+    expect(await who.json()).toEqual({ user_id: 'google-sub-roundtrip' });
+  });
+
+  it('returns 500 server_misconfigured when FORUM_JWT_SECRET is unset', async () => {
+    const { pair, jwksFetcher } = await makeWorld();
+    const idToken = await signToken(pair.privateKey, {
+      sub: 'google-sub-noconfig',
+      email: 'noconfig@example.com',
+      email_verified: true,
+      name: 'NoConfig Caregiver',
+    });
+    const res = await makeApp(jwksFetcher).request(
+      '/api/v1/auth/google',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_token: idToken }),
+      },
+      { FORUM_DB: env.FORUM_DB, GOOGLE_CLIENT_ID: CLIENT_ID },
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'server_misconfigured' });
   });
 
   it('falls back to the default display name when the token name is absent', async () => {
@@ -368,6 +459,8 @@ describe('POST /api/v1/auth/google', () => {
       email: 'existing@example.com',
       name: 'Should Not Overwrite',
       username: 'existing_handle',
+      token: expect.any(String),
+      token_expires_at: expect.any(Number),
     });
 
     const rows = await drizzle(env.FORUM_DB)

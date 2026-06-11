@@ -38,6 +38,7 @@ void main() {
     GoogleIdTokenVerifier? verifier,
     User? initialUser,
     UserStore? userStore,
+    Future<void> Function()? onSignedOut,
   }) {
     return AlphaAuthProvider(
       googleFlow: googleFlow ?? scriptedGoogleFlow('id-token'),
@@ -49,6 +50,7 @@ void main() {
           )),
       initialUser: initialUser,
       userStore: userStore,
+      onSignedOut: onSignedOut,
     );
   }
 
@@ -216,6 +218,35 @@ void main() {
     expect(await readPersistedAlphaUser(), isNotNull);
 
     await auth.signOut();
+
+    expect(await auth.watchAuthState().first, isA<AuthStateSignedOut>());
+    expect(await readPersistedAlphaUser(), isNull);
+  });
+
+  test('signOut runs the onSignedOut hook (forum session cleanup seam)',
+      () async {
+    int hookCalls = 0;
+    final AlphaAuthProvider auth = buildAlpha(
+      onSignedOut: () async => hookCalls += 1,
+    );
+    addTearDown(auth.dispose);
+    await auth.signInWithGoogle();
+
+    await auth.signOut();
+
+    expect(hookCalls, 1);
+    expect(await auth.watchAuthState().first, isA<AuthStateSignedOut>());
+  });
+
+  test('a throwing onSignedOut hook never blocks the sign-out itself',
+      () async {
+    final AlphaAuthProvider auth = buildAlpha(
+      onSignedOut: () async => throw StateError('keychain unavailable'),
+    );
+    addTearDown(auth.dispose);
+    await auth.signInWithGoogle();
+
+    await auth.signOut(); // must not throw
 
     expect(await auth.watchAuthState().first, isA<AuthStateSignedOut>());
     expect(await readPersistedAlphaUser(), isNull);

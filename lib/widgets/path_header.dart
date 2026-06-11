@@ -198,8 +198,12 @@ class PathHeader extends StatelessWidget {
             icon: const Icon(Icons.arrow_back),
             iconSize: 22,
             padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            // ≥44×44 hit target (a11y); shrinkWrap pins the layout box to
+            // exactly these constraints so the header stays compact.
+            style: IconButton.styleFrom(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            constraints: const BoxConstraints.tightFor(width: 44, height: 44),
             color: context.cb.primary,
             tooltip: 'Back',
             onPressed: () => context.go(backRoute),
@@ -247,8 +251,12 @@ class _HeaderActions extends StatelessWidget {
           icon: const Icon(Icons.account_circle_outlined),
           iconSize: 24,
           padding: EdgeInsets.zero,
-          visualDensity: VisualDensity.compact,
-          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+          // ≥44×44 hit target (a11y); shrinkWrap pins the layout box to
+          // exactly these constraints so the header stays compact.
+          style: IconButton.styleFrom(
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          constraints: const BoxConstraints.tightFor(width: 44, height: 44),
           color: context.cb.primary,
           tooltip: 'Profile & settings',
           onPressed: () => context.push('/settings'),
@@ -272,8 +280,12 @@ class _ReportButton extends ConsumerWidget {
       icon: const Icon(Icons.priority_high),
       iconSize: 22,
       padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      // ≥44×44 hit target (a11y); shrinkWrap pins the layout box to
+      // exactly these constraints so the header stays compact.
+      style: IconButton.styleFrom(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      constraints: const BoxConstraints.tightFor(width: 44, height: 44),
       color: context.cb.cta,
       tooltip: 'Report a problem',
       onPressed: () => ref.read(feedbackTriggerProvider.notifier).fire(),

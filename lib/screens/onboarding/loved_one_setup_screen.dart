@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +12,7 @@ import '../../providers/patient_configured_provider.dart';
 import '../../providers/storage_provider.dart';
 import '../../services/sync_service.dart';
 import '../../theme.dart';
+import '../../widgets/form/id_factory.dart';
 import '../../widgets/form_validation.dart';
 
 part 'loved_one_setup_screen.g.dart';
@@ -23,11 +23,7 @@ part 'loved_one_setup_screen.g.dart';
 /// id factories (and the `demo-patient-mary` seed shape).
 typedef PatientIdFactory = String Function();
 
-String _defaultPatientIdFactory() {
-  final int ms = DateTime.now().millisecondsSinceEpoch;
-  final int rand = math.Random().nextInt(1 << 32);
-  return 'patient-$ms-$rand';
-}
+String _defaultPatientIdFactory() => mintId('patient');
 
 /// ID factory the setup wizard uses. Tests override this with a fixed
 /// value so the persisted patient id is stable across runs.

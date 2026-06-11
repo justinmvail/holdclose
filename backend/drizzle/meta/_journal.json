@@ -29,6 +29,20 @@
       "when": 1780849268435,
       "tag": "0003_cool_iron_monger",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1781203102485,
+      "tag": "0004_care_docs_composite_pk",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1781203318827,
+      "tag": "0005_single_use_invites",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import 'package:careblazers/providers/voice_capture_provider.dart';
 import 'package:careblazers/routing/router.dart';
+import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/home/add_action_sheet.dart';
 import 'package:careblazers/widgets/voice_button.dart';
 import 'package:flutter/material.dart';
@@ -86,7 +87,7 @@ Future<void> _openSheet(WidgetTester tester) async {
 
 void main() {
   group('AddActionFab', () {
-    testWidgets('is a 58px teal circle with a white plus glyph',
+    testWidgets('is a 58px brand-accent circle with a plus glyph',
         (WidgetTester tester) async {
       await _pump(tester);
 
@@ -101,7 +102,7 @@ void main() {
 
       final FloatingActionButton fab =
           tester.widget<FloatingActionButton>(find.byKey(AddActionFab.fabKey));
-      expect(fab.backgroundColor, addSheetTeal);
+      expect(fab.backgroundColor, careblazersColors.link);
       expect(find.byIcon(Icons.add), findsOneWidget);
     });
 

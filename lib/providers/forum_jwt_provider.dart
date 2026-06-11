@@ -1,223 +1,206 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../services/forum_api_client.dart';
 import 'auth_provider.dart';
 
 part 'forum_jwt_provider.g.dart';
 
-/// Build-time injection point for the forum JWT shared secret
-/// (BUILD_SPEC.md §13 / Phase 13.9). Operator passes
-/// `--dart-define=FORUM_JWT_SECRET=<value>` matching the
-/// `wrangler secret put FORUM_JWT_SECRET` set on the deployed Worker.
-/// Empty default keeps the binary buildable in environments where the
-/// secret isn't piped through (e.g. CI smoke builds); callers that
-/// actually mint a token surface a [StateError] rather than signing
-/// with the empty string.
-const String _compileTimeForumJwtSecret = String.fromEnvironment(
-  'FORUM_JWT_SECRET',
-);
+/// Where the SERVER-minted forum session JWT is persisted —
+/// `flutter_secure_storage` (Keychain on iOS, Keystore on Android).
+///
+/// Security model (2026-06-11 rework): the Worker mints the session
+/// token inside `POST /auth/google` after verifying the Google ID
+/// token, signed with a secret that exists ONLY on the Worker. The app
+/// carries the token opaquely. Nothing in the binary can mint or forge
+/// an identity — extracting the app's defines yields no signing key.
+const String forumSessionTokenStorageKey = 'careblazers.forum.session_token';
 
-/// Where [ForumSecretStore] parks the shared secret in
-/// `flutter_secure_storage` — Keychain on iOS, Keystore on Android.
-/// Single key (v1 only ever holds one secret at a time) namespaced
-/// alongside [SecureTokenStorage.tokenKey] so a future "wipe all
-/// careblazers secrets" sweep can match a single prefix.
+/// Companion key holding the token's expiry as epoch **seconds** (the
+/// JWT `exp` claim the Worker reported back as `token_expires_at`).
+const String forumSessionExpiryStorageKey =
+    'careblazers.forum.session_expires_at';
+
+/// Legacy key from the retired client-side-minting scheme (pre
+/// 2026-06-11) that parked the shared HMAC secret on the device. Never
+/// written anymore; actively DELETED whenever the session store writes
+/// or clears, so updated installs shed the old secret.
 const String forumSecretStorageKey = 'careblazers.forum.jwt_secret';
 
-/// Lazy loader for the forum JWT shared secret (BUILD_SPEC.md §13 +
-/// TASKS.md Phase 13.9).
+/// A server-minted forum session: the bearer token plus its expiry.
+class ForumSession {
+  const ForumSession({required this.token, required this.expiresAt});
+
+  final String token;
+  final DateTime expiresAt;
+
+  bool isExpired(DateTime now) => !expiresAt.isAfter(now);
+}
+
+/// Secure-storage persistence for the [ForumSession].
 ///
-/// On first request, reads the build-time `--dart-define=FORUM_JWT_SECRET`
-/// value and writes it into `flutter_secure_storage`. Subsequent
-/// requests come straight from secure storage so the secret string
-/// isn't reloaded from the constant pool on every JWT mint. The
-/// indirection also means a future secret-rotation flow can write to
-/// secure storage out-of-band (e.g. a `/settings/forum/rotate` admin
-/// route) without rebuilding the app.
-class ForumSecretStore {
-  ForumSecretStore({
-    FlutterSecureStorage? storage,
-    String compileTimeSecret = _compileTimeForumJwtSecret,
-  })  : _storage = storage ?? const FlutterSecureStorage(),
-        _compileTimeSecret = compileTimeSecret;
+/// Pure CRUD — freshness/refresh policy lives in [ForumSessionManager].
+/// Every write/clear also deletes the legacy [forumSecretStorageKey] so
+/// installs upgrading from the client-minting era drop the shared
+/// secret from the device.
+class ForumSessionStore {
+  ForumSessionStore({FlutterSecureStorage? storage})
+      : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
-  final String _compileTimeSecret;
 
-  /// Returns the cached secret, seeding from the compile-time define
-  /// on first call. Throws [StateError] if neither secure storage nor
-  /// the define carry a value — callers should treat that as "the
-  /// caregiver can't reach the forum on this build" and gate forum UI
-  /// off rather than crashing the app.
-  Future<String> load() async {
-    final String? cached = await _storage.read(key: forumSecretStorageKey);
-    if (cached != null && cached.isNotEmpty) {
-      return cached;
-    }
-    if (_compileTimeSecret.isEmpty) {
-      throw StateError(
-        'FORUM_JWT_SECRET is not set. Rebuild with '
-        '`--dart-define=FORUM_JWT_SECRET=<value>` to enable the '
-        'caregiver forum.',
-      );
-    }
-    await _storage.write(
-      key: forumSecretStorageKey,
-      value: _compileTimeSecret,
+  Future<ForumSession?> read() async {
+    final String? token =
+        await _storage.read(key: forumSessionTokenStorageKey);
+    if (token == null || token.isEmpty) return null;
+    final String? expiryRaw =
+        await _storage.read(key: forumSessionExpiryStorageKey);
+    final int? expirySeconds =
+        expiryRaw == null ? null : int.tryParse(expiryRaw);
+    if (expirySeconds == null) return null;
+    return ForumSession(
+      token: token,
+      expiresAt:
+          DateTime.fromMillisecondsSinceEpoch(expirySeconds * 1000, isUtc: true),
     );
-    return _compileTimeSecret;
+  }
+
+  Future<void> write(ForumSession session) async {
+    await _storage.write(
+      key: forumSessionTokenStorageKey,
+      value: session.token,
+    );
+    await _storage.write(
+      key: forumSessionExpiryStorageKey,
+      value:
+          '${session.expiresAt.toUtc().millisecondsSinceEpoch ~/ 1000}',
+    );
+    await _storage.delete(key: forumSecretStorageKey);
+  }
+
+  Future<void> clear() async {
+    await _storage.delete(key: forumSessionTokenStorageKey);
+    await _storage.delete(key: forumSessionExpiryStorageKey);
+    await _storage.delete(key: forumSecretStorageKey);
   }
 }
 
-/// Async getter for the careblazers user id the JWT's `sub` claim
-/// resolves to (BUILD_SPEC.md §13 + §6.4). Pulled behind a typedef so
-/// [ForumJwtMinter] is unit-testable without standing up the auth
-/// state machine — production wiring watches the [authProvider] state.
-typedef ForumUserIdLoader = Future<String?> Function();
+/// Async producer of a fresh [ForumSession] when the stored one is
+/// missing, expired, or rejected — production wires this to the silent
+/// Google re-exchange (sign in silently → `POST /auth/google` → new
+/// server-minted token). Returns null when refresh isn't possible
+/// (no silent Google session, Google sign-in not configured for this
+/// build, backend unreachable).
+typedef ForumSessionRefresher = Future<ForumSession?> Function();
 
-/// Async loader for the JWT shared secret. Production wires this to
-/// [ForumSecretStore.load]; tests inject a constant closure.
-typedef ForumSecretLoader = Future<String> Function();
-
-/// Mints — and refreshes — HS256 JWTs for the forum API client
-/// (BUILD_SPEC.md §13 + TASKS.md Phase 13.9).
+/// Owns the forum session token lifecycle: cache → secure storage →
+/// silent refresh.
 ///
-/// Tokens carry `{sub: <careblazers_user_id>, iat, exp}` per the
-/// Worker's `auth.ts` middleware contract. The minter caches the most
-/// recent token until it falls inside the [refreshThreshold] window
-/// before expiry — at which point [currentToken] mints a fresh one.
-/// A change of signed-in user invalidates the cache immediately so a
-/// sign-out-then-sign-in-as-different-user never reuses the previous
-/// `sub`.
-class ForumJwtMinter {
-  ForumJwtMinter({
-    required ForumSecretLoader secretLoader,
-    required ForumUserIdLoader userIdLoader,
-    Duration ttl = const Duration(hours: 1),
-    Duration refreshThreshold = const Duration(minutes: 5),
+/// `currentToken()` policy:
+///  * stored token fresh (expiry beyond [refreshAhead]) → use it;
+///  * stored token inside the refresh window but unexpired → try
+///    [refresher]; fall back to the stored token if refresh fails
+///    (better a soon-to-expire token than none);
+///  * missing/expired → [refresher] or [StateError]. Callers should
+///    treat the StateError as "forum unreachable on this build/state"
+///    and gate forum UI, exactly as the previous minter contract did.
+///
+/// Concurrent refreshes are deduped onto one in-flight future, so a
+/// burst of API calls after expiry performs a single exchange.
+class ForumSessionManager {
+  ForumSessionManager({
+    required ForumSessionStore store,
+    required ForumSessionRefresher refresher,
+    Duration refreshAhead = const Duration(days: 7),
     DateTime Function()? clock,
-  })  : _secretLoader = secretLoader,
-        _userIdLoader = userIdLoader,
-        _ttl = ttl,
-        _refreshThreshold = refreshThreshold,
-        _clock = clock ?? DateTime.now {
-    assert(
-      refreshThreshold < ttl,
-      'refreshThreshold ($refreshThreshold) must be < ttl ($ttl); '
-      'otherwise every call would mint a fresh token.',
-    );
-  }
+  })  : _store = store,
+        _refresher = refresher,
+        _refreshAhead = refreshAhead,
+        _clock = clock ?? DateTime.now;
 
-  final ForumSecretLoader _secretLoader;
-  final ForumUserIdLoader _userIdLoader;
-  final Duration _ttl;
-  final Duration _refreshThreshold;
+  final ForumSessionStore _store;
+  final ForumSessionRefresher _refresher;
+  final Duration _refreshAhead;
   final DateTime Function() _clock;
 
-  String? _cachedToken;
-  DateTime? _cachedExpiresAt;
-  String? _cachedUserId;
+  ForumSession? _cached;
+  Future<ForumSession?>? _inFlightRefresh;
 
-  /// The next time [currentToken] would refresh the cached token,
-  /// or null if no token has been minted yet. Exposed for tests +
-  /// the Phase 13.10 settings surface that wants to show "session
-  /// refreshes in N minutes" diagnostics.
-  DateTime? get cachedExpiresAt => _cachedExpiresAt;
+  /// Adopt a session handed back by an explicit sign-in (`/auth/google`
+  /// during the Google flow). Persists + caches it so the very next
+  /// API call uses it without a storage read.
+  Future<void> adoptSession(ForumSession session) async {
+    _cached = session;
+    await _store.write(session);
+  }
 
-  /// Return a non-expired JWT for the current signed-in user. Throws
-  /// [StateError] when no user is signed in (the forum UI should gate
-  /// on that condition before calling) and rethrows whatever
-  /// [_secretLoader] surfaces on a missing build-time secret.
+  /// Bearer token for the Authorization header. See class docs for the
+  /// freshness policy.
   Future<String> currentToken() async {
-    final String? userId = await _userIdLoader();
-    if (userId == null || userId.isEmpty) {
-      throw StateError(
-        'No signed-in careblazers user; cannot mint a forum JWT. '
-        'The caller should gate forum surfaces on auth state first.',
-      );
-    }
-
     final DateTime now = _clock();
-    final bool sameUser = _cachedUserId == userId;
-    final bool stillFresh = _cachedToken != null &&
-        _cachedExpiresAt != null &&
-        _cachedExpiresAt!.isAfter(now.add(_refreshThreshold));
-    if (sameUser && stillFresh) {
-      return _cachedToken!;
+    final ForumSession? stored = _cached ?? await _store.read();
+    _cached = stored;
+
+    if (stored != null && !stored.isExpired(now)) {
+      final bool nearExpiry =
+          !stored.expiresAt.isAfter(now.add(_refreshAhead));
+      if (!nearExpiry) return stored.token;
+      final ForumSession? refreshed = await _refresh();
+      // Refresh failed but the stored token is still valid — use it.
+      return (refreshed ?? stored).token;
     }
 
-    final String secret = await _secretLoader();
-    if (secret.isEmpty) {
-      throw StateError(
-        'Forum JWT secret loaded empty; refusing to sign with an '
-        'empty HMAC key.',
-      );
-    }
-    final DateTime expiresAt = now.add(_ttl);
-    final String token = _signHs256(
-      secret: secret,
-      userId: userId,
-      issuedAt: now,
-      expiresAt: expiresAt,
+    final ForumSession? refreshed = await _refresh();
+    if (refreshed != null) return refreshed.token;
+    throw StateError(
+      'No forum session token. Sign in with Google to establish one; '
+      'forum surfaces should gate on auth state before calling.',
     );
-
-    _cachedToken = token;
-    _cachedExpiresAt = expiresAt;
-    _cachedUserId = userId;
-    return token;
   }
 
-  /// Drop the cached token. Call from sign-out so the next forum
-  /// request can't accidentally reuse the previous user's `sub`.
-  void invalidate() {
-    _cachedToken = null;
-    _cachedExpiresAt = null;
-    _cachedUserId = null;
+  /// The API client calls this when the Worker answered 401 +
+  /// `Token-Expired: true`. Drops the dead token and attempts one
+  /// refresh; returns true when a usable token now exists (the caller
+  /// retries the original request once).
+  Future<bool> recoverFromExpiry() async {
+    _cached = null;
+    await _store.clear();
+    final ForumSession? refreshed = await _refresh();
+    return refreshed != null;
   }
 
-  /// HS256 sign `{header}.{payload}` per RFC 7519. Built inline rather
-  /// than via a JWT library — the Worker only verifies HS256 and we
-  /// only ever produce the one claim set, so a third-party dep would
-  /// pay no real complexity tax for the dozen-line implementation.
-  /// Static + visible so tests can pin the encoding shape against a
-  /// known-good vector.
-  static String _signHs256({
-    required String secret,
-    required String userId,
-    required DateTime issuedAt,
-    required DateTime expiresAt,
-  }) {
-    final Map<String, Object?> header = <String, Object?>{
-      'alg': 'HS256',
-      'typ': 'JWT',
-    };
-    final Map<String, Object?> payload = <String, Object?>{
-      'sub': userId,
-      'iat': issuedAt.toUtc().millisecondsSinceEpoch ~/ 1000,
-      'exp': expiresAt.toUtc().millisecondsSinceEpoch ~/ 1000,
-    };
-    final String encodedHeader = _base64UrlNoPad(utf8.encode(json.encode(header)));
-    final String encodedPayload =
-        _base64UrlNoPad(utf8.encode(json.encode(payload)));
-    final String signingInput = '$encodedHeader.$encodedPayload';
-    final Hmac hmac = Hmac(sha256, utf8.encode(secret));
-    final Digest signature = hmac.convert(utf8.encode(signingInput));
-    final String encodedSignature = _base64UrlNoPad(signature.bytes);
-    return '$signingInput.$encodedSignature';
+  /// Sign-out hook: forget the cached + persisted session (and, via
+  /// [ForumSessionStore.clear], the legacy on-device secret).
+  Future<void> clear() async {
+    _cached = null;
+    _inFlightRefresh = null;
+    await _store.clear();
   }
 
-  /// RFC 7515 §2: JWTs use base64url WITHOUT trailing `=` padding.
-  static String _base64UrlNoPad(List<int> bytes) {
-    final String encoded = base64Url.encode(bytes);
-    int end = encoded.length;
-    while (end > 0 && encoded.codeUnitAt(end - 1) == 0x3D) {
-      end -= 1;
+  Future<ForumSession?> _refresh() {
+    // Dedupe: concurrent callers share one exchange.
+    final Future<ForumSession?> inFlight =
+        _inFlightRefresh ??= _refreshOnce().whenComplete(() {
+      _inFlightRefresh = null;
+    });
+    return inFlight;
+  }
+
+  Future<ForumSession?> _refreshOnce() async {
+    final ForumSession? fresh;
+    try {
+      fresh = await _refresher();
+    } catch (_) {
+      // Refresh is best-effort: a transport/auth hiccup must not crash
+      // the caller — currentToken() falls back / throws StateError.
+      return null;
     }
-    return encoded.substring(0, end);
+    if (fresh == null || fresh.token.isEmpty) return null;
+    _cached = fresh;
+    await _store.write(fresh);
+    return fresh;
   }
 }
 
@@ -225,32 +208,41 @@ class ForumJwtMinter {
 // Riverpod wiring
 // ---------------------------------------------------------------------------
 
-/// Production [ForumSecretStore] (BUILD_SPEC.md §13 / Phase 13.9).
-/// `keepAlive: true` so the secure-storage read happens once per app
-/// session instead of on every forum request.
+/// Production [ForumSessionStore]. `keepAlive: true` so secure-storage
+/// reads are amortized across the app session.
 @Riverpod(keepAlive: true)
-ForumSecretStore forumSecretStore(Ref ref) => ForumSecretStore();
+ForumSessionStore forumSessionStore(Ref ref) => ForumSessionStore();
 
-/// Production [ForumJwtMinter] (BUILD_SPEC.md §13 / Phase 13.9).
+/// Production [ForumSessionManager].
 ///
-/// Wires the secret store + the auth state machine. The user-id loader
-/// reads `ref.read(authProvider)` lazily on each `currentToken` call —
-/// it can't subscribe with `watch` because the minter is a `keepAlive`
-/// singleton and we don't want every auth transition to invalidate
-/// every other riverpod consumer. The minter's own invalidation is
-/// driven explicitly via [ForumJwtMinter.invalidate] from sign-out
-/// handlers (Phase 13.10+ wires that).
+/// The refresher runs the SILENT Google flow (no UI) and re-exchanges
+/// the ID token at `POST /auth/google` for a fresh server-minted
+/// session. It `ref.read`s the API client lazily at refresh time — not
+/// at build — so there is no provider cycle with
+/// `forumApiClientProvider` (which watches this manager for its token
+/// loader; the `/auth/google` exchange itself is anonymous and never
+/// re-enters the token path).
 @Riverpod(keepAlive: true)
-ForumJwtMinter forumJwtMinter(Ref ref) {
-  final ForumSecretStore store = ref.watch(forumSecretStoreProvider);
-  return ForumJwtMinter(
-    secretLoader: store.load,
-    userIdLoader: () async {
-      final AuthState state = await ref.read(authProvider).watchAuthState().first;
-      return switch (state) {
-        AuthStateSignedIn(:final User user) => user.id,
-        _ => null,
-      };
+ForumSessionManager forumSessionManager(Ref ref) {
+  final ForumSessionStore store = ref.watch(forumSessionStoreProvider);
+  return ForumSessionManager(
+    store: store,
+    refresher: () async {
+      // No Google client ids baked into this build (tests, demo) —
+      // silent refresh is impossible by construction.
+      if (!googleSignInConfigured) return null;
+      final String? idToken = await silentGoogleIdToken();
+      if (idToken == null || idToken.isEmpty) return null;
+      final GoogleAuthResult result =
+          await ref.read(forumApiClientProvider).verifyGoogleIdToken(idToken);
+      final String? token = result.token;
+      final int? expiresAt = result.tokenExpiresAt;
+      if (token == null || token.isEmpty || expiresAt == null) return null;
+      return ForumSession(
+        token: token,
+        expiresAt:
+            DateTime.fromMillisecondsSinceEpoch(expiresAt * 1000, isUtc: true),
+      );
     },
   );
 }

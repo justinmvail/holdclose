@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../services/forum_api_client.dart';
+import 'forum_jwt_provider.dart';
 
 part 'auth_provider.freezed.dart';
 part 'auth_provider.g.dart';
@@ -437,9 +438,11 @@ class AlphaAuthProvider implements AuthProvider {
     required GoogleIdTokenVerifier verifier,
     User? initialUser,
     UserStore? userStore,
+    Future<void> Function()? onSignedOut,
   })  : _googleFlow = googleFlow,
         _verifier = verifier,
         _userStore = userStore ?? const UserStore(),
+        _onSignedOut = onSignedOut,
         _state = initialUser == null
             ? const AuthState.signedOut()
             : AuthState.signedIn(user: initialUser);
@@ -447,6 +450,13 @@ class AlphaAuthProvider implements AuthProvider {
   final GoogleIdTokenFlow _googleFlow;
   final GoogleIdTokenVerifier _verifier;
   final UserStore _userStore;
+
+  /// Sign-out side effects beyond the persisted user spine — the
+  /// production wiring clears the forum session token (and the legacy
+  /// on-device secret) here so a shared/returned device can't keep
+  /// acting as the previous caregiver. Best-effort: a failure must not
+  /// block the sign-out itself.
+  final Future<void> Function()? _onSignedOut;
   AuthState _state;
   final StreamController<AuthState> _changes =
       StreamController<AuthState>.broadcast();
@@ -505,6 +515,12 @@ class AlphaAuthProvider implements AuthProvider {
   @override
   Future<void> signOut() async {
     await _userStore.clear();
+    try {
+      await _onSignedOut?.call();
+    } catch (_) {
+      // Clearing auxiliary session state is best-effort; the sign-out
+      // itself must always complete.
+    }
     _emit(const AuthState.signedOut());
   }
 
@@ -640,6 +656,25 @@ Future<String?> productionGoogleIdTokenFlow() async {
   return auth.idToken;
 }
 
+/// SILENT variant of [productionGoogleIdTokenFlow]: re-acquire an ID
+/// token with no UI (uses the OS-cached Google session). Null when no
+/// cached session exists or Google declines silently. Used by the forum
+/// session refresher to re-exchange for a fresh server-minted session
+/// token when the stored one expires — the caregiver never re-taps.
+Future<String?> silentGoogleIdToken() async {
+  try {
+    final GoogleSignIn google = buildProductionGoogleSignIn();
+    final GoogleSignInAccount? account = await google.signInSilently();
+    if (account == null) return null;
+    final GoogleSignInAuthentication auth = await account.authentication;
+    return auth.idToken;
+  } catch (_) {
+    // Silent means silent: any plugin/platform hiccup is a null, never
+    // a thrown error in the middle of an unrelated API call.
+    return null;
+  }
+}
+
 /// The persisted Google [User], preloaded from [UserStore] in `main()`
 /// before `runApp` so [AlphaAuthProvider] starts signedIn for a returning
 /// Google tester — no sign-in-screen flash, no re-tap. Null means no
@@ -679,12 +714,32 @@ AuthProvider authBackend(Ref ref) {
       verifier: (String idToken) async {
         final GoogleAuthResult r =
             await ref.read(forumApiClientProvider).verifyGoogleIdToken(idToken);
+        // Adopt the SERVER-minted session token (the Worker signs it
+        // after verifying the Google ID token — the app never signs).
+        // Missing token = older backend; the session refresher will
+        // re-exchange on the first authed call instead.
+        final String? token = r.token;
+        final int? expiresAt = r.tokenExpiresAt;
+        if (token != null && token.isNotEmpty && expiresAt != null) {
+          await ref.read(forumSessionManagerProvider).adoptSession(
+                ForumSession(
+                  token: token,
+                  expiresAt: DateTime.fromMillisecondsSinceEpoch(
+                    expiresAt * 1000,
+                    isUtc: true,
+                  ),
+                ),
+              );
+        }
         return GoogleAuthResultLike(
           userId: r.userId,
           email: r.email,
           name: r.name,
         );
       },
+      // Sign-out must shed the forum session (and the legacy on-device
+      // secret) so a shared/returned device can't keep the identity.
+      onSignedOut: () => ref.read(forumSessionManagerProvider).clear(),
     );
     ref.onDispose(alpha.dispose);
     return alpha;

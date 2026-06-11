@@ -65,6 +65,40 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
       return;
     }
     _handled = true;
+    // Same consent gate as the deep-link path (2026-06-11): a scanned
+    // code re-binds this device's circle and starts syncing care data
+    // with its members — never join without an explicit yes.
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        key: const Key('circle_scan_confirm_dialog'),
+        title: const Text('Join this care circle?'),
+        content: const Text(
+          'Joining shares caregiving with this circle’s members — '
+          'schedules, medications, journal entries, and documents sync '
+          'between you. Only join a circle from someone you know and '
+          'trust.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: const Key('circle_scan_confirm_cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            key: const Key('circle_scan_confirm_accept'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Join circle'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (confirmed != true) {
+      // Declined — go back to scanning (a different code may be next).
+      setState(() => _handled = false);
+      return;
+    }
     setState(() {
       _phase = _ScanPhase.joining;
       _message = 'Joining…';
@@ -96,6 +130,8 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
         _message = switch (e.error) {
           'invite_expired' => 'That invite has expired. Ask for a new code.',
           'invite_not_found' => "That invite isn't valid anymore.",
+          'invite_used' =>
+            'That invite has already been used. Ask for a new code.',
           _ => "We couldn't join that circle. Please try again.",
         };
       });

@@ -704,13 +704,15 @@ describe('POST /api/v1/posts/:post_id/comments', () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
       id: string;
-      crisis_flagged: boolean;
+      crisis_flagged?: boolean;
       crisis_resources?: {
         crisis_card_url: string;
         hotlines: unknown[];
       };
     };
-    expect(body.crisis_flagged).toBe(true);
+    // The flag stays server-side (2026-06-11); crisis_resources alone
+    // drives the author's supportive banner.
+    expect(body.crisis_flagged).toBeUndefined();
     expect(body.crisis_resources).toBeDefined();
     expect(body.crisis_resources!.crisis_card_url).toBe('/crisis');
 
@@ -738,7 +740,7 @@ describe('POST /api/v1/posts/:post_id/comments', () => {
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.crisis_flagged).toBe(false);
+    expect(body.crisis_flagged).toBeUndefined();
     expect(body.crisis_resources).toBeUndefined();
   });
 

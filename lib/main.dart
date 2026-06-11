@@ -11,6 +11,7 @@ import 'providers/auth_provider.dart';
 import 'providers/local_notifications_provider.dart';
 import 'providers/notifications_provider.dart';
 import 'providers/onboarding_provider.dart';
+import 'providers/patient_configured_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/storage_provider.dart';
 import 'providers/tts_provider.dart';
@@ -60,9 +61,10 @@ Future<void> main() async {
 
   final ProviderContainer container = ProviderContainer(
     // BUILD_SPEC.md §5.10 + §6.3 — pipe the SettingsNotifier through
-    // the TTS selector's settings input so toggling "Read scripts
-    // aloud" off (or hitting quiet hours) re-resolves
-    // `ref.read(ttsProvider)` to `NoopTTSProvider` on the next read.
+    // the TTS selector's settings input. A settings change INVALIDATES
+    // the keepAlive tts provider so its next read re-resolves; crossing
+    // a quiet-hours boundary with no settings change is covered by the
+    // minute-polling QuietHoursActive tick the selector also watches.
     overrides: <Override>[
       ttsSettingsProvider.overrideWith(
         (Ref ref) => ref.watch(settingsProvider),
@@ -90,6 +92,17 @@ Future<void> main() async {
   // by a token so it seeds exactly once per script run and then leaves the
   // tester's edits alone on later launches.
   await maybeSeedDemoDataset(container);
+
+  // Preload "is a loved one on file" AFTER any demo reset/seed and BEFORE
+  // the first frame, so a set-up caregiver's frame-zero router decision is
+  // Home — not a /setup flash while the async SQLite read resolves. Same
+  // preload pattern as the onboarding flag + alpha user above.
+  try {
+    preloadedPatientConfigured =
+        await container.read(storageProvider).getPatient() != null;
+  } catch (_) {
+    preloadedPatientConfigured = null; // resolve async, as before
+  }
 
   // Server-authoritative sync: kick the engine AFTER the first frame so
   // launch is never blocked on the network. The lifecycle observer also
@@ -149,8 +162,10 @@ Future<void> _bootstrapSync(ProviderContainer container) async {
     // (tools/seed_demo.sh data is written before the circle exists, so it
     // never auto-syncs). One-shot per token.
     await maybeResyncAll(container, sync);
-  } catch (_) {
-    // Sync is additive — a failure here must never affect the app.
+  } catch (e) {
+    // Sync is additive — a failure here must never affect the app. The
+    // breadcrumb lands in LogBuffer for feedback reports.
+    debugPrint('sync: bootstrap failed: $e');
   }
 }
 

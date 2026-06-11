@@ -9,6 +9,10 @@ import 'package:drift/drift.dart';
 /// full [JournalEntry] through [JournalEntry.toJson]; the blob shape
 /// follows the freezed model exactly so any model field added later is
 /// persisted automatically.
+@TableIndex(
+  name: 'journal_entries_created_idx',
+  columns: <Symbol>{#createdAtMs},
+)
 class JournalEntriesTable extends Table {
   @override
   String get tableName => 'journal_entries';
@@ -102,6 +106,10 @@ class ChatConversationsTable extends Table {
 /// The freezed [Message] body lives in [payload] as JSON;
 /// [createdAtMs] is lifted out so `loadMessages()` can sort the
 /// thread chronologically without parsing every blob.
+@TableIndex(
+  name: 'chat_messages_conversation_idx',
+  columns: <Symbol>{#conversationId},
+)
 class ChatMessagesTable extends Table {
   @override
   String get tableName => 'chat_messages';
@@ -176,6 +184,14 @@ class DoseWindowsTable extends Table {
 ///
 /// The freezed [MedicationWindowEntry] (daysOfWeek, startsOn, endsOn)
 /// lives in [payload] as JSON.
+@TableIndex(
+  name: 'medication_window_entries_window_idx',
+  columns: <Symbol>{#windowId},
+)
+@TableIndex(
+  name: 'medication_window_entries_medication_idx',
+  columns: <Symbol>{#medicationId},
+)
 class MedicationWindowEntriesTable extends Table {
   @override
   String get tableName => 'medication_window_entries';
@@ -205,6 +221,10 @@ class MedicationWindowEntriesTable extends Table {
 /// the "today's doses" view (Phase 12.4) and the adherence-rate
 /// computation (Phase 12.2) can filter + order on the scheduled time
 /// without parsing every row.
+@TableIndex(
+  name: 'dose_logs_medication_scheduled_idx',
+  columns: <Symbol>{#medicationId, #scheduledForMs},
+)
 class DoseLogsTable extends Table {
   @override
   String get tableName => 'dose_logs';
@@ -288,6 +308,10 @@ class AppointmentsTable extends Table {
 /// loved one per install"), so a cascade buys nothing, and keeping the
 /// link logical leaves room for a future multi-patient model to land
 /// without reworking the FK graph.
+@TableIndex(
+  name: 'health_log_entries_patient_recorded_idx',
+  columns: <Symbol>{#patientId, #recordedAtMs},
+)
 class HealthLogEntriesTable extends Table {
   @override
   String get tableName => 'health_log_entries';

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'l10n/app_localizations.dart';
 import 'models/settings.dart';
 import 'providers/auth_provider.dart';
+import 'providers/notifications_provider.dart';
 import 'providers/quiet_hours_provider.dart';
 import 'providers/settings_provider.dart';
 import 'routing/router.dart';
@@ -44,6 +45,13 @@ class _CareblazersAppState extends ConsumerState<CareblazersApp> {
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<AuthState>? _authSub;
 
+  // Notification taps (2026-06-11): the OS hands back the deep-link
+  // payload a fired dose/appointment reminder carried; pumping it through
+  // the router is what makes tapping the reminder OPEN the right screen
+  // (the taps() stream previously had no listener — reminders landed the
+  // caregiver wherever the app last was).
+  StreamSubscription<String>? _notificationTapSub;
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +82,16 @@ class _CareblazersAppState extends ConsumerState<CareblazersApp> {
         },
         onError: (Object _) {/* never let an auth error crash the app */},
       );
+      // Route notification taps to their deep-link payloads
+      // ('/medications/today', '/appointments/<id>') so reminders open
+      // the screen they're about.
+      _notificationTapSub = ref.read(notificationsProvider).taps().listen(
+        (String deepLink) {
+          if (deepLink.isEmpty || !mounted) return;
+          _router.go(deepLink);
+        },
+        onError: (Object _) {/* never let a tap error crash the app */},
+      );
     } catch (_) {
       // Deep-link wiring is additive — a failure must never affect launch.
     }
@@ -95,14 +113,21 @@ class _CareblazersAppState extends ConsumerState<CareblazersApp> {
     if (outcome != null) _applyOutcome(outcome);
   }
 
-  /// React to a join outcome on the router's root navigator: success →
-  /// go to Care Circle + "Joined <name>"; failure → friendly SnackBar.
-  /// Stashed / not-a-link outcomes are silent.
+  /// React to a join outcome on the router's root navigator: a parsed
+  /// invite asks for explicit confirmation first; success → go to Care
+  /// Circle + "Joined <name>"; failure → friendly SnackBar. Stashed /
+  /// not-a-link outcomes are silent.
   void _applyOutcome(CircleJoinOutcome outcome) {
     final BuildContext? navContext =
         _router.routerDelegate.navigatorKey.currentContext;
     if (navContext == null || !navContext.mounted) return;
     switch (outcome) {
+      case CircleJoinConfirmationRequired(:final token):
+        // NEVER auto-join from a link: a tapped careblazers://join/<x>
+        // re-binds this device's care circle (and starts syncing the
+        // caregiver's data to its members), so it requires an explicit,
+        // informed yes.
+        unawaited(_confirmAndJoin(navContext, token));
       case CircleJoinSucceeded(:final circle):
         _router.go('/team');
         ScaffoldMessenger.of(navContext).showSnackBar(
@@ -118,10 +143,45 @@ class _CareblazersAppState extends ConsumerState<CareblazersApp> {
     }
   }
 
+  /// Show the join-confirmation dialog; redeem the invite only on an
+  /// explicit "Join circle". Dismissing/cancelling abandons the token.
+  Future<void> _confirmAndJoin(BuildContext navContext, String token) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: navContext,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        key: const Key('circle_join_confirm_dialog'),
+        title: const Text('Join this care circle?'),
+        content: const Text(
+          "You've opened a care-circle invite. Joining shares caregiving "
+          'with its members — schedules, medications, journal entries, '
+          'and documents sync between you. Only join a circle from '
+          'someone you know and trust.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: const Key('circle_join_confirm_cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            key: const Key('circle_join_confirm_accept'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Join circle'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final CircleDeepLinkHandler handler =
+        ref.read(circleDeepLinkHandlerProvider);
+    _applyOutcome(await handler.confirmJoin(token));
+  }
+
   @override
   void dispose() {
     _linkSub?.cancel();
     _authSub?.cancel();
+    _notificationTapSub?.cancel();
     super.dispose();
   }
 

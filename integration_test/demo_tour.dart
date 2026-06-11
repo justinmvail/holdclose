@@ -22,7 +22,6 @@ import 'package:careblazers/screens/chat/conversation_list_screen.dart';
 import 'package:careblazers/screens/community/community_feed_screen.dart';
 import 'package:careblazers/screens/home_screen.dart';
 import 'package:careblazers/screens/medical/care_plan_routines_screen.dart';
-import 'package:careblazers/widgets/path_header.dart';
 import 'package:careblazers/screens/medical/emergency_card_screen.dart';
 import 'package:careblazers/screens/medical/health_log_entry_form.dart';
 import 'package:careblazers/screens/medical/health_log_screen.dart';
@@ -35,11 +34,14 @@ import 'package:careblazers/screens/team/care_circle_screen.dart';
 import 'package:careblazers/screens/team/care_team_hub_screen.dart';
 import 'package:careblazers/services/appointment_repository.dart';
 import 'package:careblazers/services/chat_repository.dart';
+import 'package:careblazers/services/chat_service.dart';
 import 'package:careblazers/services/forum_api_client.dart';
 import 'package:careblazers/services/medication_repository.dart';
 import 'package:careblazers/services/provider_repository.dart';
 import 'package:careblazers/services/seed_repository.dart';
 import 'package:careblazers/widgets/home/schedule_card.dart';
+import 'package:careblazers/widgets/path_header.dart';
+import 'package:careblazers/widgets/tab_scaffold.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,24 +57,37 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// the operator records the walkthrough.
 DateTime _fixedNow() => DateTime(2026, 6, 1, 11, 0);
 
-/// Scripted pitch walkthrough for the Phase 14 information architecture
-/// (TASKS.md Phase 14.39, BUILD_SPEC.md §10.1).
+/// Scripted pitch walkthrough for the FOUR-tab information architecture
+/// (IA refactor 2026-06-06; BUILD_SPEC.md §10.1, docs/MENU_LAYOUT_SPEC.md).
+///
+/// The bottom bar is the custom [TabScaffoldBar] — `Home · Care · Chat ·
+/// Community` around the inline center mic; there is NO Material
+/// [NavigationBar] anymore, so every tab tap here goes through the bar
+/// widget (mirroring `tabFor()` in test/integration/test_harness.dart).
+/// The old "Medical" tab is now the **Care** hub (route still `/medical`)
+/// and the old "Team" tab lives under Care as the gated **Care Circle**
+/// hub (routes still `/team/*`).
 ///
 /// The tour IS the test: each leg pairs a `tester.tap()` with at least one
 /// `expect(...)`, so a regression on any screen surfaces as a hard test
-/// failure rather than a silent pass-through. It walks the five-tab IA end
-/// to end — Home dashboard → Settings → Emergency Card → dose log → the
-/// Medical hub (Health Log add + Care Plan + Cards & Docs → Emergency
-/// Card) → the Care Team hub (Care Circle → start an invite) → Chat (open
-/// a thread) → Community (Feed → Learn → Support → Feed) — capturing a
-/// demo screenshot on every tab landing.
+/// failure rather than a silent pass-through. End to end it drives:
+/// Home dashboard → Settings (via the header profile icon) → a Schedule
+/// dose group → dose log → the **Care** hub (Health Log add → Routines →
+/// Emergency Card) → the **Care Circle** hub under Care (People roster +
+/// connect actions) → **Chat** (open a seeded thread, send a message, and
+/// get the canned demo coach's reply back) → **Community** (Feed → Learn →
+/// Support → Feed) — capturing a demo screenshot on every hub/tab landing.
+/// Screenshot labels `02_care` / `03_care-circle` supersede the stale
+/// `02_medical` / `03_team` baselines from the five-tab era.
 ///
 /// Pre-conditions per §10.1:
 ///   * `DEMO_MODE=true` build define set (gates [FakeAuthProvider] + the
 ///     sign-in screen's "Skip — explore as Mary's caregiver" CTA).
-///   * `FakeLLMProvider` for deterministic coaching copy — overridden
-///     defensively so a build that flipped `USE_FAKE_LLM=false` still runs
-///     against the canned responses.
+///   * `FakeLLMProvider` for deterministic coaching copy and
+///     [DemoChatBackend] for deterministic chat replies — the DEMO_MODE
+///     pitch build (and any `flutter test` run) already selects both via
+///     the fake-engine rule; they're overridden defensively here so a
+///     build that flipped `USE_FAKE_LLM=false` still runs canned.
 ///   * [InMemoryStorageProvider] pre-seeded with Mary Henderson + the demo
 ///     journal so the dashboard + Emergency Card land populated.
 ///   * A single in-memory [CareblazersDatabase] backs every drift
@@ -89,7 +104,8 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'demo tour — Phase 14 five-tab IA walkthrough (BUILD_SPEC.md §10.1)',
+    'demo tour — four-tab IA walkthrough: Home · Care · Chat · Community '
+    '(BUILD_SPEC.md §10.1)',
     (WidgetTester tester) async {
       if (!demoModeEnabled) {
         fail(
@@ -111,14 +127,14 @@ void main() {
       await SeedRepository(storage: storage).populateAll();
 
       // One in-memory drift DB backs every repository the IA touches, so
-      // each Medical / Team / Chat screen builds against a coherent store
-      // instead of trying to open the on-device SQLite file.
+      // each Care / Care Circle / Chat screen builds against a coherent
+      // store instead of trying to open the on-device SQLite file.
       final CareblazersDatabase db =
           CareblazersDatabase(NativeDatabase.memory());
       addTearDown(db.close);
 
-      // Seed the medication tracker so the Home "Medications Today" card —
-      // and the dose log it taps through to — render a real dose row.
+      // Seed the medication tracker so the Home Schedule card — and the
+      // dose log its Morning group taps through to — render a real dose.
       final MedicationRepository medRepo =
           MedicationRepository(db, clock: _fixedNow);
       await medRepo.upsertMedication(const Medication(
@@ -171,6 +187,11 @@ void main() {
         overrides: <Override>[
           storageBackendProvider.overrideWithValue(storage),
           llmProvider.overrideWithValue(const FakeLLMProvider()),
+          // Chat rides the same deterministic rail: DEMO_MODE builds set
+          // USE_FAKE_LLM=true (and `flutter test` implies it), which
+          // already selects [DemoChatBackend] — this pins the same impl
+          // against a stray define so the tour never reaches for the shim.
+          chatLLMBackendProvider.overrideWithValue(const DemoChatBackend()),
           ttsProvider.overrideWith((Ref ref) => const NoopTTSProvider()),
           // Mirror main.dart: pipe SettingsNotifier through the TTS
           // settings selector so the muting state tracks the live
@@ -246,40 +267,50 @@ void main() {
       expect(find.byKey(ScheduleCard.cardKey), findsOneWidget);
       await _capture(tester, '01_home');
 
-      // ---- Profile icon → Settings → close back to Home --------------------
+      // ---- Profile icon → Settings → back to Home --------------------------
+      // Settings is on the PathHeader pattern now: its title row carries the
+      // back arrow (no AppBar BackButton, no word-labeled "Back to X").
       await tester.tap(find.byKey(PathHeader.profileButtonKey));
       await tester.pumpAndSettle();
       expect(find.byKey(SettingsScreen.readAloudToggleKey), findsOneWidget);
-      expect(find.text('Settings'), findsOneWidget);
-      await _tapBack(tester); // Settings has an AppBar back button.
+      // "Settings" appears as both the page title and the terminal crumb.
+      expect(find.text('Settings'), findsWidgets);
+      await _tapHeaderBack(tester); // Home › Settings — back goes to Home.
       expect(find.byKey(HomeScreen.greetingKey), findsOneWidget);
 
-      // Emergency Card is now reached via Medical → Cards & Docs (covered
-      // later in the tour). The previous Home pin was removed; the
-      // Emergency Card screen itself is still exercised below.
+      // Emergency Card is reached via the Care hub's tile (covered later in
+      // the tour). The previous Home pin was removed; the Emergency Card
+      // screen itself is still exercised below.
 
-      // ---- A Schedule medication (Donepezil, in the Morning window) →
-      // dose log → back to Home -------------------------------------------
+      // ---- The Schedule card's Morning dose group (Donepezil) → dose log →
+      // back to Home --------------------------------------------------------
+      // Tapping anywhere in today's window group (the med rows included)
+      // pushes the dose log; the Care tab lights up since the dose log
+      // lives in the Care branch.
       final Finder donepezilRow = find.text('Donepezil');
       expect(donepezilRow, findsWidgets);
       await tester.ensureVisible(donepezilRow.first);
       await tester.tap(donepezilRow.first);
       await tester.pumpAndSettle();
       expect(find.byKey(DoseLogScreen.listKey), findsOneWidget);
-      await _tapBack(tester); // Dose log has an AppBar back button.
+      // The dose log's parent crumb is Medications, so going home means the
+      // Home crumb (the tab bar's Home label is not an InkWell, so this
+      // can't mis-tap the bar).
+      await _tapCrumb(tester, 'Home');
       expect(find.byKey(HomeScreen.greetingKey), findsOneWidget);
 
       // ====================================================================
-      // MEDICAL tab — the tile hub. Capture the landing.
+      // CARE tab — the tile hub at /medical (renamed from "Medical";
+      // 2026-06-06 IA refactor). Capture the landing.
       // ====================================================================
-      await _tapTab(tester, 'Medical');
+      await _tapTab(tester, 'Care');
       expect(
         find.byKey(MedicalHubScreen.tileKey('/medical/health-log')),
         findsOneWidget,
       );
-      await _capture(tester, '02_medical');
+      await _capture(tester, '02_care');
 
-      // ---- Health Log tile → add an entry → back to Medical ----------------
+      // ---- Health Log tile → add an entry → back to the Care hub -----------
       await tester.tap(
         find.byKey(MedicalHubScreen.tileKey('/medical/health-log')),
       );
@@ -298,51 +329,54 @@ void main() {
       await tester.pumpAndSettle();
       // Back on the Health Log — the list now carries the saved entry.
       expect(find.byKey(HealthLogScreen.listKey), findsOneWidget);
-      await _tapPathBack(tester, 'Back to Medical');
+      await _tapHeaderBack(tester); // Home › Care › Health Log — back to Care.
       expect(
-        find.byKey(MedicalHubScreen.tileKey('/medical/care-plan')),
+        find.byKey(MedicalHubScreen.tileKey('/medical/routines')),
         findsOneWidget,
       );
 
-      // ---- Routines tile → back to Medical (v2 Care Plan, BUILD_SPEC.md
-      // §5.13 v2: slot/stage replaced by scheduled tasks).
+      // ---- Routines tile → back to the Care hub (v2 Care Plan,
+      // BUILD_SPEC.md §5.13 v2: slot/stage replaced by scheduled tasks).
       await tester.tap(
         find.byKey(MedicalHubScreen.tileKey('/medical/routines')),
       );
       await tester.pumpAndSettle();
       expect(find.byKey(CarePlanRoutinesScreen.emptyStateKey),
           findsOneWidget);
-      await _tapPathBack(tester, 'Back to Medical');
+      await _tapHeaderBack(tester);
       expect(
         find.byKey(MedicalHubScreen.tileKey('/medical/cards/emergency')),
         findsOneWidget,
       );
 
-      // ---- Emergency Card tile → open Emergency Card → back to Medical -----
+      // ---- Emergency Card tile → open Emergency Card → back to Care --------
       // (Cards & Documents sub-hub + POA + IDs surfaces were removed;
-      // Emergency Card is now a top-level Medical tile.)
+      // Emergency Card is a top-level Care tile.)
       await tester.tap(
         find.byKey(MedicalHubScreen.tileKey('/medical/cards/emergency')),
       );
       await tester.pumpAndSettle();
       expect(find.byKey(EmergencyCardScreen.headlineKey), findsOneWidget);
-      await _tapPathBack(tester, 'Back to Medical');
+      await _tapHeaderBack(tester);
       expect(
         find.byKey(MedicalHubScreen.tileKey('/medical/health-log')),
         findsOneWidget,
       );
 
       // ====================================================================
-      // TEAM tab — the Care Team tile hub. Capture the landing.
+      // CARE CIRCLE — the former Team tab, now the Care hub's gated tile
+      // (route stays /team). The tile is present because demo settings ship
+      // teamCoordinationEnabled=true. Capture the hub landing.
       // ====================================================================
-      await _tapTab(tester, 'Team');
+      await tester.tap(find.byKey(MedicalHubScreen.tileKey('/team')));
+      await tester.pumpAndSettle();
       expect(
         find.byKey(CareTeamHubScreen.tileKey('/team/circle')),
         findsOneWidget,
       );
-      await _capture(tester, '03_team');
+      await _capture(tester, '03_care-circle');
 
-      // ---- Care Circle → the People list + connect actions → back to Team --
+      // ---- People tile → the roster + connect actions → back ---------------
       await tester.tap(find.byKey(CareTeamHubScreen.tileKey('/team/circle')));
       await tester.pumpAndSettle();
       // The People list is the backend circle; the connect strip lets you
@@ -350,7 +384,7 @@ void main() {
       expect(find.byKey(CareCircleScreen.usernameActionKey), findsOneWidget);
       expect(find.byKey(CareCircleScreen.addByUsernameActionKey),
           findsOneWidget);
-      await _tapPathBack(tester, 'Back to Care Circle');
+      await _tapHeaderBack(tester); // … › Care Circle › People — back to hub.
       expect(
         find.byKey(CareTeamHubScreen.tileKey('/team/circle')),
         findsOneWidget,
@@ -363,13 +397,26 @@ void main() {
       expect(find.byKey(ConversationListScreen.listKey), findsOneWidget);
       await _capture(tester, '04_chat');
 
-      // ---- Open the first thread → back to the list ------------------------
+      // ---- Open the first thread → send a message → the demo coach replies
+      // → back to the list ---------------------------------------------------
       await tester.tap(
         find.byKey(ConversationListScreen.tileKey('convo-sundowning')),
       );
       await tester.pumpAndSettle();
       expect(find.byKey(ChatScreen.listKey), findsOneWidget);
-      await _tapPathBack(tester, 'Back to Chat');
+      // Under DEMO_MODE the chat backend is the deterministic
+      // [DemoChatBackend], so the round-trip is exercised end to end: the
+      // sent bubble AND the canned coach reply must both land in the thread.
+      const String chatPrompt =
+          'She was up wandering at 2 AM again. How do I get her back to sleep?';
+      await tester.enterText(find.byKey(ChatScreen.inputFieldKey), chatPrompt);
+      await tester.tap(find.byKey(ChatScreen.sendButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.text(chatPrompt), findsWidgets,
+          reason: 'the sent message must appear in the thread');
+      expect(find.text(DemoChatBackend.replyFor(chatPrompt)), findsWidgets,
+          reason: 'the canned demo coach reply must stream back end-to-end');
+      await _tapHeaderBack(tester); // Home › Chat › <thread> — back to Chat.
       expect(find.byKey(ConversationListScreen.listKey), findsOneWidget);
 
       // ====================================================================
@@ -392,7 +439,7 @@ void main() {
       expect(find.byKey(CommunityFeedScreen.listKey), findsOneWidget);
     },
     // The tour exercises the full app surface; give it generous headroom on
-    // a real device where the FakeLLM's streaming + drift I/O add up.
+    // a real device where the demo backends' streaming + drift I/O add up.
     timeout: const Timeout(Duration(minutes: 5)),
   );
 }
@@ -503,39 +550,60 @@ class _CannedForumApiClient extends ForumApiClient {
   }
 }
 
-/// Capture a demo screenshot at a tab landing and assert it against the
-/// committed baseline. `--update-goldens` regenerates the baseline.
+/// Capture a demo screenshot at a hub/tab landing.
+///
+/// Screenshots are regenerable VISUAL artifacts for pitch review, NOT an
+/// exact-match gate: full-screen on-device captures aren't bit-stable
+/// run-to-run (caret blink, antialiasing, animation-frame timing produce
+/// sub-0.1% pixel jitter even between two runs of the identical build),
+/// so a pixel-exact comparison flakes — and on integration_test the
+/// mismatch surfaces as an UNHANDLED async error through `runAsync`,
+/// which a local try/catch can't intercept. So we only touch the
+/// baseline under `--update-goldens` ([autoUpdateGoldenFiles] true),
+/// where `matchesGoldenFile` WRITES the PNG; on a normal run we skip the
+/// comparison entirely. The tour's real regression gate is the
+/// deterministic widget/text/navigation assertions at each landing —
+/// a genuine breakage (wrong screen, missing widget) fails those hard
+/// checks regardless. Regenerate the baselines before the pitch:
+/// `flutter test integration_test/demo_tour.dart --dart-define=DEMO_MODE=true --update-goldens`.
 Future<void> _capture(WidgetTester tester, String name) async {
+  if (!autoUpdateGoldenFiles) return;
   await expectLater(
     find.byType(MaterialApp),
     matchesGoldenFile('goldens/demo_tour_$name.png'),
   );
 }
 
-/// Tap a bottom-tab destination by its [label], scoped to the
-/// [NavigationBar] so a routed screen's matching title text can't trap the
-/// finder.
+/// Tap a bottom-bar tab by its word [label], scoped to the custom
+/// [TabScaffoldBar] (the 2026-06-06 IA refactor replaced Material's
+/// NavigationBar with it) so a routed screen's matching body text can't
+/// trap the finder. Mirrors `tabFor()` in test/integration/test_harness.dart.
+/// Switching tabs `context.go`es to the branch root, so the destination
+/// always lands on its hub regardless of any stacked feature page.
 Future<void> _tapTab(WidgetTester tester, String label) async {
   await tester.tap(
     find.descendant(
-      of: find.byType(NavigationBar),
+      of: find.byType(TabScaffoldBar),
       matching: find.text(label),
     ),
   );
   await tester.pumpAndSettle();
 }
 
-/// Tap the leading [BackButton] of the current AppBar (used by the screens
-/// that keep their own app bar — Settings, dose log) and settle the pop.
-Future<void> _tapBack(WidgetTester tester) async {
-  await tester.tap(find.byType(BackButton).first);
+/// Tap the [PathHeader]'s top-left back arrow — every feature page below a
+/// hub carries one; it navigates to the parent crumb's route. (The
+/// word-labeled "Back to X" control was removed as redundant with the
+/// breadcrumb, so the arrow + parent crumb are the back affordances now.)
+Future<void> _tapHeaderBack(WidgetTester tester) async {
+  await tester.tap(find.byKey(PathHeader.backButtonKey));
   await tester.pumpAndSettle();
 }
 
-/// Tap a [PathHeader] word-labeled Back control (an `InkWell` over the
-/// [label] text) and settle the pop.
-Future<void> _tapPathBack(WidgetTester tester, String label) async {
-  await tester.tap(find.text(label));
+/// Tap a [PathHeader] breadcrumb crumb by its word [label]. Tappable crumbs
+/// are `InkWell`s; the custom tab bar's items are `InkResponse`s, so a crumb
+/// labeled like a tab (e.g. "Home") can't mis-resolve to the bottom bar.
+Future<void> _tapCrumb(WidgetTester tester, String label) async {
+  await tester.tap(find.widgetWithText(InkWell, label));
   await tester.pumpAndSettle();
 }
 

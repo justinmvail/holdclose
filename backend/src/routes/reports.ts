@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Hono } from 'hono';
 
@@ -97,10 +97,12 @@ export const reportsRouter = () => {
   }>();
 
   // ---------- POST /api/v1/reports ----------
-  // Any authed user with a profile can file a report. We don't
-  // dedupe — a second report from the same user against the same
-  // target lands as a fresh row, because the admin queue uses
-  // volume of reports as a triage signal.
+  // Any authed user with a profile can file a report. Reports from
+  // DIFFERENT users against the same target land as separate rows,
+  // because the admin queue uses volume of reports as a triage
+  // signal — but the SAME reporter re-filing while their earlier
+  // report is still open just gets that open report back, so one
+  // user mashing Report can't inflate the volume signal.
 
   router.post('/', async (c) => {
     const db = drizzle(c.env.FORUM_DB);
@@ -155,6 +157,25 @@ export const reportsRouter = () => {
       if (!row) {
         return c.json({ error: 'target_not_found' }, 404);
       }
+    }
+
+    // Dedupe: an OPEN (still-pending) report by this reporter against
+    // this target is returned as-is instead of inserting a duplicate.
+    // Resolved reports (reviewed/actioned) don't block a fresh one —
+    // re-offending content stays re-flaggable after moderation.
+    const [open] = await db
+      .select()
+      .from(reports)
+      .where(
+        and(
+          eq(reports.reporterId, profile.id),
+          eq(reports.targetKind, target_kind),
+          eq(reports.targetId, target_id),
+          eq(reports.status, REPORT_STATUS_PENDING),
+        ),
+      );
+    if (open) {
+      return c.json(reportResponse(open), 200);
     }
 
     const [created] = await db

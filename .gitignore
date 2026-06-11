@@ -89,6 +89,11 @@ test/**/goldens/**/*.*
 test/**/failures/**/*.*
 !test/**/goldens/ci/*.*
 
+# Integration-test screenshot failure diffs (on-device demo_tour). The
+# baselines under integration_test/goldens/ ARE tracked; failure diffs
+# are run debris.
+integration_test/failures/
+
 # Claude Code session/harness state (lock files, etc.)
 .claude/
 

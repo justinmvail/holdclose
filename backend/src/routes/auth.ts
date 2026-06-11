@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Hono } from 'hono';
+import { sign } from 'hono/jwt';
 
 import {
   GoogleTokenError,
@@ -15,7 +16,18 @@ export type AuthRouteBindings = {
   // Allowed Google OAuth audience(s). Single value = the Web client id; may
   // be a comma-separated list so a future iOS client id audience also passes.
   GOOGLE_CLIENT_ID: string;
+  // HMAC key for the session JWTs this route MINTS after verifying the
+  // Google ID token. The same secret backs `middleware/auth.ts`
+  // verification — but it lives ONLY on the Worker. The client never
+  // signs; it carries the opaque token returned here.
+  FORUM_JWT_SECRET: string;
 };
+
+/// Lifetime of a minted session token. Long enough that an alpha tester
+/// doesn't re-auth weekly; short enough that a leaked token ages out.
+/// The client refreshes by re-running the silent Google exchange when
+/// the backend answers 401 + `Token-Expired: true`.
+export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 // Deterministic 6-hex-char hash of the user id — the same default-name shape
 // minted by the profiles bootstrap, reused here for parity.
@@ -52,6 +64,10 @@ export const authRouter = (jwksFetcher?: JwksFetcher) => {
     if (clientIds.length === 0) {
       return c.json({ error: 'server_misconfigured' }, 500);
     }
+    const sessionSecret = c.env.FORUM_JWT_SECRET;
+    if (!sessionSecret) {
+      return c.json({ error: 'server_misconfigured' }, 500);
+    }
 
     let verified;
     try {
@@ -60,6 +76,10 @@ export const authRouter = (jwksFetcher?: JwksFetcher) => {
       if (err instanceof GoogleTokenError) {
         return c.json({ error: 'invalid_token' }, 401);
       }
+      // Anything else (JWKS fetch outage, crypto failure) is a server
+      // fault, not the caller's token — propagate to the app-level
+      // onError, which logs it and answers a GENERIC 500. Never echo
+      // the error itself: it can quote request internals.
       throw err;
     }
 
@@ -87,12 +107,26 @@ export const authRouter = (jwksFetcher?: JwksFetcher) => {
       username = created.username ?? null;
     }
 
+    // Mint the session JWT HERE, server-side, after the Google identity
+    // is proven. This is the ONLY place session tokens come from — the
+    // client carries the token opaquely and never holds the HMAC secret,
+    // so possession of an app binary mints nothing.
+    const iat = Math.floor(Date.now() / 1000);
+    const exp = iat + SESSION_TTL_SECONDS;
+    const token = await sign(
+      { sub: userId, iat, exp },
+      sessionSecret,
+      'HS256',
+    );
+
     return c.json(
       {
         user_id: userId,
         email: verified.email,
         name: verified.name,
         username,
+        token,
+        token_expires_at: exp,
       },
       200,
     );

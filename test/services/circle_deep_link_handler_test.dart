@@ -62,6 +62,9 @@ class _RecordingClient extends ForumApiClient {
     if (token == 'bad') {
       throw ForumApiException(statusCode: 404, error: 'invite_not_found');
     }
+    if (token == 'used') {
+      throw ForumApiException(statusCode: 410, error: 'invite_used');
+    }
     return circle;
   }
 }
@@ -116,15 +119,34 @@ void main() {
   });
 
   group('CircleDeepLinkHandler', () {
-    test('valid token while signed in → joins + adopts + succeeds', () async {
+    test('valid token while signed in → asks for CONFIRMATION, never '
+        'joins on its own', () async {
+      final client = _RecordingClient();
+      final container = _container(signedIn: true, client: client);
+      final handler = container.read(circleDeepLinkHandlerProvider);
+
+      final outcome =
+          await handler.handleUri('careblazers://join/good_token');
+
+      // The deep link alone must NOT reach the backend — a tapped link
+      // silently re-binding the circle is the attack this gate closes.
+      expect(outcome, isA<CircleJoinConfirmationRequired>());
+      expect(
+        (outcome as CircleJoinConfirmationRequired).token,
+        'good_token',
+      );
+      expect(client.joinedTokens, isEmpty);
+    });
+
+    test('confirmJoin (the explicit yes) joins + adopts + succeeds',
+        () async {
       final client = _RecordingClient();
       final adopted = <CircleDto>[];
       final container =
           _container(signedIn: true, client: client, adopted: adopted);
       final handler = container.read(circleDeepLinkHandlerProvider);
 
-      final outcome =
-          await handler.handleUri('careblazers://join/good_token');
+      final outcome = await handler.confirmJoin('good_token');
 
       expect(outcome, isA<CircleJoinSucceeded>());
       expect((outcome as CircleJoinSucceeded).circle.name, 'Mary\'s circle');
@@ -139,7 +161,7 @@ void main() {
       final container = _container(signedIn: true, client: client);
       final handler = container.read(circleDeepLinkHandlerProvider);
 
-      final outcome = await handler.handleUri('careblazers://join/expired');
+      final outcome = await handler.confirmJoin('expired');
 
       expect(outcome, isA<CircleJoinFailed>());
       expect((outcome as CircleJoinFailed).message, contains('expired'));
@@ -150,9 +172,24 @@ void main() {
       final container = _container(signedIn: true, client: client);
       final handler = container.read(circleDeepLinkHandlerProvider);
 
-      final outcome = await handler.handleUri('careblazers://join/bad');
+      final outcome = await handler.confirmJoin('bad');
 
       expect(outcome, isA<CircleJoinFailed>());
+    });
+
+    test('already-used (single-use) token → CircleJoinFailed with the '
+        '"already been used" message', () async {
+      final client = _RecordingClient();
+      final container = _container(signedIn: true, client: client);
+      final handler = container.read(circleDeepLinkHandlerProvider);
+
+      final outcome = await handler.confirmJoin('used');
+
+      expect(outcome, isA<CircleJoinFailed>());
+      expect(
+        (outcome as CircleJoinFailed).message,
+        contains('already been used'),
+      );
     });
 
     test('non-link URI → CircleJoinNotALink, never calls join', () async {
@@ -166,7 +203,8 @@ void main() {
       expect(client.joinedTokens, isEmpty);
     });
 
-    test('signed out → stashes, then processes on sign-in', () async {
+    test('signed out → stashes; replay after sign-in STILL requires '
+        'confirmation', () async {
       final client = _RecordingClient();
       final adopted = <CircleDto>[];
       final container =
@@ -178,14 +216,24 @@ void main() {
       expect(client.joinedTokens, isEmpty);
       expect(handler.hasPending, isTrue);
 
-      // Sign-in lands → replay the stashed token.
+      // Sign-in lands → the stashed token surfaces as a confirmation
+      // request (the gate applies to replays too), not an auto-join.
       final replayed = await handler.processPending();
-      expect(replayed, isA<CircleJoinSucceeded>());
-      expect(client.joinedTokens, <String>['good_token']);
+      expect(replayed, isA<CircleJoinConfirmationRequired>());
+      expect(
+        (replayed! as CircleJoinConfirmationRequired).token,
+        'good_token',
+      );
+      expect(client.joinedTokens, isEmpty);
       expect(handler.hasPending, isFalse);
 
       // Nothing left to process.
       expect(await handler.processPending(), isNull);
+
+      // The explicit yes completes the join.
+      final joined = await handler.confirmJoin('good_token');
+      expect(joined, isA<CircleJoinSucceeded>());
+      expect(client.joinedTokens, <String>['good_token']);
     });
   });
 }

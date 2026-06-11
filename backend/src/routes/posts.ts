@@ -64,7 +64,13 @@ function postResponse(p: Post, author?: Pick<Profile, 'username' | 'displayName'
     updated_at: p.updatedAt.toISOString(),
     vote_count: p.voteCount,
     hidden: p.hidden,
-    crisis_flagged: p.crisisFlagged,
+    // crisis_flagged is deliberately NOT exposed (2026-06-11): the
+    // watchdog's keyword triage (suicidality / self-harm / abuse,
+    // recall-over-precision) stays between the author, the moderators,
+    // and the watchdog — broadcasting it on anonymous reads published a
+    // vulnerable caregiver's worst moment to every reader and scraper.
+    // The author's supportive-resources banner is driven by the
+    // `crisis_resources` field on the CREATE response instead.
   };
 }
 

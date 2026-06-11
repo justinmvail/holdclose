@@ -7,6 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/settings.dart';
 import 'bundled_tts_provider.dart';
+import 'quiet_hours_provider.dart' show quietHoursActiveProvider;
 
 part 'tts_provider.freezed.dart';
 part 'tts_provider.g.dart';
@@ -280,6 +281,13 @@ DateTime Function() ttsClock(Ref ref) => DateTime.now;
 TTSProvider tts(Ref ref) {
   final AppSettings settings = ref.watch(ttsSettingsProvider);
   final DateTime now = ref.watch(ttsClockProvider)();
+  // A keepAlive provider freezes its build-time decision until an input
+  // changes — and "what time is it" is not a riverpod input. Watching
+  // the minute-polling QuietHoursActive notifier (value unused; it's a
+  // rebuild TICK) makes CROSSING 10pm/7am mid-session re-resolve the
+  // impl, so entering quiet hours actually mutes and leaving them
+  // actually unmutes without waiting for an unrelated settings write.
+  ref.watch(quietHoursActiveProvider);
   if (shouldMuteTts(settings, now)) {
     return const NoopTTSProvider();
   }

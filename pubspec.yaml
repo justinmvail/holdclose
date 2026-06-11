@@ -1,7 +1,7 @@
 name: careblazers
 description: "In-the-moment coach for dementia caregivers."
 publish_to: 'none'
-version: 0.1.0+18
+version: 0.1.0+19
 
 environment:
   sdk: ^3.5.0
@@ -48,12 +48,11 @@ dependencies:
 
   # Network
   dio: ^5.7.0
-  # HMAC-SHA256 for client-minted forum JWTs (BUILD_SPEC.md §13 +
-  # TASKS.md Phase 13.9). Already pulled in transitively by drift +
-  # http; promoted to a direct dep here because
-  # `lib/providers/forum_jwt_provider.dart` imports it directly to
-  # sign the shared-secret JWT.
-  crypto: ^3.0.0
+  # NOTE (2026-06-11): `crypto` was a direct dep while the app minted
+  # its own forum JWTs client-side. That scheme is retired — the Worker
+  # mints session tokens after Google sign-in (`POST /auth/google`), so
+  # the app no longer signs anything and the direct dep is gone
+  # (still present transitively via drift/http).
 
   # Audio / TTS
   flutter_tts: ^4.2.0

@@ -273,24 +273,120 @@ describe('POST /api/v1/reports', () => {
     expect(res.status).toBe(201);
   });
 
-  it('allows the same reporter to file twice against the same target', async () => {
+  it('returns the existing OPEN report (200, no new row) when the same '
+      + 'reporter re-files against the same target', async () => {
     const author = await makeProfile('cb-report-dup-author');
     await makeProfile('cb-report-dup-reporter');
     const post = await seedPost({ authorId: author.id });
 
-    for (let i = 0; i < 2; i++) {
+    const first = await authedFetch('/api/v1/reports', {
+      method: 'POST',
+      sub: 'cb-report-dup-reporter',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_kind: 'post',
+        target_id: post.id,
+        reason: 'report #0',
+      }),
+    });
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as { id: string; reason: string };
+
+    const second = await authedFetch('/api/v1/reports', {
+      method: 'POST',
+      sub: 'cb-report-dup-reporter',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_kind: 'post',
+        target_id: post.id,
+        reason: 'report #1',
+      }),
+    });
+    expect(second.status).toBe(200);
+    const secondBody = (await second.json()) as {
+      id: string;
+      reason: string;
+      status: string;
+    };
+    // Same row comes back — original reason intact, still pending.
+    expect(secondBody.id).toBe(firstBody.id);
+    expect(secondBody.reason).toBe('report #0');
+    expect(secondBody.status).toBe('pending');
+
+    const db = drizzle(env.FORUM_DB);
+    const rows = await db.select().from(reports);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('a DIFFERENT reporter against the same target still files a fresh '
+      + 'row (volume stays a triage signal)', async () => {
+    const author = await makeProfile('cb-report-vol-author');
+    await makeProfile('cb-report-vol-r1');
+    await makeProfile('cb-report-vol-r2');
+    const post = await seedPost({ authorId: author.id });
+
+    for (const sub of ['cb-report-vol-r1', 'cb-report-vol-r2']) {
       const res = await authedFetch('/api/v1/reports', {
         method: 'POST',
-        sub: 'cb-report-dup-reporter',
+        sub,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           target_kind: 'post',
           target_id: post.id,
-          reason: `report #${i}`,
+          reason: 'spam',
         }),
       });
       expect(res.status).toBe(201);
     }
+    const db = drizzle(env.FORUM_DB);
+    const rows = await db.select().from(reports);
+    expect(rows).toHaveLength(2);
+  });
+
+  it('allows a fresh report once the earlier one is resolved '
+      + '(reviewed via the moderation flow)', async () => {
+    const author = await makeProfile('cb-report-refile-author');
+    await makeProfile('cb-report-refile-reporter');
+    await makeProfile('cb-report-refile-admin', { role: 'admin' });
+    const post = await seedPost({ authorId: author.id });
+
+    const first = await authedFetch('/api/v1/reports', {
+      method: 'POST',
+      sub: 'cb-report-refile-reporter',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_kind: 'post',
+        target_id: post.id,
+        reason: 'first complaint',
+      }),
+    });
+    expect(first.status).toBe(201);
+    const { id: firstId } = (await first.json()) as { id: string };
+
+    // Admin reviews it (no_action → status: reviewed).
+    const reviewed = await authedFetch(`/api/v1/reports/${firstId}`, {
+      method: 'PATCH',
+      sub: 'cb-report-refile-admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'no_action' }),
+    });
+    expect(reviewed.status).toBe(200);
+
+    // The same reporter re-flagging the same target now lands a NEW row.
+    const refiled = await authedFetch('/api/v1/reports', {
+      method: 'POST',
+      sub: 'cb-report-refile-reporter',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_kind: 'post',
+        target_id: post.id,
+        reason: 'it happened again',
+      }),
+    });
+    expect(refiled.status).toBe(201);
+    const refiledBody = (await refiled.json()) as { id: string };
+    expect(refiledBody.id).not.toBe(firstId);
+
     const db = drizzle(env.FORUM_DB);
     const rows = await db.select().from(reports);
     expect(rows).toHaveLength(2);

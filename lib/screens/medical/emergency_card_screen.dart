@@ -10,6 +10,8 @@ import '../../providers/documents_provider.dart';
 import '../../providers/link_launcher_provider.dart';
 import '../../providers/storage_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/path_header.dart';
 import '../../services/medication_repository.dart';
 
@@ -163,7 +165,8 @@ class EmergencyCardScreen extends ConsumerWidget {
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load the emergency card.\n$e"),
                 data: (EmergencyCardView view) => _Body(view: view),
               ),
             ),
@@ -250,7 +253,7 @@ class _Body extends ConsumerWidget {
             if (card != null) ...<Widget>[
               const SizedBox(height: 16),
               Text(
-                'Updated ${_formatDate(card.updatedAt)}',
+                'Updated ${formatMonthDayYear(card.updatedAt)}',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: context.cb.primarySoft,
                     ),
@@ -740,35 +743,3 @@ class _EmptyLine extends StatelessWidget {
     );
   }
 }
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load the emergency card.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const List<String> _months = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-String _formatDate(DateTime t) => '${_months[t.month - 1]} ${t.day}, ${t.year}';

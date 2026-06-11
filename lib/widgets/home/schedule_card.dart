@@ -10,6 +10,7 @@ import '../../providers/home_clock_provider.dart';
 import '../../providers/patient_timeline_provider.dart';
 import '../../services/appointment_repository.dart';
 import '../../theme.dart';
+import '../form/format.dart';
 import '../schedule_grouping.dart';
 
 /// Completed-status of every appointment, keyed by id — so the schedule can
@@ -314,7 +315,7 @@ class _GroupedRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme tt = Theme.of(context).textTheme;
     final bool past = model.start.isBefore(now);
-    final String time = _formatClock(model.start);
+    final String time = formatClock12h(model.start);
     final Color baseText = past
         ? context.cb.text.withValues(alpha: 0.55)
         : context.cb.text;
@@ -490,7 +491,7 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme tt = Theme.of(context).textTheme;
     final bool past = event.start.isBefore(now);
-    final String time = _formatClock(event.start);
+    final String time = formatClock12h(event.start);
     final String? route = event.detailRoute;
     final VoidCallback? onTap = route == null
         ? null
@@ -723,10 +724,3 @@ _Buckets _bucket(List<CareEvent> events, DateTime now) {
   return _Buckets(today: today, tomorrow: tomorrow);
 }
 
-String _formatClock(DateTime t) {
-  final int rawHour = t.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = t.minute.toString().padLeft(2, '0');
-  final String suffix = t.hour < 12 ? 'AM' : 'PM';
-  return '$hour:$minute $suffix';
-}

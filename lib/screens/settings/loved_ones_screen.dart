@@ -12,6 +12,7 @@ import '../../screens/medication/dose_window_list_screen.dart'
 import '../../screens/medication/medication_list_screen.dart'
     show medicationListProvider;
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
 import '../../widgets/path_header.dart';
 
 part 'loved_ones_screen.g.dart';
@@ -117,7 +118,8 @@ class LovedOnesScreen extends ConsumerWidget {
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load your loved ones.\n$e"),
                 data: (LovedOnesView view) => _Body(view: view),
               ),
             ),
@@ -320,28 +322,6 @@ class _EmptyState extends StatelessWidget {
     );
   }
 }
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load your loved ones.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
 /// Up to two uppercase initials from [name]; `?` for an empty name.
 String _initials(String name) {
   final List<String> parts = name

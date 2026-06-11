@@ -329,7 +329,8 @@ class FakeForumApiClient extends ForumApiClient {
     if (!exists) {
       throw ForumApiException(statusCode: 404, error: 'circle_not_found');
     }
-    final DateTime expiresAt = _clock().add(const Duration(days: 7));
+    // 48h TTL, matching the Worker's INVITE_TTL_MS (2026-06-11).
+    final DateTime expiresAt = _clock().add(const Duration(hours: 48));
     final String token = _mintId('invite');
     _invites[token] = _FakeInvite(circleId: circleId, expiresAt: expiresAt);
     return CircleInviteDto(
@@ -357,19 +358,26 @@ class FakeForumApiClient extends ForumApiClient {
     final CircleDto current = _circles[idx];
     final bool alreadyMember =
         current.members.any((CircleMemberDto m) => m.profileId == me.id);
-    final CircleDto next = alreadyMember
-        ? current
-        : current.copyWith(
-            members: <CircleMemberDto>[
-              ...current.members,
-              CircleMemberDto(
-                profileId: me.id,
-                username: me.username,
-                displayName: me.displayName,
-                role: 'member',
-              ),
-            ],
-          );
+    if (alreadyMember) {
+      // Idempotent for existing members — re-tapping an old link is
+      // benign and does not consume anything (mirrors the Worker).
+      return _withCurrentPatient(current);
+    }
+    if (invite.usedByProfileId != null) {
+      throw ForumApiException(statusCode: 410, error: 'invite_used');
+    }
+    invite.usedByProfileId = me.id;
+    final CircleDto next = current.copyWith(
+      members: <CircleMemberDto>[
+        ...current.members,
+        CircleMemberDto(
+          profileId: me.id,
+          username: me.username,
+          displayName: me.displayName,
+          role: 'member',
+        ),
+      ],
+    );
     _circles[idx] = next;
     return _withCurrentPatient(next);
   }
@@ -727,10 +735,15 @@ class FakeForumApiClient extends ForumApiClient {
 /// In-memory invite record the fake mints from [createInvite] and
 /// redeems in [joinCircle] (care-circle connect, 2026-06-06).
 class _FakeInvite {
-  const _FakeInvite({required this.circleId, required this.expiresAt});
+  _FakeInvite({required this.circleId, required this.expiresAt});
 
   final String circleId;
   final DateTime expiresAt;
+
+  /// Mirrors the Worker's single-use consumption (2026-06-11): set to the
+  /// consuming profile id on the first NEW-member join; any later join by
+  /// someone else gets `invite_used`.
+  String? usedByProfileId;
 }
 
 /// Shared circle + sync state for [FakeForumApiClient]

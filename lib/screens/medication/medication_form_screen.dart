@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +11,10 @@ import '../../providers/patient_timeline_provider.dart' show invalidatePatientTi
 import '../../services/medication_repository.dart';
 import '../../services/notification_scheduler.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
+import '../../widgets/form/id_factory.dart';
+import '../../widgets/form/labelled_field.dart';
 import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
 import '../../widgets/weekday_picker.dart';
@@ -26,11 +28,7 @@ part 'medication_form_screen.g.dart';
 /// deterministic.
 typedef MedicationIdFactory = String Function();
 
-String _defaultMedicationIdFactory() {
-  final int ms = DateTime.now().millisecondsSinceEpoch;
-  final int rand = math.Random().nextInt(1 << 32);
-  return '$ms-$rand';
-}
+String _defaultMedicationIdFactory() => mintId('');
 
 /// ID factory the form screen uses. Tests override this with a
 /// monotonic counter so the medication-id and schedule-id pair is
@@ -442,7 +440,8 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
             Expanded(
               child: hydration.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load this medication.\n$e"),
                 data: (Medication? med) {
                   _hydrateFromMedication(med);
                   return Form(
@@ -460,7 +459,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                                 const EdgeInsets.fromLTRB(20, 16, 20, 16),
                             children: <Widget>[
                   const SizedBox(height: 4),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Name',
                     child: TextFormField(
                       key: MedicationFormScreen.nameFieldKey,
@@ -493,7 +492,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Dosage',
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,7 +544,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Route',
                     child: DropdownButtonFormField<MedicationRoute>(
                       key: MedicationFormScreen.routeDropdownKey,
@@ -588,7 +587,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Prescriber (optional)',
                     child: TextFormField(
                       key: MedicationFormScreen.prescriberFieldKey,
@@ -604,7 +603,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Notes (optional)',
                     child: TextFormField(
                       key: MedicationFormScreen.notesFieldKey,
@@ -617,7 +616,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Times',
                     child: _WindowChipPicker(
                       fieldKey:
@@ -638,7 +637,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'Days',
                     child: WeekdayPicker(
                       selected: _daysOfWeek,
@@ -657,7 +656,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _LabelledField(
+                  LabelledField(
                     label: 'End date (optional)',
                     child: _EndDatePicker(
                       fieldKey: MedicationFormScreen.endDateFieldKey,
@@ -739,50 +738,6 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load this medication.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-class _LabelledField extends StatelessWidget {
-  const _LabelledField({required this.label, required this.child});
-
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          label,
-          style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 4),
-        child,
-      ],
     );
   }
 }
@@ -894,6 +849,13 @@ class _WindowChipPicker extends ConsumerWidget {
         );
         return;
       }
+      // Capture refs BEFORE the next await (same rule as the submit
+      // path's note above) so a widget-unmount while the time picker is
+      // up doesn't trip "ref read after dispose".
+      final MedicationRepository repo =
+          ref.read(medicationRepositoryBackendProvider);
+      final Future<String> patientIdFuture =
+          ref.read(activePatientIdProvider.future);
       // Sheet closed with the new label; pop the system time picker
       // before minting the DoseWindow.
       final TimeOfDay? time = await showTimePicker(
@@ -901,9 +863,7 @@ class _WindowChipPicker extends ConsumerWidget {
         initialTime: const TimeOfDay(hour: 8, minute: 0),
       );
       if (time == null) return;
-      final MedicationRepository repo =
-          ref.read(medicationRepositoryBackendProvider);
-      final String patientId = await ref.read(activePatientIdProvider.future);
+      final String patientId = await patientIdFuture;
       final List<DoseWindow> existing =
           await repo.windowsForPatient(patientId);
       final int nextSort = existing.isEmpty
@@ -919,6 +879,9 @@ class _WindowChipPicker extends ConsumerWidget {
         sortOrder: nextSort,
       );
       await repo.upsertWindow(window);
+      // The picker + repo writes above may outlive this chip row; only
+      // touch ref/onChanged when the row is still mounted.
+      if (!context.mounted) return;
       ref.invalidate(doseWindowListProvider);
       onChanged(<String>{...selected, window.id});
     } else if (picked.existingId != null) {
@@ -1124,7 +1087,7 @@ class _EndDatePicker extends StatelessWidget {
     final TextTheme tt = Theme.of(context).textTheme;
     final String label = value == null
         ? 'No end date'
-        : _formatDate(value!);
+        : formatMonthDayYear(value!);
     return InkWell(
       key: fieldKey,
       onTap: () => _pick(context),
@@ -1148,14 +1111,6 @@ class _EndDatePicker extends StatelessWidget {
     );
   }
 }
-
-const List<String> _monthNamesShort = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-String _formatDate(DateTime d) =>
-    '${_monthNamesShort[d.month - 1]} ${d.day}, ${d.year}';
 
 /// Title-case a free-text input as the user types.
 ///

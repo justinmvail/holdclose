@@ -849,9 +849,23 @@ class _OutcomeButtons extends StatelessWidget {
               minimumSize: const Size.fromHeight(56),
             ),
             onPressed: onThatHelped,
-            child: Text(
-              '✓  That helped — log it',
-              style: textTheme.labelLarge?.copyWith(color: Colors.white),
+            // Icon slot, not an emoji/dingbat in the label — the brand
+            // voice bans emoji on primary CTAs (CLAUDE.md).
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Icon(Icons.check, size: 20, color: Colors.white),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'That helped — log it',
+                    textAlign: TextAlign.center,
+                    style:
+                        textTheme.labelLarge?.copyWith(color: Colors.white),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -867,11 +881,22 @@ class _OutcomeButtons extends StatelessWidget {
               minimumSize: const Size.fromHeight(56),
             ),
             onPressed: onDifferentApproach,
-            child: Text(
-              '→  Try a different approach',
-              style: textTheme.labelLarge?.copyWith(
-                color: context.cb.primary,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(Icons.refresh, size: 20, color: context.cb.primary),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Try a different approach',
+                    textAlign: TextAlign.center,
+                    style: textTheme.labelLarge?.copyWith(
+                      color: context.cb.primary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -886,11 +911,23 @@ class _OutcomeButtons extends StatelessWidget {
               minimumSize: const Size.fromHeight(48),
             ),
             onPressed: onTalkToNatali,
-            child: Text(
-              '💬  I need to talk to Natali',
-              style: textTheme.labelLarge?.copyWith(
-                color: context.cb.link,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(Icons.chat_bubble_outline,
+                    size: 18, color: context.cb.link),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'I need to talk to Natali',
+                    textAlign: TextAlign.center,
+                    style: textTheme.labelLarge?.copyWith(
+                      color: context.cb.link,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

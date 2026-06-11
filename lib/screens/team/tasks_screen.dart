@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +9,9 @@ import '../../models/caregiver.dart';
 import '../../providers/active_patient_provider.dart';
 import '../../providers/care_tasks_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form/form_error_view.dart';
+import '../../widgets/form/format.dart';
+import '../../widgets/form/id_factory.dart';
 import '../../widgets/path_header.dart';
 
 part 'tasks_screen.g.dart';
@@ -19,11 +21,7 @@ part 'tasks_screen.g.dart';
 /// appointment / medication form id factories.
 typedef TaskIdFactory = String Function();
 
-String _defaultTaskIdFactory() {
-  final int ms = DateTime.now().millisecondsSinceEpoch;
-  final int rand = math.Random().nextInt(1 << 32);
-  return 'task-$ms-$rand';
-}
+String _defaultTaskIdFactory() => mintId('task');
 
 /// Id factory the create sheet uses. Tests override this with a monotonic
 /// counter so the minted ids are stable across runs.
@@ -131,7 +129,8 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
             Expanded(
               child: async.when(
                 loading: () => const SizedBox.shrink(),
-                error: (Object e, StackTrace _) => _ErrorView(message: '$e'),
+                error: (Object e, StackTrace _) => FormErrorView(
+                    message: "We couldn't load the tasks.\n$e"),
                 data: (List<CareTaskCard> cards) {
                   final List<CareTaskCard> filtered = cards
                       .where((CareTaskCard c) => c.task.status == _segment)
@@ -1076,27 +1075,6 @@ class _AssigneeChoice extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          "We couldn't load the tasks.\n$message",
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -1138,17 +1116,6 @@ String _initials(String name) {
       .toUpperCase();
 }
 
-const List<String> _monthsShort = <String>[
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
 /// "Jun 3, 2:30 PM" — the due time shown on a card + the create sheet.
-String formatDue(DateTime due) {
-  final String month = _monthsShort[due.month - 1];
-  final int rawHour = due.hour % 12;
-  final int hour = rawHour == 0 ? 12 : rawHour;
-  final String minute = due.minute.toString().padLeft(2, '0');
-  final String suffix = due.hour < 12 ? 'AM' : 'PM';
-  return '$month ${due.day}, $hour:$minute $suffix';
-}
+String formatDue(DateTime due) =>
+    '${monthAbbreviations[due.month - 1]} ${due.day}, ${formatClock12h(due)}';

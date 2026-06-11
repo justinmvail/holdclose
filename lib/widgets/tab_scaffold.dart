@@ -205,38 +205,52 @@ class _TabItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color color = selected ? context.cb.primary : context.cb.primarySoft;
     return Expanded(
-      child: InkResponse(
+      // Announce each tab as a button with its word label + selection
+      // state so VoiceOver/TalkBack read "Home, button, selected" rather
+      // than bare text. The label replaces the descendants' semantics
+      // (container + excludeSemantics) to avoid a doubled announcement;
+      // onTap keeps the activate action on the node the label lives on.
+      child: Semantics(
+        container: true,
+        button: true,
+        selected: selected,
+        label: destination.label,
+        excludeSemantics: true,
         onTap: onTap,
-        radius: 40,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(
-              selected ? destination.selectedIcon : destination.icon,
-              size: 26,
-              color: color,
-            ),
-            const SizedBox(height: 2),
-            // Single-line, clipped — never wrap. A wrapped label would grow
-            // the column past the bar height and trip a RenderFlex overflow
-            // (the wide test font surfaced this; "Community" is the worst case).
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(
-                destination.label,
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 40,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                selected ? destination.selectedIcon : destination.icon,
+                size: 26,
+                color: color,
+              ),
+              const SizedBox(height: 2),
+              // Single-line, clipped — never wrap. A wrapped label would
+              // grow the column past the bar height and trip a RenderFlex
+              // overflow (the wide test font surfaced this; "Community" is
+              // the worst case).
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  destination.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -362,6 +376,15 @@ class _CenterVoiceButtonState extends ConsumerState<_CenterVoiceButton> {
         await ref.read(chatServiceProvider).routeVoiceIntent(text);
     if (!mounted) {
       _removeOverlay();
+      return;
+    }
+    if (_cancelled) {
+      // The caregiver dismissed the overlay while the request was in
+      // flight — a LATE resolution must not yank them into a chat
+      // thread (or flash a stale confirmation) they already walked
+      // away from. The persisted thread (if any) stays in the chat
+      // list; nothing is lost, nothing navigates.
+      _reset();
       return;
     }
     ref.invalidate(chatConversationListProvider);

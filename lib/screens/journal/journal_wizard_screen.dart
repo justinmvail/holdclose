@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/journal_entry.dart';
 import '../../providers/storage_provider.dart';
 import '../../theme.dart';
+import '../../widgets/form/id_factory.dart';
 import '../../widgets/path_header.dart';
 
 /// Hand-off shape for the chat coach's `[action:log_journal …]` action
@@ -247,8 +247,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
     final StorageProvider storage = ref.read(storageProvider);
     final DateTime now = DateTime.now();
     final JournalEntry entry = JournalEntry.wizard(
-      id: 'journal-${now.millisecondsSinceEpoch}-'
-          '${math.Random().nextInt(1 << 32)}',
+      id: mintId('journal', clock: () => now),
       createdAt: now,
       occurredAt: _resolveOccurredAt(),
       situationText: _situationController.text.trim(),

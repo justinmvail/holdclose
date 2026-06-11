@@ -22,6 +22,18 @@ const MAX_BLOB_BYTES = 8 * 1024 * 1024;
 // circle's blobs, and the per-document key is constrained to a safe charset.
 const KEY_PATTERN = /^[A-Za-z0-9._-]{1,200}$/;
 
+// Content types a document scan can legitimately be. Anything else (e.g.
+// text/html, image/svg+xml) is rejected at upload so a stored blob can
+// never be replayed to a browser as an active document.
+const ALLOWED_CONTENT_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/heic',
+  'image/webp',
+  'application/pdf',
+  'application/octet-stream',
+]);
+
 async function loadProfileByUserId(
   db: Db,
   careblazersUserId: string,
@@ -90,6 +102,16 @@ export const documentsRouter = () => {
     const authd = await authorize(c, db, circleId);
     if (!authd.ok) return authd.res;
 
+    // Whitelist the declared type before buffering the body. Strip any
+    // parameters ("image/jpeg; charset=x" → "image/jpeg") so a decorated
+    // header can't sneak past the set lookup.
+    const rawType =
+      c.req.header('Content-Type') || 'application/octet-stream';
+    const contentType = rawType.split(';')[0].trim().toLowerCase();
+    if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+      return c.json({ error: 'unsupported_media_type' }, 415);
+    }
+
     const body = await c.req.arrayBuffer();
     if (body.byteLength === 0) {
       return c.json({ error: 'empty_body' }, 400);
@@ -99,8 +121,6 @@ export const documentsRouter = () => {
     }
 
     const fullKey = storageKey(circleId, key);
-    const contentType =
-      c.req.header('Content-Type') || 'application/octet-stream';
     await c.env.DOC_BLOBS.put(fullKey, body, {
       httpMetadata: { contentType },
     });
@@ -128,7 +148,14 @@ export const documentsRouter = () => {
       obj.httpMetadata?.contentType || 'application/octet-stream';
     return new Response(obj.body, {
       status: 200,
-      headers: { 'Content-Type': contentType },
+      headers: {
+        'Content-Type': contentType,
+        // Belt-and-braces against a blob being interpreted as an active
+        // document: never MIME-sniff, and force download semantics rather
+        // than inline rendering.
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Disposition': 'attachment',
+      },
     });
   });
 
