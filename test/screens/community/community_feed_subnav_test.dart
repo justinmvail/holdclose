@@ -1,3 +1,4 @@
+import '../../support/forum_cache_test_override.dart';
 import 'dart:async';
 
 import 'package:careblazers/db/database.dart';
@@ -66,6 +67,7 @@ Future<void> _pumpScreen(WidgetTester tester) async {
           _CannedForumApiClient(<ForumPost>[_post('a', title: 'Feed post a')]),
         ),
         communityFeedClockProvider.overrideWithValue(() => _fixedNow),
+        forumPostCacheTestOverride(),
       ],
       child: const MaterialApp(home: CommunityFeedScreen()),
     ),
@@ -93,6 +95,7 @@ Future<GoRouter> _pumpShell(WidgetTester tester) async {
           _CannedForumApiClient(<ForumPost>[_post('a', title: 'Feed post a')]),
         ),
         communityFeedClockProvider.overrideWithValue(() => _fixedNow),
+        forumPostCacheTestOverride(),
         homeConversationProvider.overrideWith(
           (_) async => Conversation(
             id: 'subnav-test-conv',

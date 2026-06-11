@@ -124,8 +124,8 @@ void main() {
       expect(await db.select(db.identificationDocsTable).get(), isEmpty);
     });
 
-    test('schemaVersion is 18 (Care Circle local-first cache migration step)', () {
-      expect(db.schemaVersion, 18);
+    test('schemaVersion is 19 (forum-post local-first cache migration step)', () {
+      expect(db.schemaVersion, 19);
     });
   });
 }

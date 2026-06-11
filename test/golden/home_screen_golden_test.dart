@@ -1,3 +1,4 @@
+import '../support/forum_cache_test_override.dart';
 import 'package:alchemist/alchemist.dart';
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/care_event.dart';
@@ -51,6 +52,10 @@ void main() {
                   FakeAuthProvider()..signInWithGoogle(),
                 ),
                 homeClockProvider.overrideWithValue(() => _goldenNow),
+                // Home's Community recap card reads the (local-first) feed,
+                // which now reaches a DB-backed cache — keep it in-memory so
+                // the golden never opens on-device sqlite.
+                forumPostCacheTestOverride(),
                 // The Medications Today card (Phase 14.9) reads the
                 // dose-log providers; an empty in-memory repo keeps the
                 // golden off on-device sqlite and renders the card's

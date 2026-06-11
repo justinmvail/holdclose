@@ -689,3 +689,25 @@ class CircleMemberCacheTable extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{profileId};
 }
+
+/// Local read-cache of the community forum's first page (per sort), so the
+/// Community feed renders the last-seen posts INSTANTLY and OFFLINE instead of
+/// a skeleton / "couldn't load" error when there's no signal (local-first).
+/// The feed always refreshes from `GET /posts` in the background when online,
+/// so a connected reader still sees what's there now; this cache is the
+/// offline / cold-start fallback. [payload] is `ForumPost.toJson()`; [sort] is
+/// the `ForumPostSort` name; [rank] preserves the server's ordering within a
+/// sort.
+class ForumPostCacheTable extends Table {
+  @override
+  String get tableName => 'forum_post_cache';
+
+  TextColumn get id => text()();
+  TextColumn get sort => text()();
+  IntColumn get rank => integer()();
+  TextColumn get payload => text()();
+  IntColumn get cachedAtMs => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id, sort};
+}

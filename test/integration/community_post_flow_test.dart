@@ -32,6 +32,7 @@
 library;
 
 import 'package:careblazers/models/forum.dart';
+import '../support/forum_cache_test_override.dart';
 import 'package:careblazers/screens/community/community_feed_screen.dart';
 import 'package:careblazers/screens/community/post_compose_screen.dart';
 import 'package:careblazers/screens/community/post_detail_screen.dart';
@@ -378,6 +379,7 @@ Future<_Detail> _pumpToFirstPost(
       forumApiClientProvider.overrideWithValue(fake),
       postDetailClockProvider.overrideWithValue(() => kHarnessClock),
       communityFeedClockProvider.overrideWithValue(() => kHarnessClock),
+      forumPostCacheTestOverride(),
     ],
   );
 
@@ -437,6 +439,7 @@ Future<_OwnPost> _pumpToOwnPost(WidgetTester tester) async {
       forumApiClientProvider.overrideWithValue(fake),
       postDetailClockProvider.overrideWithValue(() => kHarnessClock),
       communityFeedClockProvider.overrideWithValue(() => kHarnessClock),
+      forumPostCacheTestOverride(),
     ],
   );
 

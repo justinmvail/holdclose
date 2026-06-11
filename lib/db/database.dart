@@ -57,6 +57,7 @@ part 'database.g.dart';
     ExpensesTable,
     SyncOutboxTable,
     CircleMemberCacheTable,
+    ForumPostCacheTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
@@ -124,7 +125,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       CareblazersDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -312,6 +313,12 @@ class CareblazersDatabase extends _$CareblazersDatabase {
             // `GET /circles` live. Lights up empty; fills on the next sync.
             await m.createTable(circleMemberCacheTable);
           }
+          if (from < 19) {
+            // Local-first community feed: a read-cache of the forum's first
+            // page so Community renders the last-seen posts offline instead of
+            // a "couldn't load" error. Lights up empty; fills on first load.
+            await m.createTable(forumPostCacheTable);
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -358,6 +365,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(expensesTable).go();
       await delete(syncOutboxTable).go();
       await delete(circleMemberCacheTable).go();
+      await delete(forumPostCacheTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();

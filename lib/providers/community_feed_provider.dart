@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/forum.dart';
 import '../services/forum_api_client.dart';
+import 'forum_post_cache_provider.dart';
 
 part 'community_feed_provider.g.dart';
 
@@ -133,13 +134,33 @@ class CommunityFeedState {
 class CommunityFeed extends _$CommunityFeed {
   @override
   CommunityFeedState build() {
-    // Kick off the first fetch out of band — the build() return value
-    // is the initial state, and the future settles a microtask later
-    // with the first page's payload. Riverpod handles disposal: if the
-    // notifier tears down before the future resolves, `state =` becomes
-    // a no-op via the `mounted` guard inside `_load`.
-    unawaited(_load(sort: ForumPostSort.hot, append: false));
+    // Local-first: paint the last-seen page from the on-device cache FIRST
+    // (instant + offline), then refresh from the backend. Riverpod handles
+    // disposal — `state =` no-ops after teardown via the `mounted` guard.
+    unawaited(_init());
     return const CommunityFeedState.initial();
+  }
+
+  /// Hydrate from the cache, then refresh page 1 from the backend. The cached
+  /// posts render immediately (no skeleton flash, and the whole feed is
+  /// readable offline); `isLoading` stays true so the screen still shows it's
+  /// refreshing, and a successful load replaces the cache with fresh posts.
+  Future<void> _init() async {
+    final List<ForumPost> cached = await _readCache(ForumPostSort.hot);
+    if (cached.isNotEmpty && _stillHot()) {
+      state = state.copyWith(posts: cached);
+    }
+    await _load(sort: ForumPostSort.hot, append: false);
+  }
+
+  bool _stillHot() => state.sort == ForumPostSort.hot && state.posts.isEmpty;
+
+  Future<List<ForumPost>> _readCache(ForumPostSort sort) async {
+    try {
+      return await ref.read(forumPostCacheRepositoryProvider).firstPage(sort);
+    } catch (_) {
+      return const <ForumPost>[];
+    }
   }
 
   /// Flip the sort key and reload from the top. No-op when [next] is
@@ -212,12 +233,42 @@ class CommunityFeed extends _$CommunityFeed {
         hasMore: page.length >= communityFeedPageSize,
         clearError: true,
       );
+      // Cache the fresh first page so the next cold/offline open shows it.
+      if (!append) {
+        unawaited(_writeCache(sort, page));
+      }
     } catch (error) {
+      // Offline / backend down. Local-first: prefer showing CONTENT over an
+      // error. On a first-page load, keep whatever's already on screen, or
+      // fall back to the cached first page, so the feed stays readable with no
+      // signal. Only surface the error when there's genuinely nothing to show.
+      if (!append) {
+        List<ForumPost> show = state.posts;
+        if (show.isEmpty) show = await _readCache(sort);
+        if (show.isNotEmpty) {
+          state = state.copyWith(
+            sort: sort,
+            posts: show,
+            isLoading: false,
+            isLoadingMore: false,
+            clearError: true,
+          );
+          return;
+        }
+      }
       state = state.copyWith(
         isLoading: false,
         isLoadingMore: false,
         error: error,
       );
+    }
+  }
+
+  Future<void> _writeCache(ForumPostSort sort, List<ForumPost> page) async {
+    try {
+      await ref.read(forumPostCacheRepositoryProvider).cacheFirstPage(sort, page);
+    } catch (_) {
+      // A cache write failure must never affect the live feed.
     }
   }
 }

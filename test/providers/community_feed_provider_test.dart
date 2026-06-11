@@ -1,6 +1,9 @@
+import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/forum.dart';
 import 'package:careblazers/providers/community_feed_provider.dart';
+import 'package:careblazers/providers/forum_post_cache_provider.dart';
 import 'package:careblazers/services/forum_api_client.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
@@ -83,10 +86,18 @@ class _ListPostsCall {
 /// the disposed notifier's `state =` becomes a no-op, masking the test
 /// signal. A no-op listener keeps the subscription alive for the
 /// duration of the test.
-ProviderContainer _container(_FakeForumApiClient client) {
+ProviderContainer _container(
+  _FakeForumApiClient client, {
+  ForumPostCacheRepository? cache,
+}) {
+  // The feed reads a forum-post cache repo (local-first). In unit tests it
+  // must NOT open the real on-disk DB — back it with an in-memory one.
+  final ForumPostCacheRepository cacheRepo = cache ??
+      ForumPostCacheRepository(CareblazersDatabase(NativeDatabase.memory()));
   final ProviderContainer container = ProviderContainer(
     overrides: <Override>[
       forumApiClientProvider.overrideWithValue(client),
+      forumPostCacheRepositoryProvider.overrideWithValue(cacheRepo),
     ],
   );
   container.listen<CommunityFeedState>(
@@ -335,6 +346,75 @@ void main() {
       );
       final CommunityFeedState after = before.copyWith(clearError: true);
       expect(after.error, isNull);
+    });
+  });
+
+  group('CommunityFeed — local-first offline cache', () {
+    test('caches the fresh first page on a successful load', () async {
+      final CareblazersDatabase db =
+          CareblazersDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final ForumPostCacheRepository cache = ForumPostCacheRepository(db);
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..setPage(
+          sort: ForumPostSort.hot,
+          page: <ForumPost>[_post('a'), _post('b')],
+        );
+      final ProviderContainer container = _container(client, cache: cache);
+      addTearDown(container.dispose);
+
+      container.read(communityFeedProvider);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      // The page was written through to the on-device cache.
+      final List<ForumPost> cached = await cache.firstPage(ForumPostSort.hot);
+      expect(cached.map((ForumPost p) => p.id).toList(), <String>['a', 'b']);
+    });
+
+    test('falls back to the cached page when the backend is unreachable',
+        () async {
+      final CareblazersDatabase db =
+          CareblazersDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final ForumPostCacheRepository cache = ForumPostCacheRepository(db);
+      // Prime the cache as if a previous online session had loaded the feed.
+      await cache.cacheFirstPage(
+        ForumPostSort.hot,
+        <ForumPost>[_post('cached-1'), _post('cached-2')],
+      );
+
+      // Backend is offline — every listPosts throws.
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..nextError = Exception('offline');
+      final ProviderContainer container = _container(client, cache: cache);
+      addTearDown(container.dispose);
+
+      container.read(communityFeedProvider);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      final CommunityFeedState state = container.read(communityFeedProvider);
+      // The feed is READABLE offline from the cache — no error banner.
+      expect(state.posts.map((ForumPost p) => p.id).toList(),
+          <String>['cached-1', 'cached-2']);
+      expect(state.isLoading, isFalse);
+      expect(state.error, isNull);
+    });
+
+    test('surfaces the error when offline AND the cache is empty', () async {
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..nextError = Exception('offline');
+      final ProviderContainer container = _container(client);
+      addTearDown(container.dispose);
+
+      container.read(communityFeedProvider);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      final CommunityFeedState state = container.read(communityFeedProvider);
+      expect(state.posts, isEmpty);
+      expect(state.error, isNotNull);
     });
   });
 }

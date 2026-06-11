@@ -1,4 +1,5 @@
 import 'package:alchemist/alchemist.dart';
+import '../support/forum_cache_test_override.dart';
 import 'package:careblazers/models/forum.dart';
 import 'package:careblazers/screens/community/community_feed_screen.dart';
 import 'package:careblazers/services/forum_api_client.dart';
@@ -94,6 +95,7 @@ void main() {
                   _CannedForumApiClient(const <ForumPost>[]),
                 ),
                 communityFeedClockProvider.overrideWithValue(() => _fixedNow),
+                forumPostCacheTestOverride(),
               ],
               child: SizedBox(
                 width: 420,
@@ -128,6 +130,7 @@ void main() {
                   _OfflineForumApiClient(),
                 ),
                 communityFeedClockProvider.overrideWithValue(() => _fixedNow),
+                forumPostCacheTestOverride(),
               ],
               child: SizedBox(
                 width: 420,
@@ -198,6 +201,7 @@ void main() {
                   ]),
                 ),
                 communityFeedClockProvider.overrideWithValue(() => _fixedNow),
+                forumPostCacheTestOverride(),
               ],
               child: SizedBox(
                 width: 420,
