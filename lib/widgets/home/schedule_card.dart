@@ -353,10 +353,9 @@ class _GroupedRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              // Blank leading slot so the window's time lines up with the
-              // appointment rows' checkbox-led times (the window itself isn't
-              // a single checkable item — its meds carry their own marks).
-              const SizedBox(width: _leadingSlot),
+              // Flush-left time — the window header reads like every other
+              // parent row (fb_1781138746662030); only its child doses below
+              // indent.
               Expanded(
                 child: Text.rich(
                   label == null
@@ -507,22 +506,13 @@ class _Row extends StatelessWidget {
         : context.cb.primarySoft;
 
     // Only items with a real "done" state are checkable — appointments here
-    // (doses live in their own grouped rows). Past-record kinds (journal,
-    // health log) get a blank slot so their time still lines up.
+    // (doses live in their own grouped rows). The check-off control rides on
+    // the RIGHT now (fb_1781138746662030: "times need to remove the indent —
+    // only bullets should indent"), so every parent row's TIME is flush-left;
+    // only a window's child doses indent under it.
     final String? apptId = event.kind == CareEventKind.appointment
         ? event.externalRef
         : null;
-    final Widget leading = apptId == null
-        ? const SizedBox(width: _leadingSlot)
-        : SizedBox(
-            width: _leadingSlot,
-            child: _DoneCheckbox(
-              key: ScheduleCard.doneCheckboxKey(event.id),
-              done: doneApptIds.contains(apptId),
-              dimmed: past,
-              onTap: () => onToggleAppt(apptId),
-            ),
-          );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -535,7 +525,6 @@ class _Row extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              leading,
               Expanded(
                 child: Text.rich(
                   TextSpan(
@@ -560,6 +549,15 @@ class _Row extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (apptId != null) ...<Widget>[
+                const SizedBox(width: 8),
+                _DoneCheckbox(
+                  key: ScheduleCard.doneCheckboxKey(event.id),
+                  done: doneApptIds.contains(apptId),
+                  dimmed: past,
+                  onTap: () => onToggleAppt(apptId),
+                ),
+              ],
               if (onTap != null)
                 Icon(
                   Icons.chevron_right,

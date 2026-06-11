@@ -46,7 +46,10 @@ class HomeScreen extends ConsumerWidget {
             // as the other four tab landings; the profile affordance
             // lives in the [PathHeader.trailing] slot.
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              // Extra top breathing room so the greeting + profile/report
+              // cluster sits clear of the status bar / Dynamic Island rather
+              // than crowding the top edge (fb_1781138782074336).
+              padding: const EdgeInsets.fromLTRB(16, 32, 16, 0),
               child: KeyedSubtree(
                 key: HomeScreen.greetingKey,
                 child: StreamBuilder<AuthState>(
