@@ -413,6 +413,77 @@ void main() {
     });
   });
 
+  group('pull does not clobber an unpushed local write (LWW guard)', () {
+    test('SyncOutbox.hasPending reflects queued writes', () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final SyncOutbox outbox = SyncOutbox(d.db);
+
+      expect(await outbox.hasPending('medication', 'm1'), isFalse);
+      await outbox.enqueue(
+        collection: 'medication',
+        docId: 'm1',
+        payload: <String, dynamic>{'id': 'm1'},
+        clientUpdatedAt: 1,
+        deleted: false,
+      );
+      expect(await outbox.hasPending('medication', 'm1'), isTrue);
+      expect(await outbox.hasPending('medication', 'other'), isFalse);
+      expect(await outbox.hasPending('appointment', 'm1'), isFalse);
+    });
+
+    test('a pulled doc is SKIPPED while an unpushed local write is queued '
+        'for it', () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final CircleDto circle = await backend.createCircle('Mary');
+      await d.stateStore.setCircleId(circle.id);
+
+      // A local edit that has NOT been pushed (no applyingRemote → enqueues).
+      await d.medications.upsertMedication(_med('m1', 'LocalName'));
+      await pumpEventQueue(); // let the async enqueue land
+      expect(await SyncOutbox(d.db).hasPending('medication', 'm1'), isTrue);
+
+      // The server holds a different (older) value for the same id.
+      await backend.syncPush(circle.id, docs: <SyncDocWrite>[
+        SyncDocWrite(
+          id: 'm1',
+          collection: 'medication',
+          payload: _med('m1', 'ServerName').toJson(),
+          clientUpdatedAt: 1,
+        ),
+      ]);
+
+      await d.controller.pull();
+
+      // The unpushed local edit survived — the pull didn't clobber it.
+      expect((await d.medications.getMedication('m1'))?.name, 'LocalName');
+    });
+
+    test('a pulled doc IS applied once nothing is queued for it', () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+      final CircleDto circle = await backend.createCircle('Mary');
+      await d.stateStore.setCircleId(circle.id);
+
+      // No local pending write for m2.
+      await backend.syncPush(circle.id, docs: <SyncDocWrite>[
+        SyncDocWrite(
+          id: 'm2',
+          collection: 'medication',
+          payload: _med('m2', 'ServerName').toJson(),
+          clientUpdatedAt: 1,
+        ),
+      ]);
+
+      await d.controller.pull();
+      expect((await d.medications.getMedication('m2'))?.name, 'ServerName');
+    });
+  });
+
   group('tombstone deletes locally', () {
     test('a pulled deleted med doc removes the local row', () async {
       final FakeForumApiClient backend = FakeForumApiClient();

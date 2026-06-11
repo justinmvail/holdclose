@@ -108,6 +108,20 @@ class SyncOutbox {
     });
   }
 
+  /// True when there's an unpushed local write queued for this
+  /// (collection, docId). The sync apply path consults this so a pulled
+  /// (possibly older) copy never clobbers a local change that hasn't reached
+  /// the server yet — the next push sends our value and the server resolves
+  /// last-write-wins.
+  Future<bool> hasPending(String collection, String docId) async {
+    final SyncOutboxTableData? row = await (_db.select(_db.syncOutboxTable)
+          ..where((t) =>
+              t.collection.equals(collection) & t.docId.equals(docId))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
+  }
+
   /// The oldest [limit] pending rows, ascending by seq.
   Future<List<SyncOutboxTableData>> listPending({int limit = _syncPushBatch}) {
     return (_db.select(_db.syncOutboxTable)
@@ -446,6 +460,12 @@ class SyncController {
   /// [enqueueUpsert] — so applying a pulled doc can't re-enqueue it and
   /// bounce back to the server (the echo-loop guard).
   Future<void> _applyDoc(SyncDoc doc) async {
+    // Local-first conflict guard: if there's an UNPUSHED local write for this
+    // doc still in the outbox, that local change is authoritative until it
+    // reaches the server — don't let a pulled (older) copy clobber it. The
+    // next push sends our value and the server resolves last-write-wins. This
+    // closes the window where a pull lands between a local edit and its push.
+    if (await _outbox.hasPending(doc.collection, doc.id)) return;
     final Map<String, dynamic> payload = doc.payload.isEmpty
         ? const <String, dynamic>{}
         : jsonDecode(doc.payload) as Map<String, dynamic>;

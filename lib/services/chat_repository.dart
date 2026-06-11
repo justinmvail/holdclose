@@ -159,18 +159,27 @@ class ChatRepository with SyncSinkHost {
     String title, {
     bool custom = true,
   }) async {
-    final Conversation? existing = await getConversation(conversationId);
-    if (existing == null) return;
-    final Conversation renamed =
-        existing.copyWith(title: title, customTitle: custom);
-    await (_db.update(_db.chatConversationsTable)
-          ..where((t) => t.id.equals(conversationId)))
-        .write(
-      ChatConversationsTableCompanion(
-        payload: Value<String>(jsonEncode(renamed.toJson())),
-      ),
-    );
-    emitUpsert('chat_conversations', renamed.id, renamed.toJson());
+    // Read-modify-write wrapped in ONE transaction so it's atomic on the
+    // shared connection — a concurrent sync-apply (or another local write)
+    // can't land between the read and the write and get clobbered (lost
+    // update). Emit only AFTER the commit, like appendMessage.
+    Conversation? renamed;
+    await _db.transaction(() async {
+      final Conversation? existing = await getConversation(conversationId);
+      if (existing == null) return;
+      renamed = existing.copyWith(title: title, customTitle: custom);
+      await (_db.update(_db.chatConversationsTable)
+            ..where((t) => t.id.equals(conversationId)))
+          .write(
+        ChatConversationsTableCompanion(
+          payload: Value<String>(jsonEncode(renamed!.toJson())),
+        ),
+      );
+    });
+    final Conversation? committed = renamed;
+    if (committed != null) {
+      emitUpsert('chat_conversations', committed.id, committed.toJson());
+    }
   }
 
   /// Messages for [conversationId], oldest first — the order the
