@@ -404,11 +404,17 @@ class _GroupedRow extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          // Each medication on its own row, indented under the header.
+          // Each medication on its own row, INDENTED so its mark sits under the
+          // window's time column (not out to the left of it). Earlier the mark
+          // sat at the far-left margin, left of every row's time, so the
+          // children read as out-dented — "the indentation is reversed"
+          // (fb_1781132307652198). Nesting them past the time slot makes the
+          // doses read as children of the window header.
           // Checkmark = logged dose, hollow circle = still pending.
           for (final ({String name, bool taken}) m in model.meds)
             Padding(
-              padding: const EdgeInsets.only(left: 4, top: 2, bottom: 2),
+              padding: const EdgeInsets.only(
+                  left: _leadingSlot, top: 2, bottom: 2),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[

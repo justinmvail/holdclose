@@ -9,6 +9,7 @@ import 'package:careblazers/providers/care_events_provider.dart';
 import 'package:careblazers/providers/care_plan_provider.dart';
 import 'package:careblazers/providers/care_shifts_provider.dart';
 import 'package:careblazers/providers/care_tasks_provider.dart';
+import 'package:careblazers/providers/circle_member_cache_provider.dart';
 import 'package:careblazers/providers/documents_provider.dart';
 import 'package:careblazers/providers/expenses_provider.dart';
 import 'package:careblazers/providers/health_log_provider.dart';
@@ -37,6 +38,7 @@ void main() {
   late CareShiftsRepository careShifts;
   late ExpensesRepository expenses;
   late CareCircleRepository careCircle;
+  late CircleMemberCacheRepository circleMemberCache;
   late CareEventsRepository careEvents;
   late DocumentsRepository documents;
   late ChatRepository chat;
@@ -53,6 +55,7 @@ void main() {
     careShifts = CareShiftsRepository(db);
     expenses = ExpensesRepository(db);
     careCircle = CareCircleRepository(db);
+    circleMemberCache = CircleMemberCacheRepository(db);
     careEvents = CareEventsRepository(db);
     documents = DocumentsRepository(db);
     chat = ChatRepository(db);
@@ -67,6 +70,7 @@ void main() {
       careShifts: careShifts,
       expenses: expenses,
       careCircle: careCircle,
+      circleMemberCache: circleMemberCache,
       careEvents: careEvents,
       documents: documents,
       chat: chat,
@@ -159,6 +163,12 @@ void main() {
         mems.any((CareCircleMembership m) =>
             m.permissionLevel == PermissionLevel.owner),
         isTrue);
+
+    // The backend-circle CACHE (what the local-first Care Circle screen reads)
+    // is also populated, so seeded members show on that screen.
+    final cached = await circleMemberCache.list();
+    expect(cached.length, greaterThanOrEqualTo(4));
+    expect(cached.any((m) => m.role == 'owner'), isTrue);
   });
 
   test('seeds tasks across open / claimed / done', () async {

@@ -124,8 +124,8 @@ void main() {
       expect(await db.select(db.identificationDocsTable).get(), isEmpty);
     });
 
-    test('schemaVersion is 17 (document scan blob keys migration step)', () {
-      expect(db.schemaVersion, 17);
+    test('schemaVersion is 18 (Care Circle local-first cache migration step)', () {
+      expect(db.schemaVersion, 18);
     });
   });
 }

@@ -56,6 +56,7 @@ part 'database.g.dart';
     CareShiftsTable,
     ExpensesTable,
     SyncOutboxTable,
+    CircleMemberCacheTable,
   ],
 )
 class CareblazersDatabase extends _$CareblazersDatabase {
@@ -123,7 +124,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       CareblazersDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   /// Migration handler. Four responsibilities:
   ///
@@ -305,6 +306,12 @@ class CareblazersDatabase extends _$CareblazersDatabase {
               identificationDocsTable.photoBackKey,
             );
           }
+          if (from < 18) {
+            // Local-first Care Circle: a read-cache of the backend circle
+            // roster so the People screen renders offline instead of hitting
+            // `GET /circles` live. Lights up empty; fills on the next sync.
+            await m.createTable(circleMemberCacheTable);
+          }
         },
         beforeOpen: (OpeningDetails details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -350,6 +357,7 @@ class CareblazersDatabase extends _$CareblazersDatabase {
       await delete(careShiftsTable).go();
       await delete(expensesTable).go();
       await delete(syncOutboxTable).go();
+      await delete(circleMemberCacheTable).go();
       await delete(journalEntriesTable).go();
       await delete(patientsTable).go();
       await delete(appSettingsTable).go();

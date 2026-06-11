@@ -5,6 +5,8 @@ import 'package:careblazers/models/chat.dart';
 import 'package:careblazers/providers/pending_chat_message_provider.dart';
 import 'package:careblazers/providers/voice_capture_provider.dart';
 import 'package:careblazers/screens/chat/chat_screen.dart';
+import 'package:careblazers/screens/chat/conversation_list_screen.dart'
+    show conversationDisplayTitle;
 import 'package:careblazers/services/chat_repository.dart';
 import 'package:careblazers/services/chat_service.dart';
 import 'package:careblazers/theme.dart';
@@ -36,6 +38,29 @@ class _FakeVoiceCapture implements VoiceCapture {
 
   @override
   Future<String?> capture({void Function(String partial)? onPartial}) async => transcript;
+}
+
+/// A [VoiceCapture] that streams a [partial] immediately, then holds the final
+/// transcript behind [finalGate] — lets a test interleave a Send between the
+/// partial and the final to prove the dead-tail callback can't refill the
+/// field (fb_1781129156352504).
+class _GatedVoiceCapture implements VoiceCapture {
+  _GatedVoiceCapture({
+    required this.partial,
+    required this.finalText,
+    required this.finalGate,
+  });
+
+  final String partial;
+  final String finalText;
+  final Future<void> finalGate;
+
+  @override
+  Future<String?> capture({void Function(String partial)? onPartial}) async {
+    onPartial?.call(partial);
+    await finalGate;
+    return finalText;
+  }
 }
 
 /// A [PendingChatMessage] notifier seeded with [_seed] so a test can pump
@@ -124,6 +149,7 @@ Future<({
   Future<void>? gate,
   VoiceCapture? voiceCapture,
   ({String conversationId, String text})? pendingMessage,
+  String? customTitle,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -135,6 +161,9 @@ Future<({
     title: 'placeholder',
     createdAt: _fixedNow(),
   );
+  if (customTitle != null) {
+    await repo.renameConversation(conversationId, customTitle);
+  }
   for (final Message m in initialMessages) {
     await repo.appendMessage(m);
   }
@@ -814,6 +843,88 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(p.backend.callCount, 0);
+    });
+  });
+
+  group('ChatScreen — header title (fb_1781128985319900)', () {
+    testWidgets('shows the short custom/AI title instead of a long '
+        'first-message truncation', (WidgetTester tester) async {
+      await _pump(
+        tester,
+        conversationId: 'convo-titled',
+        customTitle: 'Sundowning At Dinner',
+        initialMessages: <Message>[
+          Message(
+            id: 'm1',
+            conversationId: 'convo-titled',
+            role: MessageRole.user,
+            body: 'What are the common signs of dementia I should look for '
+                'over the next several months of caregiving?',
+            citations: const <String>[],
+            createdAt: _fixedNow(),
+            streamingDone: true,
+          ),
+        ],
+      );
+
+      // The short stored title heads the thread (header + breadcrumb); the
+      // long first message is no longer mirrored into the title.
+      expect(find.text('Sundowning At Dinner'), findsWidgets);
+      // The derived truncation of the long first message is NOT used as the
+      // title (the message itself still shows in its bubble — that's fine).
+      final String derived = conversationDisplayTitle(
+        'What are the common signs of dementia I should look for over the '
+        'next several months of caregiving?',
+      );
+      expect(find.text(derived), findsNothing);
+    });
+  });
+
+  group('ChatScreen — voice send race (fb_1781129156352504)', () {
+    testWidgets('a dictation that finalises AFTER send does not refill the '
+        'cleared field', (WidgetTester tester) async {
+      final Completer<void> finalGate = Completer<void>();
+      final _GatedVoiceCapture voice = _GatedVoiceCapture(
+        partial: 'Testing voice to see if this clears',
+        finalText: 'Testing voice to see if this clears',
+        finalGate: finalGate.future,
+      );
+
+      final ({
+        ChatRepository repo,
+        _ScriptedBackend backend,
+        CareblazersDatabase db,
+      }) p = await _pump(
+        tester,
+        conversationId: 'convo-vrace',
+        voiceCapture: voice,
+        deltas: const <ChatDelta>[ChatDeltaText('A reply.')],
+      );
+
+      // Dictate → the partial streams into the composer field.
+      await tester.tap(find.byKey(ChatScreen.composerMicKey));
+      await tester.pump();
+      expect(
+        find.widgetWithText(TextField, 'Testing voice to see if this clears'),
+        findsOneWidget,
+      );
+
+      // Send while the capture is still open — the field clears + the turn
+      // is dispatched.
+      await tester.tap(find.byKey(ChatScreen.sendButtonKey));
+      await tester.pump();
+
+      // The dictation NOW finalises (the dead-tail callback) — it must NOT
+      // write the just-sent text back into the field.
+      finalGate.complete();
+      await tester.pumpAndSettle();
+
+      final TextField field =
+          tester.widget<TextField>(find.byKey(ChatScreen.inputFieldKey));
+      expect(field.controller!.text, isEmpty);
+      // And the message was actually sent.
+      final List<Message> persisted = await p.repo.loadMessages('convo-vrace');
+      expect(persisted.any((Message m) => m.role == MessageRole.user), isTrue);
     });
   });
 

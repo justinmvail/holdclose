@@ -128,6 +128,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   /// re-send it verbatim without the caregiver retyping (#19).
   String? _lastUserText;
 
+  /// The thread row, loaded once on init. Carries the short coach-generated /
+  /// caregiver-edited title the header prefers over a first-message
+  /// truncation; null until [_loadInitial] resolves (header falls back to the
+  /// derived name).
+  Conversation? _conversation;
+
   /// Set when the app leaves the foreground while a reply is mid-stream. iOS
   /// suspends the network socket the moment the phone locks / the app
   /// backgrounds, so an in-flight reply stalls or errors. On return to the
@@ -209,9 +215,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _loadInitial() async {
     final ChatRepository repo = ref.read(chatRepositoryProvider);
     final List<Message> initial = await repo.loadMessages(widget.conversationId);
+    // Load the thread row too so the header can show its short coach-generated
+    // or caregiver-edited title (fb_1781128985319900 — "title still too long")
+    // instead of a long truncation of the first message.
+    final Conversation? convo =
+        await repo.getConversation(widget.conversationId);
     if (!mounted) return;
     setState(() {
       _hydrated = true;
+      _conversation = convo;
       for (final Message m in initial) {
         if (!_messages.containsKey(m.id)) _order.add(m.id);
         _messages[m.id] = m;
@@ -381,6 +393,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   /// [conversationDisplayTitle]), or "New chat" before the caregiver has
   /// typed. Drives the [PathHeader] crumb + title (Phase 14.34).
   String get _conversationName {
+    // A coach-generated or caregiver-edited title wins — it's a short 2-5 word
+    // label, so the header stays on one line instead of wrapping a long
+    // first-message truncation (fb_1781128985319900).
+    final Conversation? c = _conversation;
+    if (c != null && c.customTitle && c.title.trim().isNotEmpty) {
+      return conversationDisplayTitle(c.title);
+    }
     for (final String id in _order) {
       final Message? m = _messages[id];
       if (m != null && m.role == MessageRole.user) {
@@ -833,8 +852,15 @@ class _ComposerState extends ConsumerState<_Composer> {
   /// capture impl + permission handling as the Home Add-sheet mic, so no
   /// new speech pipeline is introduced. A blank/aborted capture is a
   /// silent no-op; a denied mic surfaces the standard snackbar.
+  /// Bumped on every capture start AND on send. A capture's partial/final
+  /// writes only land while they still own the current generation — so a Send
+  /// fired mid-dictation (which clears the field) is never undone by a trailing
+  /// recognizer callback writing the just-sent text back (fb_1781129156352504).
+  int _captureGen = 0;
+
   Future<void> _captureIntoField() async {
     if (_listening) return;
+    final int gen = ++_captureGen;
     setState(() => _listening = true);
     // Anchor to whatever's already typed so a mid-compose capture APPENDS
     // rather than clobbers; the live partials + the final transcript build
@@ -842,6 +868,9 @@ class _ComposerState extends ConsumerState<_Composer> {
     final String base = widget.controller.text;
     final String prefix = base.isEmpty ? '' : '${base.trimRight()} ';
     void fill(String words) {
+      // A send (or a newer capture) superseded us — don't write into a field
+      // the caregiver already sent/cleared.
+      if (gen != _captureGen) return;
       final String joined = '$prefix$words';
       widget.controller
         ..text = joined
@@ -857,7 +886,9 @@ class _ComposerState extends ConsumerState<_Composer> {
           if (mounted && partial.trim().isNotEmpty) fill(partial);
         },
       );
-      if (!mounted) return;
+      // Superseded by a send/new capture while we awaited the final transcript
+      // → leave the field exactly as the send left it.
+      if (!mounted || gen != _captureGen) return;
       final String text = transcript?.trim() ?? '';
       if (text.isEmpty) {
         // Nothing usable — restore the pre-capture text (drop any partials).
@@ -868,7 +899,7 @@ class _ComposerState extends ConsumerState<_Composer> {
       }
       fill(text);
     } on VoiceCapturePermissionDeniedException {
-      if (!mounted) return;
+      if (!mounted || gen != _captureGen) return;
       widget.controller
         ..text = base
         ..selection = TextSelection.collapsed(offset: base.length);
@@ -876,6 +907,14 @@ class _ComposerState extends ConsumerState<_Composer> {
     } finally {
       if (mounted) setState(() => _listening = false);
     }
+  }
+
+  /// Send handler — invalidate any in-flight dictation (so a late recognizer
+  /// callback can't re-fill the field after we've sent), then hand off to the
+  /// parent's send.
+  void _handleSend() {
+    _captureGen++;
+    widget.onSend();
   }
 
   @override
@@ -977,7 +1016,7 @@ class _ComposerState extends ConsumerState<_Composer> {
               child: InkWell(
                 key: ChatScreen.sendButtonKey,
                 customBorder: const CircleBorder(),
-                onTap: sending ? null : widget.onSend,
+                onTap: sending ? null : _handleSend,
                 child: const Padding(
                   padding: EdgeInsets.all(12),
                   child: Icon(

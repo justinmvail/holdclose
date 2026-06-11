@@ -18,12 +18,15 @@ import '../models/chat.dart';
 import '../models/decoder_result.dart';
 import '../models/document.dart';
 import '../models/expense.dart';
+import '../models/forum.dart' show CircleMemberDto;
 import '../models/health_log_entry.dart';
 import '../models/journal_entry.dart';
 import '../models/medication.dart';
 import '../models/triage.dart';
 import '../providers/care_circle_provider.dart'
     show CareCircleRepository, careCircleRepositoryProvider;
+import '../providers/circle_member_cache_provider.dart'
+    show CircleMemberCacheRepository, circleMemberCacheRepositoryProvider;
 import '../providers/care_events_provider.dart'
     show CareEventsRepository, careEventsRepositoryProvider;
 import '../providers/care_plan_provider.dart'
@@ -87,6 +90,7 @@ class DemoDatasetSeeder {
     required this.careShifts,
     required this.expenses,
     required this.careCircle,
+    required this.circleMemberCache,
     required this.careEvents,
     required this.documents,
     required this.chat,
@@ -105,6 +109,7 @@ class DemoDatasetSeeder {
   final CareShiftsRepository careShifts;
   final ExpensesRepository expenses;
   final CareCircleRepository careCircle;
+  final CircleMemberCacheRepository circleMemberCache;
   final CareEventsRepository careEvents;
   final DocumentsRepository documents;
   final ChatRepository chat;
@@ -825,6 +830,36 @@ class DemoDatasetSeeder {
       permissionLevel: PermissionLevel.viewer,
       invitedAt: _daysAgo(4),
     ));
+
+    // Mirror the accepted roster into the local backend-circle CACHE so the
+    // (local-first) Care Circle "People" screen shows them too — that screen
+    // reads the cache, not the local caregiver table (which only resolves
+    // names on shifts/tasks/expenses).
+    await circleMemberCache.replaceForCircle('seed-circle', <CircleMemberDto>[
+      CircleMemberDto(
+        profileId: currentCaregiverId,
+        username: 'you',
+        displayName: 'You',
+        role: 'owner',
+      ),
+      const CircleMemberDto(
+        profileId: _cgSarah,
+        username: 'sarah_h',
+        displayName: 'Sarah Henderson',
+        role: 'member',
+      ),
+      const CircleMemberDto(
+        profileId: _cgDavid,
+        displayName: 'David Henderson',
+        role: 'member',
+      ),
+      const CircleMemberDto(
+        profileId: _cgRosa,
+        username: 'rosa_d',
+        displayName: 'Rosa Diaz',
+        role: 'member',
+      ),
+    ], clock: _clock);
   }
 
   List<String> get _allCaregiverIds =>
@@ -1126,6 +1161,7 @@ Future<void> seedDemoDataset(
     careShifts: container.read(careShiftsRepositoryProvider),
     expenses: container.read(expensesRepositoryProvider),
     careCircle: container.read(careCircleRepositoryProvider),
+    circleMemberCache: container.read(circleMemberCacheRepositoryProvider),
     careEvents: container.read(careEventsRepositoryProvider),
     documents: container.read(documentsRepositoryProvider),
     chat: container.read(chatRepositoryProvider),

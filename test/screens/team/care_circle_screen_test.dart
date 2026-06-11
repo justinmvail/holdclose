@@ -107,7 +107,7 @@ Future<GoRouter> _pump(
     ProviderScope(
       overrides: <Override>[
         syncedCircleMembersProvider.overrideWith(
-          (Ref ref) async => members,
+          (Ref ref) => Stream<List<CircleMemberDto>>.value(members),
         ),
         if (myProfileId != null)
           myForumProfileIdProvider.overrideWithValue(myProfileId),

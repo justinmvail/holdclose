@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../providers/voice_capture_provider.dart';
 import '../../services/feedback_service.dart';
 import '../../services/log_buffer.dart';
+import '../../services/voice_intake.dart';
 import '../../theme.dart';
 
 /// Opens the alpha feedback sheet. Shared entry point so the overlay and
@@ -39,6 +41,7 @@ class FeedbackSheet extends ConsumerStatefulWidget {
   static const Key sheetKey = Key('alpha-feedback-sheet');
   static const Key nameFieldKey = Key('alpha-feedback-name');
   static const Key messageFieldKey = Key('alpha-feedback-message');
+  static const Key micKey = Key('alpha-feedback-mic');
   static const Key screenshotToggleKey = Key('alpha-feedback-screenshot-toggle');
   static const Key sendButtonKey = Key('alpha-feedback-send');
 
@@ -54,6 +57,10 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
   final TextEditingController _name = TextEditingController();
   FeedbackCategory _category = FeedbackCategory.bug;
   bool _needsName = false;
+
+  /// True while a spoken phrase is being dictated into the message field
+  /// (fb_1781129218678980 — "let me use voice to text when filing a bug").
+  bool _dictating = false;
   bool _includeScreenshot = true;
   bool _submitting = false;
 
@@ -97,6 +104,49 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
     _message.dispose();
     _name.dispose();
     super.dispose();
+  }
+
+  /// Capture a spoken phrase into the message field (fb_1781129218678980).
+  /// Appends to whatever's already typed; streams partials in as they're
+  /// recognized. Reuses the shared [VoiceCapture] seam — no new speech
+  /// pipeline — so tests inject a fake and a denied mic shows the standard
+  /// snackbar.
+  Future<void> _dictate() async {
+    if (_dictating) return;
+    setState(() => _dictating = true);
+    final String base = _message.text;
+    final String prefix = base.isEmpty ? '' : '${base.trimRight()} ';
+    void fill(String words) {
+      final String joined = '$prefix$words';
+      _message
+        ..text = joined
+        ..selection = TextSelection.collapsed(offset: joined.length);
+    }
+
+    try {
+      final String? transcript = await ref.read(voiceCaptureProvider).capture(
+        onPartial: (String partial) {
+          if (mounted && partial.trim().isNotEmpty) fill(partial);
+        },
+      );
+      if (!mounted) return;
+      final String text = transcript?.trim() ?? '';
+      if (text.isEmpty) {
+        _message
+          ..text = base
+          ..selection = TextSelection.collapsed(offset: base.length);
+      } else {
+        fill(text);
+      }
+    } on VoiceCapturePermissionDeniedException {
+      if (!mounted) return;
+      _message
+        ..text = base
+        ..selection = TextSelection.collapsed(offset: base.length);
+      showVoiceCapturePermissionDeniedSnackBar(context);
+    } finally {
+      if (mounted) setState(() => _dictating = false);
+    }
   }
 
   bool get _canSend =>
@@ -219,10 +269,31 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
               minLines: 3,
               maxLines: 6,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'What happened? What would make it better?',
                 alignLabelWithHint: true,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                // Dictate the report instead of typing it
+                // (fb_1781129218678980). Same on-device capture seam the chat
+                // composer uses.
+                suffixIcon: Semantics(
+                  button: true,
+                  enabled: !_dictating,
+                  label: _dictating
+                      ? 'Listening. Speak your report.'
+                      : 'Dictate your report.',
+                  child: IconButton(
+                    key: FeedbackSheet.micKey,
+                    onPressed: _dictating ? null : _dictate,
+                    icon: _dictating
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(Icons.mic, color: context.cb.cta),
+                  ),
+                ),
               ),
               onChanged: (_) => setState(() {}),
             ),

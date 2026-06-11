@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../models/forum.dart';
+import '../../providers/circle_member_cache_provider.dart';
 import '../../providers/my_forum_profile_provider.dart';
 import '../../providers/sync_state_provider.dart';
 import '../../services/circle_invite_link.dart';
@@ -21,27 +22,44 @@ import '../../widgets/path_header.dart';
 Future<void> Function(String message) shareCircleInvite =
     (String message) => Share.share(message);
 
-/// The ACTUAL care-circle members from the backend — the synced people who
-/// joined via @username / QR, each with their real handle. This is the one
-/// and only "People" list (2026-06-07: the legacy local caregiver roster +
-/// fake "Invite caregiver" form were removed; the backend circle is now the
-/// single source of truth). Fail-safe: returns empty on any error / offline
-/// / not-in-a-circle / unconfigured backend, so the screen degrades to a
-/// clean empty state with the connect actions rather than crashing.
+/// The care-circle members — LOCAL-FIRST (2026-06-10). Reads the on-device
+/// [CircleMemberCacheTable] mirror of the backend roster, so the "People" list
+/// renders instantly and OFFLINE (a rural-outage tester still sees who's in
+/// the circle). A best-effort background refresh re-fetches `GET /circles` and
+/// rewrites the cache when the device is online; the stream below re-emits the
+/// moment that lands. Fail-safe: an offline / not-in-a-circle / unconfigured
+/// refresh just leaves the last-known cache in place.
+///
+/// (Supersedes the 2026-06-07 design that read `GET /circles` live on every
+/// open — that was the one screen that broke the app's local-first rule and
+/// went blank with no signal.)
 final syncedCircleMembersProvider =
-    FutureProvider.autoDispose<List<CircleMemberDto>>((Ref ref) async {
-  // Only reach the live backend when one is actually configured — tests +
-  // local-only/demo builds skip it entirely (never touch the real client).
-  if (!forumBackendConfigured) return const <CircleMemberDto>[];
+    StreamProvider.autoDispose<List<CircleMemberDto>>((Ref ref) {
+  // Kick a background refresh (never awaited) so the cache stays fresh when
+  // online; the UI keeps rendering the cached roster meanwhile.
+  unawaited(refreshCircleRoster(ref));
+  return ref.watch(circleMemberCacheRepositoryProvider).watch();
+});
+
+/// Best-effort: pull the backend circle roster and rewrite the local cache.
+/// Silent no-op when there's no configured backend / the device is offline /
+/// the caregiver isn't in a circle yet — the cache (and the screen) keep
+/// showing the last-known roster. Exposed for the connect flows (QR / scan /
+/// username) to call after a membership change so the People list updates
+/// without waiting for the next sync.
+Future<void> refreshCircleRoster(Ref ref) async {
+  if (!forumBackendConfigured) return;
   try {
     final List<CircleDto> circles =
-        await ref.watch(forumApiClientProvider).listCircles();
-    if (circles.isEmpty) return const <CircleMemberDto>[];
-    return circles.first.members;
+        await ref.read(forumApiClientProvider).listCircles();
+    if (circles.isEmpty) return;
+    await ref
+        .read(circleMemberCacheRepositoryProvider)
+        .replaceForCircle(circles.first.id, circles.first.members);
   } catch (_) {
-    return const <CircleMemberDto>[];
+    // Keep the cache as-is — local-first never blanks on a failed refresh.
   }
-});
+}
 
 /// Care Circle "People" roster at `/team/circle` (BUILD_SPEC.md §5.14).
 ///

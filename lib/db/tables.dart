@@ -667,3 +667,25 @@ class CareCircleMembershipsTable extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
+
+/// Local read-cache of the BACKEND care-circle roster — the `@username`-based
+/// people who actually joined the circle, served by the forum API's
+/// `GET /circles`. Distinct from [CaregiversTable] (the synced local
+/// care-team roster that resolves names on shifts/tasks/expenses): this
+/// mirrors the forum `circle_members` resource so the Care Circle "People"
+/// screen reads it LOCALLY and renders offline. A background refresh replaces
+/// the active circle's rows when the device is online (local-first: the screen
+/// never blocks on the network). [payload] is `CircleMemberDto.toJson()`;
+/// [profileId] is the backend `profiles.id`.
+class CircleMemberCacheTable extends Table {
+  @override
+  String get tableName => 'circle_member_cache';
+
+  TextColumn get profileId => text()();
+  TextColumn get circleId => text()();
+  TextColumn get payload => text()();
+  IntColumn get cachedAtMs => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{profileId};
+}

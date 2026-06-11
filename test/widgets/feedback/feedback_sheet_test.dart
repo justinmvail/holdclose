@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:careblazers/providers/auth_provider.dart';
+import 'package:careblazers/providers/voice_capture_provider.dart';
 import 'package:careblazers/services/feedback_service.dart';
 import 'package:careblazers/theme.dart';
 import 'package:careblazers/widgets/feedback/feedback_sheet.dart';
@@ -24,12 +25,15 @@ void main() {
     Uint8List? screenshot,
     String route = '/medical/medications',
     AuthState authState = const AuthState.signedOut(),
+    VoiceCapture? voiceCapture,
   }) {
     return ProviderScope(
       overrides: <Override>[
         feedbackControllerProvider.overrideWithValue(controller),
         testerNameStoreProvider.overrideWithValue(nameStore),
         authBackendProvider.overrideWithValue(_StubAuth(authState)),
+        if (voiceCapture != null)
+          voiceCaptureProvider.overrideWithValue(voiceCapture),
       ],
       child: MaterialApp(
         theme: careblazersLightTheme,
@@ -166,6 +170,34 @@ void main() {
     expect(controller.submitted!.hasScreenshot, isFalse);
     expect(controller.lastScreenshot, isNull);
   });
+
+  testWidgets('mic dictates the report into the message field '
+      '(fb_1781129218678980)', (WidgetTester tester) async {
+    await tester.pumpWidget(host(
+      controller: _RecordingController(),
+      nameStore: _FakeNameStore('Sam'),
+      voiceCapture: const _FakeVoiceCapture('The schedule indentation is off'),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(FeedbackSheet.micKey));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.widgetWithText(TextField, 'The schedule indentation is off'),
+      findsOneWidget,
+    );
+  });
+}
+
+/// Returns a canned transcript — no real mic/STT in tests.
+class _FakeVoiceCapture implements VoiceCapture {
+  const _FakeVoiceCapture(this.transcript);
+  final String? transcript;
+  @override
+  Future<String?> capture({void Function(String partial)? onPartial}) async =>
+      transcript;
 }
 
 /// Records what the sheet submits without touching disk or the network.

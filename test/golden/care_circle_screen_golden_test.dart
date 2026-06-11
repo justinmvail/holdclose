@@ -43,7 +43,8 @@ List<CircleMemberDto> _members() => <CircleMemberDto>[
 Widget _host(List<CircleMemberDto> members, double height) {
   return ProviderScope(
     overrides: <Override>[
-      syncedCircleMembersProvider.overrideWith((Ref ref) async => members),
+      syncedCircleMembersProvider.overrideWith(
+          (Ref ref) => Stream<List<CircleMemberDto>>.value(members)),
       myForumProfileIdProvider.overrideWithValue('p1'),
     ],
     child: SizedBox(
