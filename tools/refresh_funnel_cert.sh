@@ -22,6 +22,16 @@ cd "$CERTDIR" || exit 1
 stamp() { date '+%Y-%m-%d %H:%M:%S'; }
 echo "[$(stamp)] refreshing funnel cert + re-asserting funnel for $HOST" >> "$LOG"
 
+# SELF-HEAL: if tailscaled is stopped, the Funnel is silently DOWN for every
+# tester — DNS stays published (Tailscale's infra caches it), so it fails as
+# a TLS reset rather than an obvious outage, and AI + feedback + sync all die
+# at once (the 2026-06-11 outage). Bring it back up before anything else.
+# Idempotent: a no-op when already connected.
+if "$TS" status 2>&1 | grep -q "Tailscale is stopped"; then
+  echo "[$(stamp)] Tailscale was STOPPED — bringing it up" >> "$LOG"
+  "$TS" up >> "$LOG" 2>&1
+fi
+
 # Re-provision/refresh the cert — this is what re-publishes the public DNS.
 "$TS" cert "$HOST" >> "$LOG" 2>&1
 
