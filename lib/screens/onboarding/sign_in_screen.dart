@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/loved_one_lookup_provider.dart';
 import '../../providers/settings_provider.dart' show demoModeEnabled;
 import '../../services/feedback_service.dart' show alphaFeedbackEnabled;
 import '../../theme.dart';
@@ -96,18 +97,32 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     // AppLocalizations.of(context) after an async gap risks a disposed
     // context. The message is only consumed in the catch branch.
     final String failureMessage = AppLocalizations.of(context).signInError;
+    // Capture the notifier up front so the `finally` can release the gate
+    // even if the redirect tears this screen down first (it's keepAlive).
+    final LovedOneLookup lookup = ref.read(lovedOneLookupProvider.notifier);
     setState(() {
       _busy = true;
       _error = null;
     });
+    // Engage the loved-one gate BEFORE the OAuth round-trip, so the router
+    // holds on this screen (not the setup wizard) the instant auth flips to
+    // signed-in. After sign-in, adopt any loved one the account ALREADY
+    // owns off the backend before the gate decides — otherwise a returning
+    // caregiver is forced to re-create their person, and sync then shadows
+    // it with their original as the active one (fb 2026-06-13). `adopt()`
+    // is fail-safe + bounded, so it never blocks a successful sign-in.
+    lookup.begin();
     try {
       await flow();
+      await lookup.adopt();
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _busy = false;
         _error = failureMessage;
       });
+    } finally {
+      lookup.end();
     }
   }
 

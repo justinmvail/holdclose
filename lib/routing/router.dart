@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../providers/auth_provider.dart';
+import '../providers/loved_one_lookup_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../providers/patient_configured_provider.dart';
 import '../screens/chat/chat_screen.dart';
@@ -837,6 +838,16 @@ GoRouter buildRouter({
 ///    the app. The wizard itself returns null so the redirect doesn't
 ///    ping-pong; in `DEMO_MODE` the seeded Mary keeps this flag true so
 ///    the wizard is skipped entirely.
+///
+///    **Exception — a fresh sign-in's one-time backend lookup
+///    ([lovedOneLookupPending]).** A returning caregiver signing in on a
+///    new install has no loved one on THIS device yet, but their account
+///    may already own one on the backend. While that one-time lookup is
+///    in flight we hold on `/sign-in` (which shows its own spinner)
+///    instead of forcing `/setup` — otherwise the caregiver is made to
+///    create a DUPLICATE person that sync then shadows with their
+///    original (fb 2026-06-13). Once the lookup settles this falls through
+///    to the real setup-vs-home decision.
 /// 4. Signed-in caregivers who land on `/onboarding` or `/sign-in`
 ///    (deep link, browser back) get bounced to `/` rather than being
 ///    asked to re-onboard.
@@ -845,6 +856,7 @@ String? careblazersRedirect({
   required bool onboardingCompleted,
   required AuthState authState,
   required bool patientConfigured,
+  bool lovedOneLookupPending = false,
 }) {
   const String onboarding = '/onboarding';
   const String signIn = '/sign-in';
@@ -861,6 +873,15 @@ String? careblazersRedirect({
   }
 
   if (!patientConfigured) {
+    // A fresh sign-in's backend loved-one lookup is still in flight — hold
+    // on the sign-in screen rather than flashing (and committing to) the
+    // setup wizard before we know whether the account already owns a loved
+    // one. Returning `signIn` for any other location keeps us put without
+    // a ping-pong; the held page's state is preserved by go_router's
+    // route key, so the screen doesn't re-fire its own navigation.
+    if (lovedOneLookupPending) {
+      return location == signIn ? null : signIn;
+    }
     return location == setup ? null : setup;
   }
 
@@ -929,6 +950,16 @@ GoRouter careblazersRouter(Ref ref) {
     (bool? _, bool __) => refresh.notify(),
   );
 
+  // The fresh-sign-in loved-one lookup flips a bool while it asks the
+  // backend whether the account already owns a loved one. The redirect
+  // re-reads it on every evaluation, so the listener just wakes go_router
+  // when the gate engages (hold on sign-in) or releases (decide
+  // setup-vs-home).
+  ref.listen<bool>(
+    lovedOneLookupProvider,
+    (bool? _, bool __) => refresh.notify(),
+  );
+
   // The auth state stream is the source of truth for the auth gate;
   // cache the latest payload on the bridge so the redirect closure can
   // read it synchronously.
@@ -949,6 +980,7 @@ GoRouter careblazersRouter(Ref ref) {
       onboardingCompleted: ref.read(onboardingCompletedProvider),
       authState: refresh.authState,
       patientConfigured: ref.read(patientConfiguredProvider),
+      lovedOneLookupPending: ref.read(lovedOneLookupProvider),
     ),
   );
 }

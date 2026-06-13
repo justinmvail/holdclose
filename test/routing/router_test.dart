@@ -661,6 +661,110 @@ void main() {
         '/sign-in',
       );
     });
+
+    test(
+      'fresh sign-in lookup PENDING holds on /sign-in, not /setup',
+      () {
+        // A returning caregiver just signed in on a new install: no loved
+        // one on THIS device yet, but the backend lookup that may pull
+        // their existing one down is still in flight. The redirect must
+        // HOLD on the sign-in screen (its spinner) rather than committing
+        // to the setup wizard, which would make them create a duplicate
+        // (fb 2026-06-13).
+        expect(
+          careblazersRedirect(
+            location: '/',
+            onboardingCompleted: true,
+            authState: signedIn,
+            patientConfigured: false,
+            lovedOneLookupPending: true,
+          ),
+          '/sign-in',
+        );
+        // The sign-in screen's own `context.go('/')` lands on '/setup' via
+        // an earlier frame — still bounced back while the lookup runs.
+        expect(
+          careblazersRedirect(
+            location: '/setup',
+            onboardingCompleted: true,
+            authState: signedIn,
+            patientConfigured: false,
+            lovedOneLookupPending: true,
+          ),
+          '/sign-in',
+        );
+      },
+    );
+
+    test('/sign-in returns null while the lookup is pending (no loop)', () {
+      // The held location returns null so go_router treats the decision as
+      // stable and the sign-in page's state is preserved (no re-navigation
+      // ping-pong) for the duration of the lookup.
+      expect(
+        careblazersRedirect(
+          location: '/sign-in',
+          onboardingCompleted: true,
+          authState: signedIn,
+          patientConfigured: false,
+          lovedOneLookupPending: true,
+        ),
+        isNull,
+      );
+    });
+
+    test(
+      'lookup PENDING is moot once a loved one IS configured (still Home)',
+      () {
+        // If the backend lookup pulled a loved one down (patientConfigured
+        // flips true) the gate opens to Home regardless of a not-yet-
+        // cleared pending flag — patient-on-file always wins.
+        expect(
+          careblazersRedirect(
+            location: '/',
+            onboardingCompleted: true,
+            authState: signedIn,
+            patientConfigured: true,
+            lovedOneLookupPending: true,
+          ),
+          isNull,
+        );
+      },
+    );
+
+    test('lookup PENDING never overrides the auth gate', () {
+      // A stray pending flag must not strand a signed-OUT user: the auth
+      // gate sits above the loved-one lookup, so they still go to sign-in
+      // (which is where the flow lives anyway).
+      expect(
+        careblazersRedirect(
+          location: '/',
+          onboardingCompleted: true,
+          authState: signedOut,
+          patientConfigured: false,
+          lovedOneLookupPending: true,
+        ),
+        '/sign-in',
+      );
+    });
+
+    test(
+      'lookup settled (NOT pending) + no patient still funnels to /setup',
+      () {
+        // Once the lookup clears with no loved one found (a genuinely new
+        // caregiver), the setup wizard is exactly right — the default
+        // (pending false) preserves the original gate behavior.
+        expect(
+          careblazersRedirect(
+            location: '/',
+            onboardingCompleted: true,
+            authState: signedIn,
+            patientConfigured: false,
+            lovedOneLookupPending: false,
+          ),
+          '/setup',
+        );
+      },
+    );
   });
 
   group('careblazersRouterProvider — wired redirect (task 31)', () {

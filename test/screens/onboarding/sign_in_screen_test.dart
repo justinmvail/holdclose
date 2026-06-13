@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:careblazers/l10n/app_localizations.dart';
 import 'package:careblazers/providers/auth_provider.dart';
+import 'package:careblazers/providers/loved_one_lookup_provider.dart';
 import 'package:careblazers/providers/settings_provider.dart';
 import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
 import 'package:flutter/material.dart';
@@ -73,6 +74,17 @@ class _SpyAuthProvider implements AuthProvider {
   }
 }
 
+/// No-op [LovedOneLookup] for the sign-in SCREEN tests. The real notifier's
+/// `adopt()` reaches into the sync engine (opening a drift database + a poll
+/// timer) — irrelevant to the screen's UI/routing contract and unsafe in a
+/// bare widget test. The post-sign-in backend lookup itself is covered by
+/// `test/providers/loved_one_lookup_provider_test.dart` and the router's
+/// pending-gate tests.
+class _NoopLovedOneLookup extends LovedOneLookup {
+  @override
+  Future<void> adopt() async {}
+}
+
 /// Pump the sign-in screen inside a minimal router with a `/` stub.
 /// Tests assert routing by inspecting the router delegate's current
 /// path and the presence of the stub's marker text.
@@ -113,6 +125,9 @@ Future<({_SpyAuthProvider spy, GoRouter router})> _pumpSignIn(
     ProviderScope(
       overrides: <Override>[
         authProvider.overrideWithValue(auth),
+        // The screen's post-sign-in loved-one lookup reaches into the sync
+        // engine; stub it out so these UI/routing tests stay hermetic.
+        lovedOneLookupProvider.overrideWith(_NoopLovedOneLookup.new),
       ],
       child: MaterialApp.router(
         theme: ThemeData(platform: platform),

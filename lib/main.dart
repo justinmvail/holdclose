@@ -162,6 +162,12 @@ Future<void> _bootstrapSync(ProviderContainer container) async {
     // (tools/seed_demo.sh data is written before the circle exists, so it
     // never auto-syncs). One-shot per token.
     await maybeResyncAll(container, sync);
+    // A returning caregiver on a fresh install has their loved one on the
+    // backend, not yet on this device — the adopt + pull above just brought
+    // them down. Refresh the setup gate so the redirect opens to Home
+    // instead of stranding them on the (now-stale) /setup wizard. Cheap +
+    // safe for every launch: a no-op re-read of `getPatient()`.
+    await container.read(patientConfiguredProvider.notifier).reload();
   } catch (e) {
     // Sync is additive — a failure here must never affect the app. The
     // breadcrumb lands in LogBuffer for feedback reports.
