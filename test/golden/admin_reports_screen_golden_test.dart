@@ -75,6 +75,11 @@ Widget _host(_FakeForumApiClient client) {
   return ProviderScope(
     overrides: <Override>[
       forumApiClientProvider.overrideWithValue(client),
+      // Pin the moderation queue's "Nd ago" clock so the golden is
+      // deterministic — with a fixed `now`, a report stamped `_fixedNow -
+      // 2h` always renders "2h ago" instead of drifting a day every real
+      // day against the wall clock.
+      adminReportsClockProvider.overrideWithValue(() => _fixedNow),
     ],
     child: SizedBox(
       width: 420,

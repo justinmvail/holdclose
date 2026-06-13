@@ -101,6 +101,9 @@ Future<void> _pump(
     ProviderScope(
       overrides: <Override>[
         forumApiClientProvider.overrideWithValue(client),
+        // Pin "now" so the relative-time row ("Nd ago") is deterministic
+        // rather than reading the wall clock.
+        adminReportsClockProvider.overrideWithValue(() => _fixedNow),
       ],
       child: const MaterialApp(home: AdminReportsScreen()),
     ),

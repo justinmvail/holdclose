@@ -10,6 +10,14 @@ import '../../widgets/path_header.dart';
 
 part 'admin_reports_screen.g.dart';
 
+/// Injectable "now" for the moderation queue's relative timestamps
+/// ("12d ago"). Defaults to the wall clock; tests + goldens override it so
+/// the rendered string is deterministic. Without this seam the golden
+/// drifts a day every real day — it bakes "Nd ago" against `DateTime.now()`,
+/// so a baseline captured on day N fails on day N+1.
+@Riverpod(keepAlive: true)
+DateTime Function() adminReportsClock(Ref ref) => DateTime.now;
+
 /// Pending moderation queue + per-row action set (BUILD_SPEC.md §13 /
 /// Phase 13.12).
 ///
@@ -245,7 +253,7 @@ class _ReportCard extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             'Reported by ${_shorten(report.reporterId)} '
-            '· ${_relativeTime(report.createdAt)}',
+            '· ${_relativeTime(report.createdAt, ref.watch(adminReportsClockProvider)())}',
             style: textTheme.bodyMedium?.copyWith(
               color: context.cb.text.withValues(alpha: 0.55),
               fontSize: 13,
@@ -294,8 +302,8 @@ class _ReportCard extends ConsumerWidget {
   static String _shorten(String id) =>
       id.length <= 8 ? id : '${id.substring(0, 8)}…';
 
-  static String _relativeTime(DateTime ts) {
-    final Duration delta = DateTime.now().toUtc().difference(ts.toUtc());
+  static String _relativeTime(DateTime ts, DateTime now) {
+    final Duration delta = now.toUtc().difference(ts.toUtc());
     if (delta.inMinutes < 1) return 'just now';
     if (delta.inMinutes < 60) return '${delta.inMinutes}m ago';
     if (delta.inHours < 24) return '${delta.inHours}h ago';
