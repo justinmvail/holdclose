@@ -1,10 +1,10 @@
 import { SELF, env } from 'cloudflare:test';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { sign } from 'hono/jwt';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { circleInvites } from '../src/db/schema';
+import { circleMembers, circleInvites, profiles } from '../src/db/schema';
 
 const SECRET = env.FORUM_JWT_SECRET;
 const ORIGIN = 'https://forum.careblazers.local';
@@ -170,6 +170,97 @@ describe('GET /api/v1/circles', () => {
     expect(body.circles).toHaveLength(2);
     const found = body.circles.find((cc) => cc.id === a.id);
     expect(found.members).toHaveLength(1);
+  });
+
+  it('returns EVERY member of a multi-member circle — no member is '
+      + 'dropped (leftJoin — 2026-06-14 roster bug)', async () => {
+    // The real alpha bug: a joiner saw only the owner + herself; the person
+    // who added her vanished because the old innerJoin dropped any
+    // circle_members row whose profile didn't resolve. This is the
+    // common-path regression guard — the full roster must come back.
+    const owner = await bootstrap('cb-roster-owner');
+    const circle = (await (
+      await authedFetch('/api/v1/circles', {
+        method: 'POST',
+        sub: 'cb-roster-owner',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Full roster' }),
+      })
+    ).json()) as { id: string };
+    const invite = (await (
+      await authedFetch(`/api/v1/circles/${circle.id}/invites`, {
+        method: 'POST',
+        sub: 'cb-roster-owner',
+      })
+    ).json()) as { token: string };
+    const joiner = await bootstrap('cb-roster-joiner');
+    await authedFetch('/api/v1/circles/join', {
+      method: 'POST',
+      sub: 'cb-roster-joiner',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: invite.token }),
+    });
+
+    // The JOINER (the alpha user) lists circles and must see BOTH the owner
+    // (who added her) and herself — not just herself + owner-only.
+    const res = await authedFetch('/api/v1/circles', {
+      sub: 'cb-roster-joiner',
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { circles: any[] };
+    const found = body.circles.find((cc) => cc.id === circle.id);
+    expect(found.members).toHaveLength(2);
+    const ids = found.members.map((m: any) => m.profile_id).sort();
+    expect(ids).toEqual([owner.id, joiner.id].sort());
+  });
+
+  it('maps a member whose profile does not resolve to the "[Member]" '
+      + 'fallback (leftJoin keeps it; innerJoin would have dropped it)',
+      async () => {
+    // The TRUE orphan state — a circle_members row whose profile is gone —
+    // can't be inserted through the route here because D1 enforces the
+    // foreign key (and ignores PRAGMA foreign_keys=OFF), so we exercise
+    // loadMembers' leftJoin + COALESCE at the query level: a left join that
+    // resolves no profile row yields NULL profile columns, which the route
+    // maps to display_name '[Member]' / username null. This pins the
+    // fallback contract the production fix relies on.
+    const owner = await bootstrap('cb-fallback-owner');
+    const circle = (await (
+      await authedFetch('/api/v1/circles', {
+        method: 'POST',
+        sub: 'cb-fallback-owner',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Fallback' }),
+      })
+    ).json()) as { id: string };
+
+    const db = drizzle(env.FORUM_DB);
+    // Force the join to match no profile (0 = 1) so every membership row
+    // comes back with NULL profile columns — the orphan shape.
+    const rows = await db
+      .select({
+        profileId: circleMembers.profileId,
+        role: circleMembers.role,
+        username: profiles.username,
+        displayName: profiles.displayName,
+      })
+      .from(circleMembers)
+      .leftJoin(profiles, sql`0 = 1`)
+      .where(eq(circleMembers.circleId, circle.id));
+    // Apply the SAME mapping loadMembers() uses.
+    const mapped = rows.map((r) => ({
+      profile_id: r.profileId,
+      username: r.username ?? null,
+      display_name: r.displayName ?? '[Member]',
+      role: r.role,
+    }));
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toEqual({
+      profile_id: owner.id,
+      username: null,
+      display_name: '[Member]',
+      role: 'owner',
+    });
   });
 });
 

@@ -49,6 +49,13 @@ type MemberRow = {
 };
 
 async function loadMembers(db: Db, circleId: string): Promise<MemberRow[]> {
+  // LEFT join, not INNER (2026-06-14 roster bug): an INNER join silently
+  // DROPS any circle_members row whose profile is missing/mismatched, so a
+  // joiner saw only the owner + herself — the person who added her (and
+  // other members whose profile row hadn't replicated) vanished. A left
+  // join keeps every membership; a member without a resolvable profile
+  // falls back to a '[Member]' placeholder + null username so the roster
+  // stays complete instead of partial.
   const rows = await db
     .select({
       profileId: circleMembers.profileId,
@@ -57,12 +64,12 @@ async function loadMembers(db: Db, circleId: string): Promise<MemberRow[]> {
       displayName: profiles.displayName,
     })
     .from(circleMembers)
-    .innerJoin(profiles, eq(circleMembers.profileId, profiles.id))
+    .leftJoin(profiles, eq(circleMembers.profileId, profiles.id))
     .where(eq(circleMembers.circleId, circleId));
   return rows.map((r) => ({
     profile_id: r.profileId,
     username: r.username ?? null,
-    display_name: r.displayName,
+    display_name: r.displayName ?? '[Member]',
     role: r.role,
   }));
 }

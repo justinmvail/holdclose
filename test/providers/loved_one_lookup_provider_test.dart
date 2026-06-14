@@ -5,6 +5,7 @@ import 'package:careblazers/providers/care_events_provider.dart';
 import 'package:careblazers/providers/care_plan_provider.dart';
 import 'package:careblazers/providers/care_shifts_provider.dart';
 import 'package:careblazers/providers/care_tasks_provider.dart';
+import 'package:careblazers/providers/circle_member_cache_provider.dart';
 import 'package:careblazers/providers/documents_provider.dart';
 import 'package:careblazers/providers/expenses_provider.dart';
 import 'package:careblazers/providers/health_log_provider.dart';
@@ -74,6 +75,7 @@ SyncController _buildSync(
       expenses: ExpensesRepository(db),
       careCircle: CareCircleRepository(db),
       documents: DocumentsRepository(db),
+      circleMemberCache: CircleMemberCacheRepository(db),
     );
 
 ProviderContainer _container({

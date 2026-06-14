@@ -22,6 +22,7 @@ import 'package:careblazers/providers/care_events_provider.dart';
 import 'package:careblazers/providers/care_plan_provider.dart';
 import 'package:careblazers/providers/care_shifts_provider.dart';
 import 'package:careblazers/providers/care_tasks_provider.dart';
+import 'package:careblazers/providers/circle_member_cache_provider.dart';
 import 'package:careblazers/providers/documents_provider.dart';
 import 'package:careblazers/providers/expenses_provider.dart';
 import 'package:careblazers/providers/health_log_provider.dart';
@@ -99,6 +100,7 @@ class _Device {
     expenses = ExpensesRepository(db);
     careCircle = CareCircleRepository(db);
     documents = DocumentsRepository(db);
+    circleMemberCache = CircleMemberCacheRepository(db);
     storage = InMemoryStorageProvider();
     stateStore = const SyncStateStore();
     controller = SyncController(
@@ -118,6 +120,7 @@ class _Device {
       expenses: expenses,
       careCircle: careCircle,
       documents: documents,
+      circleMemberCache: circleMemberCache,
       clock: clock,
     );
     // Wire the enqueue seam exactly like the provider does — one shared
@@ -160,6 +163,7 @@ class _Device {
   late final ExpensesRepository expenses;
   late final CareCircleRepository careCircle;
   late final DocumentsRepository documents;
+  late final CircleMemberCacheRepository circleMemberCache;
   late final InMemoryStorageProvider storage;
   late final SyncStateStore stateStore;
   late final SyncController controller;
@@ -1485,6 +1489,54 @@ void main() {
       // (cursor = patient.rev) skipped it forever.
       expect((await d.storage.listAllJournalEntries()).single.id, 'j1');
       expect((await d.storage.getPatient())?.name, 'Mary Renamed');
+    });
+
+    test(
+        'adoptJoinedCircle caches the WHOLE roster locally so the People '
+        'screen sees the inviter immediately (2026-06-14 roster bug)',
+        () async {
+      final FakeForumApiClient backend = FakeForumApiClient();
+      final _Device d = _Device(backend);
+      addTearDown(d.dispose);
+
+      // The circle the join returned: owner + the inviter + the joiner.
+      // Before the fix this roster was never cached, so the People screen
+      // showed only the owner + herself until the next online refresh.
+      final CircleDto joined = CircleDto(
+        id: 'circle-1',
+        name: 'Mary',
+        ownerProfileId: 'owner-1',
+        createdAt: DateTime.utc(2026, 1, 1),
+        members: const <CircleMemberDto>[
+          CircleMemberDto(
+            profileId: 'owner-1',
+            username: 'mom',
+            displayName: 'Mom',
+            role: 'owner',
+          ),
+          CircleMemberDto(
+            profileId: 'inviter-1',
+            username: 'sarah_h',
+            displayName: 'Sarah',
+            role: 'member',
+          ),
+          CircleMemberDto(
+            profileId: 'me-1',
+            username: null,
+            displayName: 'Me',
+            role: 'member',
+          ),
+        ],
+      );
+
+      await d.controller.adoptJoinedCircle(joined);
+
+      final List<CircleMemberDto> cached = await d.circleMemberCache.list();
+      expect(
+        cached.map((CircleMemberDto m) => m.profileId).toSet(),
+        <String>{'owner-1', 'inviter-1', 'me-1'},
+        reason: 'every member — owner, inviter, self — must be cached',
+      );
     });
   });
 

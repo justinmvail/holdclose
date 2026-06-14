@@ -26,6 +26,7 @@ import '../providers/care_events_provider.dart';
 import '../providers/care_plan_provider.dart';
 import '../providers/care_shifts_provider.dart';
 import '../providers/care_tasks_provider.dart';
+import '../providers/circle_member_cache_provider.dart';
 import '../providers/documents_provider.dart';
 import '../providers/expenses_provider.dart';
 import '../providers/health_log_provider.dart';
@@ -171,6 +172,7 @@ class SyncController {
     required ExpensesRepository expenses,
     required CareCircleRepository careCircle,
     required DocumentsRepository documents,
+    required CircleMemberCacheRepository circleMemberCache,
     DateTime Function()? clock,
   })  : _outbox = outbox,
         _client = client,
@@ -188,6 +190,7 @@ class SyncController {
         _expenses = expenses,
         _careCircle = careCircle,
         _documents = documents,
+        _circleMemberCache = circleMemberCache,
         _clock = clock ?? DateTime.now;
 
   final SyncOutbox _outbox;
@@ -206,6 +209,7 @@ class SyncController {
   final ExpensesRepository _expenses;
   final CareCircleRepository _careCircle;
   final DocumentsRepository _documents;
+  final CircleMemberCacheRepository _circleMemberCache;
   final DateTime Function() _clock;
 
   Future<void>? _inFlight;
@@ -624,6 +628,11 @@ class SyncController {
         if (circles.isNotEmpty) {
           final CircleDto first = circles.first;
           await _stateStore.setCircleId(first.id);
+          // Cache the denormalized roster locally so the People screen has
+          // it immediately — otherwise the screen reads a stale/empty cache
+          // until the next online roster refresh (the alpha bug where a
+          // joiner saw only the owner + herself).
+          await _cacheRoster(first);
           if (first.patient != null) {
             await _applyPatient(first.patient!);
           }
@@ -683,6 +692,10 @@ class SyncController {
   Future<void> adoptJoinedCircle(CircleDto circle) async {
     try {
       await _stateStore.setCircleId(circle.id);
+      // Cache the denormalized roster locally so the People screen shows the
+      // whole circle (owner + inviter + everyone) the instant the join
+      // returns, instead of a stale/partial cache until the next refresh.
+      await _cacheRoster(circle);
       final SyncPatient? p = circle.patient;
       if (p != null && !p.deleted && p.payload.isNotEmpty) {
         final Patient parsed = Patient.fromJson(
@@ -701,6 +714,21 @@ class SyncController {
     } catch (e) {
       // Local patient (if any) already saved by the join path — safe.
       debugPrint('sync: adoptJoinedCircle follow-up failed: $e');
+    }
+  }
+
+  /// Mirror [circle]'s denormalized member roster into the local
+  /// [CircleMemberCacheTable] the Care Circle "People" screen reads
+  /// local-first. Called when a circle is adopted (join via QR/link, or the
+  /// launch-time adopt branch) so the roster renders immediately rather than
+  /// waiting for the next online refresh (`refreshCircleRoster`). Best-effort
+  /// — a cache write failure must not abort the adopt.
+  Future<void> _cacheRoster(CircleDto circle) async {
+    try {
+      await _circleMemberCache.replaceForCircle(circle.id, circle.members);
+    } catch (e) {
+      // The next online roster refresh re-fills the cache; never block adopt.
+      debugPrint('sync: cacheRoster failed: $e');
     }
   }
 
@@ -994,6 +1022,8 @@ SyncController syncController(Ref ref) {
       ref.watch(careCircleRepositoryProvider);
   final DocumentsRepository documents =
       ref.watch(documentsRepositoryProvider);
+  final CircleMemberCacheRepository circleMemberCache =
+      ref.watch(circleMemberCacheRepositoryProvider);
   final SyncController controller = SyncController(
     outbox: SyncOutbox(db),
     client: ref.watch(forumApiClientProvider),
@@ -1011,6 +1041,7 @@ SyncController syncController(Ref ref) {
     expenses: expenses,
     careCircle: careCircle,
     documents: documents,
+    circleMemberCache: circleMemberCache,
   );
 
   // Register the enqueue seam on the SAME (keepAlive) repository instances
