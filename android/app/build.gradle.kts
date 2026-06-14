@@ -67,6 +67,17 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // Run R8 with our keep rules (proguard-rules.pro). Even with
+            // minify off, core-library desugaring runs R8/D8 and strips the
+            // Gson `Signature` attribute that flutter_local_notifications
+            // needs — which crashed Android saves (fb 2026-06-14). Enabling
+            // minify here makes R8 honor proguard-rules.pro (which keeps the
+            // signatures + the TTS/JNI classes) and shrinks the APK.
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
