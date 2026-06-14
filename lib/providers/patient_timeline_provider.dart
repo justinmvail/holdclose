@@ -281,7 +281,10 @@ Future<List<CareEvent>> patientJournalEvents(Ref ref) async {
 @riverpod
 Future<List<CareEvent>> patientTaskEvents(Ref ref) async {
   final CareTasksRepository repo = ref.watch(careTasksRepositoryProvider);
-  final List<CareTask> tasks = await repo.listTasks();
+  // Scope to the active loved one (multi-patient, Issue #6) so Home's Today
+  // schedule never surfaces another person's loose tasks.
+  final String patientId = await ref.watch(activePatientIdProvider.future);
+  final List<CareTask> tasks = await repo.listTasksForPatient(patientId);
   return <CareEvent>[
     for (final CareTask task in tasks)
       if (task.routineId == null && task.dueAt != null)

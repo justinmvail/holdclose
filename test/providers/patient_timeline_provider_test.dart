@@ -1,6 +1,7 @@
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/care_event.dart';
 import 'package:careblazers/models/care_task.dart';
+import 'package:careblazers/providers/active_patient_provider.dart';
 import 'package:careblazers/providers/care_events_provider.dart';
 import 'package:careblazers/providers/care_tasks_provider.dart';
 import 'package:careblazers/providers/patient_timeline_provider.dart';
@@ -28,13 +29,14 @@ CareTask _task({
   String title = 'Refill meds',
   DateTime? dueAt,
   String? routineId,
+  String patientId = _patientId,
 }) =>
     CareTask(
       id: id,
       title: title,
       dueAt: dueAt,
       routineId: routineId,
-      patientId: _patientId,
+      patientId: patientId,
     );
 
 void main() {
@@ -57,6 +59,11 @@ void main() {
       overrides: <Override>[
         appointmentRepositoryProvider.overrideWithValue(appointmentRepo),
         careTasksRepositoryProvider.overrideWithValue(tasksRepo),
+        // Pin the active loved one so the task projection is scoped without
+        // touching the on-device SQLite file (the default
+        // activePatientIdProvider reads storage); the seeded tasks carry the
+        // same id so they surface.
+        activePatientIdProvider.overrideWith((Ref ref) async => _patientId),
         // Isolate the task projection — every other patient-scoped source
         // contributes nothing.
         patientDoseEventsProvider.overrideWith((Ref ref) async =>
@@ -101,6 +108,21 @@ void main() {
         id: 'bundled',
         dueAt: DateTime(2026, 6, 3, 8),
         routineId: 'r-1',
+      ));
+
+      final List<CareEvent> events =
+          await makeContainer().read(patientTaskEventsProvider.future);
+
+      expect(events, isEmpty);
+    });
+
+    test('excludes a standalone task filed under another loved one', () async {
+      // Active patient is _patientId; this task belongs to someone else, so
+      // it must not ride the active person's timeline.
+      await tasksRepo.upsertTask(_task(
+        id: 'theirs',
+        dueAt: DateTime(2026, 6, 3, 11),
+        patientId: 'other-patient',
       ));
 
       final List<CareEvent> events =

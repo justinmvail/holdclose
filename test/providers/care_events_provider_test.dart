@@ -2,6 +2,7 @@ import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/appointment.dart';
 import 'package:careblazers/models/care_event.dart';
 import 'package:careblazers/models/care_task.dart';
+import 'package:careblazers/providers/active_patient_provider.dart';
 import 'package:careblazers/providers/care_events_provider.dart';
 import 'package:careblazers/providers/care_tasks_provider.dart';
 import 'package:careblazers/services/appointment_repository.dart';
@@ -17,14 +18,22 @@ CareEvent _note({
   required String id,
   required DateTime start,
   String title = 'Pick up prescription',
+  String patientId = _patientId,
 }) =>
     CareEvent(
       id: id,
       kind: CareEventKind.note,
       title: title,
       start: start,
-      patientId: _patientId,
+      patientId: patientId,
     );
+
+/// Pins the active loved one for the display-scoped [careEvents] (notes
+/// portion) + [calendarTaskEvents] providers without hitting the on-device
+/// SQLite file (the default `activePatientIdProvider` reads storage). Tests
+/// pass the same id their seeded rows carry so the calendar sees them.
+Override _activePatient([String id = _patientId]) =>
+    activePatientIdProvider.overrideWith((Ref ref) async => id);
 
 Appointment _appointment({
   required String id,
@@ -200,6 +209,52 @@ void main() {
       await db.wipeAll();
       expect(await repo.listEvents(), isEmpty);
     });
+
+    test(
+        'listEventsForPatient filters to one patient; listEvents stays '
+        'unfiltered (for sync)', () async {
+      await repo.upsertEvent(_note(
+        id: 'mine',
+        start: DateTime(2026, 6, 1, 10),
+        patientId: _patientId,
+      ));
+      await repo.upsertEvent(_note(
+        id: 'theirs',
+        start: DateTime(2026, 6, 1, 10),
+        patientId: 'other-patient',
+      ));
+
+      expect(
+        (await repo.listEventsForPatient(_patientId))
+            .map((CareEvent e) => e.id),
+        <String>['mine'],
+      );
+      expect(
+        (await repo.listEvents()).map((CareEvent e) => e.id).toSet(),
+        <String>{'mine', 'theirs'},
+      );
+    });
+
+    test('restampPatient re-files legacy notes and is a no-op when from==to',
+        () async {
+      await repo.upsertEvent(_note(
+        id: 'legacy',
+        start: DateTime(2026, 6, 1, 10),
+        patientId: 'demo-patient-mary',
+      ));
+
+      expect(
+        await repo.restampPatient('demo-patient-mary', 'patient-new'),
+        1,
+      );
+      expect(await repo.listEventsForPatient('demo-patient-mary'), isEmpty);
+      expect(
+        (await repo.listEventsForPatient('patient-new'))
+            .map((CareEvent e) => e.id),
+        <String>['legacy'],
+      );
+      expect(await repo.restampPatient('patient-new', 'patient-new'), 0);
+    });
   });
 
   group('careEvents — four-source unification', () {
@@ -232,6 +287,7 @@ void main() {
           calendarTaskEventsProvider.overrideWith((Ref ref) async => taskEvents),
           calendarShiftEventsProvider
               .overrideWith((Ref ref) async => shiftEvents),
+          _activePatient(),
         ],
       );
       addTearDown(container.dispose);
@@ -292,6 +348,30 @@ void main() {
       expect(appt.detailRoute, '/appointments/a1');
     });
 
+    test('a note filed under another loved one is hidden from the calendar',
+        () async {
+      // Two notes under two different loved ones; the active patient is
+      // _patientId (pinned by makeContainer's _activePatient override).
+      await careEventsRepo.upsertEvent(_note(
+        id: 'mine',
+        start: DateTime(2026, 6, 3, 9),
+        patientId: _patientId,
+      ));
+      await careEventsRepo.upsertEvent(_note(
+        id: 'theirs',
+        start: DateTime(2026, 6, 3, 9),
+        patientId: 'other-patient',
+      ));
+
+      final List<CareEvent> events =
+          await makeContainer().read(careEventsProvider.future);
+
+      final Iterable<String> noteIds = events
+          .where((CareEvent e) => e.kind == CareEventKind.note)
+          .map((CareEvent e) => e.id);
+      expect(noteIds, <String>['mine']);
+    });
+
     test('the task + shift seams contribute nothing with no tasks', () async {
       await providerRepo.upsertProvider(_provider(id: 'p1', name: 'Dr. Patel'));
       await appointmentRepo.upsertAppointment(_appointment(
@@ -308,6 +388,7 @@ void main() {
           appointmentRepositoryProvider.overrideWithValue(appointmentRepo),
           careEventsRepositoryProvider.overrideWithValue(careEventsRepo),
           careTasksRepositoryProvider.overrideWithValue(careTasksRepo),
+          _activePatient(),
         ],
       );
       addTearDown(container.dispose);
@@ -347,6 +428,7 @@ void main() {
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[
           careTasksRepositoryProvider.overrideWithValue(careTasksRepo),
+          _activePatient(),
         ],
       );
       addTearDown(container.dispose);

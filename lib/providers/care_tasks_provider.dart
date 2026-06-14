@@ -8,6 +8,7 @@ import '../db/database.dart';
 import '../models/care_task.dart';
 import '../models/caregiver.dart';
 import '../services/sync_sink.dart';
+import 'active_patient_provider.dart';
 import 'auth_provider.dart';
 import 'care_circle_provider.dart';
 import 'care_events_provider.dart' show fallbackPatientId;
@@ -87,6 +88,11 @@ class CareTasksRepository with SyncSinkHost {
   /// Every task, dated ones first (earliest due first) then the undated
   /// ones. SQLite sorts NULLs first under `ASC`, so the due-time order is
   /// re-applied in Dart to keep undated tasks at the tail deterministically.
+  ///
+  /// UNFILTERED across patients on purpose — the sync engine
+  /// ([SyncController.resyncAllLocal]) walks this to push EVERY local row up
+  /// regardless of which loved one is active. The board's DISPLAY read is
+  /// [listTasksForPatient]; don't swap one for the other.
   Future<List<CareTask>> listTasks() async {
     final List<CareTasksTableData> rows =
         await _db.select(_db.careTasksTable).get();
@@ -96,6 +102,42 @@ class CareTasksRepository with SyncSinkHost {
         .toList();
     tasks.sort(_byDueThenTitle);
     return tasks;
+  }
+
+  /// Tasks filed under [patientId] only, same ordering as [listTasks]
+  /// (multi-patient display scoping, Issue #6).
+  ///
+  /// The board / calendar / timeline read THIS so a caregiver with more than
+  /// one loved one on file (e.g. left over from the earlier duplicate-patient
+  /// bug) never sees another person's tasks. Filters on the lifted
+  /// [CareTasksTable.patientId] column. Sync still uses the unfiltered
+  /// [listTasks].
+  Future<List<CareTask>> listTasksForPatient(String patientId) async {
+    final List<CareTasksTableData> rows = await (_db.select(_db.careTasksTable)
+          ..where((t) => t.patientId.equals(patientId)))
+        .get();
+    final List<CareTask> tasks = rows
+        .map((CareTasksTableData r) =>
+            CareTask.fromJson(jsonDecode(r.payload) as Map<String, dynamic>))
+        .toList();
+    tasks.sort(_byDueThenTitle);
+    return tasks;
+  }
+
+  /// Re-file every task currently stamped [from] under [to], returning the
+  /// number of rows moved (the one-time multi-patient migration, Issue #6).
+  ///
+  /// Each moved row round-trips through [upsertTask] so the lifted
+  /// [CareTasksTable.patientId] column is rewritten AND the change re-emits
+  /// through the sync sink (acceptable — LWW resolves it). A no-op when
+  /// [from] == [to].
+  Future<int> restampPatient(String from, String to) async {
+    if (from == to) return 0;
+    final List<CareTask> tasks = await listTasksForPatient(from);
+    for (final CareTask task in tasks) {
+      await upsertTask(task.copyWith(patientId: to));
+    }
+    return tasks.length;
   }
 }
 
@@ -147,7 +189,12 @@ class CareTasks extends _$CareTasks {
   @override
   Future<List<CareTask>> build() async {
     final CareTasksRepository repo = ref.watch(careTasksRepositoryProvider);
-    return repo.listTasks();
+    // Scope the board to the active loved one (multi-patient, Issue #6) so a
+    // caregiver with several people on file sees only the selected person's
+    // tasks. With one loved one [activePatientIdProvider] resolves to that
+    // sole id, identical to the old unfiltered read.
+    final String patientId = await ref.watch(activePatientIdProvider.future);
+    return repo.listTasksForPatient(patientId);
   }
 
   /// Create (or replace) a task, then refresh.
@@ -202,9 +249,10 @@ class CareTasks extends _$CareTasks {
     Future<void> Function(CareTasksRepository repo) op,
   ) async {
     final CareTasksRepository repo = ref.read(careTasksRepositoryProvider);
+    final String patientId = await ref.read(activePatientIdProvider.future);
     state = await AsyncValue.guard(() async {
       await op(repo);
-      return repo.listTasks();
+      return repo.listTasksForPatient(patientId);
     });
   }
 }

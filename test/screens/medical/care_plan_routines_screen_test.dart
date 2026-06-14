@@ -2,6 +2,7 @@ import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/care_plan_routine.dart';
 import 'package:careblazers/models/care_task.dart';
 import 'package:careblazers/models/medication.dart' show FrequencyKind;
+import 'package:careblazers/providers/active_patient_provider.dart';
 import 'package:careblazers/providers/care_plan_provider.dart';
 import 'package:careblazers/providers/care_tasks_provider.dart';
 import 'package:careblazers/screens/medical/care_plan_routines_screen.dart';
@@ -92,6 +93,12 @@ Future<List<String>> _pumpScreen(
         // careTasksRepository; override it onto the same in-memory db so the
         // screen never opens the on-device sqlite file.
         careTasksRepositoryProvider.overrideWithValue(tasksRepo),
+        // The "· N tasks" suffix now flows through careTasks ->
+        // activePatientId; pin it to the seeded tasks' patient so the count
+        // resolves deterministically (the new async hop otherwise races
+        // pumpAndSettle and drops the suffix).
+        activePatientIdProvider
+            .overrideWith((Ref ref) async => 'demo-patient-mary'),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

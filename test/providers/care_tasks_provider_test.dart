@@ -1,6 +1,7 @@
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/care_task.dart';
 import 'package:careblazers/models/caregiver.dart';
+import 'package:careblazers/providers/active_patient_provider.dart';
 import 'package:careblazers/providers/care_circle_provider.dart';
 import 'package:careblazers/providers/care_tasks_provider.dart';
 import 'package:drift/native.dart';
@@ -18,6 +19,7 @@ CareTask _task({
   String? assigneeCaregiverId,
   DateTime? claimedAt,
   DateTime? completedAt,
+  String patientId = _patientId,
 }) =>
     CareTask(
       id: id,
@@ -26,8 +28,15 @@ CareTask _task({
       assigneeCaregiverId: assigneeCaregiverId,
       claimedAt: claimedAt,
       completedAt: completedAt,
-      patientId: _patientId,
+      patientId: patientId,
     );
+
+/// Pins the active loved one for the display-scoped providers
+/// ([CareTasks.build], [CareTasksView]) without hitting the on-device
+/// SQLite file (the default `activePatientIdProvider` reads storage). Tests
+/// pass the same id their `_task`s carry so the board sees them.
+Override _activePatient([String id = _patientId]) =>
+    activePatientIdProvider.overrideWith((Ref ref) async => id);
 
 void main() {
   group('CareTask — derived status', () {
@@ -117,6 +126,47 @@ void main() {
       await db.wipeAll();
       expect(await repo.listTasks(), isEmpty);
     });
+
+    test(
+        'listTasksForPatient filters to one patient; listTasks stays '
+        'unfiltered (for sync)', () async {
+      await repo.upsertTask(_task(id: 'mine', patientId: _patientId));
+      await repo.upsertTask(_task(id: 'theirs', patientId: 'other-patient'));
+
+      // The display read sees only the active patient's task…
+      final List<CareTask> mine = await repo.listTasksForPatient(_patientId);
+      expect(mine.map((CareTask t) => t.id), <String>['mine']);
+
+      // …while the unfiltered read (what resyncAllLocal walks) sees BOTH, so
+      // sync still pushes every local row regardless of patient.
+      final List<CareTask> all = await repo.listTasks();
+      expect(all.map((CareTask t) => t.id).toSet(),
+          <String>{'mine', 'theirs'});
+    });
+
+    test('restampPatient re-files legacy rows and is a no-op when from==to',
+        () async {
+      await repo.upsertTask(_task(id: 'legacy1', patientId: 'demo-patient-mary'));
+      await repo.upsertTask(_task(id: 'legacy2', patientId: 'demo-patient-mary'));
+      await repo.upsertTask(_task(id: 'already', patientId: 'patient-new'));
+
+      final int moved =
+          await repo.restampPatient('demo-patient-mary', 'patient-new');
+      expect(moved, 2);
+      expect(await repo.listTasksForPatient('demo-patient-mary'), isEmpty);
+      expect(
+        (await repo.listTasksForPatient('patient-new'))
+            .map((CareTask t) => t.id)
+            .toSet(),
+        <String>{'legacy1', 'legacy2', 'already'},
+      );
+
+      // Re-running with identical ids moves nothing.
+      expect(
+        await repo.restampPatient('patient-new', 'patient-new'),
+        0,
+      );
+    });
   });
 
   group('CareTasks notifier — state machine', () {
@@ -128,6 +178,7 @@ void main() {
         overrides: <Override>[
           careTasksRepositoryProvider.overrideWithValue(repo),
           careTasksClockProvider.overrideWithValue(() => _clock),
+          _activePatient(),
         ],
       );
       addTearDown(container.dispose);
@@ -235,6 +286,19 @@ void main() {
 
       expect(await container.read(careTasksProvider.future), isEmpty);
     });
+
+    test('the board shows only the ACTIVE patient — another loved one\'s '
+        'task is hidden', () async {
+      // Two tasks under two different loved ones; the active patient is
+      // _patientId (pinned by makeContainer's _activePatient override).
+      await repo.upsertTask(_task(id: 'mine', patientId: _patientId));
+      await repo.upsertTask(_task(id: 'theirs', patientId: 'other-patient'));
+
+      final List<CareTask> board =
+          await makeContainer().read(careTasksProvider.future);
+
+      expect(board.map((CareTask t) => t.id), <String>['mine']);
+    });
   });
 
   group('careTasksView — join with assignees', () {
@@ -267,6 +331,7 @@ void main() {
           careTasksRepositoryProvider.overrideWithValue(tasksRepo),
           careCircleRepositoryProvider.overrideWithValue(circleRepo),
           careTasksClockProvider.overrideWithValue(() => _clock),
+          _activePatient(),
         ],
       );
       addTearDown(container.dispose);

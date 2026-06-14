@@ -516,8 +516,13 @@ Future<ChatActionOutcome?> _completeTask(
   Ref ref,
   Map<String, String> args,
 ) async {
-  final List<CareTask> tasks =
-      await ref.read(careTasksRepositoryProvider).listTasks();
+  // Scope the by-title lookup to the active loved one (multi-patient, Issue
+  // #6) so "complete the pharmacy task" can't match another person's task.
+  final String? patientId = await _patientId(ref);
+  if (patientId == null) return null;
+  final List<CareTask> tasks = await ref
+      .read(careTasksRepositoryProvider)
+      .listTasksForPatient(patientId);
   final CareTask? target = _resolveTask(tasks, args['title']);
   if (target == null) return null;
   await ref.read(careTasksProvider.notifier).complete(target.id);
@@ -528,8 +533,13 @@ Future<ChatActionOutcome?> _deleteTask(
   Ref ref,
   Map<String, String> args,
 ) async {
-  final List<CareTask> tasks =
-      await ref.read(careTasksRepositoryProvider).listTasks();
+  // Same active-patient scoping as _completeTask — a destructive lookup must
+  // never resolve to a different loved one's task (multi-patient, Issue #6).
+  final String? patientId = await _patientId(ref);
+  if (patientId == null) return null;
+  final List<CareTask> tasks = await ref
+      .read(careTasksRepositoryProvider)
+      .listTasksForPatient(patientId);
   final CareTask? target = _resolveTask(tasks, args['title']);
   if (target == null) return null;
   await ref.read(careTasksProvider.notifier).removeTask(target.id);

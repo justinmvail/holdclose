@@ -3,6 +3,7 @@ import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/care_plan_routine.dart';
 import 'package:careblazers/models/care_task.dart';
 import 'package:careblazers/models/medication.dart' show FrequencyKind;
+import 'package:careblazers/providers/active_patient_provider.dart';
 import 'package:careblazers/providers/care_plan_provider.dart';
 import 'package:careblazers/providers/care_tasks_provider.dart';
 import 'package:careblazers/screens/medical/care_plan_routines_screen.dart';
@@ -85,6 +86,12 @@ Widget _host(({CarePlanRepository plan, CareTasksRepository tasks}) repos) {
     overrides: <Override>[
       carePlanRepositoryProvider.overrideWithValue(repos.plan),
       careTasksRepositoryProvider.overrideWithValue(repos.tasks),
+      // The "· N tasks" suffix flows through routineTaskCounts →
+      // careTasksProvider → CareTasks.build(), which now resolves the active
+      // loved one (multi-patient, Issue #6). Pin it to the seeded patient so
+      // the count is deterministic and the test never touches on-device
+      // storage.
+      activePatientIdProvider.overrideWith((Ref ref) async => _patientId),
     ],
     child: SizedBox(
       width: 420,

@@ -8,6 +8,7 @@ import '../db/database.dart';
 import '../models/care_shift.dart';
 import '../models/caregiver.dart';
 import '../services/sync_sink.dart';
+import 'active_patient_provider.dart';
 import 'care_circle_provider.dart';
 import 'care_events_provider.dart' show fallbackPatientId;
 
@@ -214,6 +215,11 @@ class CareShiftsRepository with SyncSinkHost {
   }
 
   /// Every shift, earliest start first.
+  ///
+  /// UNFILTERED across patients on purpose — the sync engine
+  /// ([SyncController.resyncAllLocal]) walks this to push EVERY local row up
+  /// regardless of which loved one is active. The strip's DISPLAY read is
+  /// [listShiftsForPatient].
   Future<List<CareShift>> listShifts() async {
     final List<CareShiftsTableData> rows = await (_db
             .select(_db.careShiftsTable)
@@ -225,6 +231,42 @@ class CareShiftsRepository with SyncSinkHost {
         .map((CareShiftsTableData r) =>
             CareShift.fromJson(jsonDecode(r.payload) as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Shifts filed under [patientId] only, earliest start first
+  /// (multi-patient display scoping, Issue #6).
+  ///
+  /// The coverage strip reads THIS so a caregiver with more than one loved
+  /// one on file never sees another person's shifts. Filters on the lifted
+  /// [CareShiftsTable.patientId] column. Sync still uses the unfiltered
+  /// [listShifts].
+  Future<List<CareShift>> listShiftsForPatient(String patientId) async {
+    final List<CareShiftsTableData> rows = await (_db
+            .select(_db.careShiftsTable)
+          ..where((t) => t.patientId.equals(patientId))
+          ..orderBy(<OrderClauseGenerator<$CareShiftsTableTable>>[
+            (t) => OrderingTerm(expression: t.startMs, mode: OrderingMode.asc),
+          ]))
+        .get();
+    return rows
+        .map((CareShiftsTableData r) =>
+            CareShift.fromJson(jsonDecode(r.payload) as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Re-file every shift currently stamped [from] under [to], returning the
+  /// number of rows moved (the one-time multi-patient migration, Issue #6).
+  ///
+  /// Each moved row round-trips through [upsertShift] so the lifted
+  /// [CareShiftsTable.patientId] column is rewritten AND the change re-emits
+  /// through the sync sink. A no-op when [from] == [to].
+  Future<int> restampPatient(String from, String to) async {
+    if (from == to) return 0;
+    final List<CareShift> shifts = await listShiftsForPatient(from);
+    for (final CareShift shift in shifts) {
+      await upsertShift(shift.copyWith(patientId: to));
+    }
+    return shifts.length;
   }
 }
 
@@ -261,7 +303,11 @@ class CareShifts extends _$CareShifts {
   @override
   Future<List<CareShift>> build() async {
     final CareShiftsRepository repo = ref.watch(careShiftsRepositoryProvider);
-    return repo.listShifts();
+    // Scope the coverage strip to the active loved one (multi-patient, Issue
+    // #6). With one loved one [activePatientIdProvider] resolves to that sole
+    // id, identical to the old unfiltered read.
+    final String patientId = await ref.watch(activePatientIdProvider.future);
+    return repo.listShiftsForPatient(patientId);
   }
 
   /// Create (or replace) a shift, then refresh.
@@ -276,9 +322,10 @@ class CareShifts extends _$CareShifts {
     Future<void> Function(CareShiftsRepository repo) op,
   ) async {
     final CareShiftsRepository repo = ref.read(careShiftsRepositoryProvider);
+    final String patientId = await ref.read(activePatientIdProvider.future);
     state = await AsyncValue.guard(() async {
       await op(repo);
-      return repo.listShifts();
+      return repo.listShiftsForPatient(patientId);
     });
   }
 }

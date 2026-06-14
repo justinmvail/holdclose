@@ -1,5 +1,6 @@
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/care_shift.dart';
+import 'package:careblazers/providers/active_patient_provider.dart';
 import 'package:careblazers/providers/care_shifts_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,15 +15,21 @@ CareShift _shift({
   required DateTime start,
   required DateTime end,
   String? notes,
+  String patientId = _patientId,
 }) =>
     CareShift(
       id: id,
       caregiverId: caregiverId,
       start: start,
       end: end,
-      patientId: _patientId,
+      patientId: patientId,
       notes: notes,
     );
+
+/// Pins the active loved one for the display-scoped [CareShifts.build] /
+/// [shiftWeek] without hitting the on-device SQLite file.
+Override _activePatient([String id = _patientId]) =>
+    activePatientIdProvider.overrideWith((Ref ref) async => id);
 
 /// A shift on the local day [DateTime(2026, 6, 1)] from hour [fromHour] to
 /// hour [toHour] (24h clock), covered by [caregiverId].
@@ -280,6 +287,57 @@ void main() {
       await db.wipeAll();
       expect(await repo.listShifts(), isEmpty);
     });
+
+    test(
+        'listShiftsForPatient filters to one patient; listShifts stays '
+        'unfiltered (for sync)', () async {
+      await repo.upsertShift(_shift(
+        id: 'mine',
+        caregiverId: 'c1',
+        start: DateTime(2026, 6, 1, 9),
+        end: DateTime(2026, 6, 1, 17),
+      ));
+      await repo.upsertShift(_shift(
+        id: 'theirs',
+        caregiverId: 'c2',
+        start: DateTime(2026, 6, 1, 9),
+        end: DateTime(2026, 6, 1, 17),
+        patientId: 'other-patient',
+      ));
+
+      expect(
+        (await repo.listShiftsForPatient(_patientId))
+            .map((CareShift s) => s.id),
+        <String>['mine'],
+      );
+      expect(
+        (await repo.listShifts()).map((CareShift s) => s.id).toSet(),
+        <String>{'mine', 'theirs'},
+      );
+    });
+
+    test('restampPatient re-files legacy rows and is a no-op when from==to',
+        () async {
+      await repo.upsertShift(_shift(
+        id: 'legacy',
+        caregiverId: 'c1',
+        start: DateTime(2026, 6, 1, 9),
+        end: DateTime(2026, 6, 1, 17),
+        patientId: 'demo-patient-mary',
+      ));
+
+      expect(
+        await repo.restampPatient('demo-patient-mary', 'patient-new'),
+        1,
+      );
+      expect(await repo.listShiftsForPatient('demo-patient-mary'), isEmpty);
+      expect(
+        (await repo.listShiftsForPatient('patient-new'))
+            .map((CareShift s) => s.id),
+        <String>['legacy'],
+      );
+      expect(await repo.restampPatient('patient-new', 'patient-new'), 0);
+    });
   });
 
   group('CareShifts notifier + shiftWeek', () {
@@ -292,6 +350,7 @@ void main() {
         overrides: <Override>[
           careShiftsRepositoryProvider.overrideWithValue(repo),
           careShiftsClockProvider.overrideWithValue(() => clock),
+          _activePatient(),
         ],
       );
       addTearDown(container.dispose);
@@ -318,6 +377,27 @@ void main() {
 
       await container.read(careShiftsProvider.notifier).removeShift('s1');
       expect(await container.read(careShiftsProvider.future), isEmpty);
+    });
+
+    test('the strip shows only the ACTIVE patient — another loved one\'s '
+        'shift is hidden', () async {
+      await repo.upsertShift(_shift(
+        id: 'mine',
+        caregiverId: 'c1',
+        start: DateTime(2026, 6, 1, 9),
+        end: DateTime(2026, 6, 1, 17),
+      ));
+      await repo.upsertShift(_shift(
+        id: 'theirs',
+        caregiverId: 'c2',
+        start: DateTime(2026, 6, 1, 9),
+        end: DateTime(2026, 6, 1, 17),
+        patientId: 'other-patient',
+      ));
+
+      final List<CareShift> board =
+          await makeContainer().read(careShiftsProvider.future);
+      expect(board.map((CareShift s) => s.id), <String>['mine']);
     });
 
     test('shiftWeek yields 7 days starting today, folding in coverage',

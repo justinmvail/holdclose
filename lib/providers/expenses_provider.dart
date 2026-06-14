@@ -8,6 +8,7 @@ import '../db/database.dart';
 import '../models/caregiver.dart';
 import '../models/expense.dart';
 import '../services/sync_sink.dart';
+import 'active_patient_provider.dart';
 import 'care_circle_provider.dart';
 import 'care_events_provider.dart' show fallbackPatientId;
 
@@ -66,6 +67,11 @@ class ExpensesRepository with SyncSinkHost {
   /// Every expense, newest paid first (ties broken by id so reads stay
   /// stable). The newest-first order matches how the ledger renders each
   /// month group.
+  ///
+  /// UNFILTERED across patients on purpose — the sync engine
+  /// ([SyncController.resyncAllLocal]) walks this to push EVERY local row up
+  /// regardless of which loved one is active. The ledger's DISPLAY read is
+  /// [listExpensesForPatient].
   Future<List<Expense>> listExpenses() async {
     final List<ExpensesTableData> rows = await (_db.select(_db.expensesTable)
           ..orderBy(<OrderClauseGenerator<$ExpensesTableTable>>[
@@ -80,6 +86,46 @@ class ExpensesRepository with SyncSinkHost {
         .map((ExpensesTableData r) =>
             Expense.fromJson(jsonDecode(r.payload) as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Expenses filed under [patientId] only, newest paid first
+  /// (multi-patient display scoping, Issue #6).
+  ///
+  /// The ledger reads THIS so a caregiver with more than one loved one on
+  /// file never sees another person's costs. Filters on the lifted
+  /// [ExpensesTable.patientId] column. Sync still uses the unfiltered
+  /// [listExpenses].
+  Future<List<Expense>> listExpensesForPatient(String patientId) async {
+    final List<ExpensesTableData> rows = await (_db.select(_db.expensesTable)
+          ..where((t) => t.patientId.equals(patientId))
+          ..orderBy(<OrderClauseGenerator<$ExpensesTableTable>>[
+            (t) => OrderingTerm(
+                  expression: t.paidAtMs,
+                  mode: OrderingMode.desc,
+                ),
+            (t) => OrderingTerm(expression: t.id),
+          ]))
+        .get();
+    return rows
+        .map((ExpensesTableData r) =>
+            Expense.fromJson(jsonDecode(r.payload) as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Re-file every expense currently stamped [from] under [to], returning
+  /// the number of rows moved (the one-time multi-patient migration, Issue
+  /// #6).
+  ///
+  /// Each moved row round-trips through [upsertExpense] so the lifted
+  /// [ExpensesTable.patientId] column is rewritten AND the change re-emits
+  /// through the sync sink. A no-op when [from] == [to].
+  Future<int> restampPatient(String from, String to) async {
+    if (from == to) return 0;
+    final List<Expense> expenses = await listExpensesForPatient(from);
+    for (final Expense expense in expenses) {
+      await upsertExpense(expense.copyWith(patientId: to));
+    }
+    return expenses.length;
   }
 }
 
@@ -131,7 +177,11 @@ class Expenses extends _$Expenses {
   @override
   Future<List<Expense>> build() async {
     final ExpensesRepository repo = ref.watch(expensesRepositoryProvider);
-    return repo.listExpenses();
+    // Scope the ledger to the active loved one (multi-patient, Issue #6).
+    // With one loved one [activePatientIdProvider] resolves to that sole id,
+    // identical to the old unfiltered read.
+    final String patientId = await ref.watch(activePatientIdProvider.future);
+    return repo.listExpensesForPatient(patientId);
   }
 
   /// Create (or replace) an expense, then refresh.
@@ -150,9 +200,10 @@ class Expenses extends _$Expenses {
     Future<void> Function(ExpensesRepository repo) op,
   ) async {
     final ExpensesRepository repo = ref.read(expensesRepositoryProvider);
+    final String patientId = await ref.read(activePatientIdProvider.future);
     state = await AsyncValue.guard(() async {
       await op(repo);
-      return repo.listExpenses();
+      return repo.listExpensesForPatient(patientId);
     });
   }
 }

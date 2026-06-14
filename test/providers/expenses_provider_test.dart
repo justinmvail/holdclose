@@ -1,6 +1,7 @@
 import 'package:careblazers/db/database.dart';
 import 'package:careblazers/models/caregiver.dart';
 import 'package:careblazers/models/expense.dart';
+import 'package:careblazers/providers/active_patient_provider.dart';
 import 'package:careblazers/providers/care_circle_provider.dart';
 import 'package:careblazers/providers/expenses_provider.dart';
 import 'package:drift/native.dart';
@@ -19,6 +20,7 @@ Expense _expense({
   DateTime? paidAt,
   ExpenseKind kind = ExpenseKind.meds,
   String? receiptPath,
+  String patientId = _patientId,
 }) =>
     Expense(
       id: id,
@@ -29,8 +31,13 @@ Expense _expense({
       paidAt: paidAt ?? DateTime.utc(2026, 6, 1, 9),
       kind: kind,
       receiptPath: receiptPath,
-      patientId: _patientId,
+      patientId: patientId,
     );
+
+/// Pins the active loved one for the display-scoped [Expenses.build] /
+/// [expensesView] without hitting the on-device SQLite file.
+Override _activePatient([String id = _patientId]) =>
+    activePatientIdProvider.overrideWith((Ref ref) async => id);
 
 void main() {
   group('monthlyTotals selector', () {
@@ -103,6 +110,42 @@ void main() {
       await db.wipeAll();
       expect(await repo.listExpenses(), isEmpty);
     });
+
+    test(
+        'listExpensesForPatient filters to one patient; listExpenses stays '
+        'unfiltered (for sync)', () async {
+      await repo.upsertExpense(_expense(id: 'mine', patientId: _patientId));
+      await repo
+          .upsertExpense(_expense(id: 'theirs', patientId: 'other-patient'));
+
+      expect(
+        (await repo.listExpensesForPatient(_patientId))
+            .map((Expense e) => e.id),
+        <String>['mine'],
+      );
+      expect(
+        (await repo.listExpenses()).map((Expense e) => e.id).toSet(),
+        <String>{'mine', 'theirs'},
+      );
+    });
+
+    test('restampPatient re-files legacy rows and is a no-op when from==to',
+        () async {
+      await repo
+          .upsertExpense(_expense(id: 'legacy', patientId: 'demo-patient-mary'));
+
+      expect(
+        await repo.restampPatient('demo-patient-mary', 'patient-new'),
+        1,
+      );
+      expect(await repo.listExpensesForPatient('demo-patient-mary'), isEmpty);
+      expect(
+        (await repo.listExpensesForPatient('patient-new'))
+            .map((Expense e) => e.id),
+        <String>['legacy'],
+      );
+      expect(await repo.restampPatient('patient-new', 'patient-new'), 0);
+    });
   });
 
   group('Expenses notifier — CRUD', () {
@@ -113,6 +156,7 @@ void main() {
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[
           expensesRepositoryProvider.overrideWithValue(repo),
+          _activePatient(),
         ],
       );
       addTearDown(container.dispose);
@@ -165,6 +209,17 @@ void main() {
 
       expect(await container.read(expensesProvider.future), isEmpty);
     });
+
+    test('the ledger shows only the ACTIVE patient — another loved one\'s '
+        'expense is hidden', () async {
+      await repo.upsertExpense(_expense(id: 'mine', patientId: _patientId));
+      await repo
+          .upsertExpense(_expense(id: 'theirs', patientId: 'other-patient'));
+
+      final List<Expense> ledger =
+          await makeContainer().read(expensesProvider.future);
+      expect(ledger.map((Expense e) => e.id), <String>['mine']);
+    });
   });
 
   group('expensesView — grouping + payer join', () {
@@ -187,6 +242,7 @@ void main() {
         overrides: <Override>[
           expensesRepositoryProvider.overrideWithValue(expensesRepo),
           careCircleRepositoryProvider.overrideWithValue(circleRepo),
+          _activePatient(),
         ],
       );
       addTearDown(container.dispose);

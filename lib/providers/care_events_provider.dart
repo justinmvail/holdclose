@@ -9,6 +9,7 @@ import '../models/care_event.dart';
 import '../models/care_task.dart';
 import '../services/appointment_repository.dart';
 import '../services/sync_sink.dart';
+import 'active_patient_provider.dart';
 import 'care_tasks_provider.dart';
 
 part 'care_events_provider.g.dart';
@@ -132,6 +133,11 @@ class CareEventsRepository with SyncSinkHost {
   }
 
   /// Every natively-stored event, chronological by start.
+  ///
+  /// UNFILTERED across patients on purpose — the sync engine
+  /// ([SyncController.resyncAllLocal]) walks this to push EVERY local note up
+  /// regardless of which loved one is active. The calendar's DISPLAY read is
+  /// [listEventsForPatient].
   Future<List<CareEvent>> listEvents() async {
     final List<CareEventsTableData> rows = await (_db
             .select(_db.careEventsTable)
@@ -143,6 +149,45 @@ class CareEventsRepository with SyncSinkHost {
         .map((CareEventsTableData r) =>
             CareEvent.fromJson(jsonDecode(r.payload) as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Natively-stored events filed under [patientId] only, chronological by
+  /// start (multi-patient display scoping, Issue #6).
+  ///
+  /// The calendar reads THIS so a caregiver with more than one loved one on
+  /// file never sees another person's notes. Filters on the lifted
+  /// [CareEventsTable.patientId] column. Sync still uses the unfiltered
+  /// [listEvents].
+  Future<List<CareEvent>> listEventsForPatient(String patientId) async {
+    final List<CareEventsTableData> rows = await (_db
+            .select(_db.careEventsTable)
+          ..where((t) => t.patientId.equals(patientId))
+          ..orderBy(<OrderClauseGenerator<$CareEventsTableTable>>[
+            (t) => OrderingTerm(expression: t.startMs, mode: OrderingMode.asc),
+          ]))
+        .get();
+    return rows
+        .map((CareEventsTableData r) =>
+            CareEvent.fromJson(jsonDecode(r.payload) as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Re-file every natively-stored note currently stamped [from] under [to],
+  /// returning the number of rows moved (the one-time multi-patient
+  /// migration, Issue #6).
+  ///
+  /// Each moved row round-trips through [upsertEvent] so the lifted
+  /// [CareEventsTable.patientId] column is rewritten AND the change re-emits
+  /// through the sync sink. A no-op when [from] == [to]. Only the
+  /// natively-stored notes live here — the projected appointment/task/shift
+  /// events aren't rows in this table, so they're untouched.
+  Future<int> restampPatient(String from, String to) async {
+    if (from == to) return 0;
+    final List<CareEvent> events = await listEventsForPatient(from);
+    for (final CareEvent event in events) {
+      await upsertEvent(event.copyWith(patientId: to));
+    }
+    return events.length;
   }
 }
 
@@ -178,7 +223,10 @@ final CareEventsRepositoryBackendProvider careEventsRepositoryProvider =
 @riverpod
 Future<List<CareEvent>> calendarTaskEvents(Ref ref) async {
   final CareTasksRepository repo = ref.watch(careTasksRepositoryProvider);
-  final List<CareTask> tasks = await repo.listTasks();
+  // Scope to the active loved one (multi-patient, Issue #6) so the Schedule
+  // calendar never surfaces another person's task blocks.
+  final String patientId = await ref.watch(activePatientIdProvider.future);
+  final List<CareTask> tasks = await repo.listTasksForPatient(patientId);
   return <CareEvent>[
     for (final CareTask task in tasks)
       if (task.routineId == null && task.dueAt != null)
@@ -232,9 +280,14 @@ Future<List<CareEvent>> careEvents(Ref ref) async {
       ),
   ];
 
+  // Notes are scoped to the active loved one (multi-patient, Issue #6); the
+  // appointment / task / shift sources are scoped at their own seams (the
+  // appointment projection FKs onto a provider, not a patient, so it isn't
+  // filtered here).
+  final String patientId = await ref.watch(activePatientIdProvider.future);
   final CareEventsRepository notesRepo =
       ref.watch(careEventsRepositoryProvider);
-  events.addAll(await notesRepo.listEvents());
+  events.addAll(await notesRepo.listEventsForPatient(patientId));
 
   events.addAll(await ref.watch(calendarTaskEventsProvider.future));
   events.addAll(await ref.watch(calendarShiftEventsProvider.future));

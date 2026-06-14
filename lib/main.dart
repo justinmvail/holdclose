@@ -7,7 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
 import 'models/settings.dart';
+import 'providers/active_patient_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/care_events_provider.dart';
+import 'providers/care_shifts_provider.dart';
+import 'providers/care_tasks_provider.dart';
+import 'providers/expenses_provider.dart';
 import 'providers/local_notifications_provider.dart';
 import 'providers/notifications_provider.dart';
 import 'providers/onboarding_provider.dart';
@@ -35,6 +40,12 @@ const String _seedDemoToken = String.fromEnvironment('SEED_TOKEN');
 
 /// SharedPreferences key holding the last [_seedDemoToken] that was applied.
 const String seedDemoTokenPrefsKey = 'careblazers.seed_demo_token';
+
+/// SharedPreferences flag marking the one-time multi-patient care-circle
+/// re-stamp ([maybeRestampCareCirclePatient]) as done, so it runs at most
+/// once per install (Issue #6).
+const String careCircleRestampPrefsKey =
+    'careblazers.care_circle_restamp_done';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -103,6 +114,15 @@ Future<void> main() async {
   } catch (_) {
     preloadedPatientConfigured = null; // resolve async, as before
   }
+
+  // One-time multi-patient re-stamp (Issue #6): move any care-circle row
+  // still stamped with the legacy hardcoded `demo-patient-mary` id onto the
+  // ACTIVE loved one, so a real alpha user with more than one person on file
+  // (e.g. left over from the earlier duplicate-patient bug) stops seeing
+  // another person's tasks / shifts / expenses / notes. Runs AFTER the
+  // patient is resolved above and is guarded to run once per install.
+  // Fail-safe — swallows its own errors so a launch is never blocked.
+  await maybeRestampCareCirclePatient(container);
 
   // Server-authoritative sync: kick the engine AFTER the first frame so
   // launch is never blocked on the network. The lifecycle observer also
@@ -284,4 +304,80 @@ Future<bool> maybeSeedDemoDataset(
   await seedDemoDataset(container, clock: clock);
   await store.setString(seedDemoTokenPrefsKey, _seedDemoToken);
   return true;
+}
+
+/// One-time re-stamp of legacy care-circle rows onto the active loved one
+/// (multi-patient, Issue #6).
+///
+/// Background: before the display-scoping fix, the care-circle features
+/// (Tasks / Shifts / Expenses) and the calendar notes stamped every new row
+/// with a hardcoded `demo-patient-mary` const, and the boards read EVERY
+/// row unfiltered. An alpha user who ended up with more than one loved one
+/// on file (e.g. from the earlier duplicate-patient bug) therefore saw
+/// another person's data on the now patient-scoped boards — the legacy rows
+/// are stranded under `demo-patient-mary` while the active patient is some
+/// other id.
+///
+/// This walks the four care-circle tables and re-files any row stamped with
+/// [fallbackPatientId] ('demo-patient-mary') under the current active
+/// patient id, so the previously-hidden data reappears under the right
+/// person. Guarded by [careCircleRestampPrefsKey] so it runs at most once
+/// per install. The single-patient product model makes this safe — there's
+/// exactly one loved one the rows can belong to.
+///
+/// Edge cases handled:
+///  * **No patient on file yet** (fresh install) → no-op, and the guard is
+///    NOT set, so the re-stamp gets a real chance once a loved one exists.
+///  * **Active patient IS the legacy id** (the common single-install / demo
+///    case) → every `restampPatient` call is a `from == to` no-op; the guard
+///    is set so we don't re-scan on every launch.
+///  * The re-stamp re-emits each moved row through the sync sink — that's
+///    acceptable; the server resolves it last-write-wins (and the sink is a
+///    no-op anyway when no circle is bound).
+///
+/// Fail-safe: every step swallows its own errors so a launch is never
+/// blocked. Returns true when the re-stamp actually ran to completion (the
+/// guard was set), false when it was skipped (already done, or no patient).
+@visibleForTesting
+Future<bool> maybeRestampCareCirclePatient(
+  ProviderContainer container, {
+  Future<SharedPreferences> Function()? prefs,
+}) async {
+  try {
+    final SharedPreferences store =
+        await (prefs ?? SharedPreferences.getInstance)();
+    if (store.getBool(careCircleRestampPrefsKey) ?? false) return false;
+
+    // Resolve the active loved one. With no patient on file yet, hold off —
+    // don't burn the one-shot guard before there's a target to re-file onto.
+    final String activeId =
+        await container.read(activePatientIdProvider.future);
+    final bool hasPatient =
+        await container.read(storageProvider).getPatient() != null;
+    if (!hasPatient) return false;
+
+    // Re-file each table's legacy rows onto the active patient. Each call is
+    // a no-op when activeId == fallbackPatientId (the single-install case).
+    await container
+        .read(careTasksRepositoryProvider)
+        .restampPatient(fallbackPatientId, activeId);
+    await container
+        .read(careShiftsRepositoryProvider)
+        .restampPatient(fallbackPatientId, activeId);
+    await container
+        .read(expensesRepositoryProvider)
+        .restampPatient(fallbackPatientId, activeId);
+    await container
+        .read(careEventsRepositoryProvider)
+        .restampPatient(fallbackPatientId, activeId);
+
+    await store.setBool(careCircleRestampPrefsKey, true);
+    return true;
+  } catch (e) {
+    // Additive + best-effort — a failure must never affect launch. The
+    // breadcrumb lands in LogBuffer for feedback reports; the guard stays
+    // unset so the next launch retries.
+    debugPrint('migration: care-circle patient re-stamp failed: $e');
+    return false;
+  }
 }
