@@ -530,8 +530,21 @@ class _Actions extends ConsumerWidget {
           key: TasksScreen.claimButtonKey(task.id),
           label: 'Claim',
           icon: Icons.pan_tool_alt_outlined,
-          onPressed: () =>
-              ref.read(careTasksProvider.notifier).claim(task.id, me),
+          // Confirm the claim AND name the next step — a tester read the
+          // post-claim "Complete" button as "it already completed it?"
+          // (fb 2026-06-14). Spelling out "tap Complete when it's done"
+          // bridges the Claim → Complete jump.
+          onPressed: () async {
+            await ref.read(careTasksProvider.notifier).claim(task.id, me);
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  "You've claimed this — tap Complete when it's done.",
+                ),
+              ),
+            );
+          },
         ),
       );
     }
