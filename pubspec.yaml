@@ -1,7 +1,7 @@
 name: careblazers
 description: "In-the-moment coach for dementia caregivers."
 publish_to: 'none'
-version: 0.1.0+23
+version: 0.1.0+24
 
 environment:
   sdk: ^3.5.0
