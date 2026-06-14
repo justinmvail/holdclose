@@ -4,6 +4,7 @@ import 'package:careblazers/models/settings.dart';
 import 'package:careblazers/providers/bundled_tts_provider.dart';
 import 'package:careblazers/providers/settings_provider.dart';
 import 'package:careblazers/providers/storage_provider.dart';
+import 'package:careblazers/widgets/careblazers_switch.dart';
 import 'package:careblazers/providers/tts_provider.dart';
 import 'package:careblazers/screens/settings/settings_screen.dart';
 import 'package:careblazers/widgets/path_header.dart';
@@ -68,11 +69,11 @@ Future<void> _scrollTo(WidgetTester tester, Finder target) async {
   await tester.pump();
 }
 
-/// Snapshot the value of the SwitchListTile at [key]. Keeps the
+/// Snapshot the value of the CareblazersSwitchListTile at [key]. Keeps the
 /// Phase 12.8 tracker assertions concise — three of them flip the
 /// same switch and re-read.
 bool _switchValue(WidgetTester tester, Key key) {
-  return tester.widget<SwitchListTile>(find.byKey(key)).value;
+  return tester.widget<CareblazersSwitchListTile>(find.byKey(key)).value;
 }
 
 void main() {
@@ -111,7 +112,7 @@ void main() {
         // Phase 14.6 removed the master "Use trackers" gate.
         expect(_switchValue(tester, SettingsScreen.notificationsToggleKey),
             isTrue);
-        final SwitchListTile remindersTile = tester.widget<SwitchListTile>(
+        final CareblazersSwitchListTile remindersTile = tester.widget<CareblazersSwitchListTile>(
             find.byKey(SettingsScreen.notificationsToggleKey));
         expect(remindersTile.onChanged, isNotNull,
             reason: 'reminders toggle is no longer gated on a master switch');

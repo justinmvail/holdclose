@@ -9,6 +9,7 @@ import '../../providers/active_patient_provider.dart';
 import '../../providers/patient_timeline_provider.dart';
 import '../../services/medication_repository.dart';
 import '../../theme.dart';
+import '../../widgets/careblazers_switch.dart';
 import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
 import 'medication_form_screen.dart' show TitleCaseTextFormatter;
@@ -502,7 +503,7 @@ class _DoseWindowFormScreenState
                 },
               ),
               const SizedBox(height: 16),
-              SwitchListTile(
+              CareblazersSwitchListTile(
                 key: DoseWindowFormScreen.asNeededToggleKey,
                 contentPadding: EdgeInsets.zero,
                 title: const Text('As needed (no scheduled time)'),
