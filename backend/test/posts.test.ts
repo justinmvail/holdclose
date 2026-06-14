@@ -4,7 +4,14 @@ import { drizzle } from 'drizzle-orm/d1';
 import { sign } from 'hono/jwt';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { posts, profiles, type Post, type Profile } from '../src/db/schema';
+import {
+  comments,
+  posts,
+  profiles,
+  type Comment,
+  type Post,
+  type Profile,
+} from '../src/db/schema';
 
 const SECRET = env.FORUM_JWT_SECRET;
 const ORIGIN = 'https://forum.careblazers.local';
@@ -82,6 +89,25 @@ async function seedPost(values: SeedPost): Promise<Post> {
       voteCount: values.voteCount ?? 0,
       createdAt,
       updatedAt: createdAt,
+      hidden: values.hidden ?? false,
+    })
+    .returning();
+  return row;
+}
+
+async function seedComment(values: {
+  postId: string;
+  authorId: string;
+  hidden?: boolean;
+}): Promise<Comment> {
+  const db = drizzle(env.FORUM_DB);
+  const [row] = await db
+    .insert(comments)
+    .values({
+      postId: values.postId,
+      authorId: values.authorId,
+      body: 'comment',
+      depth: 0,
       hidden: values.hidden ?? false,
     })
     .returning();
@@ -389,6 +415,43 @@ describe('GET /api/v1/posts', () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid_cursor' });
   });
+
+  it('reports per-post comment_count across the feed', async () => {
+    const author = await makeProfile('cb-feed-counts');
+    const base = Date.now();
+    const chatty = await seedPost({
+      authorId: author.id,
+      title: 'chatty',
+      body: 'b',
+      createdAt: new Date(base),
+    });
+    const quiet = await seedPost({
+      authorId: author.id,
+      title: 'quiet',
+      body: 'b',
+      createdAt: new Date(base - 1000),
+    });
+    await seedComment({ postId: chatty.id, authorId: author.id });
+    await seedComment({ postId: chatty.id, authorId: author.id });
+    // A tombstoned comment still counts — it renders as "[removed]".
+    await seedComment({
+      postId: chatty.id,
+      authorId: author.id,
+      hidden: true,
+    });
+
+    const res = await SELF.fetch(`${ORIGIN}/api/v1/posts?sort=new`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      posts: Array<{ id: string; comment_count: number }>;
+    };
+    const byId = Object.fromEntries(
+      body.posts.map((p) => [p.id, p.comment_count]),
+    );
+    expect(byId[chatty.id]).toBe(3);
+    // A post with no comments reports 0, not a missing field.
+    expect(byId[quiet.id]).toBe(0);
+  });
 });
 
 // ---------- GET /api/v1/posts/:id ----------
@@ -452,6 +515,27 @@ describe('GET /api/v1/posts/:id', () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.author_username).toBeNull();
     expect(body.author_display_name).toBe('Caregiver_abc123');
+  });
+
+  it('returns comment_count for the post detail', async () => {
+    const author = await makeProfile('cb-detail-count');
+    const created = await seedPost({
+      authorId: author.id,
+      title: 'detail',
+      body: 'body',
+    });
+    // No comments yet → 0 (the bug was this field never appearing).
+    const empty = await SELF.fetch(`${ORIGIN}/api/v1/posts/${created.id}`);
+    expect(((await empty.json()) as { comment_count: number }).comment_count)
+      .toBe(0);
+
+    await seedComment({ postId: created.id, authorId: author.id });
+    await seedComment({ postId: created.id, authorId: author.id });
+
+    const res = await SELF.fetch(`${ORIGIN}/api/v1/posts/${created.id}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { comment_count: number };
+    expect(body.comment_count).toBe(2);
   });
 
   it('returns 404 for an unknown id', async () => {

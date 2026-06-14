@@ -1,8 +1,14 @@
-import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, lt, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Hono } from 'hono';
 
-import { posts, profiles, type Post, type Profile } from '../db/schema';
+import {
+  comments,
+  posts,
+  profiles,
+  type Post,
+  type Profile,
+} from '../db/schema';
 import { auth, type AuthBindings, type AuthVariables } from '../middleware/auth';
 import { detectCrisisContent } from '../middleware/crisisFlag';
 
@@ -52,7 +58,17 @@ function hotScore(voteCount: number, createdAt: Date): number {
 // response so the app can render the real @username (or display_name)
 // without a second round-trip per author. `author` may be undefined for
 // a row whose profile was deleted; both fields then fall to null.
-function postResponse(p: Post, author?: Pick<Profile, 'username' | 'displayName'>) {
+//
+// `commentCount` is the post's visible-comment tally, computed by the
+// read routes from the comments table (there is no denormalized column,
+// unlike vote_count). Write paths that don't compute it — create, patch
+// — fall back to 0, the correct value for a just-created post and a
+// harmless default for the others (the feed re-fetches the real count).
+function postResponse(
+  p: Post,
+  author?: Pick<Profile, 'username' | 'displayName'>,
+  commentCount = 0,
+) {
   return {
     id: p.id,
     author_id: p.authorId,
@@ -63,6 +79,7 @@ function postResponse(p: Post, author?: Pick<Profile, 'username' | 'displayName'
     created_at: p.createdAt.toISOString(),
     updated_at: p.updatedAt.toISOString(),
     vote_count: p.voteCount,
+    comment_count: commentCount,
     hidden: p.hidden,
     // crisis_flagged is deliberately NOT exposed (2026-06-11): the
     // watchdog's keyword triage (suicidality / self-harm / abuse,
@@ -100,6 +117,43 @@ async function loadAuthors(
     map.set(row.id, { username: row.username, displayName: row.displayName });
   }
   return map;
+}
+
+// Build a postId -> comment count map for a batch of posts in one
+// grouped query, so the feed attaches each post's reply tally without a
+// per-post round-trip. Mirrors loadAuthors' batched shape. Tombstoned
+// (hidden) comments are counted too: they stay in the thread as
+// "[removed]" placeholders, so the feed's count matches the rows a
+// reader actually sees. Posts with no comments are simply absent from
+// the map; callers default those to 0.
+async function loadCommentCounts(
+  db: Db,
+  postIds: string[],
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  const unique = [...new Set(postIds)];
+  if (unique.length === 0) {
+    return map;
+  }
+  const rows = await db
+    .select({ postId: comments.postId, count: count() })
+    .from(comments)
+    .where(inArray(comments.postId, unique))
+    .groupBy(comments.postId);
+  for (const row of rows) {
+    map.set(row.postId, row.count);
+  }
+  return map;
+}
+
+// The single-post comment tally for the detail route. Same counting
+// rule as loadCommentCounts (hidden rows included).
+async function loadCommentCount(db: Db, postId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: count() })
+    .from(comments)
+    .where(eq(comments.postId, postId));
+  return row?.count ?? 0;
 }
 
 async function loadProfileByUserId(
@@ -185,8 +239,13 @@ export const postsRouter = () => {
         .orderBy(desc(posts.createdAt), desc(posts.id))
         .limit(limit);
       const authors = await loadAuthors(db, rows.map((r) => r.authorId));
+      const counts = await loadCommentCounts(db, rows.map((r) => r.id));
       return c.json(
-        { posts: rows.map((r) => postResponse(r, authors.get(r.authorId))) },
+        {
+          posts: rows.map((r) =>
+            postResponse(r, authors.get(r.authorId), counts.get(r.id) ?? 0),
+          ),
+        },
         200,
       );
     }
@@ -212,8 +271,13 @@ export const postsRouter = () => {
         .orderBy(desc(posts.voteCount), desc(posts.id))
         .limit(limit);
       const authors = await loadAuthors(db, rows.map((r) => r.authorId));
+      const counts = await loadCommentCounts(db, rows.map((r) => r.id));
       return c.json(
-        { posts: rows.map((r) => postResponse(r, authors.get(r.authorId))) },
+        {
+          posts: rows.map((r) =>
+            postResponse(r, authors.get(r.authorId), counts.get(r.id) ?? 0),
+          ),
+        },
         200,
       );
     }
@@ -244,7 +308,10 @@ export const postsRouter = () => {
     }
     const pageRows = scored.slice(start, start + limit).map((s) => s.p);
     const authors = await loadAuthors(db, pageRows.map((p) => p.authorId));
-    const page = pageRows.map((p) => postResponse(p, authors.get(p.authorId)));
+    const counts = await loadCommentCounts(db, pageRows.map((p) => p.id));
+    const page = pageRows.map((p) =>
+      postResponse(p, authors.get(p.authorId), counts.get(p.id) ?? 0),
+    );
     return c.json({ posts: page }, 200);
   });
 
@@ -255,7 +322,11 @@ export const postsRouter = () => {
       return c.json({ error: 'post_not_found' }, 404);
     }
     const authors = await loadAuthors(db, [post.authorId]);
-    return c.json(postResponse(post, authors.get(post.authorId)), 200);
+    const commentCount = await loadCommentCount(db, post.id);
+    return c.json(
+      postResponse(post, authors.get(post.authorId), commentCount),
+      200,
+    );
   });
 
   // ---------- Authed writes ----------

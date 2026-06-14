@@ -404,6 +404,40 @@ void main() {
       expect(state.postingReplyKeys, isEmpty);
     });
 
+    test('increments the post comment count on a successful reply', () async {
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..postToReturn = _post('p', commentCount: 3)
+        ..commentsToReturn = <ForumComment>[_comment('c1')]
+        ..commentBuilder = (String? parent, String body) =>
+            _comment('new', parent: parent, body: body);
+      final ProviderContainer container = _container(client);
+      addTearDown(container.dispose);
+
+      await container.read(postDetailProvider.notifier).load('p');
+      expect(container.read(postDetailProvider).post?.commentCount, 3);
+
+      await container
+          .read(postDetailProvider.notifier)
+          .reply(body: 'one more');
+
+      // The denormalized count bumps so the header re-renders without a
+      // refetch — this is the reply-counter bug the fix targets.
+      expect(container.read(postDetailProvider).post?.commentCount, 4);
+    });
+
+    test('leaves the comment count untouched on a failed reply', () async {
+      final _FakeForumApiClient client = _FakeForumApiClient()
+        ..postToReturn = _post('p', commentCount: 3)
+        ..nextCreateCommentError = Exception('429');
+      final ProviderContainer container = _container(client);
+      addTearDown(container.dispose);
+
+      await container.read(postDetailProvider.notifier).load('p');
+      await container.read(postDetailProvider.notifier).reply(body: 'nope');
+
+      expect(container.read(postDetailProvider).post?.commentCount, 3);
+    });
+
     test('returns null and surfaces the error on failed submit', () async {
       final _FakeForumApiClient client = _FakeForumApiClient()
         ..postToReturn = _post('p')

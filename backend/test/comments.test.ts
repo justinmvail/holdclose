@@ -508,6 +508,43 @@ describe('POST /api/v1/posts/:post_id/comments', () => {
     expect(typeof body.id).toBe('string');
   });
 
+  it("returns the post's updated comment_count, incrementing per reply", async () => {
+    const author = await makeProfile('cb-cmts-count');
+    const post = await seedPost({ authorId: author.id });
+
+    const first = await authedFetch(
+      `/api/v1/posts/${post.id}/comments`,
+      {
+        method: 'POST',
+        sub: 'cb-cmts-count',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: 'first reply' }),
+      },
+    );
+    expect(first.status).toBe(201);
+    // The count reflects THIS new row — the bug was a missing/stale 0.
+    expect(((await first.json()) as { comment_count: number }).comment_count)
+      .toBe(1);
+
+    const second = await authedFetch(
+      `/api/v1/posts/${post.id}/comments`,
+      {
+        method: 'POST',
+        sub: 'cb-cmts-count',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: 'second reply' }),
+      },
+    );
+    expect(second.status).toBe(201);
+    expect(((await second.json()) as { comment_count: number }).comment_count)
+      .toBe(2);
+
+    // And the detail route now agrees with the create responses.
+    const detail = await SELF.fetch(`${ORIGIN}/api/v1/posts/${post.id}`);
+    expect(((await detail.json()) as { comment_count: number }).comment_count)
+      .toBe(2);
+  });
+
   it('computes depth from the parent on a nested reply', async () => {
     const author = await makeProfile('cb-cmts-nested');
     const post = await seedPost({ authorId: author.id });

@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { asc, count, desc, eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Hono } from 'hono';
 
@@ -50,6 +50,19 @@ async function loadVisiblePost(
     return undefined;
   }
   return row;
+}
+
+// The post's current comment tally. Counts hidden (tombstoned) rows too,
+// matching the read routes in posts.ts so the create response and the
+// feed agree. Returned on the create-comment response so the client can
+// reconcile the denormalized count it carries on the post card without a
+// separate fetch.
+async function loadCommentCount(db: Db, postId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: count() })
+    .from(comments)
+    .where(eq(comments.postId, postId));
+  return row?.count ?? 0;
 }
 
 function commentResponse(
@@ -255,6 +268,11 @@ export const commentsRouter = () => {
       })
       .returning();
     const payload: Record<string, unknown> = commentResponse(created, profile);
+    // The post's updated comment tally rides along on the create
+    // response so the client can sync the denormalized count on the
+    // post card without a follow-up fetch. Counted AFTER the insert so
+    // it includes this new row.
+    payload.comment_count = await loadCommentCount(db, post.id);
     if (detection.flagged) {
       payload.crisis_resources = detection.resources;
     }

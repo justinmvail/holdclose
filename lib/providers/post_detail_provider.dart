@@ -287,8 +287,17 @@ class PostDetail extends _$PostDetail {
         resp.comment,
       ];
       final Set<String> done = <String>{...state.postingReplyKeys}..remove(key);
+      // Bump the post's denormalized comment count so the header (and the
+      // feed card, once this state flows back) re-renders the new tally
+      // without waiting on a refetch — mirrors how a vote applies the
+      // server's new count optimistically. deleteComment decrements the
+      // same field on the other side.
+      final ForumPost? post = state.post;
       state = state.copyWith(
         comments: nextComments,
+        post: post != null
+            ? post.copyWith(commentCount: post.commentCount + 1)
+            : post,
         postingReplyKeys: done,
       );
       return resp;
