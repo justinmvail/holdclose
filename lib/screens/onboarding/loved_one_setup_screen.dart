@@ -67,6 +67,14 @@ class LovedOneSetupScreen extends ConsumerStatefulWidget {
   static const Key allergiesFieldKey = Key('loved-one-setup-allergies');
   static const Key saveButtonKey = Key('loved-one-setup-save');
 
+  /// Cancel/close affordance — shown ONLY in ADD mode (`isAdd: true`) so a
+  /// caregiver who opened "add another loved one" from the Loved ones
+  /// manager (or hit it by accident) can back out. The first-run onboarding
+  /// gate (`isAdd: false`) deliberately has NO escape — the caregiver must
+  /// create their first person before reaching the app — so this is absent
+  /// there. (fb 2026-06-14: an accidental tap trapped a tester with no exit.)
+  static const Key cancelButtonKey = Key('loved-one-setup-cancel');
+
   @override
   ConsumerState<LovedOneSetupScreen> createState() =>
       _LovedOneSetupScreenState();
@@ -203,12 +211,41 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
     }
   }
 
+  /// Back out of ADD mode without creating a loved one — pop to the Loved
+  /// ones manager (or navigate there if this was somehow a root entry).
+  /// Only reachable from the ADD-mode close button.
+  void _cancelAdd() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/loved-ones');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: context.cb.background,
+      // ADD mode is a pushed modal task off the Loved ones manager — it MUST
+      // have a way out. (fb 2026-06-14: a tester hit "add a loved one" by
+      // accident and got trapped — no back button, no top bar.) The first-run
+      // gate (isAdd false) intentionally keeps NO AppBar / no escape: the
+      // caregiver has to create their first person before reaching the app.
+      appBar: widget.isAdd
+          ? AppBar(
+              backgroundColor: context.cb.background,
+              foregroundColor: context.cb.primary,
+              elevation: 0,
+              leading: IconButton(
+                key: LovedOneSetupScreen.cancelButtonKey,
+                icon: const Icon(Icons.close),
+                tooltip: MaterialLocalizations.of(context).cancelButtonLabel,
+                onPressed: _submitting ? null : _cancelAdd,
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Form(
           key: _formKey,

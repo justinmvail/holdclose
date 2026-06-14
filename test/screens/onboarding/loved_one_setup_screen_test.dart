@@ -121,6 +121,21 @@ void main() {
         isTrue,
       );
     });
+
+    testWidgets(
+      'first-run gate has NO cancel/close button (caregiver must create '
+      'their first person to proceed)',
+      (WidgetTester tester) async {
+        final InMemoryStorageProvider storage = InMemoryStorageProvider();
+        addTearDown(storage.dispose);
+
+        await _pumpSetup(tester, storage: storage);
+
+        // The escape hatch is add-mode only — the onboarding gate stays
+        // deliberately escape-less.
+        expect(find.byKey(LovedOneSetupScreen.cancelButtonKey), findsNothing);
+      },
+    );
   });
 
   group('LovedOneSetupScreen — validation', () {
@@ -372,6 +387,30 @@ void main() {
             containsAll(<String>['p-existing', 'p-new']));
         expect(await storage.getActivePatientId(), 'p-new');
         expect((await storage.getPatient())!.id, 'p-new');
+      },
+    );
+
+    testWidgets(
+      'add mode shows a cancel button that backs out WITHOUT creating a '
+      'loved one (fb 2026-06-14: an accidental tap trapped a tester)',
+      (WidgetTester tester) async {
+        final InMemoryStorageProvider storage = InMemoryStorageProvider();
+        addTearDown(storage.dispose);
+
+        final ({GoRouter router}) pumped =
+            await pumpAdd(tester, storage: storage);
+
+        // The escape hatch exists in add mode — it must never trap the user.
+        final Finder cancel = find.byKey(LovedOneSetupScreen.cancelButtonKey);
+        expect(cancel, findsOneWidget);
+
+        await tester.tap(cancel);
+        await tester.pumpAndSettle();
+
+        // Popped back to the manager; nothing was created.
+        expect(_path(pumped.router), '/loved-ones');
+        expect(find.text('manager-stub'), findsOneWidget);
+        expect(await storage.getPatient(), isNull);
       },
     );
   });
