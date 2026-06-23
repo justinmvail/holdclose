@@ -99,3 +99,4 @@ integration_test/failures/
 
 # Local dev secrets sourced by tools/seed_demo.sh (never commit)
 tools/dev_defines.sh
+demo_video/
