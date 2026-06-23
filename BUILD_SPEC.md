@@ -1,26 +1,33 @@
 # Careblazers — Build Spec
 
-> ## ⚠️ SUPERSEDED IN PART — read this first (2026-06-22)
+> ## ⚠️ SUPERSEDED IN PART — read this first (pivot DONE 2026-06-23)
 >
 > This spec describes the **original** product: "Careblazers," a
 > dementia-behavior decoder built as a partnership pitch to Dr. Natali
-> Edmonds. That pitch went unanswered, and the product has **pivoted**.
-> For the current direction, **[`CLAUDE.md`](CLAUDE.md) → Direction is
-> authoritative**; this document is kept for the still-accurate detail
-> (the caregiving suite, data models, backend, security, navigation),
-> but the following parts are **no longer true**:
+> Edmonds. That pitch went unanswered, and the product **pivoted** — the
+> pivot is now **implemented in code** (commit `0a27b13`). For the current
+> direction, **[`CLAUDE.md`](CLAUDE.md) → Direction is authoritative**;
+> this document is kept for the still-accurate detail (the caregiving
+> suite, data models, backend, security, navigation), but the following
+> parts are **no longer true and are LIVE in the code**:
 >
 > - **Renamed Careblazers → Holdclose** (brand at holdclose.care, under
->   Juno Code Studio). Wherever this spec says "Careblazers," read
->   "Holdclose" — the code rename is a later phase.
-> - **The Behavior Decoder is being REMOVED.** Every "Decoder" / triage /
->   "Dr. Natali says:" / behavior-script section below is obsolete. The
->   wedge is now the **data-grounded chat coach** (see
->   [`docs/CHAT_FEATURE.md`](docs/CHAT_FEATURE.md)).
+>   Juno Code Studio). The code rename is **done** — Dart identifiers,
+>   `pubspec name:`, bundle id `com.holdclose.holdclose`, and the
+>   `holdclose://` scheme are all Holdclose. Wherever this spec says
+>   "Careblazers," read "Holdclose." (The repo *directory* is still named
+>   `careblazers`, and a few internal ids — `careblazers_user_id`, the
+>   Android Kotlin/JNI package — are deliberately unchanged; see CLAUDE.md.)
+> - **The Behavior Decoder is REMOVED.** Every "Decoder" / triage /
+>   "Dr. Natali says:" / behavior-script section below is obsolete and the
+>   code is deleted. The wedge is the **data-grounded chat coach** (see
+>   [`docs/CHAT_FEATURE.md`](docs/CHAT_FEATURE.md)); the journal is now a
+>   free-text model.
 > - **All Dr. Natali / Dementia Careblazers framing is removed** — the
 >   product is its own brand; no attribution or branded-framework voice.
 > - **General-purpose caregiving**, not dementia-specific — copy + system
->   prompts are being re-voiced for any care situation.
+>   prompts are re-voiced for any care situation; the demo persona is
+>   post-stroke + hypertension, not Alzheimer's.
 > - **Business model:** paid subscription + a rev-share affiliate program
 >   (per-creator referral codes → commission on paying subscribers);
 >   requires a paywall + attribution backend, a later phase.

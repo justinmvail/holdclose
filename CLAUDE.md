@@ -3,13 +3,20 @@
 This file is loaded by Claude into context at the start of every session
 in this repo.
 
-> **Read this first — the app is mid-rebrand.** The product was
-> "Careblazers"; it is being renamed **Holdclose** and repositioned (see
-> **Direction** below). The on-disk package is still `careblazers` and the
-> code still carries `Careblazers` / `Dr. Natali` / Behavior-Decoder
-> naming — that migration is **decided and in progress**, not done. When
-> code and docs disagree about *direction*, this file wins; when they
-> disagree about *current mechanics*, the code still wins.
+> **Read this first — the rebrand is DONE (2026-06-23, commit `0a27b13`).**
+> The product began as "Careblazers"; it is now **Holdclose**. The code is
+> fully migrated: the Behavior Decoder is gone, all Dr. Natali / dementia-
+> specific framing is stripped, and `Careblazers*` identifiers + the
+> `careblazers://` scheme + the `pubspec name:` are renamed to Holdclose
+> (`HoldcloseColors`, `context.hc`, `HoldcloseDatabase`, `holdclose://`,
+> `package:holdclose/…`, bundle id `com.holdclose.holdclose`). The on-disk
+> **repo directory is still `careblazers`** (not renamed). A few internal
+> identifiers are **deliberately kept** as `careblazers` and must NOT be
+> "fixed": the `careblazers_user_id` D1 column / JSON wire key, the Android
+> `namespace` + `com.careblazers.careblazers` Kotlin/JNI package + native
+> espeak lib, and dev tooling under `tools/`. **BUILD_SPEC.md and TASKS.md
+> are stale** on the old framing — when they disagree with the code, the
+> code wins.
 
 ## What this is
 
@@ -30,44 +37,44 @@ recovery, dementia) — **not dementia-only**.
 
 Published under **Juno Code Studio** (JCSV One LLC) at **holdclose.care**.
 
-## Direction (pivot — 2026-06-22; decided, migration in progress)
+## Direction (pivot — completed 2026-06-23)
 
 The product began as "Careblazers," an in-the-moment dementia-behavior
 decoder, built as a partnership pitch to Dr. Natali Edmonds (Dementia
-Careblazers). **That pitch went unanswered.** The app is being de-branded
-and shipped as its own product:
+Careblazers). **That pitch went unanswered**, so the app was de-branded and
+shipped as its own product, **Holdclose** ("hold the people you love
+close"), brand at **holdclose.care**. The three-phase pivot is **done and
+pushed** (commit `0a27b13`; all suites green):
 
-- **Renamed Careblazers → Holdclose** ("hold the people you love close").
-  Brand at **holdclose.care**. Code identifiers (`Careblazers*` classes,
-  the `careblazers://` deep-link scheme, bundle IDs, `pubspec name:`)
-  still say Careblazers — rename is Phase 3.
-- **The Behavior Decoder is being removed.** Alpha users found it neat but
-  said they'd "just use the chat." The data-grounded chat coach is the
-  product now; the decoder is not.
-- **All Dr. Natali / Dementia Careblazers framing is being stripped** — no
-  attribution, no "Dr. Natali says:", no branded-framework voice.
-- **General-purpose, not dementia-specific** — copy + system prompts get
-  re-voiced for any care situation.
-- **Business model:** paid subscription + a **rev-share affiliate program**
-  (per-creator referral codes → commission on *paying* subscribers).
-  Needs a paywall (StoreKit / Play Billing) + attribution backend — a
-  later phase, gated on Apple/Google **organization** enrollment.
+1. **Behavior Decoder removed** — screens/service/providers/models/routes/
+   tests/goldens/seeds deleted; unwired from Home / Journal / Learn /
+   onboarding. `JournalEntry` is now a free-text model (situation /
+   attempts / notes / voice / photo); the journal authors entries via the
+   wizard + the chat coach's `log_journal` action.
+2. **Coach re-voiced general-purpose** — Dr. Natali / Dementia Careblazers
+   framing and the dementia-specific "5 Causes" model stripped from the
+   chat/voice/recap/title system prompts and all copy; "Careblazer" →
+   "caregiver". Dr. Natali's copyrighted Learn videos removed (the Videos
+   section hides while empty). The seeded demo person ("Mary Henderson") is
+   now diagnosis-agnostic: **post-stroke + hypertension** (Lisinopril /
+   Atorvastatin / Aspirin).
+3. **Renamed Careblazers → Holdclose** — Dart identifiers, brand strings,
+   l10n, `pubspec name:` (`package:holdclose/…`), iOS+Android display name +
+   bundle id (`com.holdclose.holdclose`), the `holdclose://` deep-link
+   scheme, the `holdclose/tts` method channel, and the backend
+   (worker/D1/R2 names, invite HTML). Deliberate keeps (see top banner).
 
-**Migration phases** (these docs describe the target; the code lags it):
+**Operator follow-ups before store/deploy** (breaking, intentional): new
+Google OAuth clients for the new bundle id (sign-in breaks otherwise — see
+[[google-signin-config]] in memory); testers must reinstall (new bundle id =
+fresh app; old `careblazers://` invite links won't open it); create the
+Holdclose R2 buckets on deploy (D1 binds by id, so no data migration).
 
-1. **Remove the Behavior Decoder** — screens/service/providers/models/
-   routes/tests/goldens/seeds; unwire from Home / Journal / Learn /
-   onboarding (Journal's `decoder_result_id` link becomes optional).
-2. **Re-voice the coach** — strip Natali + dementia-specific framing from
-   the system prompts and all copy; broaden to any care situation; refresh
-   the seeded loved one to be diagnosis-agnostic.
-3. **Rename Careblazers → Holdclose** everywhere — app display name, l10n,
-   Dart identifiers, bundle IDs, and the `careblazers://` invite deep-link
-   scheme (the last two need **backend coordination** — the Worker mints
-   the invite links).
-
-Then, downstream: paywall + affiliate attribution; Apple/Google org
-enrollment; store submission.
+**Business model (still a later phase):** paid subscription + a **rev-share
+affiliate program** (per-creator referral codes → commission on *paying*
+subscribers). Needs a paywall (StoreKit / Play Billing) + attribution
+backend, gated on Apple/Google **organization** enrollment. Then: store
+submission.
 
 ## Code style
 
@@ -100,12 +107,10 @@ enrollment; store submission.
 ## Project layout
 
 (Directory-level map; representative files only. Run `ls` for the full
-inventory rather than trusting an inline tree. `screens/decoder/` and the
-decoder service/models/seeds are **slated for removal** in Phase 1;
-`Careblazers*` identifiers rename in Phase 3.)
+inventory rather than trusting an inline tree.)
 
 ```
-careblazers/                # repo/package name (renames to holdclose later)
+careblazers/                # repo DIRECTORY name (pubspec name: is holdclose)
   BUILD_SPEC.md             # original contract — superseded in parts by the pivot; see its top banner
   TASKS.md                  # historical autoloop task queue (do not edit)
   CLAUDE.md / README.md
@@ -114,19 +119,17 @@ careblazers/                # repo/package name (renames to holdclose later)
     main.dart               # bootstrap: preloads, demo reset/seed, sync kick
     app.dart                # MaterialApp.router + deep-link/notification-tap wiring
     theme.dart              # brand tokens (navy #1f2a44, salmon CTA #C97458,
-                            # warm white #f8f6f3) via CareblazersColors/context.cb
+                            # warm white #f8f6f3) via HoldcloseColors/context.hc
     routing/router.dart     # go_router: 4-tab StatefulShellRoute + redirects
     l10n/                   # gen-l10n ARB (onboarding screens only so far)
     providers/              # ~42 riverpod providers + backend interfaces
     models/                 # 20 freezed data classes (patient, medication, …)
-    services/               # 25 services: chat_service + chat_actions +
+    services/               # ~24 services: chat_service + chat_actions +
                             # chat_context_builder (the data-grounded coach),
                             # sync_service + sync_sink, forum_api_client,
                             # repositories, pdf_exporter, pattern_detector, …
-                            # (decoder_service is being removed)
     screens/
       home_screen.dart      # chat-root dashboard (greeting + schedule card)
-      decoder/              # behavior_picker, triage, decoder_result — REMOVING
       journal/              # journal, journal_entry, journal_wizard
       medical/              # Care-tab hub: medical_hub, health_log, care_plan, emergency_card
       medication/           # medication_list/form, dose_log, dose_window_list
@@ -138,8 +141,9 @@ careblazers/                # repo/package name (renames to holdclose later)
       onboarding/           # welcome_carousel, sign_in, loved_one_setup
     widgets/                # tab_scaffold (4-tab bar + center mic), path_header, …
     db/                     # drift: database.dart (migrations), tables.dart
-    seed/                   # seeded loved one, sample data, system prompts,
-                            # learn/support/guidelines content (de-Natali in Phase 2)
+    seed/                   # seeded loved one (post-stroke demo persona),
+                            # sample data, system prompts, learn/support/
+                            # guidelines content (general-purpose, no Natali)
   test/                     # mirrors lib/: providers/ services/ screens/ … golden/
   integration_test/         # demo_tour.dart, critical_path_smoke_test.dart
   backend/                  # Cloudflare Worker (Hono + drizzle + D1 + R2)
@@ -181,8 +185,8 @@ careblazers/                # repo/package name (renames to holdclose later)
   **off**); when on, every cold start wipes + reseeds the demo loved one.
   When off, the demo still backfills a profile if none is on file
   (`ensurePatient`) so dependent screens aren't empty. Non-demo builds
-  never render the toggle and never reset. (The seeded loved one becomes
-  diagnosis-agnostic in Phase 2.)
+  never render the toggle and never reset. (The seeded loved one is
+  diagnosis-agnostic — a post-stroke + hypertension demo persona.)
 - **Security invariants (2026-06-11 hardening — do not regress):**
   - The app NEVER holds a signing secret. Session JWTs are minted by
     the Worker in `POST /auth/google` after Google ID-token
@@ -284,16 +288,17 @@ npx drizzle-kit generate --name=<change>   # after editing src/db/schema.ts
   buttons.
 - Don't ship default Material colors. The brand tokens in `lib/theme.dart`
   (navy `#1f2a44`, salmon CTA `#C97458`, warm white `#f8f6f3`) override
-  every relevant ColorScheme field — reach colors through `context.cb`,
-  never raw hex. (Palette carried over from Careblazers; may be revisited
-  for the Holdclose brand, but it's the current source of truth.)
+  every relevant ColorScheme field — reach colors through `context.hc`
+  (the `HoldcloseColors` theme extension), never raw hex. (Palette carried
+  over from Careblazers; may be revisited for the Holdclose brand, but it's
+  the current source of truth.)
 
 ## When in doubt
 
 1. Re-read this file's **Direction** section, then `BUILD_SPEC.md` (and
    `docs/MENU_LAYOUT_SPEC.md` for navigation / tab / hub structure) for
    the relevant area — but remember BUILD_SPEC predates the pivot and its
-   decoder/Natali/dementia sections are superseded.
+   decoder/Natali/dementia sections are superseded (the code is the truth).
 2. Read 3 nearby screens or services for patterns.
 3. If something is genuinely ambiguous, leave a `// TODO(decision):`
    and continue.
