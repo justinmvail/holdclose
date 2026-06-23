@@ -1,5 +1,13 @@
 # Bundled neural TTS
 
+> **Note (2026-06-22 pivot):** the audio mechanics here are unchanged and
+> still accurate. Two framing caveats only: the app is rebranding
+> **Careblazers → Holdclose**, and any "Dr. Natali voice" catalog mention
+> is obsolete (the Dr. Natali / Dementia Careblazers branding is being
+> removed). The bundled voice now reads coaching replies and content
+> aloud, not "decoder scripts." See [`CLAUDE.md`](../CLAUDE.md) →
+> **Direction**.
+
 > Cross-platform reference for the bundled Piper voice. Phase 9.3
 > shipped the iOS bridge, Phase 9.4 mirrored it on Android, Phase 9.6
 > pinned the device latency matrix, and Phase 9.7 (this section, plus

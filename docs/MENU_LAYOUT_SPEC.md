@@ -1,5 +1,12 @@
 # Caregiver App — Layout Specification
 
+> **Note (2026-06-22 pivot):** the app is rebranding **Careblazers →
+> Holdclose** and going **general-purpose caregiving** (not dementia-only).
+> The IA below (4-tab bar, hubs, path header) is still accurate; just read
+> "Careblazers" as "Holdclose," and note the Behavior Decoder is being
+> removed, so any decoder-related destination is gone. See
+> [`CLAUDE.md`](../CLAUDE.md) → **Direction**.
+
 ## Scope and intent
 
 This document describes the **information architecture and screen layout only**. The accompanying HTML file (`menu_layout.html`) is a structural reference — it shows hierarchy, screen composition, and navigation, not final visual design.
@@ -73,8 +80,8 @@ Opens straight to a list of conversations: the care-circle group, individual mem
 
 ### 5. Community — direct landing (social feed)
 Lands on the **Feed**. A **segmented control / sub-nav at the top** offers three views: **Feed · Learn · Support**. This in-tab sub-nav is intentional — it lets a sixth destination's worth of content live here without adding a sixth tab (which would shrink targets below what the audience needs).
-- **Feed** — the social experience: posts with avatar, name, timestamp, body text, optional image, and **word-labeled actions (Like · Comment · Share)**. Includes official Careblazers posts and caregiver posts; supports grouping by topic / disease stage.
-- **Learn** — the Careblazers content library (videos) and "what do I do when…" playbooks.
+- **Feed** — the social experience: posts with avatar, name, timestamp, body text, optional image, and **word-labeled actions (Like · Comment · Share)**. Includes official Holdclose posts and caregiver posts; supports grouping by topic / care situation.
+- **Learn** — the app's content library (curated caregiving videos) and "what do I do when…" playbooks.
 - **Support** — caregiver wellbeing (burnout self-check, respite), expert Q&A, and crisis resources.
 
 ## Behavior rules (summary)

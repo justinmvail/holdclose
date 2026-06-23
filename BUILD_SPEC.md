@@ -1,13 +1,43 @@
 # Careblazers — Build Spec
 
-*Self-contained implementation spec. A coding agent should be able to
-build the full app from this document alone. Read before any
-non-trivial change. Companion: [`CLAUDE.md`](CLAUDE.md) for code-style
-conventions, [`TASKS.md`](TASKS.md) for the autoloop queue.*
+> ## ⚠️ SUPERSEDED IN PART — read this first (2026-06-22)
+>
+> This spec describes the **original** product: "Careblazers," a
+> dementia-behavior decoder built as a partnership pitch to Dr. Natali
+> Edmonds. That pitch went unanswered, and the product has **pivoted**.
+> For the current direction, **[`CLAUDE.md`](CLAUDE.md) → Direction is
+> authoritative**; this document is kept for the still-accurate detail
+> (the caregiving suite, data models, backend, security, navigation),
+> but the following parts are **no longer true**:
+>
+> - **Renamed Careblazers → Holdclose** (brand at holdclose.care, under
+>   Juno Code Studio). Wherever this spec says "Careblazers," read
+>   "Holdclose" — the code rename is a later phase.
+> - **The Behavior Decoder is being REMOVED.** Every "Decoder" / triage /
+>   "Dr. Natali says:" / behavior-script section below is obsolete. The
+>   wedge is now the **data-grounded chat coach** (see
+>   [`docs/CHAT_FEATURE.md`](docs/CHAT_FEATURE.md)).
+> - **All Dr. Natali / Dementia Careblazers framing is removed** — the
+>   product is its own brand; no attribution or branded-framework voice.
+> - **General-purpose caregiving**, not dementia-specific — copy + system
+>   prompts are being re-voiced for any care situation.
+> - **Business model:** paid subscription + a rev-share affiliate program
+>   (per-creator referral codes → commission on paying subscribers);
+>   requires a paywall + attribution backend, a later phase.
+>
+> Trust the suite/architecture sections here; ignore the decoder,
+> Natali, dementia-only, and "pitch demo" framing.
+
+*Self-contained implementation spec for the original build. Companion:
+[`CLAUDE.md`](CLAUDE.md) for current direction + code-style conventions,
+[`TASKS.md`](TASKS.md) for the historical autoloop queue.*
 
 ---
 
 ## 0. What to build
+
+> **Superseded** — see the banner above. Original text retained for
+> reference:
 
 A Flutter iOS + Android mobile app that gives caregivers an
 in-the-moment "What do I do RIGHT NOW?" coach for dementia behaviors,

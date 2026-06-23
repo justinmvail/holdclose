@@ -1,14 +1,23 @@
-# Chat coach (Phase 11)
+# Chat coach
 
-The chat coach is a multi-turn dementia-care companion. It's the
-conversation a Careblazer doesn't otherwise get at 11pm — when the
-decoder's single-shot script doesn't quite fit, or they want to ask a
-follow-up like "she did the same thing yesterday, what's happening?"
+> **Updated for the pivot (2026-06-22).** The chat coach is now the
+> product's **primary (and only) coaching surface** — the Behavior
+> Decoder it was originally built alongside is being **removed**, and the
+> Dr. Natali / Dementia Careblazers framing is being **stripped**.
+> Throughout this doc: ignore "decoder" cross-references (obsolete), read
+> "Careblazer" as "caregiver," and read the "Dr. Natali" voice/citation
+> labels as **brand-neutral** (e.g. "a coaching note on \<topic\>", not
+> "Dr. Natali on \<topic\>"). The app is **general-purpose caregiving**,
+> not dementia-only. The file locations and parsing mechanics below are
+> still accurate. See [`CLAUDE.md`](../CLAUDE.md) → **Direction**.
 
-Where the **Behavior Decoder** answers *"what do I do in the next
-30 seconds?"*, the chat coach answers *"help me understand what's
-going on."* Both surfaces share Dr. Natali Edmonds' framework; the
-chat one frames it as dialogue rather than a one-shot recipe.
+The chat coach is a multi-turn caregiving companion, grounded in the
+loved one's real care data — meds, dose windows, appointments, history,
+journal, the care circle — via `chat_context_builder`. It's the
+conversation a caregiver doesn't otherwise get at 11pm: a coach that
+already knows *their* situation, so they never have to re-explain it the
+way they would to a blank chatbot. **That data-grounding is the wedge** —
+it's what makes this more than "just use the AI."
 
 ## Where things live
 
