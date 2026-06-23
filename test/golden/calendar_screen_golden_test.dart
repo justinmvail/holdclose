@@ -1,12 +1,12 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart'
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart'
     show assignableCaregiversProvider;
-import 'package:careblazers/providers/patient_timeline_provider.dart';
-import 'package:careblazers/screens/team/calendar_screen.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/providers/patient_timeline_provider.dart';
+import 'package:holdclose/screens/team/calendar_screen.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -146,7 +146,7 @@ Widget _host(
       child: MaterialApp(
         home: const CalendarScreen(),
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),

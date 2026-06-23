@@ -1,13 +1,13 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_plan_routine.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/models/medication.dart' show FrequencyKind;
-import 'package:careblazers/providers/active_patient_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/screens/medical/care_plan_routines_screen.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_plan_routine.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/models/medication.dart' show FrequencyKind;
+import 'package:holdclose/providers/active_patient_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/screens/medical/care_plan_routines_screen.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +37,7 @@ CarePlanRoutine _routine(
 /// One fresh in-memory db per repo pair so the two repos share the same
 /// backing store (the "· N tasks" suffix joins routines to child tasks).
 ({CarePlanRepository plan, CareTasksRepository tasks}) _repos() {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   return (plan: CarePlanRepository(db), tasks: CareTasksRepository(db));
 }
 
@@ -99,7 +99,7 @@ Widget _host(({CarePlanRepository plan, CareTasksRepository tasks}) repos) {
       child: MaterialApp.router(
         routerConfig: router,
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),

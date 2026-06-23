@@ -1,22 +1,20 @@
 import 'dart:typed_data';
 
-import 'package:careblazers/models/behavior.dart';
-import 'package:careblazers/models/decoder_result.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/models/patient.dart';
-import 'package:careblazers/models/triage.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/services/pdf_exporter.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/models/patient.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/services/pdf_exporter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// PdfExporter coverage. The rendered PDF stores its text in font-encoded
 /// content streams (not plain latin1), so we don't grep the bytes — we
 /// assert the behaviors that ARE observable independent of glyph encoding:
 /// valid `%PDF` output, no-throw across input variants, the medical-advice
-/// footer CONSTANT (a non-negotiable guardrail), and — for date-range
-/// filtering — that an OUT-of-range entry doesn't change the output while
-/// an IN-range one does (the filter runs before rendering).
+/// footer CONSTANT (a non-negotiable guardrail), and — via byte-length
+/// deltas — that a populated entry body enlarges the output and that an
+/// OUT-of-range entry doesn't change it while an IN-range one does (the
+/// date filter runs before rendering).
 void main() {
   final DateTime clock0 = DateTime(2026, 6, 11, 10);
   PdfExporter exporter() => PdfExporter(compress: false, clock: () => clock0);
@@ -28,20 +26,22 @@ void main() {
       bytes[2] == 0x44 && // D
       bytes[3] == 0x46; // F
 
-  JournalEntry behaviorEntry(String id, String behaviorId, DateTime at) =>
+  /// Free-text journal entry (the post-decoder model). [at] doubles as the
+  /// created/occurred timestamp.
+  JournalEntry entry(
+    String id,
+    DateTime at, {
+    String? situationText,
+    String? attemptsText,
+    String? notes,
+  }) =>
       JournalEntry(
         id: id,
-        behavior: Behavior.byId(behaviorId)!,
-        triage: const TriageAnswers(),
-        result: DecoderResult(
-          say: const <String>['Sit with her.'],
-          tweak: const <String>['Dim the lights.'],
-          dontSay: const <String>["Don't argue."],
-          generatedAt: at,
-        ),
-        outcome: JournalOutcome.pending,
-        attempt: 1,
         createdAt: at,
+        occurredAt: at,
+        situationText: situationText,
+        attemptsText: attemptsText,
+        notes: notes,
       );
 
   final DateRange june = DateRange(
@@ -75,7 +75,8 @@ void main() {
     test('produces a valid PDF for a populated range (no throw)', () async {
       final Uint8List bytes = await exporter().exportRange(
         entries: <JournalEntry>[
-          behaviorEntry('j1', 'sundowning', DateTime(2026, 6, 5, 18)),
+          entry('j1', DateTime(2026, 6, 5, 18),
+              situationText: 'Restless in the late afternoon.'),
         ],
         patient: maryHenderson(),
         range: june,
@@ -83,16 +84,47 @@ void main() {
       expect(isPdf(bytes), isTrue);
     });
 
+    test('a populated free-text entry body enlarges the packet', () async {
+      final PdfExporter exp = exporter();
+      final Patient mary = maryHenderson();
+      // Same id + timestamp so only the body fields differ between the two
+      // exports — a bigger output proves the situation/attempts/notes lines
+      // (the decoder-era "Behavior summary" + "What worked:" are gone) are
+      // actually rendered into the entry block.
+      final Uint8List bare = await exp.exportRange(
+        entries: <JournalEntry>[entry('j1', DateTime(2026, 6, 5, 18))],
+        patient: mary,
+        range: june,
+      );
+      final Uint8List populated = await exp.exportRange(
+        entries: <JournalEntry>[
+          entry(
+            'j1',
+            DateTime(2026, 6, 5, 18),
+            situationText: 'Restless in the late afternoon.',
+            attemptsText: 'Dimmed the lights and sat with her.',
+            notes: 'Settled after about twenty minutes.',
+          ),
+        ],
+        patient: mary,
+        range: june,
+      );
+
+      expect(isPdf(populated), isTrue);
+      expect(populated.length, greaterThan(bare.length),
+          reason: 'the situation/attempts/notes lines add rendered content');
+    });
+
     test('an out-of-range entry does NOT change output; an in-range one '
         'does (date-range filtering runs before rendering)', () async {
       final PdfExporter exp = exporter();
       final Patient mary = maryHenderson();
-      final JournalEntry inRange =
-          behaviorEntry('in', 'sundowning', DateTime(2026, 6, 10, 18));
-      final JournalEntry outOfRange =
-          behaviorEntry('out', 'wandering', DateTime(2026, 5, 1, 12));
-      final JournalEntry inRange2 =
-          behaviorEntry('in2', 'wandering', DateTime(2026, 6, 12, 12));
+      final JournalEntry inRange = entry('in', DateTime(2026, 6, 10, 18),
+          situationText: 'Restless evening.');
+      final JournalEntry outOfRange = entry('out', DateTime(2026, 5, 1, 12),
+          situationText: 'Wandered the hallway.');
+      final JournalEntry inRange2 = entry('in2', DateTime(2026, 6, 12, 12),
+          situationText: 'Paced before lunch.');
 
       final int base = (await exp.exportRange(
         entries: <JournalEntry>[inRange],
@@ -113,7 +145,7 @@ void main() {
       expect(withOut, base,
           reason: 'the May entry is filtered out — output is unchanged');
       expect(withIn, greaterThan(base),
-          reason: 'a second June entry adds a tally + log row');
+          reason: 'a second June entry adds another entry block');
     });
 
     test('appends content when medications are supplied', () async {

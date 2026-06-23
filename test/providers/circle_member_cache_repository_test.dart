@@ -1,17 +1,17 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/circle_member_cache_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/circle_member_cache_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late CircleMemberCacheRepository repo;
 
   DateTime clock() => DateTime(2026, 6, 10, 9);
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = CircleMemberCacheRepository(db);
   });
 

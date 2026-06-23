@@ -1,11 +1,11 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart'
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart'
     show chatFriendlyErrorMessage;
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,11 +23,11 @@ Future<({
   ChatRepository repo,
   GoRouter router,
   List<String> pushedPaths,
-  CareblazersDatabase db,
+  HoldcloseDatabase db,
 })> _pump(
   WidgetTester tester, {
   required ChatRepository repo,
-  required CareblazersDatabase db,
+  required HoldcloseDatabase db,
   String idOverride = 'convo-new-1',
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1000));
@@ -74,11 +74,11 @@ Future<({
 }
 
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late ChatRepository repo;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = ChatRepository(db);
   });
 
@@ -106,7 +106,7 @@ void main() {
         ChatRepository repo,
         GoRouter router,
         List<String> pushedPaths,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         repo: repo,
@@ -266,7 +266,7 @@ void main() {
         ChatRepository repo,
         GoRouter router,
         List<String> pushedPaths,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(tester, repo: repo, db: db);
 
       await tester.tap(find.byKey(ConversationListScreen.tileKey('convo-tap')));
@@ -287,7 +287,7 @@ void main() {
         ChatRepository repo,
         GoRouter router,
         List<String> pushedPaths,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         repo: repo,
@@ -774,7 +774,7 @@ void main() {
           ],
           child: MaterialApp.router(
             theme: ThemeData(
-              scaffoldBackgroundColor: careblazersColors.background,
+              scaffoldBackgroundColor: holdcloseColors.background,
             ),
             routerConfig: router,
           ),

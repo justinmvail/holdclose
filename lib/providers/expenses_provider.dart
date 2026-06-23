@@ -25,12 +25,12 @@ const String expensesPatientId = fallbackPatientId;
 /// freezed [Expense] serialises into the row's `payload`, with
 /// [ExpensesTable.paidAtMs] lifted out so the ledger can order newest-first
 /// without decoding every blob. Tests build a repository directly against
-/// `CareblazersDatabase(NativeDatabase.memory())` so each test gets an
+/// `HoldcloseDatabase(NativeDatabase.memory())` so each test gets an
 /// isolated DB.
 class ExpensesRepository with SyncSinkHost {
   ExpensesRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Close the underlying database. The riverpod provider wires this to
   /// `ref.onDispose`.
@@ -150,7 +150,7 @@ Map<String, int> monthlyTotals(Iterable<Expense> expenses) {
 /// — same indirection [careTasksRepositoryProvider] uses.
 @Riverpod(keepAlive: true)
 ExpensesRepository expensesRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return ExpensesRepository(db);
 }

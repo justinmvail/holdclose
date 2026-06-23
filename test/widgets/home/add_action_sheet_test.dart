@@ -1,8 +1,8 @@
-import 'package:careblazers/providers/voice_capture_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/home/add_action_sheet.dart';
-import 'package:careblazers/widgets/voice_button.dart';
+import 'package:holdclose/providers/voice_capture_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/home/add_action_sheet.dart';
+import 'package:holdclose/widgets/voice_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,19 +45,19 @@ GoRouter _harnessRouter() {
       ),
       GoRoute(
         path: '/journal/new',
-        name: CareblazersRoutes.journalNew,
+        name: HoldcloseRoutes.journalNew,
         builder: (BuildContext context, GoRouterState state) =>
             _dest('journalNew', state),
       ),
       GoRoute(
         path: '/medications/today',
-        name: CareblazersRoutes.medicationDoseLog,
+        name: HoldcloseRoutes.medicationDoseLog,
         builder: (BuildContext context, GoRouterState state) =>
             _dest('doseLog', state),
       ),
       GoRoute(
         path: '/appointments/new',
-        name: CareblazersRoutes.appointmentForm,
+        name: HoldcloseRoutes.appointmentForm,
         builder: (BuildContext context, GoRouterState state) =>
             _dest('apptForm', state),
       ),
@@ -102,7 +102,7 @@ void main() {
 
       final FloatingActionButton fab =
           tester.widget<FloatingActionButton>(find.byKey(AddActionFab.fabKey));
-      expect(fab.backgroundColor, careblazersColors.link);
+      expect(fab.backgroundColor, holdcloseColors.link);
       expect(find.byIcon(Icons.add), findsOneWidget);
     });
 

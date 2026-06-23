@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:careblazers/services/sync_sink.dart';
+import 'package:holdclose/services/sync_sink.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Host with SyncSinkHost {}

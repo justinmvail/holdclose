@@ -9,7 +9,7 @@ part 'guidelines_acknowledged_provider.g.dart';
 /// install — caregivers who tap-back after acknowledging shouldn't get
 /// re-prompted on the second post.
 const String guidelinesAcknowledgedPrefsKey =
-    'careblazers.community.guidelines_acknowledged.v1';
+    'holdclose.community.guidelines_acknowledged.v1';
 
 /// One-shot bool tracking whether the caregiver has acknowledged the
 /// community guidelines (BUILD_SPEC.md §13 / Phase 13.12). Phase 13.12's

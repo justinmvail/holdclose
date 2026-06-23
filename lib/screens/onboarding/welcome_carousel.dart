@@ -31,24 +31,24 @@ class WelcomeCarousel extends ConsumerStatefulWidget {
   static const List<WelcomeCarouselPage> pages = <WelcomeCarouselPage>[
     WelcomeCarouselPage(
       glyph: 'C',
-      title: 'Careblazers',
-      body: 'We make caregiving for someone with dementia easier.',
+      title: 'Holdclose',
+      body: 'We make caring for someone you love a little easier.',
     ),
     WelcomeCarouselPage(
       glyph: '📱',
       title: 'Your pocket coach for the hard moments.',
       body:
-          'When sundowning hits, when she accuses you of something, '
-          "when he asks for his mom — tap once. Dr. Natali's "
-          'framework, in 30 seconds.',
+          'When the day turns hard, when you don\'t know what to say, '
+          'when you just need someone who gets it — a coach who knows '
+          'your loved one\'s situation, any hour.',
     ),
     WelcomeCarouselPage(
       glyph: '📔',
-      title: 'Your journal fills itself.',
+      title: 'A journal that travels with you.',
       body:
-          'Every coaching moment auto-logs. Bring the real picture to '
-          "your next doctor visit — not the 'showtime' one your loved "
-          'one performs in the exam room.',
+          'Jot down the moments that matter, in your own words. Bring '
+          "the real picture to your next doctor visit — not the 'showtime' "
+          'one your loved one performs in the exam room.',
     ),
   ];
 
@@ -190,7 +190,7 @@ class _PageBody extends StatelessWidget {
         children: <Widget>[
           // Page 1 ('C' glyph) renders the brand "Cb" split mark —
           // navy left / white "C", white right / navy "b" — matching
-          // the careblazers.com logo + the AppIcon + LaunchImage on
+          // the holdclose.com logo + the AppIcon + LaunchImage on
           // iOS. Pages 2 & 3 keep their emoji glyphs in a plain navy
           // block since they're feature illustrations, not brand
           // marks. Centralizing the mark here means future icon

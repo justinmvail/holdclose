@@ -104,11 +104,11 @@ export function buildEmail(
 ): { subject: string; text: string } {
   const severity = highestSeverity(flags);
   const subject = severity === 'red'
-    ? `[Careblazers] RED: ${flags.length} metric${flags.length === 1 ? '' : 's'} at 75%+ of cap`
-    : `[Careblazers] YELLOW: ${flags.length} metric${flags.length === 1 ? '' : 's'} at 50%+ of cap`;
+    ? `[Holdclose] RED: ${flags.length} metric${flags.length === 1 ? '' : 's'} at 75%+ of cap`
+    : `[Holdclose] YELLOW: ${flags.length} metric${flags.length === 1 ? '' : 's'} at 50%+ of cap`;
 
   const lines: string[] = [];
-  lines.push(`Careblazers weekly watchdog — ${generatedAt.toISOString()}`);
+  lines.push(`Holdclose weekly watchdog — ${generatedAt.toISOString()}`);
   lines.push('');
   lines.push(`Highest severity: ${severity.toUpperCase()}`);
   lines.push('');

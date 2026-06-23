@@ -1,29 +1,29 @@
-import 'package:careblazers/app.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/llm_provider.dart';
-import 'package:careblazers/providers/settings_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/tts_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart';
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/screens/onboarding/loved_one_setup_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart';
-import 'package:careblazers/services/fake_forum_api_client.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
+import 'package:holdclose/app.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/llm_provider.dart';
+import 'package:holdclose/providers/settings_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/tts_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart';
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/screens/onboarding/loved_one_setup_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart';
+import 'package:holdclose/services/fake_forum_api_client.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +37,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// chat** (a send that posted nothing back).
 ///
 /// Unlike the widget tests (which fake everything and never navigate the
-/// real router), these boot the actual `CareblazersApp` + real router +
+/// real router), these boot the actual `HoldcloseApp` + real router +
 /// real screens + real on-DB repositories. They fake only the two things a
 /// test must NOT hit — OAuth (the system sign-in sheet) and the LLM/network
 /// — so a regression in the wiring between fails here, not on a tester's
@@ -134,7 +134,7 @@ Future<InMemoryStorageProvider> _bootApp(
   final InMemoryStorageProvider storage = InMemoryStorageProvider();
   addTearDown(storage.dispose);
 
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   addTearDown(db.close);
 
   final ProviderContainer container = ProviderContainer(
@@ -183,7 +183,7 @@ Future<InMemoryStorageProvider> _bootApp(
       // The redirect GATE that funnels users between onboarding/setup/home is
       // wired by main.dart (not buildRouter), so in-test we boot straight to
       // the screen under test and exercise it + its real navigation directly.
-      child: CareblazersApp(router: buildRouter(initialLocation: initialLocation)),
+      child: HoldcloseApp(router: buildRouter(initialLocation: initialLocation)),
     ),
   );
   await tester.pumpAndSettle();

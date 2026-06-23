@@ -18,7 +18,7 @@ part 'forum_post_cache_provider.g.dart';
 class ForumPostCacheRepository {
   ForumPostCacheRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Replace the cached first page for [sort] with [posts] (server order
   /// preserved via the row's rank). One transaction so a reader never sees a
@@ -67,7 +67,7 @@ class ForumPostCacheRepository {
 /// Riverpod-wired singleton over the shared database connection.
 @Riverpod(keepAlive: true)
 ForumPostCacheRepository forumPostCacheRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   return ForumPostCacheRepository(db);
 }
 

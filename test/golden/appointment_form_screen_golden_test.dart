@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart' as model;
-import 'package:careblazers/screens/appointment/appointment_form_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart' as model;
+import 'package:holdclose/screens/appointment/appointment_form_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
@@ -19,11 +19,11 @@ DateTime _fixedNow() => DateTime(2026, 5, 30, 9, 0);
 /// Build an isolated DB seeded with a single provider so the empty
 /// add-form's dropdown isn't blank.
 Future<({
-  CareblazersDatabase db,
+  HoldcloseDatabase db,
   AppointmentRepository apptRepo,
   ProviderRepository providerRepo,
 })> _scaffold() async {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   final AppointmentRepository apptRepo =
       AppointmentRepository(db, clock: _fixedNow);
   final ProviderRepository providerRepo = ProviderRepository(db);
@@ -58,7 +58,7 @@ void main() {
             name: 'empty add form (Phase 12.7)',
             child: FutureBuilder<
                 ({
-                  CareblazersDatabase db,
+                  HoldcloseDatabase db,
                   AppointmentRepository apptRepo,
                   ProviderRepository providerRepo,
                 })>(
@@ -66,7 +66,7 @@ void main() {
               builder: (BuildContext context, AsyncSnapshot<dynamic> snap) {
                 if (!snap.hasData) return const SizedBox.shrink();
                 final ({
-                  CareblazersDatabase db,
+                  HoldcloseDatabase db,
                   AppointmentRepository apptRepo,
                   ProviderRepository providerRepo,
                 }) bundle = snap.data!;
@@ -87,7 +87,7 @@ void main() {
                       routerConfig: _goldenRouter(),
                       builder: (BuildContext context, Widget? child) {
                         return ColoredBox(
-                          color: careblazersColors.background,
+                          color: holdcloseColors.background,
                           child: child ?? const SizedBox.shrink(),
                         );
                       },

@@ -1,10 +1,10 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/medication/medication_list_screen.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/medication/medication_list_screen.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,7 +43,7 @@ MedicationWindowEntry _entry(String id, String medId, String windowId) =>
     );
 
 MedicationRepository _repo() =>
-    MedicationRepository(CareblazersDatabase(NativeDatabase.memory()),
+    MedicationRepository(HoldcloseDatabase(NativeDatabase.memory()),
         clock: _fixedNow);
 
 Future<MedicationRepository> _populatedRepo() async {
@@ -83,7 +83,7 @@ Widget _host(MedicationRepository repo) {
       child: MaterialApp.router(
         routerConfig: router,
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),

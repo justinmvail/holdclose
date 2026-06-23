@@ -31,10 +31,10 @@ class LocalNotificationsProvider implements NotificationsProvider {
   bool _initialized = false;
   final StreamController<String> _taps = StreamController<String>.broadcast();
 
-  static const String _channelId = 'careblazers_trackers';
+  static const String _channelId = 'holdclose_trackers';
   static const String _channelName = 'Tracker reminders';
   static const String _channelDesc =
-      'Dose + appointment reminders from Careblazers.';
+      'Dose + appointment reminders from Holdclose.';
 
   static void _defaultInitTimezones(String _) {
     tz_data.initializeTimeZones();

@@ -1,11 +1,8 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/behavior.dart';
-import 'package:careblazers/models/decoder_result.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/patient.dart';
-import 'package:careblazers/models/settings.dart';
-import 'package:careblazers/models/triage.dart';
-import 'package:careblazers/providers/storage_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/models/patient.dart';
+import 'package:holdclose/models/settings.dart';
+import 'package:holdclose/providers/storage_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,34 +13,20 @@ void main() {
 
   JournalEntry buildEntry({
     String id = 'entry-001',
-    String behaviorId = 'sundowning',
-    JournalOutcome outcome = JournalOutcome.positive,
     DateTime? createdAt,
+    String? situationText =
+        'Restless and anxious as the light faded — pacing the hallway.',
+    String? attemptsText = 'Dimmed the lamps and put on the playlist.',
     String? notes,
     String? voiceNotePath,
     String? photoPath,
-    int attempt = 1,
   }) =>
       JournalEntry(
         id: id,
-        behavior: Behavior.byId(behaviorId)!,
-        triage: const TriageAnswers(
-          when: TriageWhen.lateAfternoonEvening,
-          whatChanged: TriageWhatChanged.nothing,
-          whatTried: TriageWhatTried.talked,
-        ),
-        result: DecoderResult(
-          say: const <String>[
-            "That sounds really hard. I'm right here with you.",
-            "Let's sit for a minute. You don't have to do anything.",
-          ],
-          tweak: const <String>['Dim the overhead lights.'],
-          dontSay: const <String>["Don't say 'it's not bedtime yet'."],
-          generatedAt: DateTime.utc(2026, 5, 29, 19, 42),
-        ),
-        outcome: outcome,
-        attempt: attempt,
         createdAt: createdAt ?? DateTime.utc(2026, 5, 29, 19, 42, 30),
+        occurredAt: createdAt ?? DateTime.utc(2026, 5, 29, 19, 42),
+        situationText: situationText,
+        attemptsText: attemptsText,
         notes: notes,
         voiceNotePath: voiceNotePath,
         photoPath: photoPath,
@@ -75,11 +58,11 @@ void main() {
   // ---- DriftStorageProvider ------------------------------------------------
 
   group('DriftStorageProvider', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late DriftStorageProvider storage;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       storage = DriftStorageProvider(db);
     });
 
@@ -140,17 +123,17 @@ void main() {
           <String>['recent']);
     });
 
-    test('updateJournalEntry persists outcome flips', () async {
-      final JournalEntry entry = buildEntry(outcome: JournalOutcome.pending);
+    test('updateJournalEntry persists edits to the entry body', () async {
+      final JournalEntry entry = buildEntry(notes: 'Original note.');
       await storage.insertJournalEntry(entry);
 
-      final JournalEntry flipped =
-          entry.copyWith(outcome: JournalOutcome.triedDifferent);
-      await storage.updateJournalEntry(flipped);
+      final JournalEntry edited =
+          entry.copyWith(notes: 'Updated — settled within ten minutes.');
+      await storage.updateJournalEntry(edited);
 
       final List<JournalEntry> rows =
           await storage.watchJournalEntries().first;
-      expect(rows.single.outcome, JournalOutcome.triedDifferent);
+      expect(rows.single.notes, 'Updated — settled within ten minutes.');
     });
 
     test('deleteJournalEntry removes the row', () async {

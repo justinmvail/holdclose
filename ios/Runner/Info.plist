@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Careblazers</string>
+	<string>Holdclose</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>careblazers</string>
+	<string>holdclose</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -54,18 +54,18 @@
 			</array>
 		</dict>
 		<!-- Care Circle invite LINKS (2026-06-08). Registers the
-		     `careblazers://` custom scheme so a tapped
-		     `careblazers://join/<token>` link opens the app; app_links
+		     `holdclose://` custom scheme so a tapped
+		     `holdclose://join/<token>` link opens the app; app_links
 		     delivers the URI to app.dart, which redeems the token. Mirrors
 		     the Android MainActivity intent-filter. -->
 		<dict>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>app.careblazers.invite</string>
+			<string>app.holdclose.invite</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>careblazers</string>
+				<string>holdclose</string>
 			</array>
 		</dict>
 	</array>
@@ -77,13 +77,13 @@
 	     Copy is caregiver-facing and never names the speech tech (the
 	     LLM/recognizer stays invisible per CLAUDE.md voice rules). -->
 	<key>NSCameraUsageDescription</key>
-	<string>Careblazers uses the camera so you can snap a photo for a journal entry about your loved one.</string>
+	<string>Holdclose uses the camera so you can snap a photo for a journal entry about your loved one.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Careblazers uses the microphone so you can add a voice note or speak an entry instead of typing.</string>
+	<string>Holdclose uses the microphone so you can add a voice note or speak an entry instead of typing.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Careblazers needs access to your photos so you can attach one to a journal entry about your loved one.</string>
+	<string>Holdclose needs access to your photos so you can attach one to a journal entry about your loved one.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Careblazers turns what you say into text so you can add an entry by voice instead of typing.</string>
+	<string>Holdclose turns what you say into text so you can add an entry by voice instead of typing.</string>
 	<!-- Dev-only plain-HTTP exception (iOS ATS blocks http:// by default).
 	     localhost: the local LLM shim (tools/claude_shim.py), used when the
 	     app points SHIM_URL at http://localhost:8765 for local dev. Remote

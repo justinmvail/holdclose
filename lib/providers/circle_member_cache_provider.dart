@@ -19,7 +19,7 @@ part 'circle_member_cache_provider.g.dart';
 class CircleMemberCacheRepository {
   CircleMemberCacheRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Replace the cached roster for [circleId] with [members]. Done as one
   /// transaction so the screen never sees a half-written roster. Deleting the
@@ -71,7 +71,7 @@ class CircleMemberCacheRepository {
 /// `*RepositoryBackend` pattern the other repositories use.
 @Riverpod(keepAlive: true)
 CircleMemberCacheRepository circleMemberCacheRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   return CircleMemberCacheRepository(db);
 }
 

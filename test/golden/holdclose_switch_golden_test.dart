@@ -1,19 +1,19 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/careblazers_switch.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/holdclose_switch.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void _noop(bool _) {}
 
-/// Preview of [CareblazersSwitch] (fb 2026-06-14 — clearer on/off toggles):
+/// Preview of [HoldcloseSwitch] (fb 2026-06-14 — clearer on/off toggles):
 /// the two standalone states up top, then two settings rows showing it in
 /// context.
 Widget _preview() {
   return MaterialApp(
     debugShowCheckedModeBanner: false,
     home: Material(
-      color: careblazersColors.surfaceWarm,
+      color: holdcloseColors.surfaceWarm,
       child: SizedBox(
         width: 440,
         child: Padding(
@@ -24,26 +24,26 @@ Widget _preview() {
             children: <Widget>[
               Row(
                 children: const <Widget>[
-                  CareblazersSwitch(value: false, onChanged: _noop),
+                  HoldcloseSwitch(value: false, onChanged: _noop),
                   SizedBox(width: 24),
-                  CareblazersSwitch(value: true, onChanged: _noop),
+                  HoldcloseSwitch(value: true, onChanged: _noop),
                 ],
               ),
               const SizedBox(height: 22),
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: careblazersColors.background,
+                  color: holdcloseColors.background,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
                   children: const <Widget>[
-                    CareblazersSwitchListTile(
+                    HoldcloseSwitchListTile(
                       value: true,
                       onChanged: _noop,
                       title: Text('Read scripts aloud'),
                       subtitle: Text('Hear each coaching script spoken.'),
                     ),
-                    CareblazersSwitchListTile(
+                    HoldcloseSwitchListTile(
                       value: false,
                       onChanged: _noop,
                       title: Text('Quiet hours'),
@@ -61,10 +61,10 @@ Widget _preview() {
 }
 
 void main() {
-  group('CareblazersSwitch golden', () {
+  group('HoldcloseSwitch golden', () {
     goldenTest(
       'on/off states + in settings rows',
-      fileName: 'careblazers_switch',
+      fileName: 'holdclose_switch',
       builder: () => GoldenTestGroup(
         columns: 1,
         children: <Widget>[

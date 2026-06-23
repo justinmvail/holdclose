@@ -1,5 +1,5 @@
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/segmented_subnav.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/segmented_subnav.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -83,18 +83,18 @@ void main() {
       expect(widget.activeIndex, 0);
 
       // First pill carries the active (white) label; the others slate.
-      expect(_labelStyle(tester, 'Feed')?.color, careblazersColors.background);
-      expect(_labelStyle(tester, 'Learn')?.color, careblazersColors.text);
-      expect(_labelStyle(tester, 'Support')?.color, careblazersColors.text);
+      expect(_labelStyle(tester, 'Feed')?.color, holdcloseColors.background);
+      expect(_labelStyle(tester, 'Learn')?.color, holdcloseColors.text);
+      expect(_labelStyle(tester, 'Support')?.color, holdcloseColors.text);
     });
 
     testWidgets('honors an explicit activeIndex',
         (WidgetTester tester) async {
       await _pump(tester, activeIndex: 1, onChanged: (_) {});
 
-      expect(_labelStyle(tester, 'Feed')?.color, careblazersColors.text);
-      expect(_labelStyle(tester, 'Learn')?.color, careblazersColors.background);
-      expect(_labelStyle(tester, 'Support')?.color, careblazersColors.text);
+      expect(_labelStyle(tester, 'Feed')?.color, holdcloseColors.text);
+      expect(_labelStyle(tester, 'Learn')?.color, holdcloseColors.background);
+      expect(_labelStyle(tester, 'Support')?.color, holdcloseColors.text);
     });
 
     testWidgets('active pill fills navy; inactive fills warm white',
@@ -104,8 +104,8 @@ void main() {
       final Iterable<Material> materials =
           tester.widgetList<Material>(find.byType(Material));
       final Set<Color?> fills = materials.map((Material m) => m.color).toSet();
-      expect(fills, contains(careblazersColors.primary));
-      expect(fills, contains(careblazersColors.surfaceWarm));
+      expect(fills, contains(holdcloseColors.primary));
+      expect(fills, contains(holdcloseColors.surfaceWarm));
     });
   });
 

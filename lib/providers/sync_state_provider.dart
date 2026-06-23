@@ -6,11 +6,11 @@ part 'sync_state_provider.g.dart';
 /// shared_preferences key holding the active care-circle id
 /// (server-authoritative sync). Null/absent = "not in a circle" =
 /// fully local, sync no-ops everywhere.
-const String syncCircleIdPrefsKey = 'careblazers.sync.circle_id';
+const String syncCircleIdPrefsKey = 'holdclose.sync.circle_id';
 
 /// Prefix for the per-circle pull cursor (`...<circleId>` → int rev).
 /// Defaults to 0 (pull everything) when absent.
-const String syncCursorPrefsKeyPrefix = 'careblazers.sync.cursor.';
+const String syncCursorPrefsKeyPrefix = 'holdclose.sync.cursor.';
 
 /// Durable store for the sync engine's small bits of cross-launch state:
 /// which care circle this install is bound to, and how far each circle's

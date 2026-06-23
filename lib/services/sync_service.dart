@@ -82,7 +82,7 @@ const int _syncPushBatch = 200;
 class SyncOutbox {
   SyncOutbox(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Append a pending write, replacing any earlier pending row for the
   /// same (collection, docId) so the latest value wins.
@@ -999,7 +999,7 @@ class SyncController {
 /// interval timer, and the medication sync sink all share one instance.
 @Riverpod(keepAlive: true)
 SyncController syncController(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   final MedicationRepository medications =
       ref.watch(medicationRepositoryProvider);

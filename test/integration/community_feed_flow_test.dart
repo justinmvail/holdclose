@@ -5,7 +5,7 @@
 /// Phase 15.13. Companion to the Phase 15.12 post-detail flow
 /// ([community_post_flow_test.dart]).
 ///
-/// These drive the *real* [CareblazersApp] over the shared Phase 15
+/// These drive the *real* [HoldcloseApp] over the shared Phase 15
 /// harness (pinned clock, no-op TTS/analytics) plus a process-local
 /// [FakeForumApiClient] wired in as the [forumApiClientProvider] override
 /// so the feed, the sort re-fetches, the refresh round-trip, the new post,
@@ -37,16 +37,16 @@
 ///      seeded pending reports.
 library;
 
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/community_feed_provider.dart';
-import 'package:careblazers/providers/guidelines_acknowledged_provider.dart';
-import 'package:careblazers/providers/my_forum_profile_provider.dart'
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/community_feed_provider.dart';
+import 'package:holdclose/providers/guidelines_acknowledged_provider.dart';
+import 'package:holdclose/providers/my_forum_profile_provider.dart'
     show forumAdminRole;
-import 'package:careblazers/screens/community/admin_reports_screen.dart';
-import 'package:careblazers/screens/community/community_feed_screen.dart';
-import 'package:careblazers/screens/community/post_compose_screen.dart';
-import 'package:careblazers/services/fake_forum_api_client.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/screens/community/admin_reports_screen.dart';
+import 'package:holdclose/screens/community/community_feed_screen.dart';
+import 'package:holdclose/screens/community/post_compose_screen.dart';
+import 'package:holdclose/services/fake_forum_api_client.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -241,7 +241,7 @@ Future<ProviderContainer> _pumpCommunity(
   ForumApiClient client, {
   List<Override> extraOverrides = const <Override>[],
 }) async {
-  final ProviderContainer container = await pumpCareblazersApp(
+  final ProviderContainer container = await pumpHoldcloseApp(
     tester,
     extraOverrides: <Override>[
       forumApiClientProvider.overrideWithValue(client),

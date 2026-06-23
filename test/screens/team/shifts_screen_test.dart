@@ -1,11 +1,11 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_shift.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/models/patient.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/team/shifts_screen.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_shift.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/models/patient.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/team/shifts_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,13 +53,13 @@ CareShift _onDay1({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late CareShiftsRepository shiftsRepo;
   late CareCircleRepository circleRepo;
   int ids = 0;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     shiftsRepo = CareShiftsRepository(db);
     circleRepo = CareCircleRepository(db);
     ids = 0;

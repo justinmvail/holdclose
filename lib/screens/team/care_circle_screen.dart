@@ -227,7 +227,7 @@ class _ConnectActions extends ConsumerWidget {
         token: invite.token,
       );
       await shareCircleInvite(
-        'Join my care circle on Careblazers: $link',
+        'Join my care circle on Holdclose: $link',
       );
     } on ForumApiException catch (_) {
       messenger.showSnackBar(

@@ -1,7 +1,7 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/l10n/app_localizations.dart';
-import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/l10n/app_localizations.dart';
+import 'package:holdclose/screens/onboarding/welcome_carousel.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,7 +50,7 @@ void main() {
                   ),
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.background,
+                      color: holdcloseColors.background,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },

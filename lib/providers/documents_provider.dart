@@ -30,7 +30,7 @@ class DocumentsRepository with SyncSinkHost {
   DocumentsRepository(this._db, {DocumentBlobService? blobService})
       : blobService = blobService ?? const NoopDocumentBlobService();
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Moves document-scan image BYTES to/from R2 so a scan survives a
   /// reinstall + syncs across the circle (the row metadata already syncs).
@@ -436,10 +436,10 @@ class DocumentsRepository with SyncSinkHost {
 /// and never see the concrete drift database — same indirection
 /// [healthLogRepositoryProvider] / [carePlanRepositoryProvider] use.
 ///
-/// In production the repo opens its own [CareblazersDatabase] handle onto
+/// In production the repo opens its own [HoldcloseDatabase] handle onto
 /// the shared SQLite file; SQLite's per-connection serialization keeps
 /// that safe. Tests build a [DocumentsRepository] directly against
-/// `CareblazersDatabase(NativeDatabase.memory())` so each test gets an
+/// `HoldcloseDatabase(NativeDatabase.memory())` so each test gets an
 /// isolated DB.
 ///
 /// Named `documentsRepositoryBackend` so the generated class is
@@ -447,7 +447,7 @@ class DocumentsRepository with SyncSinkHost {
 /// natural-language [documentsRepositoryProvider] alias below.
 @Riverpod(keepAlive: true)
 DocumentsRepository documentsRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return DocumentsRepository(
     db,

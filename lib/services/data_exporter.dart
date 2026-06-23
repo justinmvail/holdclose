@@ -161,7 +161,7 @@ class DataExporter {
 
   /// Filename the share sheet suggests. Date-stamped so successive backups
   /// don't clobber each other in the caregiver's Files app.
-  static const String filenamePrefix = 'careblazers-backup';
+  static const String filenamePrefix = 'holdclose-backup';
 
   /// MIME type for the shared file.
   static const String mimeType = 'application/json';
@@ -427,7 +427,7 @@ class DataExporter {
     return written;
   }
 
-  /// `careblazers-backup-YYYY-MM-DD.json` from [at]'s calendar date.
+  /// `holdclose-backup-YYYY-MM-DD.json` from [at]'s calendar date.
   String _filename(DateTime at) {
     final String y = at.year.toString().padLeft(4, '0');
     final String m = at.month.toString().padLeft(2, '0');

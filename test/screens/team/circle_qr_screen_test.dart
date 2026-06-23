@@ -1,6 +1,6 @@
-import 'package:careblazers/screens/team/circle_qr_screen.dart';
-import 'package:careblazers/services/fake_forum_api_client.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/screens/team/circle_qr_screen.dart';
+import 'package:holdclose/services/fake_forum_api_client.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,6 +52,6 @@ void main() {
   });
 
   test('circleQrPayload prefixes the token with the scheme', () {
-    expect(circleQrPayload('abc'), 'careblazers:circle:abc');
+    expect(circleQrPayload('abc'), 'holdclose:circle:abc');
   });
 }

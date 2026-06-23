@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:careblazers/providers/voice_capture_provider.dart';
-import 'package:careblazers/services/voice_intake.dart';
-import 'package:careblazers/widgets/voice_button.dart';
+import 'package:holdclose/providers/voice_capture_provider.dart';
+import 'package:holdclose/services/voice_intake.dart';
+import 'package:holdclose/widgets/voice_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

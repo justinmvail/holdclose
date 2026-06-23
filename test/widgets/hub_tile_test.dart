@@ -1,51 +1,51 @@
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/hub_tile.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/hub_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Six tiles drawn from a spread of [CareblazersColors] chip tokens —
+/// Six tiles drawn from a spread of [HoldcloseColors] chip tokens —
 /// enough to fill three rows of a 2-column grid.
 List<HubTile> _sixTiles({VoidCallback? onTap}) => <HubTile>[
       HubTile(
         icon: Icons.medication_outlined,
         label: 'Medications',
         subLabel: 'doses & reminders',
-        chipColor: careblazersColors.primary,
+        chipColor: holdcloseColors.primary,
         onTap: onTap ?? () {},
       ),
       HubTile(
         icon: Icons.schedule_outlined,
         label: 'Medication Schedule',
         subLabel: 'daily timeline',
-        chipColor: careblazersColors.cta,
+        chipColor: holdcloseColors.cta,
         onTap: onTap ?? () {},
       ),
       HubTile(
         icon: Icons.event_outlined,
         label: 'Appointments',
         subLabel: 'calendar & visits',
-        chipColor: careblazersColors.accentDeep,
+        chipColor: holdcloseColors.accentDeep,
         onTap: onTap ?? () {},
       ),
       HubTile(
         icon: Icons.favorite_outline,
         label: 'Health Log',
         subLabel: 'symptoms & vitals',
-        chipColor: careblazersColors.link,
+        chipColor: holdcloseColors.link,
         onTap: onTap ?? () {},
       ),
       HubTile(
         icon: Icons.list_alt_outlined,
         label: 'Care Plan',
         subLabel: 'routine & stages',
-        chipColor: careblazersColors.success,
+        chipColor: holdcloseColors.success,
         onTap: onTap ?? () {},
       ),
       HubTile(
         icon: Icons.badge_outlined,
         label: 'Cards & Documents',
         subLabel: 'emergency card, POA, IDs',
-        chipColor: careblazersColors.primarySoft,
+        chipColor: holdcloseColors.primarySoft,
         onTap: onTap ?? () {},
       ),
     ];
@@ -97,7 +97,7 @@ void main() {
               icon: Icons.medication_outlined,
               label: 'Medications',
               subLabel: 'doses & reminders',
-              chipColor: careblazersColors.primary,
+              chipColor: holdcloseColors.primary,
               onTap: () {},
             ),
           ),
@@ -118,7 +118,7 @@ void main() {
               icon: Icons.event_outlined,
               label: 'Appointments',
               subLabel: 'calendar & visits',
-              chipColor: careblazersColors.cta,
+              chipColor: holdcloseColors.cta,
               onTap: () {},
             ),
           ),
@@ -127,7 +127,7 @@ void main() {
 
       final Icon icon = tester.widget<Icon>(find.byIcon(Icons.event_outlined));
       expect(icon.size, 32);
-      expect(icon.color, careblazersColors.background);
+      expect(icon.color, holdcloseColors.background);
     });
 
     testWidgets('honors an explicit iconColor override',
@@ -139,8 +139,8 @@ void main() {
               icon: Icons.event_outlined,
               label: 'Appointments',
               subLabel: 'calendar & visits',
-              chipColor: careblazersColors.surfaceWarm,
-              iconColor: careblazersColors.primary,
+              chipColor: holdcloseColors.surfaceWarm,
+              iconColor: holdcloseColors.primary,
               onTap: () {},
             ),
           ),
@@ -148,7 +148,7 @@ void main() {
       );
 
       final Icon icon = tester.widget<Icon>(find.byIcon(Icons.event_outlined));
-      expect(icon.color, careblazersColors.primary);
+      expect(icon.color, holdcloseColors.primary);
     });
 
     testWidgets('label is 15.5pt bold navy; sub-label is 11pt body text',
@@ -160,7 +160,7 @@ void main() {
               icon: Icons.medication_outlined,
               label: 'Medications',
               subLabel: 'doses & reminders',
-              chipColor: careblazersColors.primary,
+              chipColor: holdcloseColors.primary,
               onTap: () {},
             ),
           ),
@@ -170,11 +170,11 @@ void main() {
       final Text label = tester.widget<Text>(find.text('Medications'));
       expect(label.style?.fontSize, 15.5);
       expect(label.style?.fontWeight, FontWeight.w700);
-      expect(label.style?.color, careblazersColors.primary);
+      expect(label.style?.color, holdcloseColors.primary);
 
       final Text sub = tester.widget<Text>(find.text('doses & reminders'));
       expect(sub.style?.fontSize, 11);
-      expect(sub.style?.color, careblazersColors.text);
+      expect(sub.style?.color, holdcloseColors.text);
     });
 
     testWidgets('the chip paints with the supplied chipColor',
@@ -186,7 +186,7 @@ void main() {
               icon: Icons.medication_outlined,
               label: 'Medications',
               subLabel: 'doses & reminders',
-              chipColor: careblazersColors.success,
+              chipColor: holdcloseColors.success,
               onTap: () {},
             ),
           ),
@@ -198,7 +198,7 @@ void main() {
           tester.widgetList<Container>(find.byType(Container));
       final bool hasChip = containers.any((Container c) {
         final Decoration? d = c.decoration;
-        return d is BoxDecoration && d.color == careblazersColors.success;
+        return d is BoxDecoration && d.color == holdcloseColors.success;
       });
       expect(hasChip, isTrue);
     });
@@ -213,7 +213,7 @@ void main() {
               icon: Icons.medication_outlined,
               label: 'Medications',
               subLabel: 'doses & reminders',
-              chipColor: careblazersColors.primary,
+              chipColor: holdcloseColors.primary,
               onTap: () => taps++,
             ),
           ),

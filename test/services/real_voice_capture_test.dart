@@ -1,5 +1,5 @@
-import 'package:careblazers/providers/voice_capture_provider.dart';
-import 'package:careblazers/services/real_capture.dart';
+import 'package:holdclose/providers/voice_capture_provider.dart';
+import 'package:holdclose/services/real_capture.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';

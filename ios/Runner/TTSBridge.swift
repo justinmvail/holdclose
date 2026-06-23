@@ -3,7 +3,7 @@ import Flutter
 import Foundation
 import onnxruntime_objc
 
-// BUILD_SPEC.md Phase 9.3 — `careblazers/tts` MethodChannel handler.
+// BUILD_SPEC.md Phase 9.3 — `holdclose/tts` MethodChannel handler.
 //
 // Replaces the AppDelegate stub: loads the bundled Piper voice
 // (`en_US-amy-medium.onnx`), runs inference through ONNX Runtime
@@ -17,7 +17,7 @@ import onnxruntime_objc
 //   - availableVoices()                → List<{id, displayName, locale, gender}>
 enum TTSBridge {
 
-    static let channelName = "careblazers/tts"
+    static let channelName = "holdclose/tts"
 
     private static let engine = TTSEngine()
 

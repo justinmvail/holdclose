@@ -22,7 +22,7 @@ import java.nio.LongBuffer
 import java.util.concurrent.Executors
 import org.json.JSONObject
 
-// BUILD_SPEC.md Phase 9.4 — `careblazers/tts` MethodChannel handler.
+// BUILD_SPEC.md Phase 9.4 — `holdclose/tts` MethodChannel handler.
 //
 // Mirror of `ios/Runner/TTSBridge.swift`: loads the bundled Piper
 // voice (`en_US-amy-medium.onnx`), runs inference through ONNX
@@ -36,7 +36,7 @@ import org.json.JSONObject
 //   - availableVoices()                → List<{id, displayName, locale, gender}>
 object TTSBridge {
 
-    const val CHANNEL_NAME: String = "careblazers/tts"
+    const val CHANNEL_NAME: String = "holdclose/tts"
 
     /// Registers the MethodChannel against the Flutter engine. Called
     /// from `MainActivity.configureFlutterEngine`.

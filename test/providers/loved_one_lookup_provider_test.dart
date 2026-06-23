@@ -1,25 +1,25 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/circle_member_cache_provider.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/loved_one_lookup_provider.dart';
-import 'package:careblazers/providers/patient_configured_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/sync_state_provider.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/services/sync_service.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/circle_member_cache_provider.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/loved_one_lookup_provider.dart';
+import 'package:holdclose/providers/patient_configured_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/sync_state_provider.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/services/sync_service.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,7 +54,7 @@ class _RecordingClient extends ForumApiClient {
 }
 
 SyncController _buildSync(
-  CareblazersDatabase db,
+  HoldcloseDatabase db,
   StorageProvider storage,
   ForumApiClient client,
 ) =>
@@ -82,7 +82,7 @@ ProviderContainer _container({
   required StorageProvider storage,
   required ForumApiClient client,
 }) {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   addTearDown(db.close);
   final SyncController sync = _buildSync(db, storage, client);
   addTearDown(sync.dispose);

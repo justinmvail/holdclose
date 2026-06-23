@@ -3,22 +3,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../providers/link_launcher_provider.dart';
-import '../../routing/router.dart' show CareblazersRoutes;
+import '../../routing/router.dart' show HoldcloseRoutes;
 import '../../seed/learn_content.dart';
 import '../../theme.dart';
 
 /// The **Learn** segment of the Community tab (BUILD_SPEC.md §5.16,
-/// TASKS.md Phase 14.37) — the Careblazers content library.
+/// TASKS.md Phase 14.37) — the Holdclose content library.
 ///
 /// Rendered as the in-tab body when the Community sub-nav's Learn segment
 /// is active (it is NOT a routed screen of its own; the
 /// `CommunityFeedScreen` owns the Scaffold + sub-nav). Top to bottom:
 ///
-///   * **Videos** — a vertical list of seeded framework videos
-///     ([learnVideos]). Each card shows the real YouTube thumbnail, the
-///     title, and the run length. Tapping the card deep-links straight to
-///     Dr. Natali's video on YouTube via [linkLauncherProvider] (no
-///     in-app detail screen — alpha feedback fb_1780932492880889).
+///   * **Videos** — a vertical list of seeded primer videos
+///     ([learnVideos]). Each card shows the YouTube thumbnail, the title,
+///     and the run length; tapping deep-links to the video via
+///     [linkLauncherProvider] (no in-app detail screen — alpha feedback
+///     fb_1780932492880889). The whole section hides when no videos are
+///     seeded (the de-brand left the curated list empty for now).
 ///   * **Playbooks** — the seeded "what do I do when…" guides
 ///     ([learnPlaybooks]), grouped under their [LearnTopic] header. Each
 ///     row pushes `/community/learn/playbooks/:id`.
@@ -47,20 +48,22 @@ class LearnScreen extends StatelessWidget {
       key: listKey,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: <Widget>[
-        const _SectionHeader(label: 'Videos'),
-        const SizedBox(height: 4),
-        Text(
-          "Short primers on Dr. Natali's framework.",
-          style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+        if (learnVideos.isNotEmpty) ...<Widget>[
+          const _SectionHeader(label: 'Videos'),
+          const SizedBox(height: 4),
+          Text(
+            'Short primers on caregiving.',
+            style: textTheme.bodyMedium?.copyWith(
+              color: context.cb.primarySoft,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        for (final LearnVideo video in learnVideos) ...<Widget>[
-          _VideoCard(video: video),
+          const SizedBox(height: 12),
+          for (final LearnVideo video in learnVideos) ...<Widget>[
+            _VideoCard(video: video),
+            const SizedBox(height: 12),
+          ],
           const SizedBox(height: 12),
         ],
-        const SizedBox(height: 12),
         const _SectionHeader(label: 'Playbooks'),
         const SizedBox(height: 4),
         Text(
@@ -291,7 +294,7 @@ class _PlaybookRow extends StatelessWidget {
           key: LearnScreen.playbookRowKey(playbook.id),
           borderRadius: BorderRadius.circular(16),
           onTap: () => context.pushNamed(
-            CareblazersRoutes.communityLearnPlaybook,
+            HoldcloseRoutes.communityLearnPlaybook,
             pathParameters: <String, String>{'id': playbook.id},
           ),
           child: Padding(

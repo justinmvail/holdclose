@@ -1,8 +1,8 @@
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/form/form_error_view.dart';
-import 'package:careblazers/widgets/form/format.dart';
-import 'package:careblazers/widgets/form/id_factory.dart';
-import 'package:careblazers/widgets/form/labelled_field.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/form/form_error_view.dart';
+import 'package:holdclose/widgets/form/format.dart';
+import 'package:holdclose/widgets/form/id_factory.dart';
+import 'package:holdclose/widgets/form/labelled_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,7 +11,7 @@ void main() {
     testWidgets('renders the message centered in branded body text',
         (WidgetTester tester) async {
       await tester.pumpWidget(MaterialApp(
-        theme: careblazersLightTheme,
+        theme: holdcloseLightTheme,
         home: const Scaffold(
           body: FormErrorView(message: "We couldn't load the things.\nboom"),
         ),
@@ -21,7 +21,7 @@ void main() {
       expect(textFinder, findsOneWidget);
       final Text text = tester.widget<Text>(textFinder);
       expect(text.textAlign, TextAlign.center);
-      expect(text.style?.color, careblazersColors.text);
+      expect(text.style?.color, holdcloseColors.text);
       expect(
         find.ancestor(of: textFinder, matching: find.byType(Center)),
         findsWidgets,
@@ -33,7 +33,7 @@ void main() {
     testWidgets('renders a bold label above the child',
         (WidgetTester tester) async {
       await tester.pumpWidget(MaterialApp(
-        theme: careblazersLightTheme,
+        theme: holdcloseLightTheme,
         home: const Scaffold(
           body: LabelledField(
             label: 'Name',

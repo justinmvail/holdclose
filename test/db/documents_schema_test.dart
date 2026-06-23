@@ -1,18 +1,18 @@
 import 'dart:convert';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/models/document.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/models/document.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Documents tables (TASKS.md Phase 14.21)', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late DocumentsRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = DocumentsRepository(db);
     });
 

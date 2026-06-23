@@ -1,4 +1,4 @@
-import 'package:careblazers/providers/analytics_provider.dart';
+import 'package:holdclose/providers/analytics_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
@@ -63,7 +63,7 @@ void main() {
 
     test('trackScreen swallows the call without throwing', () {
       const NoopAnalyticsProvider noop = NoopAnalyticsProvider();
-      expect(() => noop.trackScreen('/decoder/triage'), returnsNormally);
+      expect(() => noop.trackScreen('/journal/new'), returnsNormally);
       expect(() => noop.trackScreen(''), returnsNormally);
     });
 
@@ -104,13 +104,13 @@ void main() {
       expect(identical(impl, spy), isTrue);
 
       impl.trackEvent('decoder_run', <String, Object?>{'behavior': 'upset'});
-      impl.trackScreen('/decoder/result');
+      impl.trackScreen('/journal/abc123');
       impl.setUser(userId: 'demo-user-sarah');
 
       expect(spy.events, hasLength(1));
       expect(spy.events.single.key, 'decoder_run');
       expect(spy.events.single.value['behavior'], 'upset');
-      expect(spy.screens, <String>['/decoder/result']);
+      expect(spy.screens, <String>['/journal/abc123']);
       expect(spy.users, <String>['demo-user-sarah']);
     });
   });

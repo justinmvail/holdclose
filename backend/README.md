@@ -1,6 +1,6 @@
-# Careblazers Forum Backend
+# Holdclose Forum Backend
 
-Cloudflare Workers backend for the Careblazers caregiver forum
+Cloudflare Workers backend for the Holdclose caregiver forum
 (BUILD_SPEC.md §13 / TASKS.md Phase 13). Single-board Reddit-style
 forum with threaded comments, hosted on Cloudflare for cost-of-scale
 and zero-egress. The Flutter app talks to this Worker via Dio + JWTs
@@ -95,9 +95,9 @@ new one instead.
 ```bash
 # One-time setup (run from the backend/ directory):
 wrangler login
-wrangler d1 create careblazers-forum
+wrangler d1 create holdclose-forum
 #   → paste the returned UUID into wrangler.toml's database_id
-wrangler r2 bucket create careblazers-forum-media
+wrangler r2 bucket create holdclose-forum-media
 wrangler secret put FORUM_JWT_SECRET   # Phase 13.3 — auth middleware
 
 # Deploy:
@@ -143,8 +143,8 @@ Worker request count and worker p95 latency are sampled and included
 in the email body for context but are **not** threshold-checked —
 they're informational signals for capacity planning.
 
-A red flag promotes the email subject to `[Careblazers] RED: …`;
-otherwise it ships as `[Careblazers] YELLOW: …`. Red takes
+A red flag promotes the email subject to `[Holdclose] RED: …`;
+otherwise it ships as `[Holdclose] YELLOW: …`. Red takes
 precedence over yellow when both severities fire in the same run.
 
 ### Watchdog setup
@@ -161,7 +161,7 @@ deploy time):
 
 - `CLOUDFLARE_ACCOUNT_ID` — your CF account tag
 - `CLOUDFLARE_D1_DATABASE_ID` — the D1 UUID (same as `database_id`)
-- `CLOUDFLARE_R2_BUCKET_NAME` — defaults to `careblazers-forum-media`
+- `CLOUDFLARE_R2_BUCKET_NAME` — defaults to `holdclose-forum-media`
 - `RESEND_FROM_EMAIL` — verified Resend sender
 - `RESEND_TO_EMAIL` — operator inbox
 

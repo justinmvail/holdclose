@@ -186,7 +186,7 @@ class MedicationRepository with SyncSinkHost {
   MedicationRepository(this._db, {DateTime Function()? clock})
       : _clock = clock ?? DateTime.now;
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
   final DateTime Function() _clock;
 
   // The sync-sink wiring (`syncSink`, `applyingRemote`, `emitUpsert`,
@@ -625,7 +625,7 @@ class MedicationRepository with SyncSinkHost {
 /// Riverpod-wired singleton.
 @Riverpod(keepAlive: true)
 MedicationRepository medicationRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return MedicationRepository(db);
 }

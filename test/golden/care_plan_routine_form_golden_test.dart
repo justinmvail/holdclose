@@ -1,10 +1,10 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/medical/care_plan_routine_form.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/medical/care_plan_routine_form.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,7 +21,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// the active-patient lookup off the on-device sqlite file (it only fires
 /// on submit anyway).
 ({CarePlanRepository plan, CareTasksRepository tasks}) _repos() {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   return (plan: CarePlanRepository(db), tasks: CareTasksRepository(db));
 }
 
@@ -56,7 +56,7 @@ Widget _host() {
       child: MaterialApp.router(
         routerConfig: router,
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),

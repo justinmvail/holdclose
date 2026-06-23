@@ -34,12 +34,12 @@ part 'appointment_repository.g.dart';
 /// [ChatRepository] / [MedicationRepository] use. Deleting a [Provider]
 /// cascades to its appointments via the FK `ON DELETE CASCADE` declared
 /// in `lib/db/tables.dart`; the `PRAGMA foreign_keys = ON` in
-/// [CareblazersDatabase]'s `beforeOpen` is what makes that cascade real.
+/// [HoldcloseDatabase]'s `beforeOpen` is what makes that cascade real.
 class AppointmentRepository with SyncSinkHost {
   AppointmentRepository(this._db, {DateTime Function()? clock})
       : _clock = clock ?? DateTime.now;
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
   final DateTime Function() _clock;
 
   // ─────────────────────────────────────────── Appointment CRUD ──
@@ -182,10 +182,10 @@ class AppointmentRepository with SyncSinkHost {
 /// the concrete drift database — same indirection
 /// [medicationRepositoryProvider] and [chatRepositoryProvider] use.
 ///
-/// In production the repo opens its own [CareblazersDatabase] handle
+/// In production the repo opens its own [HoldcloseDatabase] handle
 /// onto the same SQLite file the rest of the app shares; SQLite's
 /// per-connection serialization keeps that safe. Tests build an
-/// [AppointmentRepository] directly against `CareblazersDatabase(
+/// [AppointmentRepository] directly against `HoldcloseDatabase(
 /// NativeDatabase.memory())` so each test gets an isolated DB.
 ///
 /// Named `appointmentRepositoryBackend` so the generated class is
@@ -193,7 +193,7 @@ class AppointmentRepository with SyncSinkHost {
 /// natural-language [appointmentRepositoryProvider] alias below.
 @Riverpod(keepAlive: true)
 AppointmentRepository appointmentRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return AppointmentRepository(db);
 }

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { auth, type AuthBindings, type AuthVariables } from '../src/middleware/auth';
 
 const SECRET = env.FORUM_JWT_SECRET;
-const ORIGIN = 'https://forum.careblazers.local';
+const ORIGIN = 'https://forum.holdclose.local';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 

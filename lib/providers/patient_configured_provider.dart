@@ -11,7 +11,7 @@ part 'patient_configured_provider.g.dart';
 /// setup**. Until the caregiver saves a [Patient], the app has no
 /// "your person" to anchor the Emergency Card, the Medical header, or
 /// the decoder context on, so the router redirect (see
-/// `careblazersRedirect`) funnels every authenticated location to
+/// `holdcloseRedirect`) funnels every authenticated location to
 /// `/setup`.
 ///
 /// Mirrors [OnboardingCompleted]: a `keepAlive` notifier exposing a

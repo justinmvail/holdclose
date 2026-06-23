@@ -97,17 +97,14 @@ Future<List<ActivityEvent>> catchMeUpEvents(Ref ref) async {
   return List<ActivityEvent>.unmodifiable(events);
 }
 
-/// One-line recap of a journal entry — the caregiver's own situation text
-/// for a wizard entry, the behavior label for a decoder auto-log. Mirrors
-/// the Recent Activity row title so the recap and the feed name the same
-/// event the same way.
+/// One-line recap of a journal entry — the caregiver's own situation text,
+/// or a plain "Journal note" when the entry has none. Mirrors the Recent
+/// Activity row title so the recap and the feed name the same event the
+/// same way.
 String _journalSummary(JournalEntry entry) {
-  if (entry.wizardKind) {
-    final String? situation = entry.situationText?.trim();
-    if (situation != null && situation.isNotEmpty) return situation;
-    return 'Journal note';
-  }
-  return entry.behavior.label;
+  final String? situation = entry.situationText?.trim();
+  if (situation != null && situation.isNotEmpty) return situation;
+  return 'Journal note';
 }
 
 /// One-line recap of an acted-on dose — "Gave Donepezil 10 mg", "Skipped

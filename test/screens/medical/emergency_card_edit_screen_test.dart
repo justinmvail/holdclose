@@ -1,14 +1,14 @@
 import 'dart:async';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/document.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/screens/medical/emergency_card_edit_screen.dart';
-import 'package:careblazers/screens/medical/emergency_card_screen.dart'
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/document.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/screens/medical/emergency_card_edit_screen.dart';
+import 'package:holdclose/screens/medical/emergency_card_screen.dart'
     show EmergencyCardView, emergencyCardViewProvider;
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -106,11 +106,11 @@ Future<void> _enterContactField(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late DocumentsRepository repo;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = DocumentsRepository(db);
   });
 

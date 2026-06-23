@@ -1,4 +1,4 @@
-import 'package:careblazers/models/chat.dart';
+import 'package:holdclose/models/chat.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

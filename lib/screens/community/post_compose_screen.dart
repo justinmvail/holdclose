@@ -8,7 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/forum.dart';
 import '../../providers/community_feed_provider.dart';
 import '../../providers/guidelines_acknowledged_provider.dart';
-import '../../routing/router.dart' show CareblazersRoutes;
+import '../../routing/router.dart' show HoldcloseRoutes;
 import '../../seed/community_guidelines.dart';
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
@@ -157,7 +157,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
           const SnackBar(content: Text('Posted.')),
         );
       }
-      context.goNamed(CareblazersRoutes.community);
+      context.goNamed(HoldcloseRoutes.community);
     } on ForumApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -195,7 +195,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
       if (context.canPop()) {
         context.pop();
       } else {
-        context.goNamed(CareblazersRoutes.community);
+        context.goNamed(HoldcloseRoutes.community);
       }
     } on ForumApiException catch (e) {
       if (!mounted) return;
@@ -379,7 +379,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
                 const SizedBox(height: 24),
                 _GuidelinesLink(
                   onPressed: () =>
-                      context.pushNamed(CareblazersRoutes.communityGuidelines),
+                      context.pushNamed(HoldcloseRoutes.communityGuidelines),
                 ),
               ],
             ),

@@ -1,4 +1,4 @@
-import 'package:careblazers/models/caregiver.dart';
+import 'package:holdclose/models/caregiver.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

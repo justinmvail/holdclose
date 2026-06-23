@@ -51,7 +51,7 @@ app.get('/health', (c) => c.json({ status: 'ok' }));
 // under /api/v1) and intentionally EXEMPT from the forum JWT middleware —
 // it's a shareable web page the invited caregiver opens from a text link,
 // like /auth/google's pre-auth handshake. It just renders the token from
-// the path + offers a `careblazers://join/<token>` deep link into the app.
+// the path + offers a `holdclose://join/<token>` deep link into the app.
 app.route('/join', joinRouter());
 
 const api = new Hono<{ Bindings: Bindings; Variables: Variables }>();

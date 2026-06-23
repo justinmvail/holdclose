@@ -1,10 +1,10 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/models/appointment.dart' show AppointmentStatus;
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/providers/home_clock_provider.dart';
-import 'package:careblazers/providers/patient_timeline_provider.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/home/schedule_card.dart';
+import 'package:holdclose/models/appointment.dart' show AppointmentStatus;
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/providers/home_clock_provider.dart';
+import 'package:holdclose/providers/patient_timeline_provider.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/home/schedule_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +15,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// "Morning Medication · 8:00 AM", and an appointment interleaved between
 /// two med windows (windows need not be adjacent). No `theme:` so
 /// google_fonts stays off the network under `flutter test`; the card
-/// pulls brand colors straight off [careblazersColors].
+/// pulls brand colors straight off [holdcloseColors].
 
 const String _patient = 'demo-patient-mary';
 
@@ -128,7 +128,7 @@ void main() {
                 child: MaterialApp(
                   debugShowCheckedModeBanner: false,
                   home: ColoredBox(
-                    color: careblazersColors.background,
+                    color: holdcloseColors.background,
                     child: const Scaffold(
                       backgroundColor: Colors.transparent,
                       body: Padding(

@@ -8,7 +8,7 @@ import '../../providers/settings_provider.dart';
 import '../../services/data_exporter.dart';
 import '../../services/forum_api_client.dart' show forumBackendConfigured;
 import '../../theme.dart';
-import '../../widgets/careblazers_switch.dart';
+import '../../widgets/holdclose_switch.dart';
 import '../../widgets/path_header.dart';
 import 'loved_ones_screen.dart' show LovedOnesScreen;
 
@@ -246,7 +246,7 @@ class _AudioSection extends ConsumerWidget {
         _SectionCard(
           child: Column(
             children: <Widget>[
-              CareblazersSwitchListTile(
+              HoldcloseSwitchListTile(
                 key: SettingsScreen.readAloudToggleKey,
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Read scripts aloud'),
@@ -257,7 +257,7 @@ class _AudioSection extends ConsumerWidget {
                 onChanged: (bool v) => notifier.setReadScriptsAloud(v),
               ),
               const Divider(height: 1),
-              CareblazersSwitchListTile(
+              HoldcloseSwitchListTile(
                 key: SettingsScreen.bundledVoiceToggleKey,
                 contentPadding: EdgeInsets.zero,
                 title: const Text('High-quality bundled voice'),
@@ -282,7 +282,7 @@ class _AudioSection extends ConsumerWidget {
                 enabled: audioOn,
               ),
               const Divider(height: 1),
-              CareblazersSwitchListTile(
+              HoldcloseSwitchListTile(
                 key: SettingsScreen.quietHoursToggleKey,
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Quiet hours'),
@@ -301,7 +301,7 @@ class _AudioSection extends ConsumerWidget {
                 enabled: audioOn && settings.quietHoursEnabled,
               ),
               const Divider(height: 1),
-              CareblazersSwitchListTile(
+              HoldcloseSwitchListTile(
                 key: SettingsScreen.allowAudioToggleKey,
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Always allow audio'),
@@ -763,7 +763,7 @@ class _TrackersSection extends StatelessWidget {
         _SectionCard(
           child: Column(
             children: <Widget>[
-              CareblazersSwitchListTile(
+              HoldcloseSwitchListTile(
                 key: SettingsScreen.notificationsToggleKey,
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Send reminders'),
@@ -781,7 +781,7 @@ class _TrackersSection extends StatelessWidget {
               // of the toggle, so hide it there to avoid confusing real users.
               if (!forumBackendConfigured) ...<Widget>[
                 const Divider(height: 1),
-                CareblazersSwitchListTile(
+                HoldcloseSwitchListTile(
                   key: SettingsScreen.useDemoForumToggleKey,
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Use demo community'),
@@ -823,7 +823,7 @@ class _CareTeamSection extends StatelessWidget {
       children: <Widget>[
         const _SectionHeader(title: 'Care Circle'),
         _SectionCard(
-          child: CareblazersSwitchListTile(
+          child: HoldcloseSwitchListTile(
             key: SettingsScreen.teamCoordinationToggleKey,
             contentPadding: EdgeInsets.zero,
             title: const Text('Coordinate with others'),
@@ -958,7 +958,7 @@ class _DemoSection extends StatelessWidget {
         _SectionCard(
           child: Column(
             children: <Widget>[
-              CareblazersSwitchListTile(
+              HoldcloseSwitchListTile(
                 key: SettingsScreen.resetOnLaunchToggleKey,
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Reset on launch'),

@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,8 +1,8 @@
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/screens/team/circle_qr_screen.dart';
-import 'package:careblazers/screens/team/circle_scan_screen.dart';
-import 'package:careblazers/services/fake_forum_api_client.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/screens/team/circle_qr_screen.dart';
+import 'package:holdclose/screens/team/circle_scan_screen.dart';
+import 'package:holdclose/services/fake_forum_api_client.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -138,7 +138,7 @@ void main() {
     expect(find.text('Joined Test circle.'), findsOneWidget);
   });
 
-  testWidgets('non-careblazers payload shows a friendly invalid message',
+  testWidgets('non-holdclose payload shows a friendly invalid message',
       (tester) async {
     final State<CircleScanScreen> state =
         await _pump(tester, FakeForumApiClient());

@@ -1,7 +1,7 @@
-import 'package:careblazers/providers/photo_attacher_provider.dart';
-import 'package:careblazers/providers/voice_capture_provider.dart';
-import 'package:careblazers/providers/voice_note_recorder_provider.dart';
-import 'package:careblazers/services/real_capture.dart';
+import 'package:holdclose/providers/photo_attacher_provider.dart';
+import 'package:holdclose/providers/voice_capture_provider.dart';
+import 'package:holdclose/providers/voice_note_recorder_provider.dart';
+import 'package:holdclose/services/real_capture.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

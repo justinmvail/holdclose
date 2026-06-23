@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:careblazers/providers/auth_provider.dart';
+import 'package:holdclose/providers/auth_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,7 +47,7 @@ void main() {
 
   const User altUser = User(
     id: 'alt-001',
-    email: 'alt@careblazers.app',
+    email: 'alt@holdclose.app',
     name: 'Alt Caregiver',
   );
 
@@ -69,7 +69,7 @@ void main() {
     test('JSON round-trip', () {
       const User u = User(
         id: 'u-42',
-        email: 'demo@careblazers.app',
+        email: 'demo@holdclose.app',
         name: 'Sarah Henderson',
       );
       final String encoded = jsonEncode(u.toJson());
@@ -122,7 +122,7 @@ void main() {
     test('defaults to the canned Sarah Henderson user', () {
       final FakeAuthProvider fake = FakeAuthProvider();
       expect(fake.user, equals(FakeAuthProvider.cannedSarahHenderson));
-      expect(fake.user.email, 'demo@careblazers.app');
+      expect(fake.user.email, 'demo@holdclose.app');
       expect(fake.user.name, 'Sarah Henderson');
       expect(fake.user.id, isNotEmpty);
     });

@@ -1,8 +1,8 @@
-import 'package:careblazers/l10n/app_localizations.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/guidelines_acknowledged_provider.dart';
-import 'package:careblazers/screens/community/post_compose_screen.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/l10n/app_localizations.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/guidelines_acknowledged_provider.dart';
+import 'package:holdclose/screens/community/post_compose_screen.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -20,7 +20,7 @@ part 'care_circle_provider.g.dart';
 class CareCircleRepository with SyncSinkHost {
   CareCircleRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Close the underlying database. The riverpod provider wires this to
   /// `ref.onDispose`.
@@ -148,14 +148,14 @@ class CareCircleRepository with SyncSinkHost {
 /// reach for [careCircleRepositoryProvider] and never see the concrete
 /// drift database — same indirection [documentsRepositoryProvider] uses.
 ///
-/// In production the repo opens its own [CareblazersDatabase] handle onto
+/// In production the repo opens its own [HoldcloseDatabase] handle onto
 /// the shared SQLite file; SQLite's per-connection serialization keeps
 /// that safe. Tests build a [CareCircleRepository] directly against
-/// `CareblazersDatabase(NativeDatabase.memory())` so each test gets an
+/// `HoldcloseDatabase(NativeDatabase.memory())` so each test gets an
 /// isolated DB.
 @Riverpod(keepAlive: true)
 CareCircleRepository careCircleRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return CareCircleRepository(db);
 }

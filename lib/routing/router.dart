@@ -17,9 +17,6 @@ import '../screens/community/community_guidelines_screen.dart';
 import '../screens/community/learn_playbook_detail_screen.dart';
 import '../screens/community/post_compose_screen.dart';
 import '../screens/community/post_detail_screen.dart';
-import '../screens/decoder/behavior_picker_screen.dart';
-import '../screens/decoder/decoder_result_screen.dart';
-import '../screens/decoder/triage_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/journal/journal_entry_screen.dart';
 import '../screens/journal/journal_screen.dart';
@@ -61,8 +58,8 @@ part 'router.g.dart';
 /// Route names for go_router. Use these instead of raw path strings
 /// when calling `context.goNamed(...)` so a rename only touches one
 /// place.
-class CareblazersRoutes {
-  CareblazersRoutes._();
+class HoldcloseRoutes {
+  HoldcloseRoutes._();
 
   static const String home = 'home';
   static const String journal = 'journal';
@@ -76,9 +73,6 @@ class CareblazersRoutes {
   // mode to append + activate another loved one.
   static const String lovedOnes = 'loved-ones';
   static const String lovedOnesAdd = 'loved-ones-add';
-  static const String decoderBehavior = 'decoder-behavior';
-  static const String decoderTriage = 'decoder-triage';
-  static const String decoderResult = 'decoder-result';
   static const String journalEntry = 'journal-entry';
   static const String journalNew = 'journal-new';
   static const String chatList = 'chat-list';
@@ -148,7 +142,7 @@ class CareblazersRoutes {
 /// [redirect] + [refreshListenable] are optional so widget tests that
 /// only probe route registration (no auth/onboarding state) can still
 /// construct a router with no gates. The production wiring lives in
-/// [careblazersRouterProvider]; that's the path the running app uses.
+/// [holdcloseRouterProvider]; that's the path the running app uses.
 GoRouter buildRouter({
   String initialLocation = '/',
   GoRouterRedirect? redirect,
@@ -172,34 +166,34 @@ GoRouter buildRouter({
       // auto-renders a back arrow in the AppBar.
       GoRoute(
         path: '/onboarding',
-        name: CareblazersRoutes.onboarding,
+        name: HoldcloseRoutes.onboarding,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const WelcomeCarousel(),
       ),
       GoRoute(
         path: '/sign-in',
-        name: CareblazersRoutes.signIn,
+        name: HoldcloseRoutes.signIn,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const SignInScreen(),
       ),
       // New-user loved-one setup wizard — the third gate after the
       // welcome carousel + sign-in. An authenticated caregiver with no
-      // [Patient] on file is funnelled here (see `careblazersRedirect`)
+      // [Patient] on file is funnelled here (see `holdcloseRedirect`)
       // to create "their person"; on save it lands them on Home. A pushed
       // root-navigator route like the other pre-tab screens, so it covers
       // the tab shell and relies on its own in-page chrome (no OS back).
       GoRoute(
         path: '/setup',
-        name: CareblazersRoutes.setup,
+        name: HoldcloseRoutes.setup,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const LovedOneSetupScreen(),
       ),
       GoRoute(
         path: '/settings',
-        name: CareblazersRoutes.settings,
+        name: HoldcloseRoutes.settings,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const SettingsScreen(),
@@ -211,14 +205,14 @@ GoRouter buildRouter({
       // onto the root navigator so they cover the tab bar like Settings.
       GoRoute(
         path: '/loved-ones',
-        name: CareblazersRoutes.lovedOnes,
+        name: HoldcloseRoutes.lovedOnes,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const LovedOnesScreen(),
         routes: <RouteBase>[
           GoRoute(
             path: 'add',
-            name: CareblazersRoutes.lovedOnesAdd,
+            name: HoldcloseRoutes.lovedOnesAdd,
             parentNavigatorKey: rootNavigatorKey,
             builder: (BuildContext context, GoRouterState state) =>
                 const LovedOneSetupScreen(isAdd: true),
@@ -226,89 +220,22 @@ GoRouter buildRouter({
         ],
       ),
       GoRoute(
-        path: '/decoder/behavior',
-        name: CareblazersRoutes.decoderBehavior,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) =>
-            const BehaviorPickerScreen(),
-      ),
-      GoRoute(
-        path: '/decoder/triage',
-        name: CareblazersRoutes.decoderTriage,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) {
-          // The behavior picker (BUILD_SPEC.md §5.2) pushes here with a
-          // [TriageArgs] payload. A deep-link or accidental direct-nav
-          // lands without args — render a soft fallback rather than
-          // crashing the navigator stack.
-          final Object? extra = state.extra;
-          if (extra is! TriageArgs) {
-            return Scaffold(
-              appBar: AppBar(title: const Text('Triage')),
-              body: const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text(
-                    'Pick a behavior to get started.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            );
-          }
-          return TriageScreen(args: extra);
-        },
-      ),
-      GoRoute(
-        path: '/decoder/result',
-        name: CareblazersRoutes.decoderResult,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (BuildContext context, GoRouterState state) {
-          // The triage screen (BUILD_SPEC.md §5.3) pushes here with a
-          // [DecoderResultArgsExtra] in `state.extra`. A deep-link or
-          // accidental direct-nav into `/decoder/result` lands without
-          // args — render a soft fallback rather than crashing the
-          // navigator stack.
-          final Object? extra = state.extra;
-          if (extra is! DecoderResultArgsExtra) {
-            return Scaffold(
-              appBar: AppBar(title: const Text('Decoder')),
-              body: const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text(
-                    'Pick a behavior and answer the three questions to '
-                    'see the coaching script.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            );
-          }
-          return DecoderResultScreen(
-            behavior: extra.behavior,
-            triage: extra.triage,
-            initialAttempt: extra.initialAttempt,
-          );
-        },
-      ),
-      GoRoute(
         path: '/community/compose',
-        name: CareblazersRoutes.communityCompose,
+        name: HoldcloseRoutes.communityCompose,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const PostComposeScreen(),
       ),
       GoRoute(
         path: '/community/guidelines',
-        name: CareblazersRoutes.communityGuidelines,
+        name: HoldcloseRoutes.communityGuidelines,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const CommunityGuidelinesScreen(),
       ),
       GoRoute(
         path: '/community/admin/reports',
-        name: CareblazersRoutes.communityAdminReports,
+        name: HoldcloseRoutes.communityAdminReports,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const AdminReportsScreen(),
@@ -321,7 +248,7 @@ GoRouter buildRouter({
       // screen — cards deep-link straight to YouTube; fb_1780932492880889.)
       GoRoute(
         path: '/community/learn/playbooks/:id',
-        name: CareblazersRoutes.communityLearnPlaybook,
+        name: HoldcloseRoutes.communityLearnPlaybook,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             LearnPlaybookDetailScreen(
@@ -330,7 +257,7 @@ GoRouter buildRouter({
       ),
       GoRoute(
         path: '/community/:postId',
-        name: CareblazersRoutes.communityPostDetail,
+        name: HoldcloseRoutes.communityPostDetail,
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) {
           // Feed tiles push here with the already-fetched [ForumPost]
@@ -353,7 +280,7 @@ GoRouter buildRouter({
           // fetch-by-id round-trip.
           GoRoute(
             path: 'edit',
-            name: CareblazersRoutes.communityPostEdit,
+            name: HoldcloseRoutes.communityPostEdit,
             parentNavigatorKey: rootNavigatorKey,
             builder: (BuildContext context, GoRouterState state) {
               final Object? extra = state.extra;
@@ -373,7 +300,7 @@ GoRouter buildRouter({
       // Emergency Card at the redirect target — this route stays alive.
       GoRoute(
         path: '/crisis',
-        name: CareblazersRoutes.crisis,
+        name: HoldcloseRoutes.crisis,
         parentNavigatorKey: rootNavigatorKey,
         redirect: (BuildContext context, GoRouterState state) =>
             '/medical/cards/emergency',
@@ -401,7 +328,7 @@ GoRouter buildRouter({
             routes: <RouteBase>[
               GoRoute(
                 path: '/',
-                name: CareblazersRoutes.home,
+                name: HoldcloseRoutes.home,
                 builder: (BuildContext context, GoRouterState state) =>
                     const HomeScreen(),
               ),
@@ -427,7 +354,7 @@ GoRouter buildRouter({
             routes: <RouteBase>[
               GoRoute(
                 path: '/medical',
-                name: CareblazersRoutes.medicalHub,
+                name: HoldcloseRoutes.medicalHub,
                 builder: (BuildContext context, GoRouterState state) =>
                     const MedicalHubScreen(),
                 routes: <RouteBase>[
@@ -436,7 +363,7 @@ GoRouter buildRouter({
                   // bar stays; it's also the `/crisis` redirect target.
                   GoRoute(
                     path: 'cards/emergency',
-                    name: CareblazersRoutes.medicalCardsEmergency,
+                    name: HoldcloseRoutes.medicalCardsEmergency,
                     builder: (BuildContext context, GoRouterState state) =>
                         const EmergencyCardScreen(),
                     routes: <RouteBase>[
@@ -446,7 +373,7 @@ GoRouter buildRouter({
                       // notifier. On the modern PathHeader pattern.
                       GoRoute(
                         path: 'edit',
-                        name: CareblazersRoutes.medicalCardsEmergencyEdit,
+                        name: HoldcloseRoutes.medicalCardsEmergencyEdit,
                         builder: (BuildContext context, GoRouterState state) =>
                             const EmergencyCardEditScreen(),
                       ),
@@ -458,19 +385,19 @@ GoRouter buildRouter({
                   // isn't swallowed by the `:id` parameter.
                   GoRoute(
                     path: 'health-log',
-                    name: CareblazersRoutes.medicalHealthLog,
+                    name: HoldcloseRoutes.medicalHealthLog,
                     builder: (BuildContext context, GoRouterState state) =>
                         const HealthLogScreen(),
                     routes: <RouteBase>[
                       GoRoute(
                         path: 'new',
-                        name: CareblazersRoutes.medicalHealthLogNew,
+                        name: HoldcloseRoutes.medicalHealthLogNew,
                         builder: (BuildContext context, GoRouterState state) =>
                             const HealthLogEntryForm(),
                       ),
                       GoRoute(
                         path: ':id/edit',
-                        name: CareblazersRoutes.medicalHealthLogEdit,
+                        name: HoldcloseRoutes.medicalHealthLogEdit,
                         builder: (BuildContext context, GoRouterState state) =>
                             HealthLogEntryForm(
                           entryId: state.pathParameters['id'],
@@ -486,19 +413,19 @@ GoRouter buildRouter({
                   // segment isn't swallowed by the `:id` parameter.
                   GoRoute(
                     path: 'routines',
-                    name: CareblazersRoutes.medicalRoutines,
+                    name: HoldcloseRoutes.medicalRoutines,
                     builder: (BuildContext context, GoRouterState state) =>
                         const CarePlanRoutinesScreen(),
                     routes: <RouteBase>[
                       GoRoute(
                         path: 'new',
-                        name: CareblazersRoutes.medicalRoutineNew,
+                        name: HoldcloseRoutes.medicalRoutineNew,
                         builder: (BuildContext context, GoRouterState state) =>
                             const CarePlanRoutineForm(),
                       ),
                       GoRoute(
                         path: ':id',
-                        name: CareblazersRoutes.medicalRoutineEdit,
+                        name: HoldcloseRoutes.medicalRoutineEdit,
                         builder: (BuildContext context, GoRouterState state) =>
                             CarePlanRoutineForm(
                           routineId: state.pathParameters['id'],
@@ -512,19 +439,19 @@ GoRouter buildRouter({
               // dose-log shortcut. In the Care branch so the tab bar stays.
               GoRoute(
                 path: '/medications',
-                name: CareblazersRoutes.medicationList,
+                name: HoldcloseRoutes.medicationList,
                 builder: (BuildContext context, GoRouterState state) =>
                     const MedicationListScreen(),
                 routes: <RouteBase>[
                   GoRoute(
                     path: 'new',
-                    name: CareblazersRoutes.medicationForm,
+                    name: HoldcloseRoutes.medicationForm,
                     builder: (BuildContext context, GoRouterState state) =>
                         const MedicationFormScreen(),
                   ),
                   GoRoute(
                     path: 'today',
-                    name: CareblazersRoutes.medicationDoseLog,
+                    name: HoldcloseRoutes.medicationDoseLog,
                     // The Home Add sheet's voice button may push a dose-kind
                     // [AddSheetTranscript]; the voice-intake bridge (Phase
                     // 14.14) pre-fills the dose-note field from it.
@@ -536,7 +463,7 @@ GoRouter buildRouter({
                   // shadows the literal `new` / `today` children above.
                   GoRoute(
                     path: ':id/edit',
-                    name: CareblazersRoutes.medicationEdit,
+                    name: HoldcloseRoutes.medicationEdit,
                     builder: (BuildContext context, GoRouterState state) =>
                         MedicationFormScreen(
                       medicationId: state.pathParameters['id'],
@@ -548,19 +475,19 @@ GoRouter buildRouter({
                   // the list for add + edit.
                   GoRoute(
                     path: 'windows',
-                    name: CareblazersRoutes.medicationWindowList,
+                    name: HoldcloseRoutes.medicationWindowList,
                     builder: (BuildContext context, GoRouterState state) =>
                         const DoseWindowListScreen(),
                     routes: <RouteBase>[
                       GoRoute(
                         path: 'new',
-                        name: CareblazersRoutes.medicationWindowNew,
+                        name: HoldcloseRoutes.medicationWindowNew,
                         builder: (BuildContext context, GoRouterState state) =>
                             const DoseWindowFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
-                        name: CareblazersRoutes.medicationWindowEdit,
+                        name: HoldcloseRoutes.medicationWindowEdit,
                         builder: (BuildContext context, GoRouterState state) =>
                             DoseWindowFormScreen(
                           windowId: state.pathParameters['id'],
@@ -574,13 +501,13 @@ GoRouter buildRouter({
               // Care branch so the tab bar stays.
               GoRoute(
                 path: '/appointments',
-                name: CareblazersRoutes.appointmentList,
+                name: HoldcloseRoutes.appointmentList,
                 builder: (BuildContext context, GoRouterState state) =>
                     const AppointmentListScreen(),
                 routes: <RouteBase>[
                   GoRoute(
                     path: 'new',
-                    name: CareblazersRoutes.appointmentForm,
+                    name: HoldcloseRoutes.appointmentForm,
                     // The Home Add sheet's voice button may push an
                     // appointment-kind [AddSheetTranscript]; the voice-intake
                     // bridge (Phase 14.14) pre-fills the visit-notes textarea.
@@ -596,7 +523,7 @@ GoRouter buildRouter({
                   ),
                   GoRoute(
                     path: ':id',
-                    name: CareblazersRoutes.appointmentDetail,
+                    name: HoldcloseRoutes.appointmentDetail,
                     builder: (BuildContext context, GoRouterState state) =>
                         AppointmentDetailScreen(
                       appointmentId: state.pathParameters['id'] ?? '',
@@ -604,7 +531,7 @@ GoRouter buildRouter({
                     routes: <RouteBase>[
                       GoRoute(
                         path: 'edit',
-                        name: CareblazersRoutes.appointmentEdit,
+                        name: HoldcloseRoutes.appointmentEdit,
                         builder: (BuildContext context, GoRouterState state) =>
                             AppointmentFormScreen(
                           appointmentId: state.pathParameters['id'],
@@ -622,13 +549,13 @@ GoRouter buildRouter({
               // by the `:id` parameter.
               GoRoute(
                 path: '/journal',
-                name: CareblazersRoutes.journal,
+                name: HoldcloseRoutes.journal,
                 builder: (BuildContext context, GoRouterState state) =>
                     const JournalScreen(),
                 routes: <RouteBase>[
                   GoRoute(
                     path: 'new',
-                    name: CareblazersRoutes.journalNew,
+                    name: HoldcloseRoutes.journalNew,
                     builder: (BuildContext context, GoRouterState state) {
                       // Two ways in: the chat coach pushes a fully-formed
                       // [JournalWizardArgs]; the Home Add sheet's voice
@@ -653,7 +580,7 @@ GoRouter buildRouter({
                   ),
                   GoRoute(
                     path: ':id',
-                    name: CareblazersRoutes.journalEntry,
+                    name: HoldcloseRoutes.journalEntry,
                     builder: (BuildContext context, GoRouterState state) =>
                         JournalEntryScreen(
                             entryId: state.pathParameters['id'] ?? ''),
@@ -666,7 +593,7 @@ GoRouter buildRouter({
               // `/team/*` internally so existing deep links keep resolving.
               GoRoute(
                 path: '/team',
-                name: CareblazersRoutes.teamHub,
+                name: HoldcloseRoutes.teamHub,
                 builder: (BuildContext context, GoRouterState state) =>
                     const CareTeamHubScreen(),
                 routes: <RouteBase>[
@@ -676,7 +603,7 @@ GoRouter buildRouter({
                   // "Schedule" tile via `?from=medical`).
                   GoRoute(
                     path: 'calendar',
-                    name: CareblazersRoutes.teamCalendar,
+                    name: HoldcloseRoutes.teamCalendar,
                     // `?from=medical` (the Medical hub's "Schedule" tile)
                     // flips the path header to the Medical breadcrumb;
                     // `?date=YYYY-MM-DD` (the chat coach's "take me to that
@@ -694,7 +621,7 @@ GoRouter buildRouter({
                   // stays.
                   GoRoute(
                     path: 'tasks',
-                    name: CareblazersRoutes.teamTasks,
+                    name: HoldcloseRoutes.teamTasks,
                     builder: (BuildContext context, GoRouterState state) =>
                         const TasksScreen(),
                   ),
@@ -703,7 +630,7 @@ GoRouter buildRouter({
                   // the tab bar stays.
                   GoRoute(
                     path: 'shifts',
-                    name: CareblazersRoutes.teamShifts,
+                    name: HoldcloseRoutes.teamShifts,
                     builder: (BuildContext context, GoRouterState state) =>
                         const ShiftsScreen(),
                   ),
@@ -712,7 +639,7 @@ GoRouter buildRouter({
                   // so the tab bar stays.
                   GoRoute(
                     path: 'activity',
-                    name: CareblazersRoutes.teamActivity,
+                    name: HoldcloseRoutes.teamActivity,
                     builder: (BuildContext context, GoRouterState state) =>
                         const ActivityScreen(),
                   ),
@@ -721,7 +648,7 @@ GoRouter buildRouter({
                   // branch so the tab bar stays.
                   GoRoute(
                     path: 'expenses',
-                    name: CareblazersRoutes.teamExpenses,
+                    name: HoldcloseRoutes.teamExpenses,
                     builder: (BuildContext context, GoRouterState state) =>
                         const ExpensesScreen(),
                   ),
@@ -731,7 +658,7 @@ GoRouter buildRouter({
                   // focused modal task.
                   GoRoute(
                     path: 'circle',
-                    name: CareblazersRoutes.teamCircle,
+                    name: HoldcloseRoutes.teamCircle,
                     builder: (BuildContext context, GoRouterState state) =>
                         const CareCircleScreen(),
                     routes: <RouteBase>[
@@ -742,21 +669,21 @@ GoRouter buildRouter({
                       // modal connect task, not a browsable hub page.
                       GoRoute(
                         path: 'username',
-                        name: CareblazersRoutes.teamCircleUsername,
+                        name: HoldcloseRoutes.teamCircleUsername,
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (BuildContext context, GoRouterState state) =>
                             const UsernameScreen(),
                       ),
                       GoRoute(
                         path: 'qr',
-                        name: CareblazersRoutes.teamCircleQr,
+                        name: HoldcloseRoutes.teamCircleQr,
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (BuildContext context, GoRouterState state) =>
                             const CircleQrScreen(),
                       ),
                       GoRoute(
                         path: 'scan',
-                        name: CareblazersRoutes.teamCircleScan,
+                        name: HoldcloseRoutes.teamCircleScan,
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (BuildContext context, GoRouterState state) =>
                             const CircleScanScreen(),
@@ -774,13 +701,13 @@ GoRouter buildRouter({
             routes: <RouteBase>[
               GoRoute(
                 path: '/chat',
-                name: CareblazersRoutes.chatList,
+                name: HoldcloseRoutes.chatList,
                 builder: (BuildContext context, GoRouterState state) =>
                     const ConversationListScreen(),
                 routes: <RouteBase>[
                   GoRoute(
                     path: ':id',
-                    name: CareblazersRoutes.chatThread,
+                    name: HoldcloseRoutes.chatThread,
                     builder: (BuildContext context, GoRouterState state) {
                       final String id = state.pathParameters['id'] ?? '';
                       // Key by conversation id so navigating thread→thread
@@ -805,7 +732,7 @@ GoRouter buildRouter({
             routes: <RouteBase>[
               GoRoute(
                 path: '/community',
-                name: CareblazersRoutes.community,
+                name: HoldcloseRoutes.community,
                 builder: (BuildContext context, GoRouterState state) =>
                     const CommunityFeedScreen(),
               ),
@@ -851,7 +778,7 @@ GoRouter buildRouter({
 /// 4. Signed-in caregivers who land on `/onboarding` or `/sign-in`
 ///    (deep link, browser back) get bounced to `/` rather than being
 ///    asked to re-onboard.
-String? careblazersRedirect({
+String? holdcloseRedirect({
   required String location,
   required bool onboardingCompleted,
   required AuthState authState,
@@ -895,7 +822,7 @@ String? careblazersRedirect({
 /// [onboardingCompletedProvider] notifier into a single [Listenable]
 /// that go_router's `refreshListenable` understands.
 ///
-/// Owned by [careblazersRouterProvider]; widget tests that wire the
+/// Owned by [holdcloseRouterProvider]; widget tests that wire the
 /// redirect by hand can construct one directly and drive it with
 /// [updateAuthState] + [notify].
 @visibleForTesting
@@ -930,7 +857,7 @@ class AuthOnboardingRefresh extends ChangeNotifier {
 /// `MaterialApp.router` triggers — without it, every theme/textScaler
 /// change would tear the router (and its navigation stack) down.
 @Riverpod(keepAlive: true)
-GoRouter careblazersRouter(Ref ref) {
+GoRouter holdcloseRouter(Ref ref) {
   final AuthOnboardingRefresh refresh = AuthOnboardingRefresh();
 
   // Onboarding flips a bool — the redirect re-reads the provider on
@@ -975,7 +902,7 @@ GoRouter careblazersRouter(Ref ref) {
   return buildRouter(
     refreshListenable: refresh,
     redirect: (BuildContext context, GoRouterState state) =>
-        careblazersRedirect(
+        holdcloseRedirect(
       location: state.matchedLocation,
       onboardingCompleted: ref.read(onboardingCompletedProvider),
       authState: refresh.authState,

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:careblazers/widgets/caption_fade.dart';
+import 'package:holdclose/widgets/caption_fade.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

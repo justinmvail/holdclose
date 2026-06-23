@@ -1,9 +1,9 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/screens/team/tasks_screen.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/screens/team/tasks_screen.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,7 +74,7 @@ Widget _host() {
       child: MaterialApp(
         home: const TasksScreen(),
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),

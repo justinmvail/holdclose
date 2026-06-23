@@ -1,8 +1,8 @@
 {
-  "name": "careblazers-backend",
+  "name": "holdclose-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Cloudflare Workers backend for the Careblazers caregiver forum.",
+  "description": "Cloudflare Workers backend for the Holdclose caregiver forum.",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",

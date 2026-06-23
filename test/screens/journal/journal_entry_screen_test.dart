@@ -1,11 +1,8 @@
-import 'package:careblazers/models/behavior.dart';
-import 'package:careblazers/models/decoder_result.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/triage.dart';
-import 'package:careblazers/providers/photo_attacher_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/voice_note_recorder_provider.dart';
-import 'package:careblazers/screens/journal/journal_entry_screen.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/providers/photo_attacher_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/voice_note_recorder_provider.dart';
+import 'package:holdclose/screens/journal/journal_entry_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,38 +58,22 @@ class _SpyPhotoAttacher implements PhotoAttacher {
   }
 }
 
-const Behavior _sundowning =
-    Behavior(id: 'sundowning', label: 'Sundowning', glyph: '🌅');
-
-const TriageAnswers _triage = TriageAnswers(
-  when: TriageWhen.lateAfternoonEvening,
-  whatChanged: TriageWhatChanged.nothing,
-  whatTried: TriageWhatTried.talked,
-);
-
+/// Caregiver-authored journal entry (the post-decoder shape: a free-text
+/// situation + attempts, plus optional notes/voice/photo).
 JournalEntry _entry({
   String id = 'entry-1',
+  String? situationText = 'She kept asking to call her mother.',
+  String? attemptsText = 'I redirected to the photo album.',
   String? notes,
   String? voiceNotePath,
   String? photoPath,
-  JournalOutcome outcome = JournalOutcome.positive,
 }) =>
     JournalEntry(
       id: id,
-      behavior: _sundowning,
-      triage: _triage,
-      result: DecoderResult(
-        say: const <String>[
-          "That sounds really hard. I'm right here with you.",
-          "Let's sit together for a minute.",
-        ],
-        tweak: const <String>['Dim overhead lights.'],
-        dontSay: const <String>["Don't argue."],
-        generatedAt: DateTime.utc(2026, 5, 29, 19, 42),
-      ),
-      outcome: outcome,
-      attempt: 0,
       createdAt: DateTime.utc(2026, 5, 29, 19, 42),
+      occurredAt: DateTime.utc(2026, 5, 29, 19, 42),
+      situationText: situationText,
+      attemptsText: attemptsText,
       notes: notes,
       voiceNotePath: voiceNotePath,
       photoPath: photoPath,
@@ -174,28 +155,44 @@ Future<List<JournalEntry>> _readEntries(
 
 void main() {
   group('JournalEntryScreen — BUILD_SPEC.md §5.6', () {
-    testWidgets('renders behavior chip, outcome chip, and scripts section',
+    testWidgets('renders situation + attempts read-only blocks',
         (WidgetTester tester) async {
-      await _pumpEntry(tester, seedEntry: _entry());
+      await _pumpEntry(
+        tester,
+        seedEntry: _entry(
+          situationText: 'She was anxious before dinner.',
+          attemptsText: 'We sat by the window with tea.',
+        ),
+      );
 
       expect(
-        find.byKey(JournalEntryScreen.behaviorChipKey),
+        find.byKey(JournalEntryScreen.situationSectionKey),
         findsOneWidget,
       );
-      expect(find.text('Sundowning'), findsOneWidget);
-      expect(find.byKey(JournalEntryScreen.outcomeChipKey), findsOneWidget);
-      expect(find.text('That helped'), findsOneWidget);
+      expect(find.text('She was anxious before dinner.'), findsOneWidget);
       expect(
-        find.byKey(JournalEntryScreen.scriptsSectionKey),
+        find.byKey(JournalEntryScreen.attemptsSectionKey),
         findsOneWidget,
       );
-      // Each script line lands inside the read-only quote.
-      expect(
-        find.textContaining("That sounds really hard"),
-        findsOneWidget,
+      expect(find.text('We sat by the window with tea.'), findsOneWidget);
+      // Section headers describe the read-only content.
+      expect(find.text('What happened'), findsOneWidget);
+      expect(find.text('What you tried'), findsOneWidget);
+    });
+
+    testWidgets('situation/attempts blocks are dropped when fields are blank',
+        (WidgetTester tester) async {
+      await _pumpEntry(
+        tester,
+        seedEntry: _entry(situationText: null, attemptsText: null),
       );
-      expect(find.textContaining('Dim overhead lights'), findsOneWidget);
-      expect(find.textContaining("Don't argue"), findsOneWidget);
+
+      expect(find.byKey(JournalEntryScreen.situationSectionKey), findsNothing);
+      expect(find.byKey(JournalEntryScreen.attemptsSectionKey), findsNothing);
+      expect(find.text('What happened'), findsNothing);
+      expect(find.text('What you tried'), findsNothing);
+      // Notes editor still renders so a bare entry is still editable.
+      expect(find.byKey(JournalEntryScreen.notesFieldKey), findsOneWidget);
     });
 
     testWidgets('shows "not here anymore" when id is unknown',

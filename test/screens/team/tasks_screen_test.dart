@@ -1,10 +1,10 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/team/tasks_screen.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/team/tasks_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,13 +34,13 @@ CareTask _task({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late CareTasksRepository tasksRepo;
   late CareCircleRepository circleRepo;
   int ids = 0;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     tasksRepo = CareTasksRepository(db);
     circleRepo = CareCircleRepository(db);
     ids = 0;

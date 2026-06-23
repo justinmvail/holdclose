@@ -1,5 +1,5 @@
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/widgets/schedule_grouping.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/widgets/schedule_grouping.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Pure-function coverage for [groupDoseEventsByWindow] — the shared

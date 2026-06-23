@@ -1,28 +1,27 @@
 import 'dart:async';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/widgets/tab_scaffold.dart';
-import 'package:careblazers/l10n/app_localizations.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/providers/home_conversation_provider.dart';
-import 'package:careblazers/providers/onboarding_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/onboarding/loved_one_setup_screen.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/screens/appointment/appointment_list_screen.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart';
-import 'package:careblazers/screens/community/community_feed_screen.dart';
-import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/screens/medical/emergency_card_screen.dart';
-import 'package:careblazers/screens/medical/medical_hub_screen.dart';
-import 'package:careblazers/screens/team/care_team_hub_screen.dart';
-import 'package:careblazers/screens/medication/medication_list_screen.dart';
-import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
-import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
-import 'package:careblazers/services/chat_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/widgets/tab_scaffold.dart';
+import 'package:holdclose/l10n/app_localizations.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/home_conversation_provider.dart';
+import 'package:holdclose/providers/onboarding_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/onboarding/loved_one_setup_screen.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/screens/appointment/appointment_list_screen.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart';
+import 'package:holdclose/screens/community/community_feed_screen.dart';
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/screens/medical/emergency_card_screen.dart';
+import 'package:holdclose/screens/medical/medical_hub_screen.dart';
+import 'package:holdclose/screens/team/care_team_hub_screen.dart';
+import 'package:holdclose/screens/medication/medication_list_screen.dart';
+import 'package:holdclose/screens/onboarding/sign_in_screen.dart';
+import 'package:holdclose/screens/onboarding/welcome_carousel.dart';
+import 'package:holdclose/services/chat_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,7 +30,7 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 /// Pump the router wrapped in a bare MaterialApp + a ProviderScope.
-/// We deliberately skip `careblazersLightTheme` here — its google_fonts
+/// We deliberately skip `holdcloseLightTheme` here — its google_fonts
 /// TextStyles fire fire-and-forget Futures during construction; in
 /// unit tests without bundled font assets those Futures fail in the
 /// root zone and surface as uncaught errors. The theme contract is
@@ -59,7 +58,7 @@ Future<GoRouter> pumpRouter(
 
   final GoRouter router = buildRouter(initialLocation: initialLocation);
   final DateTime now = DateTime.utc(2026, 5, 30, 12);
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   addTearDown(db.close);
   await tester.pumpWidget(
     ProviderScope(
@@ -102,7 +101,7 @@ Future<GoRouter> pumpRouter(
 String currentPath(GoRouter router) =>
     router.routerDelegate.currentConfiguration.uri.path;
 
-/// One named-route expectation: the [CareblazersRoutes] name, the
+/// One named-route expectation: the [HoldcloseRoutes] name, the
 /// path parameters to fill, and the location it must resolve to.
 class _NamedRoute {
   const _NamedRoute(this.name, this.location, [this.params = const {}]);
@@ -112,7 +111,7 @@ class _NamedRoute {
 }
 
 void main() {
-  group('careblazersRouter — route registration (old + Phase 14 IA)', () {
+  group('holdcloseRouter — route registration (old + Phase 14 IA)', () {
     // Exhaustive check that every registered route — carried over from
     // earlier phases AND added/moved in the Phase 14.5 rewrite — resolves
     // by name to the expected location. `namedLocation` is a pure lookup
@@ -123,54 +122,51 @@ void main() {
     // that DO render cleanly.
     const List<_NamedRoute> registered = <_NamedRoute>[
       // Carried over from earlier phases.
-      _NamedRoute(CareblazersRoutes.home, '/'),
-      _NamedRoute(CareblazersRoutes.decoderBehavior, '/decoder/behavior'),
-      _NamedRoute(CareblazersRoutes.decoderTriage, '/decoder/triage'),
-      _NamedRoute(CareblazersRoutes.decoderResult, '/decoder/result'),
-      _NamedRoute(CareblazersRoutes.settings, '/settings'),
-      _NamedRoute(CareblazersRoutes.onboarding, '/onboarding'),
-      _NamedRoute(CareblazersRoutes.signIn, '/sign-in'),
-      _NamedRoute(CareblazersRoutes.setup, '/setup'),
+      _NamedRoute(HoldcloseRoutes.home, '/'),
+      _NamedRoute(HoldcloseRoutes.settings, '/settings'),
+      _NamedRoute(HoldcloseRoutes.onboarding, '/onboarding'),
+      _NamedRoute(HoldcloseRoutes.signIn, '/sign-in'),
+      _NamedRoute(HoldcloseRoutes.setup, '/setup'),
       // Journal — moved to top-level pushed routes in Phase 14.5.
-      _NamedRoute(CareblazersRoutes.journal, '/journal'),
-      _NamedRoute(CareblazersRoutes.journalNew, '/journal/new'),
-      _NamedRoute(CareblazersRoutes.journalEntry, '/journal/sample-id',
+      _NamedRoute(HoldcloseRoutes.journal, '/journal'),
+      _NamedRoute(HoldcloseRoutes.journalNew, '/journal/new'),
+      _NamedRoute(HoldcloseRoutes.journalEntry, '/journal/sample-id',
           <String, String>{'id': 'sample-id'}),
       // Medications — moved to top-level pushed routes in Phase 14.5.
-      _NamedRoute(CareblazersRoutes.medicationList, '/medications'),
-      _NamedRoute(CareblazersRoutes.medicationForm, '/medications/new'),
-      _NamedRoute(CareblazersRoutes.medicationEdit,
+      _NamedRoute(HoldcloseRoutes.medicationList, '/medications'),
+      _NamedRoute(HoldcloseRoutes.medicationForm, '/medications/new'),
+      _NamedRoute(HoldcloseRoutes.medicationEdit,
           '/medications/sample-id/edit', <String, String>{'id': 'sample-id'}),
-      _NamedRoute(CareblazersRoutes.medicationDoseLog, '/medications/today'),
+      _NamedRoute(HoldcloseRoutes.medicationDoseLog, '/medications/today'),
       // Appointments — moved to top-level pushed routes in Phase 14.5.
-      _NamedRoute(CareblazersRoutes.appointmentList, '/appointments'),
-      _NamedRoute(CareblazersRoutes.appointmentForm, '/appointments/new'),
-      _NamedRoute(CareblazersRoutes.appointmentDetail,
+      _NamedRoute(HoldcloseRoutes.appointmentList, '/appointments'),
+      _NamedRoute(HoldcloseRoutes.appointmentForm, '/appointments/new'),
+      _NamedRoute(HoldcloseRoutes.appointmentDetail,
           '/appointments/sample-id', <String, String>{'id': 'sample-id'}),
-      _NamedRoute(CareblazersRoutes.appointmentEdit,
+      _NamedRoute(HoldcloseRoutes.appointmentEdit,
           '/appointments/sample-id/edit', <String, String>{'id': 'sample-id'}),
       // Community shell branch + its pushed companions.
-      _NamedRoute(CareblazersRoutes.community, '/community'),
-      _NamedRoute(CareblazersRoutes.communityCompose, '/community/compose'),
+      _NamedRoute(HoldcloseRoutes.community, '/community'),
+      _NamedRoute(HoldcloseRoutes.communityCompose, '/community/compose'),
       _NamedRoute(
-          CareblazersRoutes.communityGuidelines, '/community/guidelines'),
+          HoldcloseRoutes.communityGuidelines, '/community/guidelines'),
       _NamedRoute(
-          CareblazersRoutes.communityAdminReports, '/community/admin/reports'),
-      _NamedRoute(CareblazersRoutes.communityPostDetail,
+          HoldcloseRoutes.communityAdminReports, '/community/admin/reports'),
+      _NamedRoute(HoldcloseRoutes.communityPostDetail,
           '/community/sample-post', <String, String>{'postId': 'sample-post'}),
       // New Phase 14 shell branches + the Medical emergency sub-route.
-      _NamedRoute(CareblazersRoutes.medicalHub, '/medical'),
+      _NamedRoute(HoldcloseRoutes.medicalHub, '/medical'),
       _NamedRoute(
-          CareblazersRoutes.medicalCardsEmergency, '/medical/cards/emergency'),
-      _NamedRoute(CareblazersRoutes.medicalCardsEmergencyEdit,
+          HoldcloseRoutes.medicalCardsEmergency, '/medical/cards/emergency'),
+      _NamedRoute(HoldcloseRoutes.medicalCardsEmergencyEdit,
           '/medical/cards/emergency/edit'),
-      _NamedRoute(CareblazersRoutes.teamHub, '/team'),
-      _NamedRoute(CareblazersRoutes.chatList, '/chat'),
-      _NamedRoute(CareblazersRoutes.chatThread, '/chat/sample-id',
+      _NamedRoute(HoldcloseRoutes.teamHub, '/team'),
+      _NamedRoute(HoldcloseRoutes.chatList, '/chat'),
+      _NamedRoute(HoldcloseRoutes.chatThread, '/chat/sample-id',
           <String, String>{'id': 'sample-id'}),
       // `/crisis` stays registered for deep-link compat (it redirects at
       // navigation time — see the behavioural group below).
-      _NamedRoute(CareblazersRoutes.crisis, '/crisis'),
+      _NamedRoute(HoldcloseRoutes.crisis, '/crisis'),
     ];
 
     for (final _NamedRoute route in registered) {
@@ -185,7 +181,7 @@ void main() {
     }
   });
 
-  group('careblazersRouter — fixed 4-tab shell', () {
+  group('holdcloseRouter — fixed 4-tab shell', () {
     testWidgets(
       'opens on Home by default inside the tab shell',
       (WidgetTester tester) async {
@@ -285,7 +281,7 @@ void main() {
     );
   });
 
-  group('careblazersRouter — push semantics on the moved feature routes', () {
+  group('holdcloseRouter — push semantics on the moved feature routes', () {
     testWidgets(
       'pushing /medications keeps the tab bar + leaves a PathHeader back',
       (WidgetTester tester) async {
@@ -361,38 +357,14 @@ void main() {
         expect(currentPath(router), '/medical');
       },
     );
-
-    testWidgets(
-      'pushing /decoder/behavior covers the shell + leaves a PathHeader back',
-      (WidgetTester tester) async {
-        final GoRouter router = await pumpRouter(tester);
-
-        unawaited(router.push('/decoder/behavior'));
-        await tester.pumpAndSettle();
-
-        expect(find.byType(BehaviorPickerScreen), findsOneWidget);
-        // The picker sits under the Journal hub, so its PathHeader back
-        // affordance is the tappable 'Journal' breadcrumb crumb — the
-        // replacement for the old AppBar back arrow.
-        expect(find.widgetWithText(InkWell, 'Journal'), findsOneWidget);
-        expect(find.byType(TabScaffoldBar), findsNothing);
-
-        // Tapping the crumb runs context.go('/journal') → the Journal
-        // screen; the behavior picker is gone.
-        await tester.tap(find.widgetWithText(InkWell, 'Journal'));
-        await tester.pumpAndSettle();
-        expect(find.byType(BehaviorPickerScreen), findsNothing);
-        expect(currentPath(router), '/journal');
-      },
-    );
   });
 
-  group('careblazersRedirect — pure policy (BUILD_SPEC.md §5.11 + §5.12)', () {
+  group('holdcloseRedirect — pure policy (BUILD_SPEC.md §5.11 + §5.12)', () {
     const AuthState signedOut = AuthState.signedOut();
     const AuthState signedIn = AuthState.signedIn(
       user: User(
         id: 'redirect-test',
-        email: 'redirect@careblazers.app',
+        email: 'redirect@holdclose.app',
         name: 'Redirect Test',
       ),
     );
@@ -400,7 +372,7 @@ void main() {
 
     test('un-onboarded + signed-out funnels everything to /onboarding', () {
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/',
           onboardingCompleted: false,
           authState: signedOut,
@@ -409,7 +381,7 @@ void main() {
         '/onboarding',
       );
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/journal',
           onboardingCompleted: false,
           authState: signedOut,
@@ -418,7 +390,7 @@ void main() {
         '/onboarding',
       );
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/sign-in',
           onboardingCompleted: false,
           authState: signedOut,
@@ -437,7 +409,7 @@ void main() {
         // gate's target location — otherwise go_router treats the
         // decision as unstable and bails after its safety limit.
         expect(
-          careblazersRedirect(
+          holdcloseRedirect(
             location: '/onboarding',
             onboardingCompleted: false,
             authState: signedOut,
@@ -450,7 +422,7 @@ void main() {
 
     test('onboarded + signed-out funnels everything to /sign-in', () {
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/',
           onboardingCompleted: true,
           authState: signedOut,
@@ -459,7 +431,7 @@ void main() {
         '/sign-in',
       );
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/journal',
           onboardingCompleted: true,
           authState: signedOut,
@@ -468,7 +440,7 @@ void main() {
         '/sign-in',
       );
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/onboarding',
           onboardingCompleted: true,
           authState: signedOut,
@@ -481,7 +453,7 @@ void main() {
 
     test('/sign-in returns null when onboarded + signed-out (no loop)', () {
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/sign-in',
           onboardingCompleted: true,
           authState: signedOut,
@@ -497,7 +469,7 @@ void main() {
       // `/sign-in` mid-flow — treat anything that isn't explicitly
       // signedIn as signedOut.
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/sign-in',
           onboardingCompleted: true,
           authState: loading,
@@ -506,7 +478,7 @@ void main() {
         isNull,
       );
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/',
           onboardingCompleted: true,
           authState: loading,
@@ -518,7 +490,7 @@ void main() {
 
     test('signed-in user can navigate anywhere outside the auth screens', () {
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/',
           onboardingCompleted: true,
           authState: signedIn,
@@ -527,7 +499,7 @@ void main() {
         isNull,
       );
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/journal',
           onboardingCompleted: true,
           authState: signedIn,
@@ -536,8 +508,8 @@ void main() {
         isNull,
       );
       expect(
-        careblazersRedirect(
-          location: '/decoder/result',
+        holdcloseRedirect(
+          location: '/medical',
           onboardingCompleted: true,
           authState: signedIn,
           patientConfigured: true,
@@ -553,7 +525,7 @@ void main() {
         // an auth screen — kick them home rather than asking them to
         // re-onboard.
         expect(
-          careblazersRedirect(
+          holdcloseRedirect(
             location: '/onboarding',
             onboardingCompleted: true,
             authState: signedIn,
@@ -562,7 +534,7 @@ void main() {
           '/',
         );
         expect(
-          careblazersRedirect(
+          holdcloseRedirect(
             location: '/sign-in',
             onboardingCompleted: true,
             authState: signedIn,
@@ -580,7 +552,7 @@ void main() {
         // in, then has no loved one on file yet — every location collapses
         // to the setup wizard until one is saved.
         expect(
-          careblazersRedirect(
+          holdcloseRedirect(
             location: '/',
             onboardingCompleted: true,
             authState: signedIn,
@@ -589,7 +561,7 @@ void main() {
           '/setup',
         );
         expect(
-          careblazersRedirect(
+          holdcloseRedirect(
             location: '/journal',
             onboardingCompleted: true,
             authState: signedIn,
@@ -604,7 +576,7 @@ void main() {
       // The redirect MUST return null on the gate's own target so
       // go_router treats the decision as stable.
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/setup',
           onboardingCompleted: true,
           authState: signedIn,
@@ -618,7 +590,7 @@ void main() {
       // Once a loved one is on file the setup gate is satisfied: Home
       // resolves cleanly and a stray landing on /setup bounces home.
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/',
           onboardingCompleted: true,
           authState: signedIn,
@@ -627,7 +599,7 @@ void main() {
         isNull,
       );
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/setup',
           onboardingCompleted: true,
           authState: signedIn,
@@ -643,7 +615,7 @@ void main() {
       // at the earlier gate first — /setup is unreachable until both
       // earlier gates pass.
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/',
           onboardingCompleted: false,
           authState: signedIn,
@@ -652,7 +624,7 @@ void main() {
         '/onboarding',
       );
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/',
           onboardingCompleted: true,
           authState: signedOut,
@@ -672,7 +644,7 @@ void main() {
         // to the setup wizard, which would make them create a duplicate
         // (fb 2026-06-13).
         expect(
-          careblazersRedirect(
+          holdcloseRedirect(
             location: '/',
             onboardingCompleted: true,
             authState: signedIn,
@@ -684,7 +656,7 @@ void main() {
         // The sign-in screen's own `context.go('/')` lands on '/setup' via
         // an earlier frame — still bounced back while the lookup runs.
         expect(
-          careblazersRedirect(
+          holdcloseRedirect(
             location: '/setup',
             onboardingCompleted: true,
             authState: signedIn,
@@ -701,7 +673,7 @@ void main() {
       // stable and the sign-in page's state is preserved (no re-navigation
       // ping-pong) for the duration of the lookup.
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/sign-in',
           onboardingCompleted: true,
           authState: signedIn,
@@ -719,7 +691,7 @@ void main() {
         // flips true) the gate opens to Home regardless of a not-yet-
         // cleared pending flag — patient-on-file always wins.
         expect(
-          careblazersRedirect(
+          holdcloseRedirect(
             location: '/',
             onboardingCompleted: true,
             authState: signedIn,
@@ -736,7 +708,7 @@ void main() {
       // gate sits above the loved-one lookup, so they still go to sign-in
       // (which is where the flow lives anyway).
       expect(
-        careblazersRedirect(
+        holdcloseRedirect(
           location: '/',
           onboardingCompleted: true,
           authState: signedOut,
@@ -754,7 +726,7 @@ void main() {
         // caregiver), the setup wizard is exactly right — the default
         // (pending false) preserves the original gate behavior.
         expect(
-          careblazersRedirect(
+          holdcloseRedirect(
             location: '/',
             onboardingCompleted: true,
             authState: signedIn,
@@ -767,7 +739,7 @@ void main() {
     );
   });
 
-  group('careblazersRouterProvider — wired redirect (task 31)', () {
+  group('holdcloseRouterProvider — wired redirect (task 31)', () {
     testWidgets(
       'unauthenticated + un-onboarded app lands on /onboarding',
       (WidgetTester tester) async {
@@ -927,7 +899,7 @@ class _RedirectSpyAuth implements AuthProvider {
 
   static const User _user = User(
     id: 'redirect-spy-user',
-    email: 'spy@careblazers.app',
+    email: 'spy@holdclose.app',
     name: 'Spy Caregiver',
   );
 
@@ -965,7 +937,7 @@ class _RedirectSpyAuth implements AuthProvider {
   }
 }
 
-/// Pump [careblazersRouterProvider] inside a real `MaterialApp.router`
+/// Pump [holdcloseRouterProvider] inside a real `MaterialApp.router`
 /// with auth overridden to [auth]. Returns the [ProviderContainer] so
 /// tests can read [onboardingCompletedProvider] without going through
 /// the widget tree.
@@ -1000,7 +972,7 @@ Future<ProviderContainer> _pumpWiredRouter(
   );
   addTearDown(container.dispose);
 
-  final GoRouter router = container.read(careblazersRouterProvider);
+  final GoRouter router = container.read(holdcloseRouterProvider);
 
   await tester.pumpWidget(
     UncontrolledProviderScope(

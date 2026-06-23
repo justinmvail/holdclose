@@ -1,18 +1,18 @@
 import '../support/forum_cache_test_override.dart';
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/providers/home_clock_provider.dart';
-import 'package:careblazers/providers/patient_timeline_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/appointment/appointment_list_screen.dart'
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/home_clock_provider.dart';
+import 'package:holdclose/providers/patient_timeline_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/appointment/appointment_list_screen.dart'
     show appointmentListClockProvider;
-import 'package:careblazers/screens/medication/dose_log_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/screens/medication/dose_log_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,7 +62,7 @@ void main() {
                 // "No medications today." empty state.
                 medicationRepositoryBackendProvider.overrideWithValue(
                   MedicationRepository(
-                    CareblazersDatabase(NativeDatabase.memory()),
+                    HoldcloseDatabase(NativeDatabase.memory()),
                     clock: () => _goldenNow,
                   ),
                 ),
@@ -82,7 +82,7 @@ void main() {
                 // router's calendar route happy in goldens.
                 appointmentRepositoryBackendProvider.overrideWithValue(
                   AppointmentRepository(
-                    CareblazersDatabase(NativeDatabase.memory()),
+                    HoldcloseDatabase(NativeDatabase.memory()),
                     clock: () => _goldenNow,
                   ),
                 ),
@@ -96,13 +96,13 @@ void main() {
                 // No `theme:` — google_fonts can't fetch under
                 // `flutter test` (see test/golden/flutter_test_config.dart).
                 // HomeScreen pulls brand colors directly off
-                // careblazersColors, so the scaffold stays brand-accurate
+                // holdcloseColors, so the scaffold stays brand-accurate
                 // without dragging the google_fonts TextTheme through.
                 child: MaterialApp.router(
                   routerConfig: buildRouter(),
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.surfaceWarm,
+                      color: holdcloseColors.surfaceWarm,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },

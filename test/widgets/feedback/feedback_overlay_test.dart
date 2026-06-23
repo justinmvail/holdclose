@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:careblazers/services/feedback_service.dart';
-import 'package:careblazers/widgets/feedback/feedback_overlay.dart';
-import 'package:careblazers/widgets/feedback/feedback_sheet.dart';
+import 'package:holdclose/services/feedback_service.dart';
+import 'package:holdclose/widgets/feedback/feedback_overlay.dart';
+import 'package:holdclose/widgets/feedback/feedback_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

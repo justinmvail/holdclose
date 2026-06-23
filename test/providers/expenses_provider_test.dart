@@ -1,9 +1,9 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/models/expense.dart';
-import 'package:careblazers/providers/active_patient_provider.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/models/expense.dart';
+import 'package:holdclose/providers/active_patient_provider.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,11 +59,11 @@ void main() {
   });
 
   group('ExpensesRepository — CRUD', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late ExpensesRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = ExpensesRepository(db);
     });
 
@@ -149,7 +149,7 @@ void main() {
   });
 
   group('Expenses notifier — CRUD', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late ExpensesRepository repo;
 
     ProviderContainer makeContainer() {
@@ -164,7 +164,7 @@ void main() {
     }
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = ExpensesRepository(db);
     });
 
@@ -223,12 +223,12 @@ void main() {
   });
 
   group('expensesView — grouping + payer join', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late ExpensesRepository expensesRepo;
     late CareCircleRepository circleRepo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       expensesRepo = ExpensesRepository(db);
       circleRepo = CareCircleRepository(db);
     });

@@ -22,7 +22,7 @@
          dataExtractionRules excluding the DB) if cloud restore ever
          becomes a product feature. -->
     <application
-        android:label="careblazers"
+        android:label="Holdclose"
         android:name="${applicationName}"
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -50,8 +50,8 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
             <!-- Care Circle invite LINKS (2026-06-08). Opens the app on a
-                 `careblazers://` custom-scheme deep link (e.g.
-                 `careblazers://join/<token>`) tapped from a shared text
+                 `holdclose://` custom-scheme deep link (e.g.
+                 `holdclose://join/<token>`) tapped from a shared text
                  link / the backend's public /join/<token> landing page.
                  The app_links plugin delivers the URI; app.dart redeems
                  the token. iOS registers the same scheme in Info.plist. -->
@@ -59,7 +59,7 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="careblazers"/>
+                <data android:scheme="holdclose"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

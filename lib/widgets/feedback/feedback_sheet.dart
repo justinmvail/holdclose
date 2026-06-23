@@ -9,7 +9,7 @@ import '../../services/feedback_service.dart';
 import '../../services/log_buffer.dart';
 import '../../services/voice_intake.dart';
 import '../../theme.dart';
-import '../careblazers_switch.dart';
+import '../holdclose_switch.dart';
 
 /// Opens the alpha feedback sheet. Shared entry point so the overlay and
 /// tests use one path. [route] is the screen the tester was on; [screenshot]
@@ -328,7 +328,7 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
                       style: textTheme.bodyMedium?.copyWith(fontSize: 14),
                     ),
                   ),
-                  CareblazersSwitch(
+                  HoldcloseSwitch(
                     key: FeedbackSheet.screenshotToggleKey,
                     value: _includeScreenshot,
                     onChanged: (bool v) =>
@@ -349,7 +349,7 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
                     style: textTheme.bodyMedium?.copyWith(fontSize: 14),
                   ),
                 ),
-                CareblazersSwitch(
+                HoldcloseSwitch(
                   key: FeedbackSheet.logsToggleKey,
                   value: _includeLogs,
                   onChanged: (bool v) => setState(() => _includeLogs = v),

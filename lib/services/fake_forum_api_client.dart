@@ -59,14 +59,14 @@ class FakeForumApiClient extends ForumApiClient {
 
   /// The synthetic profile the demo signs in as. The fake auth
   /// provider's user maps to `careblazers_user_id = 'demo-user'`.
-  static const String _demoUserCareblazersId = 'demo-user';
+  static const String _demoUserHoldcloseId = 'demo-user';
   static const String _demoProfileId = 'demo-profile';
 
   void _seedDemoData() {
     final DateTime now = _clock();
-    _profiles[_demoUserCareblazersId] = ForumProfile(
+    _profiles[_demoUserHoldcloseId] = ForumProfile(
       id: _demoProfileId,
-      careblazersUserId: _demoUserCareblazersId,
+      careblazersUserId: _demoUserHoldcloseId,
       displayName: 'You',
       joinedAt: now.subtract(const Duration(days: 60)),
       role: 'user',
@@ -159,16 +159,16 @@ class FakeForumApiClient extends ForumApiClient {
       '$prefix-${_clock().millisecondsSinceEpoch}-${_rng.nextInt(1 << 32)}';
 
   ForumProfile _resolveMyProfile() {
-    final ForumProfile? p = _profiles[_demoUserCareblazersId];
+    final ForumProfile? p = _profiles[_demoUserHoldcloseId];
     if (p != null) return p;
     final ForumProfile fresh = ForumProfile(
       id: _demoProfileId,
-      careblazersUserId: _demoUserCareblazersId,
+      careblazersUserId: _demoUserHoldcloseId,
       displayName: 'You',
       joinedAt: _clock(),
       role: 'user',
     );
-    _profiles[_demoUserCareblazersId] = fresh;
+    _profiles[_demoUserHoldcloseId] = fresh;
     return fresh;
   }
 

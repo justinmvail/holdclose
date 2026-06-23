@@ -1,10 +1,10 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/widgets/tab_scaffold.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/widgets/tab_scaffold.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,10 +21,10 @@ DateTime _fixedNow() => DateTime.utc(2026, 5, 29, 19, 42);
 /// Only the Chat branch is preloaded (branches default to lazy build), so
 /// the other four tabs' screens never mount and we don't drag their
 /// providers into the harness.
-Future<({ChatRepository repo, CareblazersDatabase db})> _pump(
+Future<({ChatRepository repo, HoldcloseDatabase db})> _pump(
   WidgetTester tester, {
   required ChatRepository repo,
-  required CareblazersDatabase db,
+  required HoldcloseDatabase db,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -66,11 +66,11 @@ Future<void> _seedOneThread(ChatRepository repo) async {
 }
 
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late ChatRepository repo;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = ChatRepository(db);
   });
 

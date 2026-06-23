@@ -1,48 +1,27 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/models/behavior.dart';
-import 'package:careblazers/models/decoder_result.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/triage.dart';
-import 'package:careblazers/providers/photo_attacher_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/voice_note_recorder_provider.dart';
-import 'package:careblazers/screens/journal/journal_entry_screen.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/providers/photo_attacher_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/voice_note_recorder_provider.dart';
+import 'package:holdclose/screens/journal/journal_entry_screen.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
-const Behavior _sundowning =
-    Behavior(id: 'sundowning', label: 'Sundowning', glyph: '🌅');
-
-const TriageAnswers _triage = TriageAnswers(
-  when: TriageWhen.lateAfternoonEvening,
-  whatChanged: TriageWhatChanged.nothing,
-  whatTried: TriageWhatTried.talked,
-);
-
+/// Caregiver-authored entry with every optional field populated, so the
+/// golden exercises the situation + attempts read-only blocks, the notes
+/// editor, and the voice row in one pass.
 JournalEntry _populatedEntry() => JournalEntry(
       id: 'golden-entry',
-      behavior: _sundowning,
-      triage: _triage,
-      result: DecoderResult(
-        say: const <String>[
-          "That sounds really hard. I'm right here with you.",
-          "Let's sit together for a minute.",
-        ],
-        tweak: const <String>[
-          'Dim overhead lights and switch on a warm lamp.',
-        ],
-        dontSay: const <String>[
-          "Don't say 'you already asked me that'.",
-        ],
-        generatedAt: DateTime.utc(2026, 5, 29, 19, 42),
-      ),
-      outcome: JournalOutcome.positive,
-      attempt: 0,
       createdAt: DateTime.utc(2026, 5, 29, 19, 42),
+      occurredAt: DateTime.utc(2026, 5, 29, 19, 42),
+      situationText:
+          'She kept asking to call her mother, getting more upset each time.',
+      attemptsText:
+          'I dimmed the overhead lights and we sat together with a warm lamp.',
       notes: 'Sat with her on the porch — the lamp helped within a minute.',
       voiceNotePath: 'voice-fixture.m4a',
     );
@@ -56,7 +35,7 @@ InMemoryStorageProvider _populatedStorage() {
 void main() {
   group('JournalEntryScreen golden', () {
     goldenTest(
-      'renders behavior + outcome chips, scripts, notes, voice + photo rows',
+      'renders situation + attempts blocks, notes, voice + photo rows',
       fileName: 'journal_entry_screen_populated',
       builder: () => GoldenTestGroup(
         columns: 1,
@@ -79,7 +58,7 @@ void main() {
                   routerConfig: _goldenRouter(),
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.background,
+                      color: holdcloseColors.background,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },

@@ -97,7 +97,7 @@ abstract class AppLocalizations {
   /// The application's name, shown as the MaterialApp title.
   ///
   /// In en, this message translates to:
-  /// **'Careblazers'**
+  /// **'Holdclose'**
   String get appTitle;
 
   /// Generic confirm/save button label, reused across forms.
@@ -229,13 +229,13 @@ abstract class AppLocalizations {
   /// Brand wordmark shown at the top of the sign-in screen.
   ///
   /// In en, this message translates to:
-  /// **'Careblazers'**
+  /// **'Holdclose'**
   String get signInTitle;
 
   /// Tagline beneath the wordmark on the sign-in screen; mirrors welcome-carousel page 1.
   ///
   /// In en, this message translates to:
-  /// **'We make caregiving for someone with dementia easier.'**
+  /// **'We make caring for someone you love a little easier.'**
   String get signInTagline;
 
   /// Error banner message shown when an OAuth sign-in flow fails or is cancelled.
@@ -367,7 +367,7 @@ abstract class AppLocalizations {
   /// Placeholder hint for the loved-one diagnosis field.
   ///
   /// In en, this message translates to:
-  /// **'e.g. Alzheimer\'s disease'**
+  /// **'e.g. Parkinson\'s, stroke recovery, a diagnosis'**
   String get lovedOneSetupDiagnosisHint;
 
   /// Field label for the optional loved-one allergies input.

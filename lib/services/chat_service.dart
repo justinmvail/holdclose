@@ -144,17 +144,17 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
       for (int i = 0; i < history.length - 1; i++) {
         final ChatTurn turn = history[i];
         final String label = turn.role == MessageRole.user
-            ? 'Careblazer'
+            ? 'Caregiver'
             : 'Coach';
         // Indent continuation lines so multi-line content can never put
-        // "Coach:" / "Careblazer:" at column 0 and spoof a turn boundary
+        // "Coach:" / "Caregiver:" at column 0 and spoof a turn boundary
         // (role labels are only ever at the start of an unindented line).
         final String content = turn.content.replaceAll('\n', '\n  ');
         sb.writeln('$label: $content');
       }
       sb.writeln();
     }
-    sb.writeln('[Latest Careblazer message]');
+    sb.writeln('[Latest caregiver message]');
     sb.write(history.last.content);
     return sb.toString();
   }
@@ -378,11 +378,11 @@ typedef ChatTitleGenerator = Future<String?> Function(List<ChatTurn> turns);
 /// a few words, not a sentence; [sanitizeChatTitle] hardens whatever comes
 /// back (strips quotes/punctuation, caps the length at a word boundary).
 const String chatTitleSystemPrompt =
-    'You name a saved conversation for a dementia caregiver. Reply with ONLY '
+    'You name a saved conversation for a family caregiver. Reply with ONLY '
     'a short, specific title of 2 to 5 words that captures what the caregiver '
     'is asking about. Title Case. No quotes, no punctuation, no emoji, no '
-    'trailing period. Examples: Sundowning At Dinner, Refusing To Bathe, '
-    'Repeating The Same Question.';
+    'trailing period. Examples: Restless At Dinner, Refusing To Bathe, '
+    'Asking The Same Question.';
 
 /// Clean a raw model-produced title into a tile-ready label, or null when
 /// nothing usable remains. Takes the first line, strips wrapping quotes and
@@ -508,7 +508,7 @@ class VoiceIntentChat extends VoiceIntentOutcome {
   final String conversationId;
 }
 
-/// Multi-turn dementia-care chat orchestrator (TASKS.md Phase 11.3).
+/// Multi-turn caregiving chat orchestrator (TASKS.md Phase 11.3).
 ///
 /// Wraps a [ChatLLMBackend] (defaults to [ClaudeShimChatBackend], the
 /// shim-backed real impl) and a [ChatRepository]. Per-message flow:
@@ -871,7 +871,7 @@ class ChatService {
   }
 
   /// Actions that REMOVE or CANCEL the caregiver's data. These are never
-  /// auto-executed from a model reply — in a dementia-care app a silently
+  /// auto-executed from a model reply — in a caregiving app a silently
   /// deleted medication or cancelled appointment is a safety event, and
   /// a crafted journal/med name synced from a circle peer could otherwise
   /// smuggle such a tag into the prompt (indirect injection). They are
@@ -1110,7 +1110,7 @@ class ChatService {
 
 /// Deterministic, offline [ChatLLMBackend] for demo + test builds —
 /// the chat counterpart of [FakeLLMProvider]. Streams a short, canned,
-/// Dr.-Natali-voiced reply in word chunks (so the streaming UI animates
+/// coaching-voice reply in word chunks (so the streaming UI animates
 /// exactly as live) chosen by simple keyword so the pitch demo feels
 /// responsive without a network, a shim, or nondeterminism. Never emits
 /// an `[action:…]` tag — demo chat reads, it doesn't write.

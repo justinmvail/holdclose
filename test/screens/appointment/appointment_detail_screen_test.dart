@@ -1,10 +1,10 @@
 import 'dart:convert';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart' as model;
-import 'package:careblazers/providers/link_launcher_provider.dart';
-import 'package:careblazers/screens/appointment/appointment_detail_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart' as model;
+import 'package:holdclose/providers/link_launcher_provider.dart';
+import 'package:holdclose/screens/appointment/appointment_detail_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
@@ -15,7 +15,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 DateTime _fixedNow() => DateTime.utc(2026, 6, 1, 12);
 
 Future<void> _seedProvider(
-  CareblazersDatabase db, {
+  HoldcloseDatabase db, {
   String id = 'prov-1',
   String name = 'Dr. Ortega',
   String phone = '(415) 555-0188',
@@ -62,12 +62,12 @@ model.Appointment _appt({
 Future<({
   GoRouter router,
   AppointmentRepository repo,
-  CareblazersDatabase db,
+  HoldcloseDatabase db,
   RecordingLinkLauncher launcher,
 })> _pumpDetail(
   WidgetTester tester, {
   required AppointmentRepository repo,
-  required CareblazersDatabase db,
+  required HoldcloseDatabase db,
   required String appointmentId,
   Size surfaceSize = const Size(420, 1400),
 }) async {
@@ -118,11 +118,11 @@ Future<({
 }
 
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late AppointmentRepository repo;
 
   setUp(() async {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = AppointmentRepository(db, clock: _fixedNow);
     await _seedProvider(db);
   });

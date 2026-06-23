@@ -1,5 +1,5 @@
-import 'package:careblazers/screens/journal/journal_wizard_screen.dart';
-import 'package:careblazers/services/voice_intake.dart';
+import 'package:holdclose/screens/journal/journal_wizard_screen.dart';
+import 'package:holdclose/services/voice_intake.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

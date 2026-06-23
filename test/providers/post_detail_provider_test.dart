@@ -1,6 +1,6 @@
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/post_detail_provider.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/post_detail_provider.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;

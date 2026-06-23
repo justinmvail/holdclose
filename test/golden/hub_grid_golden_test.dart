@@ -1,11 +1,11 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/hub_tile.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/hub_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A populated Medical-style hub: six tiles across the brand chip-color
-/// palette (BUILD_SPEC.md §5.13). Chip colors are [CareblazersColors]
+/// palette (BUILD_SPEC.md §5.13). Chip colors are [HoldcloseColors]
 /// tokens — the HTML reference's coral/teal/amber/plum placeholders are
 /// discarded per docs/MENU_LAYOUT_SPEC.md.
 final List<HubTile> _tiles = <HubTile>[
@@ -13,42 +13,42 @@ final List<HubTile> _tiles = <HubTile>[
     icon: Icons.medication_outlined,
     label: 'Medications',
     subLabel: 'doses & reminders',
-    chipColor: careblazersColors.primary,
+    chipColor: holdcloseColors.primary,
     onTap: () {},
   ),
   HubTile(
     icon: Icons.schedule_outlined,
     label: 'Medication Schedule',
     subLabel: 'daily timeline',
-    chipColor: careblazersColors.cta,
+    chipColor: holdcloseColors.cta,
     onTap: () {},
   ),
   HubTile(
     icon: Icons.event_outlined,
     label: 'Appointments',
     subLabel: 'calendar & visits',
-    chipColor: careblazersColors.accentDeep,
+    chipColor: holdcloseColors.accentDeep,
     onTap: () {},
   ),
   HubTile(
     icon: Icons.favorite_outline,
     label: 'Health Log',
     subLabel: 'symptoms & vitals',
-    chipColor: careblazersColors.link,
+    chipColor: holdcloseColors.link,
     onTap: () {},
   ),
   HubTile(
     icon: Icons.list_alt_outlined,
     label: 'Care Plan',
     subLabel: 'routine & stages',
-    chipColor: careblazersColors.success,
+    chipColor: holdcloseColors.success,
     onTap: () {},
   ),
   HubTile(
     icon: Icons.badge_outlined,
     label: 'Cards & Documents',
     subLabel: 'emergency card, POA, IDs',
-    chipColor: careblazersColors.primarySoft,
+    chipColor: holdcloseColors.primarySoft,
     onTap: () {},
   ),
 ];
@@ -61,9 +61,9 @@ final List<HubTile> _tiles = <HubTile>[
 Widget _host(Widget grid) => Container(
       width: 412,
       height: 560,
-      color: careblazersColors.background,
+      color: holdcloseColors.background,
       child: Material(
-        color: careblazersColors.background,
+        color: holdcloseColors.background,
         child: grid,
       ),
     );

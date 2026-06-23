@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
 
-  "appTitle": "Careblazers",
+  "appTitle": "Holdclose",
   "@appTitle": {
     "description": "The application's name, shown as the MaterialApp title."
   },
@@ -94,11 +94,11 @@
     "description": "Screen-reader (Semantics) label for the welcome-carousel Skip button."
   },
 
-  "signInTitle": "Careblazers",
+  "signInTitle": "Holdclose",
   "@signInTitle": {
     "description": "Brand wordmark shown at the top of the sign-in screen."
   },
-  "signInTagline": "We make caregiving for someone with dementia easier.",
+  "signInTagline": "We make caring for someone you love a little easier.",
   "@signInTagline": {
     "description": "Tagline beneath the wordmark on the sign-in screen; mirrors welcome-carousel page 1."
   },
@@ -187,7 +187,7 @@
   "@lovedOneSetupDiagnosisLabel": {
     "description": "Field label for the optional loved-one diagnosis input."
   },
-  "lovedOneSetupDiagnosisHint": "e.g. Alzheimer's disease",
+  "lovedOneSetupDiagnosisHint": "e.g. Parkinson's, stroke recovery, a diagnosis",
   "@lovedOneSetupDiagnosisHint": {
     "description": "Placeholder hint for the loved-one diagnosis field."
   },

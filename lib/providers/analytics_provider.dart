@@ -12,11 +12,11 @@ part 'analytics_provider.g.dart';
 /// the call sites.
 abstract class AnalyticsProvider {
   /// Record a discrete event. [name] is a short identifier (e.g.
-  /// `decoder_run`); [properties] carry whatever fields the future
-  /// real impl will want to slice on.
+  /// `journal_entry_saved`); [properties] carry whatever fields the
+  /// future real impl will want to slice on.
   void trackEvent(String name, Map<String, Object?> properties);
 
-  /// Record a screen view by route name (e.g. `/decoder/triage`). Wired
+  /// Record a screen view by route name (e.g. `/journal/new`). Wired
   /// from the go_router observer.
   void trackScreen(String routeName);
 

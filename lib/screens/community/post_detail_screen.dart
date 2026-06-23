@@ -9,7 +9,7 @@ import '../../models/forum.dart';
 import '../../providers/community_feed_provider.dart';
 import '../../providers/my_forum_profile_provider.dart';
 import '../../providers/post_detail_provider.dart';
-import '../../routing/router.dart' show CareblazersRoutes;
+import '../../routing/router.dart' show HoldcloseRoutes;
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/community/comment_thread.dart';
@@ -252,7 +252,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   /// which is gated on [myForumProfileIdProvider].
   Future<void> _editPost(ForumPost post) async {
     await context.pushNamed(
-      CareblazersRoutes.communityPostEdit,
+      HoldcloseRoutes.communityPostEdit,
       pathParameters: <String, String>{'postId': post.id},
       extra: post,
     );
@@ -314,7 +314,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Post deleted.')),
       );
-      context.goNamed(CareblazersRoutes.community);
+      context.goNamed(HoldcloseRoutes.community);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Couldn't delete the post. Try again.")),

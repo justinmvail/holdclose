@@ -2,22 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/providers/care_plan_provider.dart'
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/providers/care_plan_provider.dart'
     show carePlanRepositoryProvider, CarePlanRepository;
-import 'package:careblazers/providers/health_log_provider.dart'
+import 'package:holdclose/providers/health_log_provider.dart'
     show healthLogRepositoryProvider, HealthLogRepository;
-import 'package:careblazers/providers/llm_provider.dart' show claudeShimEndpoint;
-import 'package:careblazers/providers/storage_provider.dart'
+import 'package:holdclose/providers/llm_provider.dart' show claudeShimEndpoint;
+import 'package:holdclose/providers/storage_provider.dart'
     show storageProvider, InMemoryStorageProvider;
-import 'package:careblazers/seed/chat_system_prompt.dart';
-import 'package:careblazers/services/appointment_repository.dart'
+import 'package:holdclose/seed/chat_system_prompt.dart';
+import 'package:holdclose/services/appointment_repository.dart'
     show appointmentRepositoryProvider, AppointmentRepository;
-import 'package:careblazers/services/chat_actions.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart';
-import 'package:careblazers/services/medication_repository.dart'
+import 'package:holdclose/services/chat_actions.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart';
+import 'package:holdclose/services/medication_repository.dart'
     show medicationRepositoryProvider, MedicationRepository;
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
@@ -74,11 +74,11 @@ class _LoadThrowsRepo extends ChatRepository {
 
 void main() {
   group('ChatService.sendMessage — TASKS.md Phase 11.3', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late ChatRepository repo;
 
     setUp(() async {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = ChatRepository(db);
       await repo.createConversation(
         id: 'convo-1',
@@ -293,7 +293,7 @@ void main() {
           _ScriptedChatBackend(<ChatDelta>[
         const ChatDeltaText('Sundowning '),
         const ChatDeltaText('is the late-afternoon '),
-        const ChatDeltaText('shift many Careblazers notice.'),
+        const ChatDeltaText('shift many Holdclose notice.'),
       ]);
       final ChatService svc = ChatService(
         repository: repo,
@@ -322,8 +322,8 @@ void main() {
             '',
             'Sundowning ',
             'Sundowning is the late-afternoon ',
-            'Sundowning is the late-afternoon shift many Careblazers notice.',
-            'Sundowning is the late-afternoon shift many Careblazers notice.',
+            'Sundowning is the late-afternoon shift many Holdclose notice.',
+            'Sundowning is the late-afternoon shift many Holdclose notice.',
           ]);
       // The final snapshot is the only one with streamingDone=true.
       expect(
@@ -819,11 +819,11 @@ void main() {
   // ---- Auto-title (fb_1781115614890041) ---------------------------------
 
   group('ChatService.sendMessage — auto-title', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late ChatRepository repo;
 
     setUp(() async {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = ChatRepository(db);
       await repo.createConversation(
         id: 'convo-1',
@@ -1028,8 +1028,8 @@ void main() {
   group('chatServiceProvider', () {
     test('resolves to a ChatService wired with the riverpod backends',
         () async {
-      final CareblazersDatabase db =
-          CareblazersDatabase(NativeDatabase.memory());
+      final HoldcloseDatabase db =
+          HoldcloseDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       final ChatRepository repo = ChatRepository(db);
       await repo.createConversation(
@@ -1090,7 +1090,7 @@ void main() {
         ],
       );
       expect(formatted, isNot(contains('[Conversation so far]')));
-      expect(formatted, contains('[Latest Careblazer message]'));
+      expect(formatted, contains('[Latest caregiver message]'));
       expect(formatted, contains('what is sundowning?'));
     });
 
@@ -1104,13 +1104,13 @@ void main() {
         ],
       );
       expect(formatted, contains('[Conversation so far]'));
-      expect(formatted, contains('Careblazer: q1'));
+      expect(formatted, contains('Caregiver: q1'));
       expect(formatted, contains('Coach: a1'));
-      expect(formatted, contains('[Latest Careblazer message]'));
+      expect(formatted, contains('[Latest caregiver message]'));
       expect(formatted, contains('q2'));
       // The latest message is NOT in the "so far" block.
       expect(formatted.indexOf('q2'),
-          greaterThan(formatted.indexOf('[Latest Careblazer message]')));
+          greaterThan(formatted.indexOf('[Latest caregiver message]')));
     });
   });
 
@@ -1314,11 +1314,11 @@ void main() {
 
   group('ChatService.routeVoiceIntent — hands-free mic (fb_1781029699933602)',
       () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late ChatRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = ChatRepository(db);
     });
     tearDown(() async => db.close());

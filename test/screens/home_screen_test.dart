@@ -1,19 +1,19 @@
 import 'dart:async';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/providers/home_clock_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/appointment/appointment_list_screen.dart'
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/home_clock_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/appointment/appointment_list_screen.dart'
     show appointmentListClockProvider;
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/widgets/path_header.dart';
-import 'package:careblazers/screens/medication/dose_log_screen.dart';
-import 'package:careblazers/screens/settings/settings_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/widgets/path_header.dart';
+import 'package:holdclose/screens/medication/dose_log_screen.dart';
+import 'package:holdclose/screens/settings/settings_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,8 +42,8 @@ Future<GoRouter> _pumpHome(
   // which back onto the medication repository. Point them at an empty
   // in-memory database so Home stays off the on-device sqlite file and
   // the card renders its "No medications today." empty state.
-  final CareblazersDatabase medDb =
-      CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase medDb =
+      HoldcloseDatabase(NativeDatabase.memory());
   addTearDown(medDb.close);
   final MedicationRepository medRepo =
       MedicationRepository(medDb, clock: () => now);
@@ -51,8 +51,8 @@ Future<GoRouter> _pumpHome(
   // The Next Appointment card (Phase 14.10) reads the appointment
   // repository. An empty in-memory database keeps Home off the on-device
   // sqlite file and renders the card's "No upcoming appointments." state.
-  final CareblazersDatabase apptDb =
-      CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase apptDb =
+      HoldcloseDatabase(NativeDatabase.memory());
   addTearDown(apptDb.close);
   final AppointmentRepository apptRepo =
       AppointmentRepository(apptDb, clock: () => now);
@@ -71,7 +71,7 @@ Future<GoRouter> _pumpHome(
       ],
       child: MaterialApp.router(
         routerConfig: router,
-        theme: careblazersLightTheme,
+        theme: holdcloseLightTheme,
       ),
     ),
   );

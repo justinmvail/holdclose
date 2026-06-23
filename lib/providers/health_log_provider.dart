@@ -26,7 +26,7 @@ part 'health_log_provider.g.dart';
 class HealthLogRepository with SyncSinkHost {
   HealthLogRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Close the underlying database. The riverpod provider wires this to
   /// `ref.onDispose`.
@@ -99,10 +99,10 @@ class HealthLogRepository with SyncSinkHost {
 /// [healthLogRepositoryProvider] and never see the concrete drift
 /// database — same indirection [appointmentRepositoryProvider] uses.
 ///
-/// In production the repo opens its own [CareblazersDatabase] handle
+/// In production the repo opens its own [HoldcloseDatabase] handle
 /// onto the shared SQLite file; SQLite's per-connection serialization
 /// keeps that safe. Tests build a [HealthLogRepository] directly against
-/// `CareblazersDatabase(NativeDatabase.memory())` so each test gets an
+/// `HoldcloseDatabase(NativeDatabase.memory())` so each test gets an
 /// isolated DB.
 ///
 /// Named `healthLogRepositoryBackend` so the generated class is
@@ -110,7 +110,7 @@ class HealthLogRepository with SyncSinkHost {
 /// natural-language [healthLogRepositoryProvider] alias below.
 @Riverpod(keepAlive: true)
 HealthLogRepository healthLogRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return HealthLogRepository(db);
 }

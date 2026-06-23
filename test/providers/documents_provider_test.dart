@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/document.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/services/document_blob_service.dart';
-import 'package:careblazers/services/fake_forum_api_client.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/document.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/services/document_blob_service.dart';
+import 'package:holdclose/services/fake_forum_api_client.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,11 +75,11 @@ void main() {
   // ---- Repository CRUD via the in-memory ("fake") database --------------
 
   group('DocumentsRepository — Phase 14.21 (in-memory DB)', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late DocumentsRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = DocumentsRepository(db);
     });
 
@@ -201,10 +201,10 @@ void main() {
   // ---- Notifiers: CRUD + selectors --------------------------------------
 
   group('Documents notifiers — Phase 14.21', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
 
     ProviderContainer makeContainer() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       final DocumentsRepository repo = DocumentsRepository(db);
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[
@@ -306,14 +306,14 @@ void main() {
   // ---- Document scan blobs (R2) via the blob service ---------------------
 
   group('DocumentsRepository blob upload on save + hydrate on sync-apply', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late Directory tmp;
     late FakeForumBackend backend;
     late FakeForumApiClient client;
     late DocumentsRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       tmp = Directory.systemTemp.createTempSync('doc_repo_blob_');
       backend = FakeForumBackend();
       client = FakeForumApiClient(backend: backend);
@@ -372,8 +372,8 @@ void main() {
       expect(saved.scanKey, isNotNull);
 
       // A second device: separate DB + cache dir, SAME backend.
-      final CareblazersDatabase db2 =
-          CareblazersDatabase(NativeDatabase.memory());
+      final HoldcloseDatabase db2 =
+          HoldcloseDatabase(NativeDatabase.memory());
       addTearDown(() => db2.close());
       final Directory tmp2 = Directory.systemTemp.createTempSync('doc_b_');
       addTearDown(() => tmp2.deleteSync(recursive: true));

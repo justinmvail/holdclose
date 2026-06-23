@@ -165,16 +165,13 @@ String activityCategoryLabel(ActivityCategory category) {
 // Summary helpers (pure)
 // ---------------------------------------------------------------------------
 
-/// Short feed summary for a journal entry — the caregiver's situation text
-/// for a wizard note, the behavior label for a decoder auto-log.
+/// Short feed summary for a journal entry — the caregiver's own situation
+/// text, or a plain "Journal note" when the entry has none.
 @visibleForTesting
 String activityJournalSummary(JournalEntry entry) {
-  if (entry.wizardKind) {
-    final String? situation = entry.situationText?.trim();
-    if (situation != null && situation.isNotEmpty) return situation;
-    return 'Journal note';
-  }
-  return entry.behavior.label;
+  final String? situation = entry.situationText?.trim();
+  if (situation != null && situation.isNotEmpty) return situation;
+  return 'Journal note';
 }
 
 /// The word a dose's logged [status] reads as — the verb the old per-dose

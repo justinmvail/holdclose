@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart' as model;
-import 'package:careblazers/providers/link_launcher_provider.dart';
-import 'package:careblazers/screens/appointment/appointment_detail_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart' as model;
+import 'package:holdclose/providers/link_launcher_provider.dart';
+import 'package:holdclose/screens/appointment/appointment_detail_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
@@ -17,7 +17,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 DateTime _fixedNow() => DateTime.utc(2026, 6, 1, 12);
 
 Future<AppointmentRepository> _repoWithUpcoming() async {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   final AppointmentRepository repo =
       AppointmentRepository(db, clock: _fixedNow);
 
@@ -53,7 +53,7 @@ Future<AppointmentRepository> _repoWithUpcoming() async {
 }
 
 Future<AppointmentRepository> _repoWithCompleted() async {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   final AppointmentRepository repo =
       AppointmentRepository(db, clock: _fixedNow);
   const model.Provider provider = model.Provider(
@@ -118,7 +118,7 @@ void main() {
                       routerConfig: _goldenRouter('appt-1'),
                       builder: (BuildContext context, Widget? child) {
                         return ColoredBox(
-                          color: careblazersColors.background,
+                          color: holdcloseColors.background,
                           child: child ?? const SizedBox.shrink(),
                         );
                       },
@@ -159,7 +159,7 @@ void main() {
                       routerConfig: _goldenRouter('appt-done'),
                       builder: (BuildContext context, Widget? child) {
                         return ColoredBox(
-                          color: careblazersColors.background,
+                          color: holdcloseColors.background,
                           child: child ?? const SizedBox.shrink(),
                         );
                       },

@@ -1,48 +1,48 @@
 /// Shared harness for every Phase 15 `test/integration/*_flow_test.dart`
-/// (TASKS.md Phase 15.1). Pumps the full [CareblazersApp] over fake
+/// (TASKS.md Phase 15.1). Pumps the full [HoldcloseApp] over fake
 /// backends, an in-memory drift database, and a pinned clock so flows
 /// assert real navigation + persistence without a device, a live LLM, or
 /// the on-disk SQLite file.
 ///
-/// Every flow test calls [pumpCareblazersApp] first, optionally seeds via
+/// Every flow test calls [pumpHoldcloseApp] first, optionally seeds via
 /// [seedMaryHenderson] / [seedDashboard], then drives the UI with the
 /// shared finders ([homeGreeting], [tabFor], [pathHeaderBackTo],
 /// [findHubTile]). URL hand-offs are captured by [FakeUrlLauncher] so
 /// outbound-link assertions never fire a platform plugin.
 library;
 
-import 'package:careblazers/app.dart';
-import 'package:careblazers/widgets/tab_scaffold.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/analytics_provider.dart';
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/home_clock_provider.dart';
-import 'package:careblazers/providers/link_launcher_provider.dart';
-import 'package:careblazers/providers/llm_provider.dart';
-import 'package:careblazers/providers/onboarding_provider.dart';
-import 'package:careblazers/providers/patient_configured_provider.dart';
-import 'package:careblazers/providers/quiet_hours_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/tts_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/appointment/appointment_list_screen.dart'
+import 'package:holdclose/app.dart';
+import 'package:holdclose/widgets/tab_scaffold.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/analytics_provider.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/home_clock_provider.dart';
+import 'package:holdclose/providers/link_launcher_provider.dart';
+import 'package:holdclose/providers/llm_provider.dart';
+import 'package:holdclose/providers/onboarding_provider.dart';
+import 'package:holdclose/providers/patient_configured_provider.dart';
+import 'package:holdclose/providers/quiet_hours_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/tts_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/appointment/appointment_list_screen.dart'
     show appointmentListClockProvider;
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/screens/medication/dose_log_screen.dart'
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/screens/medication/dose_log_screen.dart'
     show doseLogClockProvider;
-import 'package:careblazers/screens/team/care_team_hub_screen.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/seed/sample_journal.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/widgets/hub_tile.dart';
+import 'package:holdclose/screens/team/care_team_hub_screen.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/seed/sample_journal.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/widgets/hub_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -92,7 +92,7 @@ class _AlreadyOnboarded extends OnboardingCompleted {
   bool build() => true;
 }
 
-/// Pump the full [CareblazersApp] wired for an integration flow and
+/// Pump the full [HoldcloseApp] wired for an integration flow and
 /// return the backing [ProviderContainer] so the test can read providers
 /// and seed through them (TASKS.md Phase 15.1).
 ///
@@ -115,7 +115,7 @@ class _AlreadyOnboarded extends OnboardingCompleted {
 /// settle (the production router always boots at `/`, so a non-root start
 /// is reached with a `go`). The in-memory DB, the fake auth controller,
 /// and the container are all torn down via [addTearDown].
-Future<ProviderContainer> pumpCareblazersApp(
+Future<ProviderContainer> pumpHoldcloseApp(
   WidgetTester tester, {
   DateTime? clock,
   List<Override>? extraOverrides,
@@ -135,10 +135,10 @@ Future<ProviderContainer> pumpCareblazersApp(
 
   // One in-memory drift DB backs the medication + appointment
   // repositories, whose reads are Future-based (no live drift stream to
-  // leak a teardown timer). [CareblazersDatabase.testInstance] wraps a
+  // leak a teardown timer). [HoldcloseDatabase.testInstance] wraps a
   // fresh `NativeDatabase.memory()` so each pump gets an isolated DB; the
   // teardown closes the connection before the next test (Phase 15.2).
-  final CareblazersDatabase db = CareblazersDatabase.testInstance();
+  final HoldcloseDatabase db = HoldcloseDatabase.testInstance();
   addTearDown(db.close);
 
   // The journal/patient/settings seam uses the Map-backed fake rather than
@@ -174,7 +174,7 @@ Future<ProviderContainer> pumpCareblazersApp(
   // [ProviderRepository] seam. Both must point at the SAME in-memory db
   // or an inline-added provider would land in a different store than the
   // one the list reads back from. Production wires its own
-  // `CareblazersDatabase.open()` handle here; in the harness we share the
+  // `HoldcloseDatabase.open()` handle here; in the harness we share the
   // one in-memory db so provider names round-trip (Phase 15.7).
   final ProviderRepository providerRepository = ProviderRepository(db);
 
@@ -182,13 +182,13 @@ Future<ProviderContainer> pumpCareblazersApp(
   // `gatherChatContext`, which resolves the care-plan + health-log repos in
   // addition to storage/medication/appointment. Point those last two seams
   // at the same in-memory db too — otherwise they fall through to
-  // `CareblazersDatabase.open()` (real on-device SQLite) and throw inside the
+  // `HoldcloseDatabase.open()` (real on-device SQLite) and throw inside the
   // test zone the moment a flow sends a chat message (Phase 15.8).
   final CarePlanRepository carePlanRepository = CarePlanRepository(db);
   final HealthLogRepository healthLogRepository = HealthLogRepository(db);
   // The patient-timeline merger (Schedule card, Catch-me-up) now also
   // projects standalone care tasks (2026-06-06 unified task/routine model).
-  // Its backend opens `CareblazersDatabase.open()` — real on-device SQLite —
+  // Its backend opens `HoldcloseDatabase.open()` — real on-device SQLite —
   // so without this override the whole merger future throws in the test zone
   // and the Schedule card falls into its error state instead of rendering
   // the seeded appointments.
@@ -237,7 +237,7 @@ Future<ProviderContainer> pumpCareblazersApp(
   await tester.pumpWidget(
     ProviderScope(
       overrides: overrides,
-      child: const CareblazersApp(),
+      child: const HoldcloseApp(),
     ),
   );
   await tester.pumpAndSettle();
@@ -245,7 +245,7 @@ Future<ProviderContainer> pumpCareblazersApp(
   // Hand the test the live container so its seeders write through the
   // same overrides the running widgets read.
   final ProviderContainer container = ProviderScope.containerOf(
-    tester.element(find.byType(CareblazersApp)),
+    tester.element(find.byType(HoldcloseApp)),
     listen: false,
   );
 
@@ -261,7 +261,7 @@ Future<ProviderContainer> pumpCareblazersApp(
   await tester.pumpAndSettle();
 
   if (initialLocation != '/') {
-    container.read(careblazersRouterProvider).go(initialLocation);
+    container.read(holdcloseRouterProvider).go(initialLocation);
     await tester.pumpAndSettle();
   }
 

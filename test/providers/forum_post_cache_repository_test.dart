@@ -1,7 +1,7 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/forum_post_cache_provider.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/forum_post_cache_provider.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,12 +17,12 @@ ForumPost _post(String id) => ForumPost(
     );
 
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late ForumPostCacheRepository repo;
   DateTime clock() => DateTime(2026, 6, 10, 9);
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = ForumPostCacheRepository(db);
   });
   tearDown(() async => db.close());

@@ -13,7 +13,7 @@ class CommunityGuidelineSection {
   final String body;
 }
 
-/// The four pillars of the careblazers community (BUILD_SPEC.md §13 /
+/// The four pillars of the holdclose community (BUILD_SPEC.md §13 /
 /// Phase 13.12).
 ///
 /// Order matters. Tone first — caregivers under duress need to know
@@ -23,7 +23,7 @@ class CommunityGuidelineSection {
 /// hardest line to maintain — and posting it BEFORE the crisis pointer
 /// makes "this is not a clinician" land before "here is who is".
 ///
-/// Operator can update via a spec change (PR + Dr. Natali signoff).
+/// Operator can update via a spec change (PR + operator signoff).
 /// Treat this list as content, not config — the locked-down voice is
 /// load-bearing for the support promise.
 const List<CommunityGuidelineSection> communityGuidelines =

@@ -1,13 +1,13 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart';
-import 'package:careblazers/services/medication_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart';
+import 'package:holdclose/services/medication_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,7 +41,7 @@ class _ScriptedBackend implements ChatLLMBackend {
 
 Future<({MedicationRepository meds, GoRouter router})> _pumpThread(
   WidgetTester tester, {
-  required CareblazersDatabase db,
+  required HoldcloseDatabase db,
   required List<ChatDelta> reply,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 900));
@@ -104,9 +104,9 @@ String _location(GoRouter router) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
 
-  setUp(() => db = CareblazersDatabase(NativeDatabase.memory()));
+  setUp(() => db = HoldcloseDatabase(NativeDatabase.memory()));
   tearDown(() async => db.close());
 
   testWidgets('an add_medication action in the reply writes the med + strips '

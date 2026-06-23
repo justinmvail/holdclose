@@ -12,12 +12,12 @@ import 'package:google_fonts/google_fonts.dart';
 /// for debugging — see the `.gitignore` rule that drops everything
 /// outside `goldens/ci/`).
 ///
-/// We deliberately do **not** pass `careblazersLightTheme` here.
+/// We deliberately do **not** pass `holdcloseLightTheme` here.
 /// google_fonts requires either bundled font assets or a runtime
 /// fetch; neither is available in `flutter test`. Each screen widget
 /// that cares about brand styling re-applies the relevant brand
 /// color/theme tokens in its own subtree (e.g. `TabScaffoldBar`
-/// overrides `NavigationBarTheme` directly with `careblazersColors`),
+/// overrides `NavigationBarTheme` directly with `holdcloseColors`),
 /// so goldens stay brand-accurate without dragging the TextTheme
 /// (and its google_fonts dependency) through the test framework.
 ///

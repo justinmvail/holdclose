@@ -1,10 +1,10 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/health_log_entry.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/medical/health_log_entry_form.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/health_log_entry.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/medical/health_log_entry_form.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,7 +16,7 @@ DateTime _fixedNow() => DateTime(2026, 6, 1, 9, 30);
 
 Future<HealthLogRepository> _repoWithEdit() async {
   final HealthLogRepository repo =
-      HealthLogRepository(CareblazersDatabase(NativeDatabase.memory()));
+      HealthLogRepository(HoldcloseDatabase(NativeDatabase.memory()));
   await repo.upsert(HealthLogEntry(
     id: 'hl-edit',
     patientId: 'demo-patient-mary',
@@ -70,7 +70,7 @@ Widget _host(HealthLogRepository repo, {String? editEntryId}) {
       child: MaterialApp.router(
         routerConfig: router,
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),
@@ -89,7 +89,7 @@ void main() {
           GoldenTestScenario(
             name: 'new form (Phase 14.17)',
             child: _host(
-              HealthLogRepository(CareblazersDatabase(NativeDatabase.memory())),
+              HealthLogRepository(HoldcloseDatabase(NativeDatabase.memory())),
             ),
           ),
         ],

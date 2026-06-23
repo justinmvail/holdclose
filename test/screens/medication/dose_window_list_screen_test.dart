@@ -1,8 +1,8 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/medication/dose_window_list_screen.dart';
-import 'package:careblazers/services/medication_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/medication/dose_window_list_screen.dart';
+import 'package:holdclose/services/medication_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -96,11 +96,11 @@ Future<({MedicationRepository repo, List<String> nav})> _pumpList(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late MedicationRepository repo;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = MedicationRepository(db, clock: _fixedNow);
   });
 

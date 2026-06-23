@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -23,8 +23,8 @@ void main() {
     unawaited(runZonedGuarded(
       () async {
         // Force lazy init of both themes inside this zone.
-        careblazersLightTheme.toString();
-        careblazersDarkTheme.toString();
+        holdcloseLightTheme.toString();
+        holdcloseDarkTheme.toString();
         try {
           await GoogleFonts.pendingFonts();
         } catch (_) {
@@ -49,134 +49,134 @@ void main() {
     await initialized.future;
   });
 
-  group('CareblazersColors', () {
+  group('HoldcloseColors', () {
     test('all 10 tokens match BUILD_SPEC.md §3.1 verbatim', () {
-      expect(careblazersColors.primary, const Color(0xFF1F2A44));
-      expect(careblazersColors.primarySoft, const Color(0xFF2A3B61));
-      expect(careblazersColors.text, const Color(0xFF33373D));
-      expect(careblazersColors.cta, const Color(0xFFC97458));
-      expect(careblazersColors.accentDeep, const Color(0xFFB05C40));
-      expect(careblazersColors.surfaceWarm, const Color(0xFFF8F6F3));
-      expect(careblazersColors.background, const Color(0xFFFFFFFF));
-      expect(careblazersColors.link, const Color(0xFF4054B2));
-      expect(careblazersColors.error, const Color(0xFFCF2E2E));
-      expect(careblazersColors.success, const Color(0xFF2A7C4F));
+      expect(holdcloseColors.primary, const Color(0xFF1F2A44));
+      expect(holdcloseColors.primarySoft, const Color(0xFF2A3B61));
+      expect(holdcloseColors.text, const Color(0xFF33373D));
+      expect(holdcloseColors.cta, const Color(0xFFC97458));
+      expect(holdcloseColors.accentDeep, const Color(0xFFB05C40));
+      expect(holdcloseColors.surfaceWarm, const Color(0xFFF8F6F3));
+      expect(holdcloseColors.background, const Color(0xFFFFFFFF));
+      expect(holdcloseColors.link, const Color(0xFF4054B2));
+      expect(holdcloseColors.error, const Color(0xFFCF2E2E));
+      expect(holdcloseColors.success, const Color(0xFF2A7C4F));
     });
   });
 
-  group('careblazersLightTheme', () {
+  group('holdcloseLightTheme', () {
     test('uses Material 3', () {
-      expect(careblazersLightTheme.useMaterial3, isTrue);
+      expect(holdcloseLightTheme.useMaterial3, isTrue);
     });
 
     test('brightness is light', () {
-      expect(careblazersLightTheme.brightness, Brightness.light);
+      expect(holdcloseLightTheme.brightness, Brightness.light);
     });
 
     test('colorScheme.primary is the navy brand token (#1F2A44)', () {
-      expect(careblazersLightTheme.colorScheme.primary, const Color(0xFF1F2A44));
-      expect(careblazersLightTheme.colorScheme.primary, careblazersColors.primary);
+      expect(holdcloseLightTheme.colorScheme.primary, const Color(0xFF1F2A44));
+      expect(holdcloseLightTheme.colorScheme.primary, holdcloseColors.primary);
     });
 
     test('colorScheme.secondary is the CTA salmon (#C97458)', () {
-      expect(careblazersLightTheme.colorScheme.secondary, careblazersColors.cta);
+      expect(holdcloseLightTheme.colorScheme.secondary, holdcloseColors.cta);
     });
 
     test('colorScheme.tertiary is accentDeep (#B05C40)', () {
-      expect(careblazersLightTheme.colorScheme.tertiary, careblazersColors.accentDeep);
+      expect(holdcloseLightTheme.colorScheme.tertiary, holdcloseColors.accentDeep);
     });
 
     test('colorScheme.error is the brand error red', () {
-      expect(careblazersLightTheme.colorScheme.error, careblazersColors.error);
+      expect(holdcloseLightTheme.colorScheme.error, holdcloseColors.error);
     });
 
     test('surface is white and surfaceContainerHighest is surfaceWarm', () {
-      expect(careblazersLightTheme.colorScheme.surface, careblazersColors.background);
+      expect(holdcloseLightTheme.colorScheme.surface, holdcloseColors.background);
       expect(
-        careblazersLightTheme.colorScheme.surfaceContainerHighest,
-        careblazersColors.surfaceWarm,
+        holdcloseLightTheme.colorScheme.surfaceContainerHighest,
+        holdcloseColors.surfaceWarm,
       );
     });
 
     test('onSurface is the warm body-text color (#33373D)', () {
-      expect(careblazersLightTheme.colorScheme.onSurface, careblazersColors.text);
+      expect(holdcloseLightTheme.colorScheme.onSurface, holdcloseColors.text);
     });
 
     test('scaffoldBackgroundColor is the brand background', () {
       expect(
-        careblazersLightTheme.scaffoldBackgroundColor,
-        careblazersColors.background,
+        holdcloseLightTheme.scaffoldBackgroundColor,
+        holdcloseColors.background,
       );
     });
 
     group('textTheme maps to BUILD_SPEC.md §3.2 type ramp', () {
       test('displayLarge — Montserrat 700 / 32', () {
-        final TextStyle style = careblazersLightTheme.textTheme.displayLarge!;
+        final TextStyle style = holdcloseLightTheme.textTheme.displayLarge!;
         expect(style.fontSize, 32);
         expect(style.fontWeight, FontWeight.w700);
       });
 
       test('headlineLarge — Montserrat 700 / 26', () {
-        final TextStyle style = careblazersLightTheme.textTheme.headlineLarge!;
+        final TextStyle style = holdcloseLightTheme.textTheme.headlineLarge!;
         expect(style.fontSize, 26);
         expect(style.fontWeight, FontWeight.w700);
       });
 
       test('headlineMedium — Montserrat 600 / 22', () {
-        final TextStyle style = careblazersLightTheme.textTheme.headlineMedium!;
+        final TextStyle style = holdcloseLightTheme.textTheme.headlineMedium!;
         expect(style.fontSize, 22);
         expect(style.fontWeight, FontWeight.w600);
       });
 
       test('titleLarge — Montserrat 600 / 20', () {
-        final TextStyle style = careblazersLightTheme.textTheme.titleLarge!;
+        final TextStyle style = holdcloseLightTheme.textTheme.titleLarge!;
         expect(style.fontSize, 20);
         expect(style.fontWeight, FontWeight.w600);
       });
 
       test('bodyLarge — Lato 400 / 20 (large default per audience)', () {
-        final TextStyle style = careblazersLightTheme.textTheme.bodyLarge!;
+        final TextStyle style = holdcloseLightTheme.textTheme.bodyLarge!;
         expect(style.fontSize, 20);
         expect(style.fontWeight, FontWeight.w400);
       });
 
       test('bodyMedium — Lato 400 / 16', () {
-        final TextStyle style = careblazersLightTheme.textTheme.bodyMedium!;
+        final TextStyle style = holdcloseLightTheme.textTheme.bodyMedium!;
         expect(style.fontSize, 16);
         expect(style.fontWeight, FontWeight.w400);
       });
 
       test('labelLarge — Lato 700 / 18', () {
-        final TextStyle style = careblazersLightTheme.textTheme.labelLarge!;
+        final TextStyle style = holdcloseLightTheme.textTheme.labelLarge!;
         expect(style.fontSize, 18);
         expect(style.fontWeight, FontWeight.w700);
       });
     });
   });
 
-  group('careblazersDarkTheme', () {
+  group('holdcloseDarkTheme', () {
     test('uses Material 3', () {
-      expect(careblazersDarkTheme.useMaterial3, isTrue);
+      expect(holdcloseDarkTheme.useMaterial3, isTrue);
     });
 
     test('brightness is dark', () {
-      expect(careblazersDarkTheme.brightness, Brightness.dark);
+      expect(holdcloseDarkTheme.brightness, Brightness.dark);
     });
 
     test('surface is the dark navy (#0F1422)', () {
-      expect(careblazersDarkTheme.colorScheme.surface, const Color(0xFF0F1422));
+      expect(holdcloseDarkTheme.colorScheme.surface, const Color(0xFF0F1422));
     });
 
     test('onSurface is the warm-white text (#E8E6E2)', () {
-      expect(careblazersDarkTheme.colorScheme.onSurface, const Color(0xFFE8E6E2));
+      expect(holdcloseDarkTheme.colorScheme.onSurface, const Color(0xFFE8E6E2));
     });
 
     test('secondary is the dark-palette CTA (brightened for contrast)', () {
       // Dark mode brightens the brand orange so the CTA keeps AA contrast
       // on the dark canvas; it intentionally differs from the light CTA.
       expect(
-        careblazersDarkTheme.colorScheme.secondary,
-        careblazersColorsDark.cta,
+        holdcloseDarkTheme.colorScheme.secondary,
+        holdcloseColorsDark.cta,
       );
     });
 
@@ -184,28 +184,28 @@ void main() {
       // Navy-on-navy is illegible, so dark mode lifts `primary` to a pale
       // slate-blue for headings/icons/chips.
       expect(
-        careblazersDarkTheme.colorScheme.primary,
-        careblazersColorsDark.primary,
+        holdcloseDarkTheme.colorScheme.primary,
+        holdcloseColorsDark.primary,
       );
     });
 
-    test('registers the dark CareblazersColors extension', () {
+    test('registers the dark HoldcloseColors extension', () {
       expect(
-        careblazersDarkTheme.extension<CareblazersColors>(),
-        same(careblazersColorsDark),
+        holdcloseDarkTheme.extension<HoldcloseColors>(),
+        same(holdcloseColorsDark),
       );
     });
 
-    test('light theme registers the light CareblazersColors extension', () {
+    test('light theme registers the light HoldcloseColors extension', () {
       expect(
-        careblazersLightTheme.extension<CareblazersColors>(),
-        same(careblazersColors),
+        holdcloseLightTheme.extension<HoldcloseColors>(),
+        same(holdcloseColors),
       );
     });
 
     test('scaffoldBackgroundColor matches the dark surface', () {
       expect(
-        careblazersDarkTheme.scaffoldBackgroundColor,
+        holdcloseDarkTheme.scaffoldBackgroundColor,
         const Color(0xFF0F1422),
       );
     });

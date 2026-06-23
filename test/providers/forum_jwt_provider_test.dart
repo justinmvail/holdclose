@@ -1,7 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:careblazers/providers/forum_jwt_provider.dart';
+import 'package:holdclose/providers/forum_jwt_provider.dart';
 
 /// In-memory [FlutterSecureStorage] stand-in. Only the members the
 /// session store touches are overridden; everything else inherits the

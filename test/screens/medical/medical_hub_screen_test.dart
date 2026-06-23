@@ -1,8 +1,8 @@
-import 'package:careblazers/models/settings.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/medical/medical_hub_screen.dart';
-import 'package:careblazers/widgets/hub_tile.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/models/settings.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/medical/medical_hub_screen.dart';
+import 'package:holdclose/widgets/hub_tile.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -85,7 +85,7 @@ InMemoryStorageProvider _seededStorage({required bool teamEnabled}) {
 /// hittable). [MedicalHubScreen] is a ConsumerWidget that reads
 /// `settingsProvider`, so it's wrapped in a ProviderScope with the
 /// storage seam overridden to drive the team-coordination toggle. We
-/// deliberately skip `careblazersLightTheme` — its google_fonts
+/// deliberately skip `holdcloseLightTheme` — its google_fonts
 /// TextStyles fire fire-and-forget Futures that surface as uncaught
 /// errors in a font-less test host; the screen re-applies its brand
 /// colors directly, so navigation behavior is unaffected.

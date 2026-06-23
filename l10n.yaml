@@ -4,7 +4,7 @@
 # template (source of truth for keys + descriptions). On `flutter pub
 # get` / `flutter gen-l10n`, Flutter generates `AppLocalizations`
 # (class `AppLocalizations`) into the build folder, importable as
-# `package:careblazers/l10n/app_localizations.dart` via the synthetic
+# `package:holdclose/l10n/app_localizations.dart` via the synthetic
 # package.
 #
 # `nullable-getter: false` makes `AppLocalizations.of(context)` return a

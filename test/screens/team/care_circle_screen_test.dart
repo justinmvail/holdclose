@@ -1,7 +1,7 @@
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/my_forum_profile_provider.dart';
-import 'package:careblazers/screens/team/care_circle_screen.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/my_forum_profile_provider.dart';
+import 'package:holdclose/screens/team/care_circle_screen.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -268,7 +268,7 @@ void main() {
       // off the backend origin + the minted token.
       expect(
         shared.single,
-        'Join my care circle on Careblazers: '
+        'Join my care circle on Holdclose: '
         'https://forum.example.test/join/tok_link_123',
       );
     });

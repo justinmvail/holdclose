@@ -14,7 +14,7 @@ part 'database.g.dart';
 /// `journal_entries` (auto-logged decoder runs), `patients` (the loved
 /// one — one row per install), `app_settings` (single-row preferences
 /// blob), the chat pair `chat_conversations` + `chat_messages`
-/// (Phase 11 dementia-care chatbot history), the medication-tracker
+/// (Phase 11 caregiving chatbot history), the medication-tracker
 /// trio `medications` + `dose_schedules` + `dose_logs` (Phase 12.1),
 /// the appointment pair `providers` + `appointments` (Phase 12.5)
 /// — all FK-linked with `ON DELETE CASCADE` — the two standalone
@@ -27,7 +27,7 @@ part 'database.g.dart';
 /// `care_tasks` (Phase 14.30), and the Care Team shift coverage board
 /// `care_shifts` (Phase 14.31).
 ///
-/// Construct with [CareblazersDatabase.open] in production — it lazily
+/// Construct with [HoldcloseDatabase.open] in production — it lazily
 /// opens a SQLite file under the platform's app-documents directory via
 /// `drift_flutter`. Tests pass a `NativeDatabase.memory()` directly to
 /// the unnamed constructor so each test gets an isolated DB.
@@ -60,21 +60,21 @@ part 'database.g.dart';
     ForumPostCacheTable,
   ],
 )
-class CareblazersDatabase extends _$CareblazersDatabase {
-  CareblazersDatabase(super.executor) : _isShared = false;
+class HoldcloseDatabase extends _$HoldcloseDatabase {
+  HoldcloseDatabase(super.executor) : _isShared = false;
 
   /// Private ctor for the app-wide shared singleton ([open]). Its [close]
   /// is a no-op so one provider's `ref.onDispose(db.close)` can't tear down
   /// the connection that every other provider + the sync engine share.
-  CareblazersDatabase._shared(super.executor) : _isShared = true;
+  HoldcloseDatabase._shared(super.executor) : _isShared = true;
 
   /// True only for the process-wide shared instance returned by [open].
   final bool _isShared;
 
   /// The one shared on-disk connection (see [open]).
-  static CareblazersDatabase? _sharedInstance;
+  static HoldcloseDatabase? _sharedInstance;
 
-  /// Opens the on-device SQLite file named `careblazers.sqlite` in the
+  /// Opens the on-device SQLite file named `holdclose.sqlite` in the
   /// platform's app-documents directory — returning a PROCESS-WIDE SINGLETON
   /// so every production caller (each repository/provider AND the sync
   /// engine) shares ONE connection. Drift serialises writes on a single
@@ -82,8 +82,8 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   /// failures that struck when separate connections wrote concurrently
   /// (e.g. a chat/setup write racing the sync engine). Tests bypass this in
   /// favour of `NativeDatabase.memory()`.
-  factory CareblazersDatabase.open() =>
-      openShared(driftDatabase(name: 'careblazers'));
+  factory HoldcloseDatabase.open() =>
+      openShared(driftDatabase(name: 'holdclose'));
 
   /// The memoisation behind [open], with an injectable [executor] so the
   /// singleton + no-op-close behaviour is testable without the platform
@@ -93,8 +93,8 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   /// passed [executor] is then ignored, which is the whole point (one
   /// connection for the process).
   @visibleForTesting
-  static CareblazersDatabase openShared(QueryExecutor executor) =>
-      _sharedInstance ??= CareblazersDatabase._shared(executor);
+  static HoldcloseDatabase openShared(QueryExecutor executor) =>
+      _sharedInstance ??= HoldcloseDatabase._shared(executor);
 
   /// Drop the shared singleton so a test can open a fresh one. No-op in
   /// production (nothing calls it).
@@ -121,8 +121,8 @@ class CareblazersDatabase extends _$CareblazersDatabase {
   /// (`test/integration/test_harness.dart`) and every Phase 15 `test/db/`
   /// case — the caller is responsible for `.close()` in a teardown so the
   /// connection doesn't outlive the test (TASKS.md Phase 15.2).
-  factory CareblazersDatabase.testInstance() =>
-      CareblazersDatabase(NativeDatabase.memory());
+  factory HoldcloseDatabase.testInstance() =>
+      HoldcloseDatabase(NativeDatabase.memory());
 
   @override
   int get schemaVersion => 20;

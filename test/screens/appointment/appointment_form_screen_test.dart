@@ -1,12 +1,12 @@
 import 'dart:convert';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart' as model;
-import 'package:careblazers/screens/appointment/appointment_form_screen.dart';
-import 'package:careblazers/screens/appointment/appointment_list_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart' as model;
+import 'package:holdclose/screens/appointment/appointment_form_screen.dart';
+import 'package:holdclose/screens/appointment/appointment_list_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
@@ -28,7 +28,7 @@ String Function() _counterFactory() {
 }
 
 Future<void> _seedProvider(
-  CareblazersDatabase db, {
+  HoldcloseDatabase db, {
   required String id,
   required String name,
   String phone = '(415) 555-0188',
@@ -55,13 +55,13 @@ Future<({
   GoRouter router,
   AppointmentRepository apptRepo,
   ProviderRepository providerRepo,
-  CareblazersDatabase db,
+  HoldcloseDatabase db,
   List<String> popped,
 })> _pumpForm(
   WidgetTester tester, {
   required AppointmentRepository apptRepo,
   required ProviderRepository providerRepo,
-  required CareblazersDatabase db,
+  required HoldcloseDatabase db,
   String? editAppointmentId,
   String Function()? idFactory,
 }) async {
@@ -140,12 +140,12 @@ Future<({
 }
 
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late AppointmentRepository apptRepo;
   late ProviderRepository providerRepo;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     apptRepo = AppointmentRepository(db, clock: _fixedNow);
     providerRepo = ProviderRepository(db);
   });

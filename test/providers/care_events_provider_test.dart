@@ -1,12 +1,12 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart';
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/providers/active_patient_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/providers/active_patient_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:flutter_test/flutter_test.dart';
@@ -179,11 +179,11 @@ void main() {
   });
 
   group('CareEventsRepository — native notes CRUD', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late CareEventsRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = CareEventsRepository(db);
     });
 
@@ -258,14 +258,14 @@ void main() {
   });
 
   group('careEvents — four-source unification', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late AppointmentRepository appointmentRepo;
     late ProviderRepository providerRepo;
     late CareEventsRepository careEventsRepo;
     late CareTasksRepository careTasksRepo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       appointmentRepo = AppointmentRepository(db);
       providerRepo = ProviderRepository(db);
       careEventsRepo = CareEventsRepository(db);

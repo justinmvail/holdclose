@@ -3,10 +3,10 @@
 // BUILD_SPEC.md §1).
 // ignore_for_file: depend_on_referenced_packages
 
-import 'package:careblazers/models/settings.dart';
-import 'package:careblazers/providers/quiet_hours_provider.dart';
-import 'package:careblazers/providers/settings_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
+import 'package:holdclose/models/settings.dart';
+import 'package:holdclose/providers/quiet_hours_provider.dart';
+import 'package:holdclose/providers/settings_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

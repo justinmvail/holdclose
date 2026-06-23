@@ -15,8 +15,8 @@ const Duration journalWindow = Duration(days: 30);
 /// Streams the caregiver's journal entries within [journalWindow], newest
 /// first (BUILD_SPEC.md §5.5).
 ///
-/// Watches [storageProvider] so a journal write from the decoder's
-/// auto-log (BUILD_SPEC.md §7.5) flows through the journal screen
+/// Watches [storageProvider] so a journal write (from the wizard or the
+/// chat coach's `log_journal` action) flows through the journal screen
 /// without an explicit invalidate. `keepAlive: false` — when the
 /// journal tab is off-screen, the underlying drift watch can rest.
 @Riverpod(keepAlive: false)

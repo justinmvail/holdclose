@@ -174,12 +174,12 @@ List<DayInterval> _gaps(
 /// freezed [CareShift] serialises into the row's `payload`, with
 /// [CareShiftsTable.startMs] / [CareShiftsTable.endMs] lifted out so the
 /// day strip can window without decoding every blob. Tests build a
-/// repository directly against `CareblazersDatabase(NativeDatabase.memory())`
+/// repository directly against `HoldcloseDatabase(NativeDatabase.memory())`
 /// so each test gets an isolated DB.
 class CareShiftsRepository with SyncSinkHost {
   CareShiftsRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Close the underlying database. The riverpod provider wires this to
   /// `ref.onDispose`.
@@ -275,7 +275,7 @@ class CareShiftsRepository with SyncSinkHost {
 /// drift database — same indirection [careTasksRepositoryProvider] uses.
 @Riverpod(keepAlive: true)
 CareShiftsRepository careShiftsRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return CareShiftsRepository(db);
 }

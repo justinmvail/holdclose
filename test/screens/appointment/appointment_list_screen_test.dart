@@ -1,10 +1,10 @@
 import 'dart:convert';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart' as model;
-import 'package:careblazers/screens/appointment/appointment_list_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart' as model;
+import 'package:holdclose/screens/appointment/appointment_list_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
@@ -19,7 +19,7 @@ import '../_semantics_matchers.dart';
 DateTime _fixedNow() => DateTime.utc(2026, 6, 1, 12);
 
 Future<void> _seedProvider(
-  CareblazersDatabase db, {
+  HoldcloseDatabase db, {
   String id = 'prov-1',
   String name = 'Dr. Ortega',
   model.ProviderRole role = model.ProviderRole.neurologist,
@@ -64,11 +64,11 @@ Future<({
   GoRouter router,
   AppointmentRepository repo,
   List<String> pushedPaths,
-  CareblazersDatabase db,
+  HoldcloseDatabase db,
 })> _pumpList(
   WidgetTester tester, {
   required AppointmentRepository repo,
-  required CareblazersDatabase db,
+  required HoldcloseDatabase db,
   Size surfaceSize = const Size(420, 1100),
 }) async {
   await tester.binding.setSurfaceSize(surfaceSize);
@@ -124,11 +124,11 @@ Future<({
 }
 
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late AppointmentRepository repo;
 
   setUp(() async {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = AppointmentRepository(db, clock: _fixedNow);
     await _seedProvider(db);
     // The add-form debounce is a process-wide singleton; clear it so each

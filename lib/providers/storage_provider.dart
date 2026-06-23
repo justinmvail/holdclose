@@ -109,7 +109,7 @@ abstract class StorageProvider {
   Future<void> reset();
 }
 
-/// Real impl backed by a [CareblazersDatabase] (BUILD_SPEC.md §6.2).
+/// Real impl backed by a [HoldcloseDatabase] (BUILD_SPEC.md §6.2).
 ///
 /// Each freezed model is serialised to its `toJson` shape and parked in
 /// the row's `payload` column — see `lib/db/tables.dart` for the
@@ -119,7 +119,7 @@ abstract class StorageProvider {
 class DriftStorageProvider with SyncSinkHost implements StorageProvider {
   DriftStorageProvider(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Close the underlying database. The riverpod provider wires this
   /// to `ref.onDispose`.
@@ -464,7 +464,7 @@ StorageProvider storageBackend(Ref ref) {
     return fake;
   }
   final DriftStorageProvider real =
-      DriftStorageProvider(CareblazersDatabase.open());
+      DriftStorageProvider(HoldcloseDatabase.open());
   ref.onDispose(real.close);
   return real;
 }

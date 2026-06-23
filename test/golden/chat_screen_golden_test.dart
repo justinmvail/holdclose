@@ -1,10 +1,10 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,7 +28,7 @@ class _InertBackend implements ChatLLMBackend {
 }
 
 Future<ChatRepository> _emptyRepo() async {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   final ChatRepository repo = ChatRepository(db);
   await repo.createConversation(
     id: 'convo-empty',
@@ -39,7 +39,7 @@ Future<ChatRepository> _emptyRepo() async {
 }
 
 Future<ChatRepository> _finalisedRepo() async {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   final ChatRepository repo = ChatRepository(db);
   final DateTime now = _fixedNow();
   await repo.createConversation(
@@ -75,7 +75,7 @@ Future<ChatRepository> _finalisedRepo() async {
 /// the bubble renders the inline "Try again" affordance (#19). Seeded as a
 /// finalised message so the golden is a static frame (no live stream).
 Future<ChatRepository> _erroredRepo() async {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   final ChatRepository repo = ChatRepository(db);
   final DateTime now = _fixedNow();
   await repo.createConversation(
@@ -141,7 +141,7 @@ void main() {
                       routerConfig: _goldenRouter('convo-empty'),
                       builder: (BuildContext context, Widget? child) {
                         return ColoredBox(
-                          color: careblazersColors.background,
+                          color: holdcloseColors.background,
                           child: child ?? const SizedBox.shrink(),
                         );
                       },
@@ -183,7 +183,7 @@ void main() {
                       routerConfig: _goldenRouter('convo-finalised'),
                       builder: (BuildContext context, Widget? child) {
                         return ColoredBox(
-                          color: careblazersColors.background,
+                          color: holdcloseColors.background,
                           child: child ?? const SizedBox.shrink(),
                         );
                       },
@@ -225,7 +225,7 @@ void main() {
                       routerConfig: _goldenRouter('convo-errored'),
                       builder: (BuildContext context, Widget? child) {
                         return ColoredBox(
-                          color: careblazersColors.background,
+                          color: holdcloseColors.background,
                           child: child ?? const SizedBox.shrink(),
                         );
                       },

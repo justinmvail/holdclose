@@ -27,7 +27,7 @@ class CircleJoinStashed extends CircleJoinOutcome {
 /// [CircleDeepLinkHandler.confirmJoin] with [token]. Nothing has been
 /// sent to the backend yet; dismissing the prompt abandons the token.
 ///
-/// This gate is the defense against a tapped `careblazers://join/<x>`
+/// This gate is the defense against a tapped `holdclose://join/<x>`
 /// link silently re-binding the device to an attacker's circle (which
 /// would sync the caregiver's data to strangers). No join without a yes.
 class CircleJoinConfirmationRequired extends CircleJoinOutcome {
@@ -54,8 +54,8 @@ class CircleJoinFailed extends CircleJoinOutcome {
   final String message;
 }
 
-/// Processes care-circle invite deep links (`careblazers://join/<token>` and
-/// the QR-style `careblazers:circle:<token>`). Pure of any widget/navigation
+/// Processes care-circle invite deep links (`holdclose://join/<token>` and
+/// the QR-style `holdclose:circle:<token>`). Pure of any widget/navigation
 /// concerns — it parses + joins + adopts and returns a [CircleJoinOutcome];
 /// the caller drives the SnackBar + navigation. This is the testable seam:
 /// widget tests + unit tests inject a fake [ForumApiClient] and assert the

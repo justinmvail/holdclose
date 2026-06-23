@@ -9,7 +9,7 @@ import 'sync_sink.dart';
 
 part 'chat_repository.g.dart';
 
-/// Persistence for the dementia-care chatbot (TASKS.md Phase 11.2).
+/// Persistence for the caregiving chatbot (TASKS.md Phase 11.2).
 ///
 /// Wraps the two drift tables [ChatConversationsTable] and
 /// [ChatMessagesTable] behind the five methods the chat screens
@@ -35,7 +35,7 @@ part 'chat_repository.g.dart';
 class ChatRepository with SyncSinkHost {
   ChatRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Insert a fresh empty conversation. [title] is the first user
   /// message's first 60 chars in production (per Phase 11.4 spec) but
@@ -247,11 +247,11 @@ class ChatRepository with SyncSinkHost {
 /// drift database, mirroring how every other service in the app
 /// reads through its provider alias.
 ///
-/// In production the repo opens its own [CareblazersDatabase] handle
+/// In production the repo opens its own [HoldcloseDatabase] handle
 /// onto the same SQLite file [DriftStorageProvider] uses — SQLite's
 /// per-connection serialization keeps that safe — and disposes the
 /// handle when the provider is torn down. Tests build a
-/// [ChatRepository] directly against `CareblazersDatabase(NativeDatabase
+/// [ChatRepository] directly against `HoldcloseDatabase(NativeDatabase
 /// .memory())` so each test gets an isolated DB.
 ///
 /// Named `chatRepositoryBackend` so the generated class is
@@ -260,7 +260,7 @@ class ChatRepository with SyncSinkHost {
 /// pattern [seedRepositoryProvider] uses.
 @Riverpod(keepAlive: true)
 ChatRepository chatRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return ChatRepository(db);
 }

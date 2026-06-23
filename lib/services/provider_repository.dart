@@ -24,12 +24,12 @@ part 'provider_repository.g.dart';
 /// [MedicationRepository] / [AppointmentRepository] use. Deleting a
 /// [Provider] cascades to every appointment that FKs onto it via the
 /// `ON DELETE CASCADE` declared in `lib/db/tables.dart`; the
-/// `PRAGMA foreign_keys = ON` in [CareblazersDatabase]'s `beforeOpen`
+/// `PRAGMA foreign_keys = ON` in [HoldcloseDatabase]'s `beforeOpen`
 /// is what makes that cascade real.
 class ProviderRepository with SyncSinkHost {
   ProviderRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Insert-or-replace [provider] by id. The lifted [name] column keeps
   /// the alphabetical sort in [listProviders] from having to decode
@@ -89,10 +89,10 @@ class ProviderRepository with SyncSinkHost {
 /// [appointmentRepositoryProvider] and [medicationRepositoryProvider]
 /// use.
 ///
-/// In production the repo opens its own [CareblazersDatabase] handle
+/// In production the repo opens its own [HoldcloseDatabase] handle
 /// onto the same SQLite file the rest of the app shares; SQLite's
 /// per-connection serialization keeps that safe. Tests build a
-/// [ProviderRepository] directly against `CareblazersDatabase(
+/// [ProviderRepository] directly against `HoldcloseDatabase(
 /// NativeDatabase.memory())` so each test gets an isolated DB.
 ///
 /// Named `providerRepositoryBackend` so the generated class is
@@ -100,7 +100,7 @@ class ProviderRepository with SyncSinkHost {
 /// natural-language [providerRepositoryProvider] alias below.
 @Riverpod(keepAlive: true)
 ProviderRepository providerRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return ProviderRepository(db);
 }

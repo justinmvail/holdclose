@@ -1,7 +1,7 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,11 +24,11 @@ Provider _provider({
 
 void main() {
   group('ProviderRepository — TASKS.md Phase 12.7', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late ProviderRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = ProviderRepository(db);
     });
 
@@ -92,7 +92,7 @@ void main() {
         'deleteProvider cascades through its appointments via the FK',
         () async {
       // Cascade is only honored when PRAGMA foreign_keys = ON, which
-      // CareblazersDatabase.beforeOpen turns on for every connection.
+      // HoldcloseDatabase.beforeOpen turns on for every connection.
       await repo.upsertProvider(_provider(id: 'prov-1'));
       final AppointmentRepository appts = AppointmentRepository(db);
       await appts.upsertAppointment(Appointment(

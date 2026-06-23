@@ -1,41 +1,41 @@
 import 'dart:convert' show jsonDecode;
 
-import 'package:careblazers/models/appointment.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_circle_membership.dart';
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/models/care_plan_routine.dart';
-import 'package:careblazers/models/care_shift.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/models/document.dart';
-import 'package:careblazers/models/expense.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/models/health_log_entry.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/models/patient.dart';
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/circle_member_cache_provider.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/sync_state_provider.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/fake_forum_api_client.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/services/sync_service.dart';
-import 'package:careblazers/services/sync_sink.dart';
+import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_circle_membership.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/models/care_plan_routine.dart';
+import 'package:holdclose/models/care_shift.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/models/document.dart';
+import 'package:holdclose/models/expense.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/models/health_log_entry.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/models/patient.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/circle_member_cache_provider.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/sync_state_provider.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/fake_forum_api_client.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/services/sync_service.dart';
+import 'package:holdclose/services/sync_sink.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
@@ -87,7 +87,7 @@ DoseWindow _window(String id, {String patientId = 'p1'}) => DoseWindow(
 /// the post-write scheduling are exercised here through enqueue directly).
 class _Device {
   _Device(this.client, {DateTime Function()? clock}) {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     medications = MedicationRepository(db, clock: clock);
     chat = ChatRepository(db);
     appointments = AppointmentRepository(db, clock: clock);
@@ -150,7 +150,7 @@ class _Device {
   }
 
   final ForumApiClient client;
-  late final CareblazersDatabase db;
+  late final HoldcloseDatabase db;
   late final MedicationRepository medications;
   late final ChatRepository chat;
   late final AppointmentRepository appointments;

@@ -1,16 +1,16 @@
 import '../../support/forum_cache_test_override.dart';
 import 'dart:async';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/community_subnav_provider.dart';
-import 'package:careblazers/providers/home_conversation_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/community/community_feed_screen.dart';
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/community_subnav_provider.dart';
+import 'package:holdclose/providers/home_conversation_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/community/community_feed_screen.dart';
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -84,7 +84,7 @@ Future<GoRouter> _pumpShell(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(420, 1000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   addTearDown(db.close);
 
   final GoRouter router = buildRouter(initialLocation: '/community');

@@ -16,7 +16,7 @@ enum MessageRole {
   assistant,
 }
 
-/// A single dementia-care chat thread persisted in drift
+/// A single caregiving chat thread persisted in drift
 /// (TASKS.md Phase 11.1 + 11.2).
 ///
 /// [title] is the thread's display name. By default the list screen

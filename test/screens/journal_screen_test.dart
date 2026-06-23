@@ -1,15 +1,11 @@
-import 'package:careblazers/models/behavior.dart';
-import 'package:careblazers/models/decoder_result.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/triage.dart';
-import 'package:careblazers/providers/journal_entries_provider.dart';
-import 'package:careblazers/providers/pattern_detector_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
-import 'package:careblazers/screens/journal/journal_entry_screen.dart';
-import 'package:careblazers/screens/journal/journal_screen.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/providers/journal_entries_provider.dart';
+import 'package:holdclose/providers/pattern_detector_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/journal/journal_entry_screen.dart';
+import 'package:holdclose/screens/journal/journal_screen.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,43 +20,26 @@ import '_semantics_matchers.dart';
 /// is fed entries whose `createdAt` is computed off the same anchor.
 final DateTime _fixedNow = DateTime(2026, 5, 29, 12, 0);
 
-const Behavior _sundowning =
-    Behavior(id: 'sundowning', label: 'Sundowning', glyph: '🌅');
-const Behavior _accusing =
-    Behavior(id: 'accusing', label: 'Accusing me', glyph: '💸');
-
-const TriageAnswers _triage = TriageAnswers(
-  when: TriageWhen.lateAfternoonEvening,
-  whatChanged: TriageWhatChanged.nothing,
-  whatTried: TriageWhatTried.talked,
-);
-
+/// Build a caregiver-authored journal entry (the post-decoder shape:
+/// free-text situation + attempts, no behavior/triage/result).
 JournalEntry _entry({
   required String id,
-  required Behavior behavior,
   required DateTime createdAt,
-  JournalOutcome outcome = JournalOutcome.positive,
-  List<String> tweak = const <String>['dimming lights'],
+  String situationText = 'She kept asking to call her mother.',
+  String attemptsText = 'I redirected to the photo album.',
 }) =>
     JournalEntry(
       id: id,
-      behavior: behavior,
-      triage: _triage,
-      result: DecoderResult(
-        say: const <String>['line 1'],
-        tweak: tweak,
-        dontSay: const <String>["don't argue"],
-        generatedAt: createdAt,
-      ),
-      outcome: outcome,
-      attempt: 0,
       createdAt: createdAt,
+      occurredAt: createdAt,
+      situationText: situationText,
+      attemptsText: attemptsText,
     );
 
 /// Pumps the journal screen behind the real router so `context.push`
-/// against `/decoder/behavior` lands on the real builder + the tab
-/// shell renders. Storage starts empty by default; callers seed the
-/// returned [InMemoryStorageProvider] before pumping. The surface is
+/// against `/journal/new` + `/journal/:id` lands on the real builders +
+/// the tab shell renders. Storage starts empty by default; callers seed
+/// the returned [InMemoryStorageProvider] before pumping. The surface is
 /// sized tall enough that the full populated layout (week summary +
 /// optional alert + three group sections) lays out within the viewport
 /// — otherwise the bottom Earlier group falls outside the lazy-
@@ -98,9 +77,9 @@ void main() {
         (WidgetTester tester) async {
       await _pumpJournal(tester);
 
-      expect(find.text('Your journal fills itself.'), findsOneWidget);
+      expect(find.text('Your journal, in your words.'), findsOneWidget);
       expect(
-        find.textContaining('Each time you use the decoder'),
+        find.textContaining('what happened, what you'),
         findsOneWidget,
       );
       expect(find.byKey(JournalScreen.emptyCtaKey), findsOneWidget);
@@ -108,14 +87,30 @@ void main() {
       expect(find.byKey(JournalScreen.entriesListKey), findsNothing);
     });
 
-    testWidgets('empty-state CTA pushes /decoder/behavior',
+    testWidgets('empty-state CTA opens the add sheet (not decoder nav)',
         (WidgetTester tester) async {
       await _pumpJournal(tester);
 
       await tester.tap(find.byKey(JournalScreen.emptyCtaKey));
       await tester.pumpAndSettle();
 
-      expect(find.byType(BehaviorPickerScreen), findsOneWidget);
+      // The CTA now opens the entry-method chooser sheet — both options
+      // (quick note + guided entry) surface; the 'Guided entry' option is
+      // the renamed wizard.
+      expect(find.byKey(JournalScreen.quickNoteOptionKey), findsOneWidget);
+      expect(find.byKey(JournalScreen.wizardOptionKey), findsOneWidget);
+      expect(find.text('Guided entry'), findsOneWidget);
+    });
+
+    testWidgets('add FAB opens the chooser sheet with both entry options',
+        (WidgetTester tester) async {
+      await _pumpJournal(tester);
+
+      await tester.tap(find.byKey(JournalScreen.addEntryFabKey));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(JournalScreen.quickNoteOptionKey), findsOneWidget);
+      expect(find.byKey(JournalScreen.wizardOptionKey), findsOneWidget);
     });
 
     testWidgets(
@@ -123,17 +118,14 @@ void main() {
         (WidgetTester tester) async {
       final JournalEntry todayEntry = _entry(
         id: 'today-1',
-        behavior: _sundowning,
         createdAt: _fixedNow.subtract(const Duration(hours: 2)),
       );
       final JournalEntry yesterdayEntry = _entry(
         id: 'yesterday-1',
-        behavior: _accusing,
         createdAt: _fixedNow.subtract(const Duration(days: 1, hours: 3)),
       );
       final JournalEntry earlierEntry = _entry(
         id: 'earlier-1',
-        behavior: _sundowning,
         createdAt: _fixedNow.subtract(const Duration(days: 4)),
       );
 
@@ -173,6 +165,47 @@ void main() {
           lessThan(y(JournalScreen.entryTileKey('earlier-1'))));
     });
 
+    testWidgets('entry tile shows the situation text + attempts preview',
+        (WidgetTester tester) async {
+      await _pumpJournal(
+        tester,
+        entries: <JournalEntry>[
+          _entry(
+            id: 'today-1',
+            createdAt: _fixedNow.subtract(const Duration(hours: 1)),
+            situationText: 'She was anxious before dinner.',
+            attemptsText: 'We sat by the window with tea.',
+          ),
+        ],
+      );
+
+      // Title line = first line of the situation; sub line = attempts.
+      expect(
+        find.textContaining('She was anxious before dinner.'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('We sat by the window with tea.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('entry with no situation falls back to "Journal note"',
+        (WidgetTester tester) async {
+      await _pumpJournal(
+        tester,
+        entries: <JournalEntry>[
+          JournalEntry(
+            id: 'bare-1',
+            createdAt: _fixedNow.subtract(const Duration(hours: 1)),
+            notes: 'Just a quiet day.',
+          ),
+        ],
+      );
+
+      expect(find.textContaining('Journal note'), findsOneWidget);
+    });
+
     testWidgets('pattern alert card displays when detector returns one',
         (WidgetTester tester) async {
       const PatternAlert alert = PatternAlert(
@@ -186,7 +219,6 @@ void main() {
         entries: <JournalEntry>[
           _entry(
             id: 'today-1',
-            behavior: _sundowning,
             createdAt: _fixedNow.subtract(const Duration(hours: 1)),
           ),
         ],
@@ -206,7 +238,6 @@ void main() {
         entries: <JournalEntry>[
           _entry(
             id: 'today-1',
-            behavior: _sundowning,
             createdAt: _fixedNow.subtract(const Duration(hours: 1)),
           ),
         ],
@@ -222,7 +253,6 @@ void main() {
         entries: <JournalEntry>[
           _entry(
             id: 'today-1',
-            behavior: _sundowning,
             createdAt: _fixedNow.subtract(const Duration(hours: 1)),
           ),
         ],
@@ -258,25 +288,25 @@ void main() {
       expect(find.byType(AppBar), findsNothing);
     });
 
-    testWidgets('empty-state CTA announces the decoder hand-off',
+    testWidgets('empty-state CTA carries an "add your first entry" semantics',
         (WidgetTester tester) async {
       await _pumpJournal(tester);
 
       expect(
-        hasSemanticsLabel(tester, RegExp('Open the decoder')),
+        hasSemanticsLabel(tester, RegExp('Add your first journal entry')),
         isTrue,
       );
     });
 
-    testWidgets('entry tiles announce behavior and time',
+    testWidgets('entry tiles announce the situation and time',
         (WidgetTester tester) async {
       await _pumpJournal(
         tester,
         entries: <JournalEntry>[
           _entry(
             id: 'today-1',
-            behavior: _sundowning,
             createdAt: _fixedNow.subtract(const Duration(hours: 1)),
+            situationText: 'She was restless after lunch.',
           ),
         ],
       );
@@ -284,43 +314,40 @@ void main() {
       expect(
         hasSemanticsLabel(
           tester,
-          RegExp('Sundowning.*Double-tap to open this entry'),
+          RegExp('She was restless after lunch.*Double-tap to open this entry'),
         ),
         isTrue,
       );
     });
 
-    testWidgets('week summary shows top behavior and trend subline',
+    testWidgets('week summary shows entry count and trend subline',
         (WidgetTester tester) async {
       await _pumpJournal(
         tester,
         entries: <JournalEntry>[
           _entry(
             id: 't1',
-            behavior: _sundowning,
             createdAt: _fixedNow.subtract(const Duration(hours: 1)),
           ),
           _entry(
             id: 't2',
-            behavior: _sundowning,
             createdAt: _fixedNow.subtract(const Duration(days: 2)),
           ),
           _entry(
             id: 't3',
-            behavior: _accusing,
             createdAt: _fixedNow.subtract(const Duration(days: 3)),
           ),
         ],
       );
 
       expect(
-        find.textContaining('3 incidents logged'),
+        find.textContaining('3 entries logged'),
         findsOneWidget,
       );
-      // Sundowning leads the rank — 2 this week.
+      // No prior week → "first week tracking" subline.
       expect(
-        find.textContaining('Sundowning'),
-        findsWidgets,
+        find.textContaining('first week tracking'),
+        findsOneWidget,
       );
     });
   });

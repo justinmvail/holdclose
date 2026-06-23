@@ -1,13 +1,13 @@
-import 'package:careblazers/db/database.dart';
+import 'package:holdclose/db/database.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('CareblazersDatabase.testInstance() (TASKS.md Phase 15.2)', () {
-    late CareblazersDatabase db;
+  group('HoldcloseDatabase.testInstance() (TASKS.md Phase 15.2)', () {
+    late HoldcloseDatabase db;
 
     setUp(() {
-      db = CareblazersDatabase.testInstance();
+      db = HoldcloseDatabase.testInstance();
     });
 
     tearDown(() async {
@@ -50,7 +50,7 @@ void main() {
 
     test('multiple instances are independent — no shared on-disk file',
         () async {
-      final CareblazersDatabase other = CareblazersDatabase.testInstance();
+      final HoldcloseDatabase other = HoldcloseDatabase.testInstance();
       addTearDown(other.close);
 
       // A write into one instance must never surface in the other; each

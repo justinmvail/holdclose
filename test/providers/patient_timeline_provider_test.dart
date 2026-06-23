@@ -1,11 +1,11 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/providers/active_patient_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/patient_timeline_provider.dart';
-import 'package:careblazers/services/appointment_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/providers/active_patient_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/patient_timeline_provider.dart';
+import 'package:holdclose/services/appointment_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,12 +40,12 @@ CareTask _task({
     );
 
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late AppointmentRepository appointmentRepo;
   late CareTasksRepository tasksRepo;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     appointmentRepo = AppointmentRepository(db);
     tasksRepo = CareTasksRepository(db);
   });

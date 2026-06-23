@@ -69,7 +69,7 @@ const String appSettingsSingletonId = 'singleton';
 /// settings reset/wipe clears it for free.
 const String activePatientSettingsId = 'active-patient';
 
-/// One persisted dementia-care chat thread (TASKS.md Phase 11.2). Each
+/// One persisted caregiving chat thread (TASKS.md Phase 11.2). Each
 /// row carries the full freezed [Conversation] as a JSON [payload] so
 /// new fields on the model don't require a schema bump; [createdAtMs]
 /// and [updatedAtMs] are lifted to their own columns so the
@@ -99,7 +99,7 @@ class ChatConversationsTable extends Table {
 /// repository tests pin.
 ///
 /// SQLite only honours that FK action when the per-connection
-/// `PRAGMA foreign_keys = ON` is set; [CareblazersDatabase]'s
+/// `PRAGMA foreign_keys = ON` is set; [HoldcloseDatabase]'s
 /// `MigrationStrategy.beforeOpen` enables it on every connection so
 /// production + tests share the same enforcement.
 ///
@@ -180,7 +180,7 @@ class DoseWindowsTable extends Table {
 /// wipes its entries); FK on [windowId] cascades too so deleting an
 /// empty window doesn't strand its (now dangling) entries. Both are
 /// gated by the per-connection `PRAGMA foreign_keys = ON` set in
-/// [CareblazersDatabase.migration]'s `beforeOpen`.
+/// [HoldcloseDatabase.migration]'s `beforeOpen`.
 ///
 /// The freezed [MedicationWindowEntry] (daysOfWeek, startsOn, endsOn)
 /// lives in [payload] as JSON.
@@ -269,7 +269,7 @@ class ProvidersTable extends Table {
 /// the same statement, so the repository never leaves orphans behind.
 ///
 /// SQLite only honours that FK action when the per-connection
-/// `PRAGMA foreign_keys = ON` is set; [CareblazersDatabase]'s
+/// `PRAGMA foreign_keys = ON` is set; [HoldcloseDatabase]'s
 /// `MigrationStrategy.beforeOpen` enables it on every connection.
 ///
 /// [startsAtMs] is lifted out of the freezed `Appointment` payload so
@@ -664,7 +664,7 @@ class SyncOutboxTable extends Table {
 /// so the roster never shows an orphaned permission row.
 ///
 /// SQLite only honours that FK action when the per-connection
-/// `PRAGMA foreign_keys = ON` is set; [CareblazersDatabase]'s
+/// `PRAGMA foreign_keys = ON` is set; [HoldcloseDatabase]'s
 /// `MigrationStrategy.beforeOpen` enables it on every connection.
 ///
 /// [permissionLevel] is the `PermissionLevel` enum's `.name`;

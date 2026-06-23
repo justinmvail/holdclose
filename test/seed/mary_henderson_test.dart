@@ -1,5 +1,5 @@
-import 'package:careblazers/models/patient.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
+import 'package:holdclose/models/patient.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -9,8 +9,8 @@ void main() {
       expect(mary.id, 'demo-patient-mary');
       expect(mary.name, 'Mary Henderson');
       expect(mary.age, 78);
-      expect(mary.diagnosis, "Alzheimer's disease, stage 5 (moderately severe)");
-      expect(mary.diagnosedAt, DateTime.utc(2022, 4, 15));
+      expect(mary.diagnosis, 'Stroke recovery (ischemic, 2024); high blood pressure');
+      expect(mary.diagnosedAt, DateTime.utc(2024, 2, 10));
     });
 
     test('carries the three §9.1 medications in spec order', () {
@@ -20,18 +20,18 @@ void main() {
         meds,
         containsAllInOrder(const <CrisisMedication>[
           CrisisMedication(
-            name: 'Donepezil',
+            name: 'Lisinopril',
             dose: '10 mg',
             schedule: 'every morning',
           ),
           CrisisMedication(
-            name: 'Memantine',
-            dose: '10 mg',
+            name: 'Atorvastatin',
+            dose: '20 mg',
             schedule: 'every evening',
           ),
           CrisisMedication(
-            name: 'Sertraline',
-            dose: '50 mg',
+            name: 'Aspirin',
+            dose: '81 mg',
             schedule: 'every morning',
           ),
         ]),
@@ -50,7 +50,7 @@ void main() {
         const <String>[
           'Sitting on her left side (she hears better there).',
           'The phrase "Mom, it\'s okay."',
-          'Showing her a photo of Dad (passed 2019).',
+          'Looking through the family photo album together.',
         ],
       );
     });
@@ -63,7 +63,7 @@ void main() {
         const <String>[
           'Strangers leaning over her.',
           'Loud beeping (monitors, alarms).',
-          'Being asked many questions in a row.',
+          'Being rushed or hurried through things.',
         ],
       );
     });

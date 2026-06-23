@@ -5,8 +5,8 @@ import '../models/journal_entry.dart';
 /// Severity rung for a [PatternAlert] (BUILD_SPEC.md §5.5 + §7.6).
 ///
 /// Drives the alert card's color treatment: [info] uses the brand's soft
-/// navy; [warning] uses `careblazersColors.accentDeep` so the "3+ falls
-/// this week" rule lands with the visual weight the spec calls for.
+/// navy; [warning] uses `context.cb.accentDeep` so the "3+ falls this
+/// week" rule lands with the visual weight the spec calls for.
 enum PatternSeverity { info, warning }
 
 /// One alert surfaced on the journal screen's "Heads up" card
@@ -45,39 +45,29 @@ class PatternAlert {
 /// The riverpod-wired hook lives in `providers/pattern_detector_provider`
 /// which feeds the current journal window + clock through to [detect].
 ///
-/// Three v1 rules:
+/// One v1 rule:
 ///
 /// * **3+ falls in 7 days** — naive substring match for `fall` or `fell`
-///   inside each entry's `result.tweak` or `notes`. Future: a structured
-///   tag on the entry rather than a text scan.
-/// * **5+ sundowning entries in 7 days** — counts entries whose
-///   `behavior.id` is `sundowning`.
-/// * **3+ distinct new behaviors in 14 days** — a behavior id is "new"
-///   when its earliest appearance in the supplied entries is within the
-///   14-day window. The supplied list is the journal window (currently
-///   30 days), so "first appearance" is a within-window proxy for "first
-///   appearance in the patient's history".
+///   inside each entry's free text (situation / attempts / notes).
+///   Future: a structured tag on the entry rather than a text scan.
 ///
-/// The UTI red-flag rule from BUILD_SPEC.md §7.6 is deliberately out of
-/// scope for v1 — it requires structured tags the journal entry model
-/// doesn't carry yet.
+/// The behavior-keyed rules (sundowning bursts, new-behavior spikes) were
+/// retired with the behavior decoder — journal entries are now free text,
+/// so there is no canonical behavior id to count. The UTI red-flag rule
+/// from BUILD_SPEC.md §7.6 remains out of scope: it needs structured tags
+/// the entry model doesn't carry.
 class PatternDetector {
   const PatternDetector();
 
   static const Duration _shortWindow = Duration(days: 7);
-  static const Duration _longWindow = Duration(days: 14);
 
-  /// Run every rule against [entries] anchored at [now]. Returns the
-  /// alerts in a stable order: falls → sundowning → new-behaviors. The
-  /// journal screen renders them top-to-bottom in that order.
+  /// Run every rule against [entries] anchored at [now].
   List<PatternAlert> detect(
     List<JournalEntry> entries, {
     required DateTime now,
   }) {
     final List<PatternAlert> alerts = <PatternAlert>[
       if (_detectFalls(entries, now) case final PatternAlert a) a,
-      if (_detectSundowning(entries, now) case final PatternAlert a) a,
-      if (_detectNewBehaviors(entries, now) case final PatternAlert a) a,
     ];
     return List<PatternAlert>.unmodifiable(alerts);
   }
@@ -97,56 +87,17 @@ class PatternDetector {
     );
   }
 
-  PatternAlert? _detectSundowning(List<JournalEntry> entries, DateTime now) {
-    final DateTime cutoff = now.subtract(_shortWindow);
-    int count = 0;
-    for (final JournalEntry e in entries) {
-      if (!e.createdAt.isAfter(cutoff)) continue;
-      if (e.behavior.id == 'sundowning') count += 1;
-    }
-    if (count < 5) return null;
-    return const PatternAlert(
-      kind: 'sundowning_5plus_7d',
-      text: 'Sundowning is hitting hard this week. '
-          'Talk to your doctor about evening routines.',
-      severity: PatternSeverity.warning,
-    );
-  }
-
-  PatternAlert? _detectNewBehaviors(
-    List<JournalEntry> entries,
-    DateTime now,
-  ) {
-    final DateTime cutoff = now.subtract(_longWindow);
-    final Map<String, DateTime> firstSeen = <String, DateTime>{};
-    for (final JournalEntry e in entries) {
-      final DateTime? prior = firstSeen[e.behavior.id];
-      if (prior == null || e.createdAt.isBefore(prior)) {
-        firstSeen[e.behavior.id] = e.createdAt;
-      }
-    }
-    int newCount = 0;
-    for (final DateTime ts in firstSeen.values) {
-      if (ts.isAfter(cutoff)) newCount += 1;
-    }
-    if (newCount < 3) return null;
-    return const PatternAlert(
-      kind: 'new_behaviors_3plus_14d',
-      text: 'Multiple new behaviors this week. '
-          'Worth a check-in with the doctor.',
-      severity: PatternSeverity.warning,
-    );
-  }
-
   /// Naive fall-mention probe: case-insensitive substring scan over the
-  /// entry's `notes` and every `tweak` line of its decoder result. The
-  /// scope-creep risks ("fallow", "fellow") are accepted in v1 — see
-  /// BUILD_SPEC.md §7.6 ("naive in v1: matches text 'fall' or 'fell'").
+  /// entry's free-text fields. The scope-creep risks ("fallow", "fellow")
+  /// are accepted in v1 — see BUILD_SPEC.md §7.6 ("naive in v1: matches
+  /// text 'fall' or 'fell'").
   bool _mentionsFall(JournalEntry e) {
-    final String? notes = e.notes;
-    if (notes != null && _hasFallToken(notes)) return true;
-    for (final String t in e.result.tweak) {
-      if (_hasFallToken(t)) return true;
+    for (final String? field in <String?>[
+      e.situationText,
+      e.attemptsText,
+      e.notes,
+    ]) {
+      if (field != null && _hasFallToken(field)) return true;
     }
     return false;
   }

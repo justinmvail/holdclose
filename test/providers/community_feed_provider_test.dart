@@ -1,8 +1,8 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/community_feed_provider.dart';
-import 'package:careblazers/providers/forum_post_cache_provider.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/community_feed_provider.dart';
+import 'package:holdclose/providers/forum_post_cache_provider.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -93,7 +93,7 @@ ProviderContainer _container(
   // The feed reads a forum-post cache repo (local-first). In unit tests it
   // must NOT open the real on-disk DB — back it with an in-memory one.
   final ForumPostCacheRepository cacheRepo = cache ??
-      ForumPostCacheRepository(CareblazersDatabase(NativeDatabase.memory()));
+      ForumPostCacheRepository(HoldcloseDatabase(NativeDatabase.memory()));
   final ProviderContainer container = ProviderContainer(
     overrides: <Override>[
       forumApiClientProvider.overrideWithValue(client),
@@ -351,8 +351,8 @@ void main() {
 
   group('CommunityFeed — local-first offline cache', () {
     test('caches the fresh first page on a successful load', () async {
-      final CareblazersDatabase db =
-          CareblazersDatabase(NativeDatabase.memory());
+      final HoldcloseDatabase db =
+          HoldcloseDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       final ForumPostCacheRepository cache = ForumPostCacheRepository(db);
       final _FakeForumApiClient client = _FakeForumApiClient()
@@ -374,8 +374,8 @@ void main() {
 
     test('falls back to the cached page when the backend is unreachable',
         () async {
-      final CareblazersDatabase db =
-          CareblazersDatabase(NativeDatabase.memory());
+      final HoldcloseDatabase db =
+          HoldcloseDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       final ForumPostCacheRepository cache = ForumPostCacheRepository(db);
       // Prime the cache as if a previous online session had loaded the feed.

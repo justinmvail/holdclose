@@ -38,7 +38,7 @@ enum CareEventKind {
   //   from the log's `outcome` (taken/late/skipped/missed).
   // - [healthLogEntry] — a vitals/symptom/note entry from
   //   [HealthLogEntriesTable]. `externalRef` is the entry id.
-  // - [journalEntry] — a behavior/outcome jotting from
+  // - [journalEntry] — a caregiver-authored journal note from
   //   [JournalEntriesTable]. `externalRef` is the entry id.
   doseScheduled,
   doseLogged,

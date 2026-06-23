@@ -1,5 +1,5 @@
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/services/medication_repository.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/services/medication_repository.dart';
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_test/flutter_test.dart';
 

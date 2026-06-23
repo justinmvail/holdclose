@@ -1,11 +1,11 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_plan_routine.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/models/medication.dart' show FrequencyKind;
-import 'package:careblazers/providers/active_patient_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/screens/medical/care_plan_routines_screen.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_plan_routine.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/models/medication.dart' show FrequencyKind;
+import 'package:holdclose/providers/active_patient_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/screens/medical/care_plan_routines_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,7 +19,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// renders each routine, tapping a row → the edit route, and the add
 /// affordance → the new route.
 ///
-/// Mirrors the form tests' harness: in-memory CareblazersDatabase, a
+/// Mirrors the form tests' harness: in-memory HoldcloseDatabase, a
 /// GoRouter with the routines list at the parent and `new` / `:id` child
 /// stubs that record the location they were pushed to, the repo provider
 /// overridden, and pumpAndSettle.
@@ -110,12 +110,12 @@ Future<List<String>> _pumpScreen(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late CarePlanRepository repo;
   late CareTasksRepository tasksRepo;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = CarePlanRepository(db);
     tasksRepo = CareTasksRepository(db);
   });

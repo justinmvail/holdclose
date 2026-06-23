@@ -10,7 +10,7 @@ import '../../models/forum.dart';
 import '../../providers/community_feed_provider.dart';
 import '../../providers/community_subnav_provider.dart';
 import '../../providers/my_forum_profile_provider.dart';
-import '../../routing/router.dart' show CareblazersRoutes;
+import '../../routing/router.dart' show HoldcloseRoutes;
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/form/format.dart';
@@ -43,7 +43,7 @@ enum CommunitySegment {
   /// The social feed of caregiver + official posts (the tab's landing).
   feed,
 
-  /// The Careblazers content library — videos + playbooks (Phase 14.37
+  /// The Holdclose content library — videos + playbooks (Phase 14.37
   /// lands the real `LearnScreen` here).
   learn,
 
@@ -177,7 +177,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
               backgroundColor: context.cb.cta,
               foregroundColor: Colors.white,
               onPressed: () =>
-                  context.pushNamed(CareblazersRoutes.communityCompose),
+                  context.pushNamed(HoldcloseRoutes.communityCompose),
               icon: const Icon(Icons.edit_outlined),
               label: const Text('New post'),
             )
@@ -205,7 +205,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
                         icon: const Icon(Icons.shield_outlined),
                         color: context.cb.primary,
                         onPressed: () => context.pushNamed(
-                          CareblazersRoutes.communityAdminReports,
+                          HoldcloseRoutes.communityAdminReports,
                         ),
                       )
                     : null,
@@ -261,7 +261,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
           ],
         );
       case CommunitySegment.learn:
-        // The Careblazers content library — videos + playbooks (Phase
+        // The Holdclose content library — videos + playbooks (Phase
         // 14.37). Keyed with [learnSegmentKey] so the sub-nav swap tests
         // still find the Learn body.
         return const LearnScreen(key: CommunityFeedScreen.learnSegmentKey);
@@ -479,7 +479,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            "When you're stuck on something, chances are another Careblazer "
+            "When you're stuck on something, chances are another caregiver "
             'has been there too. Share a moment and the community shows up.',
             style: textTheme.bodyLarge?.copyWith(
               color: context.cb.text,
@@ -563,7 +563,7 @@ class _PostCard extends StatelessWidget {
           // the detail header renders immediately instead of blanking
           // while the per-post fetch lands (Phase 13.11).
           onTap: () => context.goNamed(
-            CareblazersRoutes.communityPostDetail,
+            HoldcloseRoutes.communityPostDetail,
             pathParameters: <String, String>{'postId': post.id},
             extra: post,
           ),

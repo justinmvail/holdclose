@@ -1,4 +1,4 @@
-import 'package:careblazers/providers/link_launcher_provider.dart';
+import 'package:holdclose/providers/link_launcher_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -7,8 +7,8 @@ void main() {
       final RecordingLinkLauncher rec = RecordingLinkLauncher();
 
       final Uri first =
-          Uri.parse('https://careblazers.com/care-collective');
-      final Uri second = Uri.parse('mailto:hello@careblazers.com');
+          Uri.parse('https://holdclose.com/care-collective');
+      final Uri second = Uri.parse('mailto:hello@holdclose.com');
 
       expect(await rec.launch(first), isTrue);
       expect(await rec.launch(second), isTrue);

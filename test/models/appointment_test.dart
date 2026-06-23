@@ -1,4 +1,4 @@
-import 'package:careblazers/models/appointment.dart';
+import 'package:holdclose/models/appointment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

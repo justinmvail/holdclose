@@ -1,8 +1,8 @@
-import 'package:careblazers/models/settings.dart';
-import 'package:careblazers/providers/bundled_tts_provider.dart';
-import 'package:careblazers/providers/settings_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/tts_provider.dart';
+import 'package:holdclose/models/settings.dart';
+import 'package:holdclose/providers/bundled_tts_provider.dart';
+import 'package:holdclose/providers/settings_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/tts_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;

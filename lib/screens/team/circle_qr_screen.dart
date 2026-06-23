@@ -14,7 +14,7 @@ import '../../widgets/path_header.dart';
 /// QR payload scheme for a circle invite (care-circle connect,
 /// 2026-06-06). The token is wrapped so [CircleScanScreen] can validate
 /// that a scanned code is one of ours before redeeming it.
-const String circleQrScheme = 'careblazers:circle:';
+const String circleQrScheme = 'holdclose:circle:';
 
 /// Build the QR payload for an invite [token].
 String circleQrPayload(String token) => '$circleQrScheme$token';

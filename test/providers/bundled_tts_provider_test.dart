@@ -1,5 +1,5 @@
-import 'package:careblazers/providers/bundled_tts_provider.dart';
-import 'package:careblazers/providers/tts_provider.dart';
+import 'package:holdclose/providers/bundled_tts_provider.dart';
+import 'package:holdclose/providers/tts_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -42,9 +42,9 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
-    test('channelName matches the careblazers/tts contract', () {
-      expect(BundledTTSProvider.channelName, 'careblazers/tts');
-      expect(bundledTtsChannelName, 'careblazers/tts');
+    test('channelName matches the holdclose/tts contract', () {
+      expect(BundledTTSProvider.channelName, 'holdclose/tts');
+      expect(bundledTtsChannelName, 'holdclose/tts');
     });
 
     test('is a TTSProvider', () {
@@ -251,7 +251,7 @@ void main() {
           expect(warnings, isEmpty,
               reason: 'happy path must not emit the WARN line');
           expect(probeCalls.single.method, 'probe',
-              reason: 'factory probes via the careblazers/tts probe verb');
+              reason: 'factory probes via the holdclose/tts probe verb');
         },
       );
     });

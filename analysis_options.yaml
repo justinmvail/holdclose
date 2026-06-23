@@ -1,4 +1,4 @@
-# Analyzer configuration for careblazers.
+# Analyzer configuration for holdclose.
 #
 # Warnings + infos ARE fatal at the test gate. Anything that should
 # NOT block ship gets explicitly silenced here, where it's visible to

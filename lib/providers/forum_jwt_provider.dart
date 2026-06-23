@@ -16,18 +16,18 @@ part 'forum_jwt_provider.g.dart';
 /// token, signed with a secret that exists ONLY on the Worker. The app
 /// carries the token opaquely. Nothing in the binary can mint or forge
 /// an identity — extracting the app's defines yields no signing key.
-const String forumSessionTokenStorageKey = 'careblazers.forum.session_token';
+const String forumSessionTokenStorageKey = 'holdclose.forum.session_token';
 
 /// Companion key holding the token's expiry as epoch **seconds** (the
 /// JWT `exp` claim the Worker reported back as `token_expires_at`).
 const String forumSessionExpiryStorageKey =
-    'careblazers.forum.session_expires_at';
+    'holdclose.forum.session_expires_at';
 
 /// Legacy key from the retired client-side-minting scheme (pre
 /// 2026-06-11) that parked the shared HMAC secret on the device. Never
 /// written anymore; actively DELETED whenever the session store writes
 /// or clears, so updated installs shed the old secret.
-const String forumSecretStorageKey = 'careblazers.forum.jwt_secret';
+const String forumSecretStorageKey = 'holdclose.forum.jwt_secret';
 
 /// A server-minted forum session: the bearer token plus its expiry.
 class ForumSession {

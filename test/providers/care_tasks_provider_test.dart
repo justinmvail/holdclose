@@ -1,9 +1,9 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/providers/active_patient_provider.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/providers/active_patient_provider.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -76,11 +76,11 @@ void main() {
   });
 
   group('CareTasksRepository — CRUD', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late CareTasksRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = CareTasksRepository(db);
     });
 
@@ -170,7 +170,7 @@ void main() {
   });
 
   group('CareTasks notifier — state machine', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late CareTasksRepository repo;
 
     ProviderContainer makeContainer() {
@@ -186,7 +186,7 @@ void main() {
     }
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = CareTasksRepository(db);
     });
 
@@ -302,12 +302,12 @@ void main() {
   });
 
   group('careTasksView — join with assignees', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late CareTasksRepository tasksRepo;
     late CareCircleRepository circleRepo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       tasksRepo = CareTasksRepository(db);
       circleRepo = CareCircleRepository(db);
     });

@@ -1,7 +1,7 @@
 import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
-const ORIGIN = 'https://forum.careblazers.local';
+const ORIGIN = 'https://forum.holdclose.local';
 
 describe('GET /join/:token (public invite landing page)', () => {
   it('renders the deep link but does NOT echo the raw token in the body',
@@ -13,8 +13,8 @@ describe('GET /join/:token (public invite landing page)', () => {
     expect(response.headers.get('content-type')).toContain('text/html');
 
     const body = await response.text();
-    // The big "Open in Careblazers" button hands off to the app.
-    expect(body).toContain(`careblazers://join/${token}`);
+    // The big "Open in Holdclose" button hands off to the app.
+    expect(body).toContain(`holdclose://join/${token}`);
     // 2026-06-11: the token must appear ONLY inside that href — no
     // copy/paste block that lingers in screenshots or screen-shares.
     expect(body.split(token)).toHaveLength(2);

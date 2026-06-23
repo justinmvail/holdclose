@@ -1,5 +1,5 @@
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/services/forum_api_client.dart' show GoogleAuthException;
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/services/forum_api_client.dart' show GoogleAuthException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -82,7 +82,7 @@ void main() {
     // is NO persisted auth User. The launch restore must return null.
     SharedPreferences.setMockInitialValues(<String, Object>{
       'feedback.tester_name': 'Old Local Judd',
-      'careblazers.tester.install_id': 'tester-stale-123',
+      'holdclose.tester.install_id': 'tester-stale-123',
     });
 
     expect(await readPersistedAlphaUser(), isNull);

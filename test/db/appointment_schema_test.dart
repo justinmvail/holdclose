@@ -1,16 +1,16 @@
 import 'dart:convert';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Appointment tracker tables (TASKS.md Phase 12.5)', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
     });
 
     tearDown(() async {

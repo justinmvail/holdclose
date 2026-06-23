@@ -8,7 +8,7 @@ import type { AuthBindings, AuthVariables } from '../middleware/auth';
 export type ProfilesBindings = AuthBindings & {
   FORUM_DB: D1Database;
   // Public origin of the R2 bucket fronting avatar uploads (e.g.
-  // `https://media.careblazers.local`). avatar_url updates must start
+  // `https://media.holdclose.local`). avatar_url updates must start
   // with this prefix so the API can't be used to point at arbitrary
   // off-platform images.
   R2_PUBLIC_URL: string;

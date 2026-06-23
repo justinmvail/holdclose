@@ -309,8 +309,8 @@ describe('runWatchdog', () => {
       db: env.FORUM_DB,
       analytics: greenAnalytics,
       mailer,
-      operatorEmail: 'ops@careblazers.local',
-      fromEmail: 'watchdog@careblazers.local',
+      operatorEmail: 'ops@holdclose.local',
+      fromEmail: 'watchdog@holdclose.local',
       now: () => NOW,
     });
     expect(result.severity).toBe('green');
@@ -328,16 +328,16 @@ describe('runWatchdog', () => {
       db: env.FORUM_DB,
       analytics: { async fetchSnapshot() { return snapshot; } },
       mailer,
-      operatorEmail: 'ops@careblazers.local',
-      fromEmail: 'watchdog@careblazers.local',
+      operatorEmail: 'ops@holdclose.local',
+      fromEmail: 'watchdog@holdclose.local',
       now: () => NOW,
     });
     expect(result.severity).toBe('yellow');
     expect(result.emailSent).toBe(true);
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({
-      to: 'ops@careblazers.local',
-      from: 'watchdog@careblazers.local',
+      to: 'ops@holdclose.local',
+      from: 'watchdog@holdclose.local',
     });
     expect(sent[0].subject).toContain('YELLOW');
     expect(sent[0].text).toContain('D1 size');
@@ -354,8 +354,8 @@ describe('runWatchdog', () => {
       db: env.FORUM_DB,
       analytics: { async fetchSnapshot() { return snapshot; } },
       mailer,
-      operatorEmail: 'ops@careblazers.local',
-      fromEmail: 'watchdog@careblazers.local',
+      operatorEmail: 'ops@holdclose.local',
+      fromEmail: 'watchdog@holdclose.local',
       now: () => NOW,
     });
     expect(result.severity).toBe('red');
@@ -375,8 +375,8 @@ describe('runWatchdog', () => {
         db: env.FORUM_DB,
         analytics: failing,
         mailer,
-        operatorEmail: 'ops@careblazers.local',
-        fromEmail: 'watchdog@careblazers.local',
+        operatorEmail: 'ops@holdclose.local',
+        fromEmail: 'watchdog@holdclose.local',
         now: () => NOW,
       }),
     ).rejects.toThrow('analytics fetch failed');
@@ -530,9 +530,9 @@ describe('ResendMailer', () => {
     const mailer = new ResendMailer({ RESEND_API_KEY: 'rk_test' }, fakeFetch);
 
     await mailer.send({
-      from: 'watchdog@careblazers.local',
-      to: 'ops@careblazers.local',
-      subject: '[Careblazers] YELLOW',
+      from: 'watchdog@holdclose.local',
+      to: 'ops@holdclose.local',
+      subject: '[Holdclose] YELLOW',
       text: 'body',
     });
 
@@ -542,9 +542,9 @@ describe('ResendMailer', () => {
     expect(headers?.Authorization).toBe('Bearer rk_test');
     const body = JSON.parse((calls[0].init?.body as string) ?? '{}');
     expect(body).toEqual({
-      from: 'watchdog@careblazers.local',
-      to: 'ops@careblazers.local',
-      subject: '[Careblazers] YELLOW',
+      from: 'watchdog@holdclose.local',
+      to: 'ops@holdclose.local',
+      subject: '[Holdclose] YELLOW',
       text: 'body',
     });
   });

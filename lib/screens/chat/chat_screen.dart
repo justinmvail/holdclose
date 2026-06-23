@@ -18,7 +18,7 @@ import '../../widgets/message_body.dart';
 import '../../widgets/path_header.dart';
 import 'conversation_list_screen.dart';
 
-/// Multi-turn chat with the dementia-care coach (TASKS.md Phase 11.4).
+/// Multi-turn chat with the caregiving coach (TASKS.md Phase 11.4).
 ///
 /// Layout:
 ///   - A [PathHeader] (`Chat › <conversation name>`, back to Chat) at the

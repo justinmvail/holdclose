@@ -22,7 +22,7 @@ abstract class LinkLauncher {
 /// in the system browser (Safari/Chrome) rather than an in-app web view.
 /// The §5.4 spec says "in-app browser" — the platform default mode does
 /// embed for HTTPS on iOS 16+, but routing to the external app is the
-/// safer fallback for the v1 demo since the careblazers.com page hosts
+/// safer fallback for the v1 demo since the holdclose.com page hosts
 /// its own video player which doesn't always reliably play inside
 /// SFSafariViewController.
 class RealLinkLauncher implements LinkLauncher {

@@ -7,7 +7,6 @@ import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 
 import '../models/appointment.dart';
-import '../models/behavior.dart';
 import '../models/care_circle_membership.dart';
 import '../models/care_event.dart';
 import '../models/care_plan_routine.dart';
@@ -15,14 +14,12 @@ import '../models/care_shift.dart';
 import '../models/care_task.dart';
 import '../models/caregiver.dart';
 import '../models/chat.dart';
-import '../models/decoder_result.dart';
 import '../models/document.dart';
 import '../models/expense.dart';
 import '../models/forum.dart' show CircleMemberDto;
 import '../models/health_log_entry.dart';
 import '../models/journal_entry.dart';
 import '../models/medication.dart';
-import '../models/triage.dart';
 import '../providers/care_circle_provider.dart'
     show CareCircleRepository, careCircleRepositoryProvider;
 import '../providers/circle_member_cache_provider.dart'
@@ -50,7 +47,6 @@ import '../services/medication_repository.dart'
     show MedicationRepository, medicationRepositoryProvider;
 import '../services/provider_repository.dart'
     show ProviderRepository, providerRepositoryProvider;
-import 'fake_llm_seeds.dart';
 import 'mary_henderson.dart';
 
 /// The canonical demo loved one's id — every patient-scoped row links to
@@ -243,26 +239,27 @@ class DemoDatasetSeeder {
     // Live medications.
     await medications.upsertMedication(const Medication(
       id: _medDonepezil,
-      name: 'Donepezil',
+      name: 'Lisinopril',
       dosage: '10 mg',
       route: MedicationRoute.oral,
       prescriber: 'Dr. Elena Ortega',
-      notes: 'Take in the morning with breakfast.',
+      notes: 'Take in the morning with breakfast. For blood pressure.',
     ));
     await medications.upsertMedication(const Medication(
       id: _medMemantine,
-      name: 'Memantine',
-      dosage: '10 mg',
+      name: 'Atorvastatin',
+      dosage: '20 mg',
       route: MedicationRoute.oral,
       prescriber: 'Dr. Elena Ortega',
+      notes: 'Take in the evening.',
     ));
     await medications.upsertMedication(const Medication(
       id: _medSertraline,
-      name: 'Sertraline',
-      dosage: '50 mg',
+      name: 'Aspirin',
+      dosage: '81 mg',
       route: MedicationRoute.oral,
       prescriber: 'Dr. James Park',
-      notes: 'For mood. Watch for restlessness.',
+      notes: 'Low-dose, for stroke prevention.',
     ));
     await medications.upsertMedication(const Medication(
       id: _medVitD,
@@ -428,7 +425,7 @@ class DemoDatasetSeeder {
         id: 'seed-appt-neuro-1', prov: _provNeuro, daysAgo: 168, dur: 45,
         loc: 'Memory Clinic, 3rd floor',
         agenda: <String>['Review MMSE trend', 'Ask about sundowning',
-            'Renew Donepezil'],
+            'Renew Lisinopril'],
         done: <int>{0, 1, 2},
         notes: 'MMSE stable. Keep evening routine consistent. Refill sent.',
       ),
@@ -449,9 +446,9 @@ class DemoDatasetSeeder {
       (
         id: 'seed-appt-neuro-2', prov: _provNeuro, daysAgo: 54, dur: 45,
         loc: 'Memory Clinic, 3rd floor',
-        agenda: <String>['Discuss Memantine dose', 'Sleep concerns'],
+        agenda: <String>['Discuss Atorvastatin dose', 'Sleep concerns'],
         done: <int>{0, 1},
-        notes: 'Holding Memantine at 10mg. Try melatonin as needed.',
+        notes: 'Holding Atorvastatin at 20mg. Try melatonin as needed.',
       ),
       (
         id: 'seed-appt-pcp-2', prov: _provPcp, daysAgo: 21, dur: 30,
@@ -634,64 +631,66 @@ class DemoDatasetSeeder {
   // ---- Journal -----------------------------------------------------------
 
   Future<void> _seedJournal() async {
-    // Recent sundowning cluster (last 7 days) so the pattern detector's
-    // "Heads up" card surfaces, plus a spread of other behaviors + a few
-    // caregiver-authored wizard entries across the six months.
-    await _decoderEntry('seed-j-sun-1', 'sundowning',
+    // A recent cluster (last 7 days) so the journal opens populated, plus
+    // a spread of caregiver-authored entries back through the months.
+    await _journalEntry('seed-j-1',
         _now.subtract(const Duration(days: 1, hours: 4)),
-        const TriageAnswers(
-          when: TriageWhen.lateAfternoonEvening,
-          whatChanged: TriageWhatChanged.nothing,
-          whatTried: TriageWhatTried.talked,
-        ),
-        JournalOutcome.positive,
-        notes: 'Dimmed the lamps and put on the Sunday playlist. '
-            'Settled within ten minutes.');
-    await _decoderEntry('seed-j-sun-2', 'sundowning',
+        situation: 'Restless and anxious as the light faded — kept getting '
+            'up and pacing the hallway.',
+        attempts: 'Dimmed the lamps and put on the Sunday playlist.',
+        notes: 'Settled within ten minutes.');
+    await _journalEntry('seed-j-2',
         _now.subtract(const Duration(days: 3, hours: 5)),
-        const TriageAnswers(
-          when: TriageWhen.lateAfternoonEvening,
-          whatChanged: TriageWhatChanged.environment,
-          whatTried: TriageWhatTried.distracted,
-        ),
-        JournalOutcome.positive);
-    await _decoderEntry('seed-j-sun-3', 'sundowning',
+        situation: 'Unsettled in the evening after the visitors left.',
+        attempts: 'Took a slow walk to the kitchen for tea and a snack.');
+    await _journalEntry('seed-j-3',
         _now.subtract(const Duration(days: 5, hours: 6)),
-        const TriageAnswers(
-          when: TriageWhen.lateAfternoonEvening,
-          whatChanged: TriageWhatChanged.nothing,
-          whatTried: TriageWhatTried.walkedAway,
-        ),
-        JournalOutcome.triedDifferent,
-        attempt: 1);
+        situation: 'Agitated late in the day and didn\'t want company.',
+        attempts: 'Gave her quiet space, then checked back in.');
 
-    // A rotating spread of the other behaviors back through the months.
-    const List<String> behaviors = <String>['refusing_care', 'wants_home',
-        'asking_for_someone', 'accusing', 'wandering', 'hallucinating',
-        'upset'];
-    const List<JournalOutcome> outcomes = <JournalOutcome>[
-      JournalOutcome.positive,
-      JournalOutcome.triedDifferent,
-      JournalOutcome.positive,
-      JournalOutcome.positive,
+    // A rotating spread of realistic moments back through the months.
+    const List<({String situation, String attempts})> spread =
+        <({String situation, String attempts})>[
+      (
+        situation: 'Refused help with the morning routine.',
+        attempts: 'Offered the warm-towel-first detour; she came around.',
+      ),
+      (
+        situation: 'Kept saying she wanted to "go home" even though she was.',
+        attempts: 'Validated the feeling, then redirected to a cup of tea.',
+      ),
+      (
+        situation: 'Asked for her mother several times.',
+        attempts: 'Sat with her and the old photo album.',
+      ),
+      (
+        situation: 'Convinced I had hidden her purse and got upset.',
+        attempts: 'Didn\'t argue — helped her look and we found it together.',
+      ),
+      (
+        situation: 'Wandered toward the front door after dark.',
+        attempts: 'Walked with her and gently looped back to the kitchen.',
+      ),
+      (
+        situation: 'Said she could see people in the garden who weren\'t there.',
+        attempts: 'Stayed calm, drew the curtains, changed the subject.',
+      ),
+      (
+        situation: 'Teary and overwhelmed for no clear reason.',
+        attempts: 'Held her hand and just stayed close for a while.',
+      ),
     ];
     for (int i = 0; i < 14; i++) {
-      final String b = behaviors[i % behaviors.length];
+      final ({String situation, String attempts}) m =
+          spread[i % spread.length];
       final int daysAgo = 10 + i * 12;
-      await _decoderEntry('seed-j-dec-$i', b,
+      await _journalEntry('seed-j-spread-$i',
           _at(_daysAgo(daysAgo), _between(8, 19), _between(0, 59)),
-          TriageAnswers(
-            when: TriageWhen.values[_between(0, TriageWhen.values.length - 1)],
-            whatChanged: TriageWhatChanged
-                .values[_between(0, TriageWhatChanged.values.length - 1)],
-            whatTried: TriageWhatTried
-                .values[_between(0, TriageWhatTried.values.length - 1)],
-          ),
-          outcomes[i % outcomes.length]);
+          situation: m.situation, attempts: m.attempts);
     }
 
-    // Caregiver-authored "wizard" entries in her own words.
-    const List<({String situation, String attempts, String? notes})> wiz =
+    // A few entries that lean on the optional notes field / small wins.
+    const List<({String situation, String attempts, String? notes})> extra =
         <({String situation, String attempts, String? notes})>[
       (
         situation: 'Mom kept asking to call her mother this afternoon.',
@@ -709,43 +708,28 @@ class DemoDatasetSeeder {
         notes: 'Worth remembering the small wins.',
       ),
     ];
-    for (int i = 0; i < wiz.length; i++) {
+    for (int i = 0; i < extra.length; i++) {
       final DateTime when = _at(_daysAgo(8 + i * 30), 11, 0);
-      await storage.insertJournalEntry(JournalEntry.wizard(
-        id: 'seed-j-wiz-$i',
-        createdAt: when,
-        occurredAt: when,
-        situationText: wiz[i].situation,
-        attemptsText: wiz[i].attempts,
-        notes: wiz[i].notes,
-      ));
+      await _journalEntry('seed-j-extra-$i', when,
+          situation: extra[i].situation,
+          attempts: extra[i].attempts,
+          notes: extra[i].notes);
     }
   }
 
-  Future<void> _decoderEntry(
+  Future<void> _journalEntry(
     String id,
-    String behaviorId,
-    DateTime createdAt,
-    TriageAnswers triage,
-    JournalOutcome outcome, {
-    int attempt = 0,
+    DateTime createdAt, {
+    String? situation,
+    String? attempts,
     String? notes,
   }) async {
-    final Behavior behavior = Behavior.byId(behaviorId)!;
-    final DecoderResult seed = fakeLLMSeeds[behaviorId]!;
-    await storage.insertJournalEntry(JournalEntry(
+    await storage.insertJournalEntry(JournalEntry.wizard(
       id: id,
-      behavior: behavior,
-      triage: triage,
-      result: DecoderResult(
-        say: seed.say,
-        tweak: seed.tweak,
-        dontSay: seed.dontSay,
-        generatedAt: createdAt,
-      ),
-      outcome: outcome,
-      attempt: attempt,
       createdAt: createdAt,
+      occurredAt: createdAt,
+      situationText: situation,
+      attemptsText: attempts,
       notes: notes,
     ));
   }
@@ -874,7 +858,7 @@ class DemoDatasetSeeder {
             int? claimedAgo, int? completedAgo, String? routine})> rows =
         <({String title, String? body, int dueDelta, String? assignee,
             int? claimedAgo, int? completedAgo, String? routine})>[
-      (title: 'Refill Donepezil prescription', body: 'Call pharmacy — 1 refill left.',
+      (title: 'Refill Lisinopril prescription', body: 'Call pharmacy — 1 refill left.',
           dueDelta: 3, assignee: null, claimedAgo: null, completedAgo: null,
           routine: null),
       (title: 'Pick up incontinence supplies', body: null,
@@ -1025,10 +1009,10 @@ class DemoDatasetSeeder {
       id: 'seed-doc-emergency',
       patientId: demoPatientId,
       updatedAt: _daysAgo(20),
-      conditions: const <String>["Alzheimer's disease (moderate)",
-          'Hypertension', 'Hypothyroidism'],
-      medications: const <String>['Donepezil 10 mg', 'Memantine 10 mg',
-          'Sertraline 50 mg', 'Levothyroxine 75 mcg'],
+      conditions: const <String>['Stroke recovery (ischemic, 2024)',
+          'High blood pressure', 'High cholesterol'],
+      medications: const <String>['Lisinopril 10 mg', 'Atorvastatin 20 mg',
+          'Aspirin 81 mg', 'Vitamin D3 2000 IU'],
       allergies: const <String>['Penicillin'],
       emergencyContacts: const <EmergencyContact>[
         EmergencyContact(name: 'Sarah Henderson', relation: 'Daughter',

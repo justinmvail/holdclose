@@ -16,22 +16,22 @@ Patient maryHenderson() => Patient(
       id: 'demo-patient-mary',
       name: 'Mary Henderson',
       age: 78,
-      diagnosis: "Alzheimer's disease, stage 5 (moderately severe)",
-      diagnosedAt: DateTime.utc(2022, 4, 15),
+      diagnosis: 'Stroke recovery (ischemic, 2024); high blood pressure',
+      diagnosedAt: DateTime.utc(2024, 2, 10),
       medications: const <CrisisMedication>[
         CrisisMedication(
-          name: 'Donepezil',
+          name: 'Lisinopril',
           dose: '10 mg',
           schedule: 'every morning',
         ),
         CrisisMedication(
-          name: 'Memantine',
-          dose: '10 mg',
+          name: 'Atorvastatin',
+          dose: '20 mg',
           schedule: 'every evening',
         ),
         CrisisMedication(
-          name: 'Sertraline',
-          dose: '50 mg',
+          name: 'Aspirin',
+          dose: '81 mg',
           schedule: 'every morning',
         ),
       ],
@@ -39,12 +39,12 @@ Patient maryHenderson() => Patient(
       calms: const <String>[
         'Sitting on her left side (she hears better there).',
         'The phrase "Mom, it\'s okay."',
-        'Showing her a photo of Dad (passed 2019).',
+        'Looking through the family photo album together.',
       ],
       escalates: const <String>[
         'Strangers leaning over her.',
         'Loud beeping (monitors, alarms).',
-        'Being asked many questions in a row.',
+        'Being rushed or hurried through things.',
       ],
       primaryCaregiver: const Contact(
         name: 'Sarah Henderson',

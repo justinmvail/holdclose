@@ -1,36 +1,36 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/l10n/app_localizations.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/models/patient.dart';
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/circle_member_cache_provider.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/home_conversation_provider.dart';
-import 'package:careblazers/providers/onboarding_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/sync_state_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/screens/onboarding/loved_one_setup_screen.dart';
-import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/services/sync_service.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/l10n/app_localizations.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/models/patient.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/circle_member_cache_provider.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/home_conversation_provider.dart';
+import 'package:holdclose/providers/onboarding_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/sync_state_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/screens/onboarding/loved_one_setup_screen.dart';
+import 'package:holdclose/screens/onboarding/sign_in_screen.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/services/sync_service.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -122,7 +122,7 @@ class _SpyAuth implements AuthProvider {
 
   static const User _user = User(
     id: 'returning-caregiver',
-    email: 'caregiver@careblazers.app',
+    email: 'caregiver@holdclose.app',
     name: 'Returning Caregiver',
   );
 
@@ -165,7 +165,7 @@ class _AlreadyOnboarded extends OnboardingCompleted {
 /// [storage] with the app, so an adopted loved one is visible to the
 /// `/setup` gate.
 SyncController _buildSync(
-  CareblazersDatabase db,
+  HoldcloseDatabase db,
   StorageProvider storage,
   ForumApiClient client,
 ) =>
@@ -189,7 +189,7 @@ SyncController _buildSync(
       circleMemberCache: CircleMemberCacheRepository(db),
     );
 
-/// Pump the production [careblazersRouterProvider] (real redirect + sign-in
+/// Pump the production [holdcloseRouterProvider] (real redirect + sign-in
 /// screen + loved-one lookup) over [auth] + [client], returning the live
 /// pieces the test asserts against. Onboarding is pre-completed and the
 /// store starts EMPTY, so the app boots on `/sign-in`.
@@ -206,7 +206,7 @@ Future<({GoRouter router, InMemoryStorageProvider storage})> _pump(
   final InMemoryStorageProvider storage = InMemoryStorageProvider();
   addTearDown(storage.dispose);
 
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   addTearDown(db.close);
   final SyncController sync = _buildSync(db, storage, client);
   addTearDown(sync.dispose);
@@ -234,7 +234,7 @@ Future<({GoRouter router, InMemoryStorageProvider storage})> _pump(
   );
   addTearDown(container.dispose);
 
-  final GoRouter router = container.read(careblazersRouterProvider);
+  final GoRouter router = container.read(holdcloseRouterProvider);
 
   await tester.pumpWidget(
     UncontrolledProviderScope(

@@ -1,24 +1,24 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart';
-import 'package:careblazers/models/care_circle_membership.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/circle_member_cache_provider.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/seed/demo_dataset.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/models/care_circle_membership.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/circle_member_cache_provider.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/seed/demo_dataset.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,7 +26,7 @@ void main() {
   // A fixed "now" so the relative-dated seed is deterministic.
   DateTime clock() => DateTime(2026, 6, 10, 9, 0);
 
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late DemoDatasetSeeder seeder;
   late StorageProvider storage;
   late MedicationRepository medications;
@@ -44,7 +44,7 @@ void main() {
   late ChatRepository chat;
 
   setUp(() async {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     storage = DriftStorageProvider(db);
     medications = MedicationRepository(db, clock: clock);
     appointments = AppointmentRepository(db, clock: clock);
@@ -95,15 +95,15 @@ void main() {
 
     final List<Medication> meds = await medications.listMedications();
     // The ended Amoxicillin course is filtered out of the live list.
-    expect(meds.map((Medication m) => m.name), contains('Donepezil'));
+    expect(meds.map((Medication m) => m.name), contains('Lisinopril'));
     expect(meds.map((Medication m) => m.name), isNot(contains('Amoxicillin')));
 
     expect(await medications.windowsForPatient(demoPatientId), hasLength(5));
 
-    final Medication donepezil =
-        meds.firstWhere((Medication m) => m.name == 'Donepezil');
+    final Medication lisinopril =
+        meds.firstWhere((Medication m) => m.name == 'Lisinopril');
     final List<DoseLog> logs =
-        await medications.logsFor(donepezil.id);
+        await medications.logsFor(lisinopril.id);
     expect(logs.length, greaterThan(60),
         reason: 'expected a dense daily dose history');
     // Adherence is a realistic mix, not all taken.
@@ -136,20 +136,23 @@ void main() {
     expect(await carePlan.listAll(), hasLength(5));
   });
 
-  test('seeds a journal with a recent sundowning cluster + wizard entries',
+  test('seeds a journal with a recent cluster + a spread of free-text entries',
       () async {
     final List<JournalEntry> entries = await storage.listAllJournalEntries();
     expect(entries.length, greaterThan(15));
 
+    // A recent cluster so the journal opens populated.
     final DateTime weekAgo = clock().subtract(const Duration(days: 7));
-    final int recentSundowning = entries
-        .where((JournalEntry e) =>
-            e.behavior.id == 'sundowning' && e.createdAt.isAfter(weekAgo))
+    final int recent = entries
+        .where((JournalEntry e) => e.createdAt.isAfter(weekAgo))
         .length;
-    expect(recentSundowning, greaterThanOrEqualTo(3),
-        reason: 'the pattern detector needs 3 in the trailing 7 days');
+    expect(recent, greaterThanOrEqualTo(3),
+        reason: 'the journal should open populated for the demo');
 
-    expect(entries.any((JournalEntry e) => e.wizardKind), isTrue);
+    // Entries are free-text, caregiver-authored — they carry a situation.
+    expect(entries.any((JournalEntry e) => e.situationText != null), isTrue);
+    // Some entries lean on the optional notes field (the seed-j-extra-* set).
+    expect(entries.any((JournalEntry e) => e.notes != null), isTrue);
   });
 
   test('seeds the care circle with an accepted roster + a pending invite',

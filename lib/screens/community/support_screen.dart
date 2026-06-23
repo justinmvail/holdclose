@@ -16,7 +16,7 @@ import '../../theme.dart';
 ///
 ///   * **Burnout self-check** — the 10-item Likert form from
 ///     [burnoutQuestions], scored entirely on-device by [scoreBurnout]
-///     (no LLM). After submit the result band + a Dr.-Natali-style
+///     (no LLM). After submit the result band + a coaching-style
 ///     response replace the form inline, with a "Retake" action.
 ///   * **Respite resources** — the national help lines in
 ///     [respiteResources] (each tappable to dial or open), plus a "search
@@ -24,7 +24,7 @@ import '../../theme.dart';
 ///   * **Expert Q&A** — a read-only list of the curated [expertAnswers].
 ///
 /// Per BUILD_SPEC.md §13.1 this is wellbeing/peer-support content, not
-/// medical advice: the copy refers Careblazers to professional help and
+/// medical advice: the copy refers Holdclose to professional help and
 /// never diagnoses or prescribes.
 class SupportScreen extends ConsumerStatefulWidget {
   const SupportScreen({super.key});
@@ -124,7 +124,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
           id: SupportScreen.qandaId,
           icon: Icons.question_answer_outlined,
           title: 'Expert Q&A',
-          subtitle: "Answers in Dr. Natali's coaching voice.",
+          subtitle: 'Practical, compassionate answers for caregivers.',
           child: _QandaBody(),
         ),
       ],

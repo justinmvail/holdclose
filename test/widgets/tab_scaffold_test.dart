@@ -1,19 +1,19 @@
 import 'dart:async';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/providers/home_conversation_provider.dart';
-import 'package:careblazers/providers/voice_capture_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart';
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/screens/medical/medical_hub_screen.dart';
-import 'package:careblazers/services/chat_actions.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/tab_scaffold.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/providers/home_conversation_provider.dart';
+import 'package:holdclose/providers/voice_capture_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart';
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/screens/medical/medical_hub_screen.dart';
+import 'package:holdclose/services/chat_actions.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/tab_scaffold.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,7 +80,7 @@ Future<({GoRouter router, ChatRepository repo})> _pumpRouter(
 
   final GoRouter router = buildRouter();
   final DateTime now = DateTime.utc(2026, 5, 30, 12);
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   addTearDown(db.close);
   final ChatRepository repo = ChatRepository(db);
   // ProviderScope wraps the router so the branches that watch riverpod
@@ -222,12 +222,12 @@ void main() {
         Color iconColor(IconData glyph) =>
             tester.widget<Icon>(find.byIcon(glyph)).color!;
         // Active tab shows its filled glyph in primary…
-        expect(iconColor(Icons.volunteer_activism), careblazersColors.primary);
+        expect(iconColor(Icons.volunteer_activism), holdcloseColors.primary);
         // …inactive tabs show their outlined glyph in primarySoft.
-        expect(iconColor(Icons.home_outlined), careblazersColors.primarySoft);
+        expect(iconColor(Icons.home_outlined), holdcloseColors.primarySoft);
         expect(
           iconColor(Icons.chat_bubble_outline),
-          careblazersColors.primarySoft,
+          holdcloseColors.primarySoft,
         );
       },
     );

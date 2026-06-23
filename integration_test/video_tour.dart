@@ -1,47 +1,45 @@
 import 'dart:io';
 
-import 'package:careblazers/app.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/home_clock_provider.dart';
-import 'package:careblazers/providers/llm_provider.dart';
-import 'package:careblazers/providers/settings_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/tts_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart';
-import 'package:careblazers/screens/community/community_feed_screen.dart';
-import 'package:careblazers/screens/decoder/behavior_picker_screen.dart';
-import 'package:careblazers/screens/decoder/decoder_result_screen.dart';
-import 'package:careblazers/screens/decoder/triage_screen.dart';
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/screens/journal/journal_screen.dart';
-import 'package:careblazers/screens/medical/medical_hub_screen.dart';
-import 'package:careblazers/screens/medication/dose_log_screen.dart';
-import 'package:careblazers/screens/medication/medication_list_screen.dart';
-import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
-import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
-import 'package:careblazers/screens/team/care_team_hub_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/services/seed_repository.dart';
-import 'package:careblazers/widgets/path_header.dart';
-import 'package:careblazers/widgets/tab_scaffold.dart';
+import 'package:holdclose/app.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/home_clock_provider.dart';
+import 'package:holdclose/providers/llm_provider.dart';
+import 'package:holdclose/providers/settings_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/tts_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart';
+import 'package:holdclose/screens/community/community_feed_screen.dart';
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/screens/journal/journal_screen.dart';
+import 'package:holdclose/screens/journal/journal_wizard_screen.dart';
+import 'package:holdclose/screens/medical/medical_hub_screen.dart';
+import 'package:holdclose/screens/medication/dose_log_screen.dart';
+import 'package:holdclose/screens/medication/medication_list_screen.dart';
+import 'package:holdclose/screens/onboarding/sign_in_screen.dart';
+import 'package:holdclose/screens/onboarding/welcome_carousel.dart';
+import 'package:holdclose/screens/team/care_team_hub_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/services/seed_repository.dart';
+import 'package:holdclose/widgets/path_header.dart';
+import 'package:holdclose/widgets/tab_scaffold.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,10 +56,9 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 ///     the captured frames are exactly what a phone shows.
 ///   * `framePolicy = fullyLive` + wall-clock holds between actions,
 ///     so animations/streaming render in real time on screen.
-///   * Drives the Behavior Decoder end-to-end (accusing → Night /
-///     Don't know / Tried to explain → script) — the wedge the demo
-///     tour skips — and starts from an EMPTY journal so the auto-log
-///     beat ("your journal fills itself") happens on camera.
+///   * Starts from an EMPTY journal and authors a journal entry on
+///     camera (the quick-note path), so the "your journal, in your
+///     words" beat happens live.
 ///   * Optional host sync: with `--dart-define=SYNC_FILE=<path>` the
 ///     tour prints VIDEO_TOUR_READY and idles on the carousel until
 ///     the host (which starts `simctl recordVideo` on READY) creates
@@ -93,20 +90,20 @@ void main() {
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
 
   testWidgets(
-    'video tour — recordable pitch walkthrough (decoder wedge included)',
+    'video tour — recordable pitch walkthrough',
     (WidgetTester tester) async {
       if (!demoModeEnabled) {
         fail('video_tour.dart requires --dart-define=DEMO_MODE=true.');
       }
 
-      // Mary only — NO sample journal. The decoder's auto-log is the
-      // "journal fills itself" beat, so it must start empty.
+      // Mary only — NO sample journal, so the journal starts empty and the
+      // caregiver authors the first entry on camera.
       final InMemoryStorageProvider storage = InMemoryStorageProvider();
       addTearDown(storage.dispose);
       await SeedRepository(storage: storage).ensurePatient();
 
-      final CareblazersDatabase db =
-          CareblazersDatabase(NativeDatabase.memory());
+      final HoldcloseDatabase db =
+          HoldcloseDatabase(NativeDatabase.memory());
       addTearDown(db.close);
 
       // A realistic regimen across two dose windows so the Home schedule
@@ -237,7 +234,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: CareblazersApp(
+          child: HoldcloseApp(
             router: buildRouter(initialLocation: '/onboarding'),
           ),
         ),
@@ -278,7 +275,7 @@ void main() {
       _cue('scene 2: Home dashboard (greeting + schedule)');
       await _hold(tester, 4.0);
 
-      // ==== SCENE 3 — Care hub → empty Journal → decoder ==================
+      // ==== SCENE 3 — Care hub → empty Journal ============================
       await _tapTab(tester, 'Care');
       expect(
         find.byKey(MedicalHubScreen.tileKey('/journal')),
@@ -288,59 +285,30 @@ void main() {
       await _hold(tester, 2.5);
       await _tap(tester, find.byKey(MedicalHubScreen.tileKey('/journal')));
       expect(find.byKey(JournalScreen.emptyCtaKey), findsOneWidget);
-      _cue('scene 3: empty Journal ("fills itself")');
+      _cue('scene 3: empty Journal ("in your words")');
       await _hold(tester, 3.0);
       await _tap(tester, find.byKey(JournalScreen.emptyCtaKey));
 
-      // ==== SCENE 4 — the Behavior Decoder (the wedge) ====================
-      expect(find.byKey(BehaviorPickerScreen.gridKey), findsOneWidget);
-      _cue('scene 4: behavior picker');
-      await _hold(tester, 3.0);
-      await _tap(tester, find.byKey(BehaviorPickerScreen.cardKey('accusing')));
-      _cue('scene 4: triage Q1 (when)');
-      await _hold(tester, 1.2);
-      await _tap(tester, find.byKey(TriageScreen.optionKey(0, 3))); // Night
-      await _hold(tester, 0.7);
-      await _tap(tester, find.byKey(TriageScreen.nextButtonKey));
-      _cue('scene 4: triage Q2 (what changed)');
-      await _hold(tester, 1.0);
-      await _tap(tester, find.byKey(TriageScreen.optionKey(1, 5))); // Don't know
-      await _hold(tester, 0.6);
-      await _tap(tester, find.byKey(TriageScreen.nextButtonKey));
-      _cue('scene 4: triage Q3 (what tried)');
-      await _hold(tester, 1.0);
-      await _tap(tester, find.byKey(TriageScreen.optionKey(2, 1))); // Explain
-      await _hold(tester, 0.6);
-      await _tap(tester, find.byKey(TriageScreen.nextButtonKey));
+      // ==== SCENE 4 — author a journal entry (quick note) =================
+      expect(find.byKey(JournalScreen.quickNoteOptionKey), findsOneWidget);
+      _cue('scene 4: add-entry chooser');
+      await _hold(tester, 2.0);
+      await _tap(tester, find.byKey(JournalScreen.quickNoteOptionKey));
+      expect(find.byKey(JournalWizardScreen.situationFieldKey), findsOneWidget);
+      _cue('scene 4: quick note — write the moment');
+      await _hold(tester, 1.5);
+      await tester.enterText(
+        find.byKey(JournalWizardScreen.situationFieldKey),
+        'She kept asking to call her mother. I sat with her and we looked '
+        'at the wedding album until she settled.',
+      );
+      await tester.pump();
+      await _hold(tester, 3.0); // read the typed entry on screen
+      await _tap(tester, find.byKey(JournalWizardScreen.submitButtonKey));
 
-      // ==== SCENE 5 — the script streams in ===============================
-      _cue('scene 5: decoder result streaming');
-      await _hold(tester, 2.0); // skeleton → stream completes
-      expect(find.byType(DecoderResultScreen), findsOneWidget);
-      await _hold(tester, 6.0); // read "say" lines
-      await _scroll(tester, find.byType(DecoderResultScreen), -350);
-      _cue('scene 5: tweak + dont-say');
-      await _hold(tester, 3.0);
-      await _scroll(tester, find.byType(DecoderResultScreen), -350);
-      _cue('scene 5: footer + Talk to Natali');
-      await _hold(tester, 3.0);
-      // "That helped" — logs the outcome on the auto-created journal row
-      // and closes the loop by returning Home (context.go('/')).
-      final Finder thatHelped = find.byKey(DecoderResultScreen.thatHelpedKey);
-      if (tester.any(thatHelped)) {
-        await _tap(tester, thatHelped, warn: false);
-        _cue('scene 5: That helped → back Home');
-        await _hold(tester, 2.0);
-        // ==== SCENE 6 — the journal filled itself =========================
-        await _tapTab(tester, 'Care');
-        await _hold(tester, 0.8);
-        await _tap(tester, find.byKey(MedicalHubScreen.tileKey('/journal')));
-      } else {
-        // Fallback (copy change): walk the breadcrumb out of the decoder.
-        await _tapCrumb(tester, 'Journal');
-      }
+      // ==== SCENE 5 — the journal now holds the moment ====================
       expect(find.byKey(JournalScreen.entriesListKey), findsOneWidget);
-      _cue('scene 6: Journal auto-logged the moment');
+      _cue('scene 5: Journal holds the saved moment');
       await _hold(tester, 3.5);
 
       // ==== SCENE 7 — Care suite: medications + emergency card ============
@@ -586,7 +554,7 @@ ForumApiClient _demoForumClient() {
       title: 'Small win: music during dinner',
       body: 'Putting the radio on low during meals stopped the pacing '
           'almost completely. Three nights in a row now. Take the small '
-          'wins, Careblazers.',
+          'wins, Holdclose.',
       voteCount: 9,
       commentCount: 3,
       age: const Duration(days: 1),

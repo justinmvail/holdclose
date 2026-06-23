@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { handleAppError } from '../src/index';
 
-const ORIGIN = 'https://forum.careblazers.local';
+const ORIGIN = 'https://forum.holdclose.local';
 
 // app.onError is the last-resort boundary: whatever a route lets escape
 // must come back as a GENERIC `{error: 'internal'}` 500 — never the real

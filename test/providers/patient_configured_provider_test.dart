@@ -1,6 +1,6 @@
-import 'package:careblazers/providers/patient_configured_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
+import 'package:holdclose/providers/patient_configured_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 import 'package:flutter_riverpod/flutter_riverpod.dart';

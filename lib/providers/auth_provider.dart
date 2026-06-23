@@ -152,7 +152,7 @@ class SecureTokenStorage implements TokenStorage {
       : _storage = storage ?? const FlutterSecureStorage();
 
   /// Single key — v1 only ever holds one token at a time.
-  static const String tokenKey = 'careblazers.auth.token';
+  static const String tokenKey = 'holdclose.auth.token';
 
   final FlutterSecureStorage _storage;
 
@@ -199,7 +199,7 @@ class InMemoryTokenStorage implements TokenStorage {
 class UserStore {
   const UserStore();
 
-  static const String userKey = 'careblazers.auth.user';
+  static const String userKey = 'holdclose.auth.user';
 
   /// The persisted user, or null if none is saved (signed out / first run).
   Future<User?> read() async {
@@ -287,7 +287,7 @@ class RealAuthProvider implements AuthProvider {
             // Android implementation.
             id: credential.userIdentifier ?? 'apple-user',
             email: credential.email ?? '',
-            name: displayName.isEmpty ? 'Careblazer' : displayName,
+            name: displayName.isEmpty ? 'Caregiver' : displayName,
           ),
           // identityToken is the JWT we'd hand to a backend; on
           // re-authorization Apple omits it, so fall back to the
@@ -375,7 +375,7 @@ class FakeAuthProvider implements AuthProvider {
   /// Henderson's primary caregiver in the seed data, §9.1).
   static const User cannedSarahHenderson = User(
     id: 'demo-user-sarah',
-    email: 'demo@careblazers.app',
+    email: 'demo@holdclose.app',
     name: 'Sarah Henderson',
   );
 

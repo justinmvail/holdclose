@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/forum.dart';
 import '../../providers/community_feed_provider.dart';
-import '../../routing/router.dart' show CareblazersRoutes;
+import '../../routing/router.dart' show HoldcloseRoutes;
 import '../../screens/community/community_feed_screen.dart'
     show relativeTime;
 import '../../providers/home_clock_provider.dart';
@@ -87,7 +87,7 @@ class _CommunityRecapCardState extends ConsumerState<CommunityRecapCard> {
     }
 
     void openCommunity() =>
-        GoRouter.of(context).goNamed(CareblazersRoutes.community);
+        GoRouter.of(context).goNamed(HoldcloseRoutes.community);
 
     return Material(
       color: context.cb.surfaceWarm,

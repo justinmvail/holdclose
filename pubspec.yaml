@@ -1,4 +1,4 @@
-name: careblazers
+name: holdclose
 description: "In-the-moment coach for dementia caregivers."
 publish_to: 'none'
 version: 0.1.0+24
@@ -123,13 +123,13 @@ dependencies:
   mobile_scanner: ^6.0.2
 
   # Care Circle invite LINKS (2026-06-08): receive the
-  # `careblazers://join/<token>` custom-scheme deep link an invited
+  # `holdclose://join/<token>` custom-scheme deep link an invited
   # caregiver taps from a shared text link (alpha feedback: "there should
   # be a text link to link apps"). Handles BOTH cold-start (initialLink)
   # and warm (uriLinkStream) incoming URIs. Pairs with the backend's
   # public `GET /join/:token` landing page + the existing QR token
   # machinery — pure plugin, no per-call cost. iOS already registers the
-  # `careblazers` scheme in Info.plist; Android registers it via an
+  # `holdclose` scheme in Info.plist; Android registers it via an
   # intent-filter on MainActivity.
   app_links: ^6.3.0
 

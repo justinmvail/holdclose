@@ -1,14 +1,15 @@
 import 'dart:async';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/appointment/appointment_form_screen.dart';
-import 'package:careblazers/screens/journal/journal_wizard_screen.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/medication/dose_log_screen.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/services/voice_intake.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/l10n/app_localizations.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/appointment/appointment_form_screen.dart';
+import 'package:holdclose/screens/journal/journal_wizard_screen.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/medication/dose_log_screen.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/services/voice_intake.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
@@ -22,8 +23,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// screen. Drives the REAL [buildRouter] so the router's bridge wiring is
 /// exercised, not a stand-in.
 ///
-/// `/decoder/triage` with no extra is the initial location because it
-/// renders a provider-free soft-fallback page — a clean launch pad to
+/// `/onboarding` (the welcome carousel) is the initial location because
+/// it renders provider-free with no overrides — a clean launch pad to
 /// push the target route (with the transcript) onto.
 DateTime _fixedNow() => DateTime(2026, 5, 30, 11, 0);
 
@@ -34,12 +35,16 @@ Future<GoRouter> _pump(
   await tester.binding.setSurfaceSize(const Size(420, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
-  final GoRouter router = buildRouter(initialLocation: '/decoder/triage');
+  final GoRouter router = buildRouter(initialLocation: '/onboarding');
   await tester.pumpWidget(
     ProviderScope(
       key: UniqueKey(),
       overrides: overrides,
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        routerConfig: router,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -53,7 +58,7 @@ void main() {
     final GoRouter router = await _pump(tester);
 
     unawaited(router.pushNamed(
-      CareblazersRoutes.journalNew,
+      HoldcloseRoutes.journalNew,
       extra: const AddSheetTranscript(
         text: 'she kept asking to call her mother',
         kind: AddSheetKind.journalEntry,
@@ -78,7 +83,7 @@ void main() {
     final GoRouter router = await _pump(tester);
 
     unawaited(router.pushNamed(
-      CareblazersRoutes.journalNew,
+      HoldcloseRoutes.journalNew,
       queryParameters: const <String, String>{'kind': 'note'},
       extra: const AddSheetTranscript(
         text: 'remember the spare keys',
@@ -100,8 +105,8 @@ void main() {
 
   testWidgets('med-dose transcript pre-fills the dose-note field',
       (WidgetTester tester) async {
-    final CareblazersDatabase db =
-        CareblazersDatabase(NativeDatabase.memory());
+    final HoldcloseDatabase db =
+        HoldcloseDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final MedicationRepository repo =
         MedicationRepository(db, clock: _fixedNow);
@@ -120,7 +125,7 @@ void main() {
     );
 
     unawaited(router.pushNamed(
-      CareblazersRoutes.medicationDoseLog,
+      HoldcloseRoutes.medicationDoseLog,
       extra: const AddSheetTranscript(
         text: 'gave it with breakfast',
         kind: AddSheetKind.medDose,
@@ -136,8 +141,8 @@ void main() {
 
   testWidgets('appointment transcript pre-fills the visit-notes textarea',
       (WidgetTester tester) async {
-    final CareblazersDatabase db =
-        CareblazersDatabase(NativeDatabase.memory());
+    final HoldcloseDatabase db =
+        HoldcloseDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final ProviderRepository providerRepo = ProviderRepository(db);
 
@@ -149,7 +154,7 @@ void main() {
     );
 
     unawaited(router.pushNamed(
-      CareblazersRoutes.appointmentForm,
+      HoldcloseRoutes.appointmentForm,
       extra: const AddSheetTranscript(
         text: 'ask about evening agitation',
         kind: AddSheetKind.appointment,
@@ -165,8 +170,8 @@ void main() {
 
   testWidgets('a plain push with no transcript leaves the dose-note field off',
       (WidgetTester tester) async {
-    final CareblazersDatabase db =
-        CareblazersDatabase(NativeDatabase.memory());
+    final HoldcloseDatabase db =
+        HoldcloseDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final MedicationRepository repo =
         MedicationRepository(db, clock: _fixedNow);
@@ -184,7 +189,7 @@ void main() {
       ],
     );
 
-    unawaited(router.pushNamed(CareblazersRoutes.medicationDoseLog));
+    unawaited(router.pushNamed(HoldcloseRoutes.medicationDoseLog));
     await tester.pumpAndSettle();
 
     expect(find.byKey(DoseLogScreen.noteFieldKey), findsNothing);

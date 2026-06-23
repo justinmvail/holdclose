@@ -19,7 +19,7 @@ part 'care_plan_provider.g.dart';
 class CarePlanRepository with SyncSinkHost {
   CarePlanRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   Future<void> close() => _db.close();
 
@@ -111,7 +111,7 @@ class CarePlanRepository with SyncSinkHost {
 
 @Riverpod(keepAlive: true)
 CarePlanRepository carePlanRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return CarePlanRepository(db);
 }

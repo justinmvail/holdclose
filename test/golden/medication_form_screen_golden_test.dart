@@ -1,9 +1,9 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/medication/medication_form_screen.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/medication/medication_form_screen.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +14,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 DateTime _fixedNow() => DateTime(2026, 5, 30, 9, 0);
 
 MedicationRepository _repo() {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   return MedicationRepository(db, clock: _fixedNow);
 }
 
@@ -49,7 +49,7 @@ void main() {
                   routerConfig: _goldenRouter(),
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.background,
+                      color: holdcloseColors.background,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },

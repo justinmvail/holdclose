@@ -1,8 +1,8 @@
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/home_clock_provider.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/home/community_recap_card.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/home_clock_provider.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/home/community_recap_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,7 +64,7 @@ Future<void> _pump(
         homeClockProvider.overrideWithValue(() => DateTime.utc(2026, 5, 30, 13)),
       ],
       child: MaterialApp(
-        theme: careblazersLightTheme,
+        theme: holdcloseLightTheme,
         home: const Scaffold(
           body: SingleChildScrollView(child: CommunityRecapCard()),
         ),

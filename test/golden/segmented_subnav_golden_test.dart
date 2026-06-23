@@ -1,6 +1,6 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/segmented_subnav.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/segmented_subnav.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -18,9 +18,9 @@ const List<SegmentedSubnavItem> _items = <SegmentedSubnavItem>[
 /// brand colors directly.
 Widget _host(int activeIndex) => Container(
       width: 360,
-      color: careblazersColors.background,
+      color: holdcloseColors.background,
       child: Material(
-        color: careblazersColors.background,
+        color: holdcloseColors.background,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: SegmentedSubnav(

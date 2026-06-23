@@ -1,6 +1,6 @@
-import 'package:careblazers/providers/link_launcher_provider.dart';
-import 'package:careblazers/screens/community/support_screen.dart';
-import 'package:careblazers/seed/support_content.dart';
+import 'package:holdclose/providers/link_launcher_provider.dart';
+import 'package:holdclose/screens/community/support_screen.dart';
+import 'package:holdclose/seed/support_content.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

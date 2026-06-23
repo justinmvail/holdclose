@@ -1,13 +1,13 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/models/expense.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart'
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/models/expense.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart'
     show currentCaregiverIdProvider;
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/photo_attacher_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/team/expenses_screen.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/photo_attacher_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/team/expenses_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -57,13 +57,13 @@ Expense _expense({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late ExpensesRepository expensesRepo;
   late CareCircleRepository circleRepo;
   int ids = 0;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     expensesRepo = ExpensesRepository(db);
     circleRepo = CareCircleRepository(db);
     ids = 0;

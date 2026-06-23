@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 part 'onboarding_provider.g.dart';
 
 /// SharedPreferences key for the persisted onboarding-complete flag.
-const String onboardingCompletedPrefsKey = 'careblazers.onboarding_completed';
+const String onboardingCompletedPrefsKey = 'holdclose.onboarding_completed';
 
 /// The startup value for [OnboardingCompleted], overridden in `main()`
 /// with the persisted flag so a returning caregiver doesn't see the

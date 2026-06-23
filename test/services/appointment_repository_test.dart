@@ -1,6 +1,6 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart';
-import 'package:careblazers/services/appointment_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/services/appointment_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -29,11 +29,11 @@ Appointment _appt({
 
 void main() {
   group('AppointmentRepository — TASKS.md Phase 12.6', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late AppointmentRepository repo;
 
     setUp(() async {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = AppointmentRepository(db, clock: _fixedNow);
       // Seed a provider for the FK so appointment inserts succeed.
       await db.into(db.providersTable).insertOnConflictUpdate(

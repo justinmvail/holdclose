@@ -39,13 +39,13 @@ const bool _seedDemoEnabled = bool.fromEnvironment('SEED_DEMO');
 const String _seedDemoToken = String.fromEnvironment('SEED_TOKEN');
 
 /// SharedPreferences key holding the last [_seedDemoToken] that was applied.
-const String seedDemoTokenPrefsKey = 'careblazers.seed_demo_token';
+const String seedDemoTokenPrefsKey = 'holdclose.seed_demo_token';
 
 /// SharedPreferences flag marking the one-time multi-patient care-circle
 /// re-stamp ([maybeRestampCareCirclePatient]) as done, so it runs at most
 /// once per install (Issue #6).
 const String careCircleRestampPrefsKey =
-    'careblazers.care_circle_restamp_done';
+    'holdclose.care_circle_restamp_done';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -138,7 +138,7 @@ Future<void> main() async {
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: const CareblazersApp(),
+      child: const HoldcloseApp(),
     ),
   );
 }
@@ -202,7 +202,7 @@ Future<void> _bootstrapSync(ProviderContainer container) async {
 /// member can pull it. Runs once per distinct token.
 const bool _resyncAllEnabled = bool.fromEnvironment('RESYNC_ALL');
 const String _resyncAllToken = String.fromEnvironment('RESYNC_TOKEN');
-const String resyncAllTokenPrefsKey = 'careblazers.resync_all_token';
+const String resyncAllTokenPrefsKey = 'holdclose.resync_all_token';
 
 @visibleForTesting
 Future<bool> maybeResyncAll(

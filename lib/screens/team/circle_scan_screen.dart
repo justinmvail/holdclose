@@ -15,7 +15,7 @@ import '../../widgets/path_header.dart';
 /// `/team/circle/scan`.
 ///
 /// Reads a QR with [MobileScanner], parses the
-/// `careblazers:circle:<token>` payload, redeems it via
+/// `holdclose:circle:<token>` payload, redeems it via
 /// `POST /circles/join`, and shows success (joined <circle name>) or a
 /// friendly expired / invalid message.
 ///
@@ -138,8 +138,8 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
     }
   }
 
-  /// Extract the token from a `careblazers:circle:<token>` payload (or the
-  /// link-style `careblazers://join/<token>`), or null if it isn't one of
+  /// Extract the token from a `holdclose:circle:<token>` payload (or the
+  /// link-style `holdclose://join/<token>`), or null if it isn't one of
   /// ours / is empty. Shares [parseCircleInviteTokenFromString] with the
   /// deep-link receiver so both channels parse identically.
   static String? _parseToken(String? raw) =>

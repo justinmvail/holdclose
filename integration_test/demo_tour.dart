@@ -1,47 +1,47 @@
-import 'package:careblazers/app.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/home_clock_provider.dart';
-import 'package:careblazers/providers/llm_provider.dart';
-import 'package:careblazers/providers/settings_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/tts_provider.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart';
-import 'package:careblazers/screens/community/community_feed_screen.dart';
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/screens/medical/care_plan_routines_screen.dart';
-import 'package:careblazers/screens/medical/emergency_card_screen.dart';
-import 'package:careblazers/screens/medical/health_log_entry_form.dart';
-import 'package:careblazers/screens/medical/health_log_screen.dart';
-import 'package:careblazers/screens/medical/medical_hub_screen.dart';
-import 'package:careblazers/screens/medication/dose_log_screen.dart';
-import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
-import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
-import 'package:careblazers/screens/settings/settings_screen.dart';
-import 'package:careblazers/screens/team/care_circle_screen.dart';
-import 'package:careblazers/screens/team/care_team_hub_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/services/seed_repository.dart';
-import 'package:careblazers/widgets/home/schedule_card.dart';
-import 'package:careblazers/widgets/path_header.dart';
-import 'package:careblazers/widgets/tab_scaffold.dart';
+import 'package:holdclose/app.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/home_clock_provider.dart';
+import 'package:holdclose/providers/llm_provider.dart';
+import 'package:holdclose/providers/settings_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/tts_provider.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart';
+import 'package:holdclose/screens/community/community_feed_screen.dart';
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/screens/medical/care_plan_routines_screen.dart';
+import 'package:holdclose/screens/medical/emergency_card_screen.dart';
+import 'package:holdclose/screens/medical/health_log_entry_form.dart';
+import 'package:holdclose/screens/medical/health_log_screen.dart';
+import 'package:holdclose/screens/medical/medical_hub_screen.dart';
+import 'package:holdclose/screens/medication/dose_log_screen.dart';
+import 'package:holdclose/screens/onboarding/sign_in_screen.dart';
+import 'package:holdclose/screens/onboarding/welcome_carousel.dart';
+import 'package:holdclose/screens/settings/settings_screen.dart';
+import 'package:holdclose/screens/team/care_circle_screen.dart';
+import 'package:holdclose/screens/team/care_team_hub_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/services/seed_repository.dart';
+import 'package:holdclose/widgets/home/schedule_card.dart';
+import 'package:holdclose/widgets/path_header.dart';
+import 'package:holdclose/widgets/tab_scaffold.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,7 +90,7 @@ DateTime _fixedNow() => DateTime(2026, 6, 1, 11, 0);
 ///     build that flipped `USE_FAKE_LLM=false` still runs canned.
 ///   * [InMemoryStorageProvider] pre-seeded with Mary Henderson + the demo
 ///     journal so the dashboard + Emergency Card land populated.
-///   * A single in-memory [CareblazersDatabase] backs every drift
+///   * A single in-memory [HoldcloseDatabase] backs every drift
 ///     repository (medications, chat, care circle, health log, …) so no
 ///     screen tries to open the on-device SQLite file under the test host.
 ///   * [NoopTTSProvider] so any PLAY tap doesn't spin up the `flutter_tts`
@@ -129,8 +129,8 @@ void main() {
       // One in-memory drift DB backs every repository the IA touches, so
       // each Care / Care Circle / Chat screen builds against a coherent
       // store instead of trying to open the on-device SQLite file.
-      final CareblazersDatabase db =
-          CareblazersDatabase(NativeDatabase.memory());
+      final HoldcloseDatabase db =
+          HoldcloseDatabase(NativeDatabase.memory());
       addTearDown(db.close);
 
       // Seed the medication tracker so the Home Schedule card — and the
@@ -237,7 +237,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: CareblazersApp(
+          child: HoldcloseApp(
             router: buildRouter(initialLocation: '/onboarding'),
           ),
         ),

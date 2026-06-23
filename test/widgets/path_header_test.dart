@@ -1,5 +1,5 @@
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -82,7 +82,7 @@ void main() {
         find.byIcon(Icons.medication_outlined),
       );
       expect(icon.size, 24);
-      expect(icon.color, careblazersColors.primary);
+      expect(icon.color, holdcloseColors.primary);
     });
 
     testWidgets('the › separator uses primarySoft',
@@ -97,7 +97,7 @@ void main() {
       );
 
       final Text separator = tester.widget<Text>(find.text('›').first);
-      expect(separator.style?.color, careblazersColors.primarySoft);
+      expect(separator.style?.color, holdcloseColors.primarySoft);
     });
   });
 

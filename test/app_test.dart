@@ -1,15 +1,15 @@
 import 'dart:async';
 
-import 'package:careblazers/app.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/models/settings.dart';
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/providers/home_conversation_provider.dart';
-import 'package:careblazers/providers/onboarding_provider.dart';
-import 'package:careblazers/providers/quiet_hours_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/home_screen.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
+import 'package:holdclose/app.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/models/settings.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/home_conversation_provider.dart';
+import 'package:holdclose/providers/onboarding_provider.dart';
+import 'package:holdclose/providers/quiet_hours_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/home_screen.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,7 +27,7 @@ class _SignedInAuthStub implements AuthProvider {
 
   static const User _user = User(
     id: 'stub-app-test',
-    email: 'app-test@careblazers.app',
+    email: 'app-test@holdclose.app',
     name: 'App Test Caregiver',
   );
 
@@ -121,11 +121,11 @@ Future<TextScaler> _pumpAndReadScaler(
         ),
         ..._routerGateOverrides(auth),
       ],
-      child: const CareblazersApp(),
+      child: const HoldcloseApp(),
     ),
   );
   // Drain the SettingsNotifier hydrate microtask AND the
-  // `careblazersRouterProvider`'s auth-stream subscription — the
+  // `holdcloseRouterProvider`'s auth-stream subscription — the
   // production redirect (BUILD_SPEC.md §5.11 + §5.12) starts the
   // bridge in `signedOut`, so the very first redirect evaluation
   // would bounce `/` to `/sign-in` until the override's first
@@ -141,7 +141,7 @@ Future<TextScaler> _pumpAndReadScaler(
 }
 
 void main() {
-  group('CareblazersApp — font scaler (BUILD_SPEC.md §11.3)', () {
+  group('HoldcloseApp — font scaler (BUILD_SPEC.md §11.3)', () {
     testWidgets('small fontSize applies 0.875× textScaler',
         (WidgetTester tester) async {
       final TextScaler scaler = await _pumpAndReadScaler(
@@ -218,7 +218,7 @@ void main() {
               () => DateTime(2026, 5, 29, 14, 0),
             ),
           ],
-          child: CareblazersApp(router: probeRouter),
+          child: HoldcloseApp(router: probeRouter),
         ),
       );
       await tester.pump();

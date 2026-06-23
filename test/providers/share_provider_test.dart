@@ -1,4 +1,4 @@
-import 'package:careblazers/providers/share_provider.dart';
+import 'package:holdclose/providers/share_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

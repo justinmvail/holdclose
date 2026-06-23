@@ -20,7 +20,7 @@ export default defineWorkersConfig(async () => {
             bindings: {
               TEST_MIGRATIONS: migrations,
               FORUM_JWT_SECRET: 'test-forum-jwt-secret',
-              R2_PUBLIC_URL: 'https://media.careblazers.test',
+              R2_PUBLIC_URL: 'https://media.holdclose.test',
               GOOGLE_CLIENT_ID: 'test-google-web-client-id.apps.googleusercontent.com',
             },
           },

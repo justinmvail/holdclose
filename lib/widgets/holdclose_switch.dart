@@ -12,8 +12,8 @@ import '../theme.dart';
 ///
 /// Drop-in for a Material [Switch]: same `value` + `onChanged` contract, and a
 /// null `onChanged` renders a dimmed, non-interactive control.
-class CareblazersSwitch extends StatelessWidget {
-  const CareblazersSwitch({
+class HoldcloseSwitch extends StatelessWidget {
+  const HoldcloseSwitch({
     super.key,
     required this.value,
     required this.onChanged,
@@ -30,7 +30,7 @@ class CareblazersSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final CareblazersColors cb = context.cb;
+    final HoldcloseColors cb = context.cb;
     final bool enabled = onChanged != null;
     final Color track = value ? cb.success : cb.error;
 
@@ -111,11 +111,11 @@ class CareblazersSwitch extends StatelessWidget {
   }
 }
 
-/// Drop-in replacement for [SwitchListTile] backed by [CareblazersSwitch].
+/// Drop-in replacement for [SwitchListTile] backed by [HoldcloseSwitch].
 /// Tapping anywhere on the row toggles, matching SwitchListTile's behavior;
 /// [secondary] maps to the row's leading slot.
-class CareblazersSwitchListTile extends StatelessWidget {
-  const CareblazersSwitchListTile({
+class HoldcloseSwitchListTile extends StatelessWidget {
+  const HoldcloseSwitchListTile({
     super.key,
     required this.value,
     required this.onChanged,
@@ -139,7 +139,7 @@ class CareblazersSwitchListTile extends StatelessWidget {
       leading: secondary,
       title: title,
       subtitle: subtitle,
-      trailing: CareblazersSwitch(value: value, onChanged: onChanged),
+      trailing: HoldcloseSwitch(value: value, onChanged: onChanged),
       onTap: onChanged == null ? null : () => onChanged!(!value),
     );
   }

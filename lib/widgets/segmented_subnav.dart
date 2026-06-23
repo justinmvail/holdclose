@@ -29,10 +29,10 @@ class SegmentedSubnavItem {
 /// between them. Each pill has 11-radius corners and a bold 13.5pt label.
 /// The pill at [activeIndex] is the selected one:
 ///
-/// - **Active** — navy fill ([CareblazersColors.primary]), white label,
+/// - **Active** — navy fill ([HoldcloseColors.primary]), white label,
 ///   navy border.
-/// - **Inactive** — warm-white fill ([CareblazersColors.surfaceWarm]),
-///   slate label ([CareblazersColors.text]), and a faint brand-line
+/// - **Inactive** — warm-white fill ([HoldcloseColors.surfaceWarm]),
+///   slate label ([HoldcloseColors.text]), and a faint brand-line
 ///   border (navy at ~12%, the standard hairline used elsewhere in the
 ///   widget layer).
 ///
@@ -63,7 +63,7 @@ class SegmentedSubnav extends StatelessWidget {
   static const double _verticalPadding = 10;
   static const double _gap = 8;
 
-  /// Navy ([CareblazersColors.primary]) at ~12% alpha — the brand
+  /// Navy ([HoldcloseColors.primary]) at ~12% alpha — the brand
   /// hairline used for inactive-pill borders (matches the subtle
   /// primary-tint borders elsewhere in `lib/widgets/`).
   static const Color _brandLine = Color(0x1F1F2A44);

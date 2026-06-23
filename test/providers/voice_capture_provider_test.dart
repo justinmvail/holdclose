@@ -1,4 +1,4 @@
-import 'package:careblazers/providers/voice_capture_provider.dart';
+import 'package:holdclose/providers/voice_capture_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

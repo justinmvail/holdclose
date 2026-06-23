@@ -4,11 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 /// The 10 brand color tokens from BUILD_SPEC.md §3.1.
 ///
 /// Source of truth for every color used in screen build methods. Read
-/// these via `Theme.of(context).colorScheme.X` or `careblazersColors.X`
+/// these via `Theme.of(context).colorScheme.X` or `holdcloseColors.X`
 /// — never as raw hex.
 @immutable
-class CareblazersColors extends ThemeExtension<CareblazersColors> {
-  const CareblazersColors({
+class HoldcloseColors extends ThemeExtension<HoldcloseColors> {
+  const HoldcloseColors({
     required this.primary,
     required this.primarySoft,
     required this.text,
@@ -33,7 +33,7 @@ class CareblazersColors extends ThemeExtension<CareblazersColors> {
   final Color success;
 
   @override
-  CareblazersColors copyWith({
+  HoldcloseColors copyWith({
     Color? primary,
     Color? primarySoft,
     Color? text,
@@ -45,7 +45,7 @@ class CareblazersColors extends ThemeExtension<CareblazersColors> {
     Color? error,
     Color? success,
   }) {
-    return CareblazersColors(
+    return HoldcloseColors(
       primary: primary ?? this.primary,
       primarySoft: primarySoft ?? this.primarySoft,
       text: text ?? this.text,
@@ -60,12 +60,12 @@ class CareblazersColors extends ThemeExtension<CareblazersColors> {
   }
 
   @override
-  CareblazersColors lerp(
-    covariant ThemeExtension<CareblazersColors>? other,
+  HoldcloseColors lerp(
+    covariant ThemeExtension<HoldcloseColors>? other,
     double t,
   ) {
-    if (other is! CareblazersColors) return this;
-    return CareblazersColors(
+    if (other is! HoldcloseColors) return this;
+    return HoldcloseColors(
       primary: Color.lerp(primary, other.primary, t)!,
       primarySoft: Color.lerp(primarySoft, other.primarySoft, t)!,
       text: Color.lerp(text, other.text, t)!,
@@ -83,7 +83,7 @@ class CareblazersColors extends ThemeExtension<CareblazersColors> {
 /// Light brand palette (BUILD_SPEC.md §3.1). Source of truth for light
 /// mode and the safe const fallback for any context that can't reach a
 /// [BuildContext] (theme construction, top-level functions, static data).
-const CareblazersColors careblazersColors = CareblazersColors(
+const HoldcloseColors holdcloseColors = HoldcloseColors(
   primary: Color(0xFF1F2A44),
   primarySoft: Color(0xFF2A3B61),
   text: Color(0xFF33373D),
@@ -102,7 +102,7 @@ const Color _darkSurface = Color(0xFF0F1422);
 const Color _darkSurfaceVariant = Color(0xFF1A2236);
 const Color _darkText = Color(0xFFE8E6E2);
 
-/// Dark brand palette. Same token slots as [careblazersColors] but tuned
+/// Dark brand palette. Same token slots as [holdcloseColors] but tuned
 /// for a dark navy/charcoal canvas:
 /// - `background`/`surfaceWarm` become dark navy + a slightly lifted
 ///   variant so cards separate from the scaffold.
@@ -113,7 +113,7 @@ const Color _darkText = Color(0xFFE8E6E2);
 /// - `cta`/`accentDeep` (the brand orange) are nudged brighter so the CTA
 ///   keeps AA contrast on the dark canvas while staying on-brand.
 /// - `link`/`error`/`success` are lightened for contrast on dark.
-const CareblazersColors careblazersColorsDark = CareblazersColors(
+const HoldcloseColors holdcloseColorsDark = HoldcloseColors(
   primary: Color(0xFFB7C4E0),
   primarySoft: Color(0xFF8C9BBF),
   text: _darkText,
@@ -126,16 +126,16 @@ const CareblazersColors careblazersColorsDark = CareblazersColors(
   success: Color(0xFF5FBF8C),
 );
 
-/// Reads the active [CareblazersColors] theme extension off [context],
+/// Reads the active [HoldcloseColors] theme extension off [context],
 /// falling back to the light const if no ancestor theme registered one
 /// (keeps tests + stray contexts safe — never crashes, never returns
 /// null).
-extension CareblazersColorsContext on BuildContext {
-  CareblazersColors get cb =>
-      Theme.of(this).extension<CareblazersColors>() ?? careblazersColors;
+extension HoldcloseColorsContext on BuildContext {
+  HoldcloseColors get cb =>
+      Theme.of(this).extension<HoldcloseColors>() ?? holdcloseColors;
 }
 
-TextTheme _careblazersTextTheme({
+TextTheme _holdcloseTextTheme({
   required Color bodyColor,
   required Color headingColor,
 }) {
@@ -198,20 +198,20 @@ ThemeData _buildLightTheme() {
     useMaterial3: true,
     brightness: Brightness.light,
     colorScheme: scheme,
-    scaffoldBackgroundColor: careblazersColors.background,
-    extensions: const <ThemeExtension<dynamic>>[careblazersColors],
-    textTheme: _careblazersTextTheme(
-      bodyColor: careblazersColors.text,
-      headingColor: careblazersColors.primary,
+    scaffoldBackgroundColor: holdcloseColors.background,
+    extensions: const <ThemeExtension<dynamic>>[holdcloseColors],
+    textTheme: _holdcloseTextTheme(
+      bodyColor: holdcloseColors.text,
+      headingColor: holdcloseColors.primary,
     ),
     appBarTheme: AppBarTheme(
-      backgroundColor: careblazersColors.background,
-      foregroundColor: careblazersColors.primary,
+      backgroundColor: holdcloseColors.background,
+      foregroundColor: holdcloseColors.primary,
       elevation: 0,
       titleTextStyle: GoogleFonts.montserrat(
         fontSize: 22,
         fontWeight: FontWeight.w600,
-        color: careblazersColors.primary,
+        color: holdcloseColors.primary,
       ),
     ),
   );
@@ -220,13 +220,13 @@ ThemeData _buildLightTheme() {
 ThemeData _buildDarkTheme() {
   final ColorScheme scheme = ColorScheme(
     brightness: Brightness.dark,
-    primary: careblazersColorsDark.primary,
+    primary: holdcloseColorsDark.primary,
     onPrimary: _darkSurface,
-    secondary: careblazersColorsDark.cta,
+    secondary: holdcloseColorsDark.cta,
     onSecondary: _darkSurface,
-    tertiary: careblazersColorsDark.accentDeep,
+    tertiary: holdcloseColorsDark.accentDeep,
     onTertiary: _darkSurface,
-    error: careblazersColorsDark.error,
+    error: holdcloseColorsDark.error,
     onError: _darkSurface,
     surface: _darkSurface,
     onSurface: _darkText,
@@ -238,8 +238,8 @@ ThemeData _buildDarkTheme() {
     brightness: Brightness.dark,
     colorScheme: scheme,
     scaffoldBackgroundColor: _darkSurface,
-    extensions: const <ThemeExtension<dynamic>>[careblazersColorsDark],
-    textTheme: _careblazersTextTheme(
+    extensions: const <ThemeExtension<dynamic>>[holdcloseColorsDark],
+    textTheme: _holdcloseTextTheme(
       bodyColor: _darkText,
       headingColor: _darkText,
     ),
@@ -256,5 +256,5 @@ ThemeData _buildDarkTheme() {
   );
 }
 
-final ThemeData careblazersLightTheme = _buildLightTheme();
-final ThemeData careblazersDarkTheme = _buildDarkTheme();
+final ThemeData holdcloseLightTheme = _buildLightTheme();
+final ThemeData holdcloseDarkTheme = _buildDarkTheme();

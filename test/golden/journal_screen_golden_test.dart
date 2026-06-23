@@ -1,13 +1,10 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/models/behavior.dart';
-import 'package:careblazers/models/decoder_result.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/triage.dart';
-import 'package:careblazers/providers/journal_entries_provider.dart';
-import 'package:careblazers/providers/pattern_detector_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/journal/journal_screen.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/providers/journal_entries_provider.dart';
+import 'package:holdclose/providers/pattern_detector_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/journal/journal_screen.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,36 +13,20 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 final DateTime _fixedNow = DateTime(2026, 5, 29, 12, 0);
 
-const Behavior _sundowning =
-    Behavior(id: 'sundowning', label: 'Sundowning', glyph: '🌅');
-const Behavior _accusing =
-    Behavior(id: 'accusing', label: 'Accusing me', glyph: '💸');
-
-const TriageAnswers _triage = TriageAnswers(
-  when: TriageWhen.lateAfternoonEvening,
-  whatChanged: TriageWhatChanged.nothing,
-  whatTried: TriageWhatTried.talked,
-);
-
+/// Caregiver-authored journal entry (the post-decoder shape: free-text
+/// situation + attempts, no behavior/triage/result).
 JournalEntry _entry({
   required String id,
-  required Behavior behavior,
   required DateTime createdAt,
-  List<String> tweak = const <String>['dimming lights'],
+  String situationText = 'She kept asking to call her mother.',
+  String attemptsText = 'I redirected to the photo album and we made tea.',
 }) =>
     JournalEntry(
       id: id,
-      behavior: behavior,
-      triage: _triage,
-      result: DecoderResult(
-        say: const <String>['line 1'],
-        tweak: tweak,
-        dontSay: const <String>["don't argue"],
-        generatedAt: createdAt,
-      ),
-      outcome: JournalOutcome.positive,
-      attempt: 0,
       createdAt: createdAt,
+      occurredAt: createdAt,
+      situationText: situationText,
+      attemptsText: attemptsText,
     );
 
 InMemoryStorageProvider _populatedStorage() {
@@ -54,21 +35,20 @@ InMemoryStorageProvider _populatedStorage() {
   storage.insertJournalEntry(
     _entry(
       id: 'today-1',
-      behavior: _sundowning,
       createdAt: _fixedNow.subtract(const Duration(hours: 4)),
     ),
   );
   storage.insertJournalEntry(
     _entry(
       id: 'yesterday-1',
-      behavior: _accusing,
       createdAt: _fixedNow.subtract(const Duration(days: 1, hours: 3)),
+      situationText: 'He was sure someone had taken his wallet.',
+      attemptsText: 'We looked together and found it in the drawer.',
     ),
   );
   storage.insertJournalEntry(
     _entry(
       id: 'earlier-1',
-      behavior: _sundowning,
       createdAt: _fixedNow.subtract(const Duration(days: 4)),
     ),
   );
@@ -97,10 +77,10 @@ void main() {
                 patternDetectorProvider
                     .overrideWithValue(const <PatternAlert>[
                   PatternAlert(
-                    kind: 'sundowning_5plus_7d',
+                    kind: 'falls_3plus_7d',
                     text:
-                        'Sundowning is hitting hard this week. Talk to your '
-                        'doctor about evening routines.',
+                        '3 falls this week. Worth mentioning at the next '
+                        'visit.',
                     severity: PatternSeverity.warning,
                   ),
                 ]),
@@ -112,7 +92,7 @@ void main() {
                   routerConfig: _goldenRouter(),
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.background,
+                      color: holdcloseColors.background,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },
@@ -136,12 +116,12 @@ GoRouter _goldenRouter() {
             const JournalScreen(),
       ),
       GoRoute(
-        path: '/journal/:id',
+        path: '/journal/new',
         builder: (BuildContext context, GoRouterState state) =>
             const Scaffold(body: SizedBox.shrink()),
       ),
       GoRoute(
-        path: '/decoder/behavior',
+        path: '/journal/:id',
         builder: (BuildContext context, GoRouterState state) =>
             const Scaffold(body: SizedBox.shrink()),
       ),

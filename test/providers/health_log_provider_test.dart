@@ -1,6 +1,6 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/health_log_entry.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/health_log_entry.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,11 +37,11 @@ void main() {
   // ---- Repository CRUD via the in-memory ("fake") database --------------
 
   group('HealthLogRepository — Phase 14.16 (in-memory DB)', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late HealthLogRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = HealthLogRepository(db);
     });
 
@@ -123,14 +123,14 @@ void main() {
   // ---- Notifier: CRUD + selectors ---------------------------------------
 
   group('HealthLog notifier — Phase 14.16', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
 
     // A fixed LOCAL clock at noon on 2026-06-01 so the today-bucket test
     // is deterministic regardless of the host machine's timezone.
     DateTime fixedLocalNow() => DateTime(2026, 6, 1, 12);
 
     ProviderContainer makeContainer() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       final HealthLogRepository repo = HealthLogRepository(db);
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[

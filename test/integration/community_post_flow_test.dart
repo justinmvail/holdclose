@@ -4,7 +4,7 @@
 /// max-depth reply cap, and the long-press report flow), per TASKS.md
 /// Phase 15.12.
 ///
-/// These drive the *real* [CareblazersApp] over the shared Phase 15
+/// These drive the *real* [HoldcloseApp] over the shared Phase 15
 /// harness (pinned clock, no-op TTS/analytics) plus a process-local
 /// [FakeForumApiClient] wired in as the [forumApiClientProvider] override
 /// so the feed, the detail header, the comment tree, the vote round-trips,
@@ -31,15 +31,15 @@
 ///      fake backend.
 library;
 
-import 'package:careblazers/models/forum.dart';
+import 'package:holdclose/models/forum.dart';
 import '../support/forum_cache_test_override.dart';
-import 'package:careblazers/screens/community/community_feed_screen.dart';
-import 'package:careblazers/screens/community/post_compose_screen.dart';
-import 'package:careblazers/screens/community/post_detail_screen.dart';
-import 'package:careblazers/services/fake_forum_api_client.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/community/comment_thread.dart';
+import 'package:holdclose/screens/community/community_feed_screen.dart';
+import 'package:holdclose/screens/community/post_compose_screen.dart';
+import 'package:holdclose/screens/community/post_detail_screen.dart';
+import 'package:holdclose/services/fake_forum_api_client.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/community/comment_thread.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
@@ -78,19 +78,19 @@ void main() {
 
       // Neutral to start.
       expect(find.text('$base'), findsOneWidget);
-      expect(_upvoteColor(tester), careblazersColors.primarySoft);
+      expect(_upvoteColor(tester), holdcloseColors.primarySoft);
 
       // Upvote → +1, arrow lights up in the brand CTA salmon.
       await tester.tap(find.byKey(PostDetailScreen.postUpvoteKey));
       await tester.pumpAndSettle();
       expect(find.text('${base + 1}'), findsOneWidget);
-      expect(_upvoteColor(tester), careblazersColors.cta);
+      expect(_upvoteColor(tester), holdcloseColors.cta);
 
       // Tap again → reverts to the original count, highlight clears.
       await tester.tap(find.byKey(PostDetailScreen.postUpvoteKey));
       await tester.pumpAndSettle();
       expect(find.text('$base'), findsOneWidget);
-      expect(_upvoteColor(tester), careblazersColors.primarySoft);
+      expect(_upvoteColor(tester), holdcloseColors.primarySoft);
 
       await _flushTimers(tester);
     });
@@ -103,7 +103,7 @@ void main() {
       await tester.tap(find.byKey(PostDetailScreen.postUpvoteKey));
       await tester.pumpAndSettle();
       expect(find.text('${base + 1}'), findsOneWidget);
-      expect(_upvoteColor(tester), careblazersColors.cta);
+      expect(_upvoteColor(tester), holdcloseColors.cta);
 
       // Flip to downvote: the single per-target vote swings from +1 to -1,
       // so the count drops by two from the upvoted state.
@@ -111,8 +111,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('${base - 1}'), findsOneWidget); // (base+1) - 2
-      expect(_upvoteColor(tester), careblazersColors.primarySoft);
-      expect(_downvoteColor(tester), careblazersColors.primary);
+      expect(_upvoteColor(tester), holdcloseColors.primarySoft);
+      expect(_downvoteColor(tester), holdcloseColors.primary);
 
       await _flushTimers(tester);
     });
@@ -373,7 +373,7 @@ Future<_Detail> _pumpToFirstPost(
   final ForumPost first = (await fake.listPosts()).first;
   final List<ForumComment> comments = await seed(fake, first.id);
 
-  await pumpCareblazersApp(
+  await pumpHoldcloseApp(
     tester,
     extraOverrides: <Override>[
       forumApiClientProvider.overrideWithValue(fake),
@@ -433,7 +433,7 @@ Future<_OwnPost> _pumpToOwnPost(WidgetTester tester) async {
   ))
       .comment;
 
-  await pumpCareblazersApp(
+  await pumpHoldcloseApp(
     tester,
     extraOverrides: <Override>[
       forumApiClientProvider.overrideWithValue(fake),

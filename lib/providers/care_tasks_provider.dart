@@ -46,12 +46,12 @@ String currentCaregiverId(Ref ref) =>
 /// freezed [CareTask] serialises into the row's `payload`, with
 /// [CareTasksTable.dueAtMs] lifted out so the board can order by due time
 /// without decoding every blob. Tests build a repository directly against
-/// `CareblazersDatabase(NativeDatabase.memory())` so each test gets an
+/// `HoldcloseDatabase(NativeDatabase.memory())` so each test gets an
 /// isolated DB.
 class CareTasksRepository with SyncSinkHost {
   CareTasksRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Close the underlying database. The riverpod provider wires this to
   /// `ref.onDispose`.
@@ -162,7 +162,7 @@ int _byDueThenTitle(CareTask a, CareTask b) {
 /// database — same indirection [careCircleRepositoryProvider] uses.
 @Riverpod(keepAlive: true)
 CareTasksRepository careTasksRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return CareTasksRepository(db);
 }

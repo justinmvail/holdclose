@@ -108,7 +108,7 @@ class MedicationFormScreen extends ConsumerStatefulWidget {
 }
 
 /// The selectable dosage units. Default is [mg] — the overwhelming
-/// majority of dementia-care prescriptions are milligram doses (per
+/// majority of caregiving prescriptions are milligram doses (per
 /// caregiver request: "default to mg but units should be selectable").
 /// Ordered roughly by frequency of use in the target population.
 const List<String> _dosageUnits = <String>[

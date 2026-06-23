@@ -1,7 +1,7 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_shift.dart';
-import 'package:careblazers/providers/active_patient_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_shift.dart';
+import 'package:holdclose/providers/active_patient_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -231,11 +231,11 @@ void main() {
   });
 
   group('CareShiftsRepository — CRUD', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late CareShiftsRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = CareShiftsRepository(db);
     });
 
@@ -341,7 +341,7 @@ void main() {
   });
 
   group('CareShifts notifier + shiftWeek', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late CareShiftsRepository repo;
     final DateTime clock = DateTime(2026, 6, 1, 12);
 
@@ -358,7 +358,7 @@ void main() {
     }
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = CareShiftsRepository(db);
     });
 

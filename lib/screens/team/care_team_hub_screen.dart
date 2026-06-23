@@ -39,7 +39,7 @@ class CareTeamHubScreen extends ConsumerWidget {
   static const Key emptyStateKey = Key('team-hub-empty-state');
 
   /// The six hub tiles, left-to-right / top-to-bottom (BUILD_SPEC.md
-  /// §5.13). Chip colors are [CareblazersColors] tokens — the HTML
+  /// §5.13). Chip colors are [HoldcloseColors] tokens — the HTML
   /// reference's coral/teal/amber/plum placeholders are discarded per
   /// docs/MENU_LAYOUT_SPEC.md.
   static List<_TeamTileSpec> _tilesFor(BuildContext context) =>

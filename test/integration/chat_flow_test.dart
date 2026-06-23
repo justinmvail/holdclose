@@ -2,7 +2,7 @@
 /// (BUILD_SPEC.md §5.15 Chat tab → conversation list → the pushed thread,
 /// TASKS.md Phase 15.8).
 ///
-/// These drive the *real* [CareblazersApp] over the shared Phase 15
+/// These drive the *real* [HoldcloseApp] over the shared Phase 15
 /// harness (in-memory drift, pinned clock, no-op TTS/analytics) and assert
 /// real navigation + drift persistence — never goldens. Five caregiver
 /// flows:
@@ -30,15 +30,15 @@ library;
 
 import 'dart:async';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/caption_fade.dart';
-import 'package:careblazers/widgets/message_body.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/caption_fade.dart';
+import 'package:holdclose/widgets/message_body.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -121,12 +121,12 @@ Future<({
   required _FakeChatBackend backend,
   required Future<void> Function(ChatRepository repo) seed,
 }) async {
-  final CareblazersDatabase db = CareblazersDatabase.testInstance();
+  final HoldcloseDatabase db = HoldcloseDatabase.testInstance();
   addTearDown(db.close);
   final ChatRepository repo = ChatRepository(db);
   await seed(repo);
 
-  final ProviderContainer container = await pumpCareblazersApp(
+  final ProviderContainer container = await pumpHoldcloseApp(
     tester,
     extraOverrides: <Override>[
       chatRepositoryBackendProvider.overrideWithValue(repo),
@@ -313,11 +313,11 @@ void main() {
       // Colour: navy user bubble, warm assistant bubble.
       expect(
         _bubbleDecoration(tester, userInList).color,
-        careblazersColors.primary.withValues(alpha: 0.92),
+        holdcloseColors.primary.withValues(alpha: 0.92),
       );
       expect(
         _bubbleDecoration(tester, replyInList).color,
-        careblazersColors.surfaceWarm,
+        holdcloseColors.surfaceWarm,
       );
 
       // The list is pinned to the bottom once the reply lands.

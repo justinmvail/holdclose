@@ -1,19 +1,19 @@
-import 'package:careblazers/db/database.dart';
+import 'package:holdclose/db/database.dart';
 // `Provider` (clinician) is hidden so it doesn't collide with riverpod's.
-import 'package:careblazers/models/appointment.dart' hide Provider;
-import 'package:careblazers/models/care_plan_routine.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/models/health_log_entry.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/chat_actions.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
+import 'package:holdclose/models/appointment.dart' hide Provider;
+import 'package:holdclose/models/care_plan_routine.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/models/health_log_entry.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_actions.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,7 +43,7 @@ Medication _med(String id, String name, {String dosage = '10 mg'}) =>
     );
 
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late MedicationRepository repo;
   late AppointmentRepository apptRepo;
   late ProviderRepository providerRepo;
@@ -54,7 +54,7 @@ void main() {
   late Map<String, ChatActionExecutor> actions;
 
   setUp(() async {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = MedicationRepository(db, clock: _fixedClock);
     apptRepo = AppointmentRepository(db);
     providerRepo = ProviderRepository(db);

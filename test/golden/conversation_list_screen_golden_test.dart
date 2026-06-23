@@ -1,9 +1,9 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,12 +14,12 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 DateTime _fixedNow() => DateTime.utc(2026, 5, 29, 19, 42);
 
 ChatRepository _seedRepoEmpty() {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   return ChatRepository(db);
 }
 
 Future<ChatRepository> _seedRepoPopulated() async {
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   final ChatRepository repo = ChatRepository(db);
 
   final DateTime now = _fixedNow();
@@ -90,7 +90,7 @@ void main() {
                   routerConfig: _goldenRouter(),
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.background,
+                      color: holdcloseColors.background,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },
@@ -131,7 +131,7 @@ void main() {
                       routerConfig: _goldenRouter(),
                       builder: (BuildContext context, Widget? child) {
                         return ColoredBox(
-                          color: careblazersColors.background,
+                          color: holdcloseColors.background,
                           child: child ?? const SizedBox.shrink(),
                         );
                       },

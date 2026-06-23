@@ -1,6 +1,6 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/home/add_action_sheet.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/home/add_action_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,12 +9,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// [ProviderScope] (the rows' [VoiceButton]s read the voice-capture seam)
 /// + a [Material] ancestor. No `theme:` — per `flutter_test_config.dart`
 /// goldens avoid dragging google_fonts through the framework; the sheet
-/// pulls its brand colors directly off `careblazersColors`.
+/// pulls its brand colors directly off `holdcloseColors`.
 Widget _host(Widget child) => ProviderScope(
       child: Container(
         width: 390,
-        color: careblazersColors.background,
-        child: Material(color: careblazersColors.background, child: child),
+        color: holdcloseColors.background,
+        child: Material(color: holdcloseColors.background, child: child),
       ),
     );
 

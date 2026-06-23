@@ -1,7 +1,7 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/care_circle_membership.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/care_circle_membership.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -39,11 +39,11 @@ CareCircleMembership _membership({
 
 void main() {
   group('CareCircleRepository — CRUD', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late CareCircleRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = CareCircleRepository(db);
     });
 

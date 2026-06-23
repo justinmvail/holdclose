@@ -1,8 +1,8 @@
-import 'package:careblazers/models/settings.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/screens/team/care_team_hub_screen.dart';
-import 'package:careblazers/widgets/hub_tile.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/models/settings.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/screens/team/care_team_hub_screen.dart';
+import 'package:holdclose/widgets/hub_tile.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,7 +59,7 @@ InMemoryStorageProvider _seededStorage({required bool teamEnabled}) {
 
 /// Pumps the hub at a tall phone surface so all five tiles render inside
 /// the viewport (the grid scrolls, but a tall surface keeps every tile
-/// hittable). We deliberately skip `careblazersLightTheme` — its
+/// hittable). We deliberately skip `holdcloseLightTheme` — its
 /// google_fonts TextStyles fire fire-and-forget Futures that surface as
 /// uncaught errors in a font-less test host; the screen re-applies its
 /// brand colors directly, so navigation behavior is unaffected.

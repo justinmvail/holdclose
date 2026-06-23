@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/services/circle_deep_link_handler.dart';
-import 'package:careblazers/services/circle_invite_link.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/services/circle_deep_link_handler.dart';
+import 'package:holdclose/services/circle_invite_link.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
@@ -17,7 +17,7 @@ class _AuthStub implements AuthProvider {
 
   static const User _user = User(
     id: 'u1',
-    email: 'c@careblazers.app',
+    email: 'c@holdclose.app',
     name: 'Caregiver',
   );
 
@@ -89,23 +89,23 @@ ProviderContainer _container({
 
 void main() {
   group('parseCircleInviteToken', () {
-    test('parses the link-style careblazers://join/<token>', () {
+    test('parses the link-style holdclose://join/<token>', () {
       expect(
-        parseCircleInviteTokenFromString('careblazers://join/abc123'),
+        parseCircleInviteTokenFromString('holdclose://join/abc123'),
         'abc123',
       );
     });
 
-    test('parses the QR-style careblazers:circle:<token>', () {
+    test('parses the QR-style holdclose:circle:<token>', () {
       expect(
-        parseCircleInviteTokenFromString('careblazers:circle:xyz789'),
+        parseCircleInviteTokenFromString('holdclose:circle:xyz789'),
         'xyz789',
       );
     });
 
     test('returns null for an unrelated / empty URI', () {
       expect(parseCircleInviteTokenFromString('https://example.com'), isNull);
-      expect(parseCircleInviteTokenFromString('careblazers://join/'), isNull);
+      expect(parseCircleInviteTokenFromString('holdclose://join/'), isNull);
       expect(parseCircleInviteTokenFromString(null), isNull);
     });
 
@@ -126,7 +126,7 @@ void main() {
       final handler = container.read(circleDeepLinkHandlerProvider);
 
       final outcome =
-          await handler.handleUri('careblazers://join/good_token');
+          await handler.handleUri('holdclose://join/good_token');
 
       // The deep link alone must NOT reach the backend — a tapped link
       // silently re-binding the circle is the attack this gate closes.
@@ -211,7 +211,7 @@ void main() {
           _container(signedIn: false, client: client, adopted: adopted);
       final handler = container.read(circleDeepLinkHandlerProvider);
 
-      final stashed = await handler.handleUri('careblazers://join/good_token');
+      final stashed = await handler.handleUri('holdclose://join/good_token');
       expect(stashed, isA<CircleJoinStashed>());
       expect(client.joinedTokens, isEmpty);
       expect(handler.hasPending, isTrue);

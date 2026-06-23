@@ -94,7 +94,7 @@ CareEvent careEventFromTask(CareTask task) => CareEvent(
 class CareEventsRepository with SyncSinkHost {
   CareEventsRepository(this._db);
 
-  final CareblazersDatabase _db;
+  final HoldcloseDatabase _db;
 
   /// Close the underlying database. The riverpod provider wires this to
   /// `ref.onDispose`.
@@ -195,14 +195,14 @@ class CareEventsRepository with SyncSinkHost {
 /// reaches for [careEventsRepositoryProvider] and never sees the concrete
 /// drift database — same indirection [careCircleRepositoryProvider] uses.
 ///
-/// In production the repo opens its own [CareblazersDatabase] handle onto
+/// In production the repo opens its own [HoldcloseDatabase] handle onto
 /// the shared SQLite file; SQLite's per-connection serialization keeps
 /// that safe. Tests build a [CareEventsRepository] directly against
-/// `CareblazersDatabase(NativeDatabase.memory())` so each test gets an
+/// `HoldcloseDatabase(NativeDatabase.memory())` so each test gets an
 /// isolated DB.
 @Riverpod(keepAlive: true)
 CareEventsRepository careEventsRepositoryBackend(Ref ref) {
-  final CareblazersDatabase db = CareblazersDatabase.open();
+  final HoldcloseDatabase db = HoldcloseDatabase.open();
   ref.onDispose(db.close);
   return CareEventsRepository(db);
 }

@@ -1,11 +1,11 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/models/document.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/screens/medical/emergency_card_edit_screen.dart';
-import 'package:careblazers/screens/medical/emergency_card_screen.dart'
+import 'package:holdclose/models/document.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/screens/medical/emergency_card_edit_screen.dart';
+import 'package:holdclose/screens/medical/emergency_card_screen.dart'
     show EmergencyCardView, emergencyCardViewProvider;
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -54,7 +54,7 @@ void main() {
                   routerConfig: _goldenRouter(),
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.background,
+                      color: holdcloseColors.background,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },

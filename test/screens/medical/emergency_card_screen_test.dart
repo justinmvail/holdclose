@@ -1,7 +1,7 @@
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/screens/medical/emergency_card_screen.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/screens/medical/emergency_card_screen.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

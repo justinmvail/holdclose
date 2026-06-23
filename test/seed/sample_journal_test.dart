@@ -1,50 +1,52 @@
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/seed/sample_journal.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/seed/sample_journal.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 DateTime _fixedClock() => DateTime.utc(2026, 5, 29, 19, 0);
 
 void main() {
   group('sampleJournalEntries — BUILD_SPEC.md §9.2', () {
-    test('returns exactly 6 entries', () {
+    test('returns exactly 6 free-text entries', () {
       expect(sampleJournalEntries(clock: _fixedClock), hasLength(6));
     });
 
-    test('demonstrates the §7.6 sundowning pattern: 3 entries inside 7 days',
-        () {
+    test('every entry carries the seed-journal-N id', () {
+      final List<JournalEntry> entries =
+          sampleJournalEntries(clock: _fixedClock);
+      expect(
+        entries.map((JournalEntry e) => e.id).toList(),
+        <String>[
+          'seed-journal-1',
+          'seed-journal-2',
+          'seed-journal-3',
+          'seed-journal-4',
+          'seed-journal-5',
+          'seed-journal-6',
+        ],
+      );
+    });
+
+    test('every entry has a situation; most carry the attempts the caregiver '
+        'tried', () {
+      for (final JournalEntry e in sampleJournalEntries(clock: _fixedClock)) {
+        expect(e.situationText, isNotNull,
+            reason: 'entry ${e.id} has no situation text');
+        expect(e.situationText, isNotEmpty);
+        expect(e.attemptsText, isNotNull,
+            reason: 'entry ${e.id} has no attempts text');
+        expect(e.attemptsText, isNotEmpty);
+      }
+    });
+
+    test('a cluster of entries lands inside the trailing 7 days', () {
       final List<JournalEntry> entries =
           sampleJournalEntries(clock: _fixedClock);
       final DateTime cutoff = _fixedClock().subtract(const Duration(days: 7));
-      final Iterable<JournalEntry> sundowning7d = entries.where(
-        (JournalEntry e) =>
-            e.behavior.id == 'sundowning' && e.createdAt.isAfter(cutoff),
+      final Iterable<JournalEntry> recent = entries.where(
+        (JournalEntry e) => e.createdAt.isAfter(cutoff),
       );
-      expect(sundowning7d.length, 3);
-    });
-
-    test('every entry references a canonical behavior id', () {
-      const Set<String> canonical = <String>{
-        'upset',
-        'refusing_care',
-        'wants_home',
-        'asking_for_someone',
-        'accusing',
-        'sundowning',
-        'wandering',
-        'hallucinating',
-      };
-      for (final JournalEntry e in sampleJournalEntries(clock: _fixedClock)) {
-        expect(canonical, contains(e.behavior.id),
-            reason: 'entry ${e.id} has unknown behavior ${e.behavior.id}');
-      }
-    });
-
-    test('every entry carries a non-empty DecoderResult', () {
-      for (final JournalEntry e in sampleJournalEntries(clock: _fixedClock)) {
-        expect(e.result.say, isNotEmpty);
-        expect(e.result.tweak, isNotEmpty);
-        expect(e.result.dontSay, isNotEmpty);
-      }
+      expect(recent.length, greaterThanOrEqualTo(3),
+          reason: 'the journal should open populated for the demo');
     });
 
     test('createdAt timestamps are derived from the injected clock', () {

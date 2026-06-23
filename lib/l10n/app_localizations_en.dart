@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Careblazers';
+  String get appTitle => 'Holdclose';
 
   @override
   String get commonSave => 'Save';
@@ -76,11 +76,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get welcomeSkipSemantics => 'Skip onboarding and go to sign-in.';
 
   @override
-  String get signInTitle => 'Careblazers';
+  String get signInTitle => 'Holdclose';
 
   @override
   String get signInTagline =>
-      'We make caregiving for someone with dementia easier.';
+      'We make caring for someone you love a little easier.';
 
   @override
   String get signInError => 'Couldn\'t sign in. Try again.';
@@ -148,7 +148,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lovedOneSetupDiagnosisLabel => 'Diagnosis (optional)';
 
   @override
-  String get lovedOneSetupDiagnosisHint => 'e.g. Alzheimer\'s disease';
+  String get lovedOneSetupDiagnosisHint =>
+      'e.g. Parkinson\'s, stroke recovery, a diagnosis';
 
   @override
   String get lovedOneSetupAllergiesLabel => 'Allergies (optional)';

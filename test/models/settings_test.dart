@@ -1,4 +1,4 @@
-import 'package:careblazers/models/settings.dart';
+import 'package:holdclose/models/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

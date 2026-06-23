@@ -15,7 +15,7 @@
 /// Treat these as content, not config — the warm, de-escalating,
 /// non-clinical voice is load-bearing (BUILD_SPEC.md §13.1). Like
 /// `learn_content.dart`, the operator updates this via a spec change
-/// (PR + Dr. Natali signoff), never at runtime. Plain const data — this
+/// (PR + operator signoff), never at runtime. Plain const data — this
 /// is bundled seed copy, not persisted state.
 library;
 
@@ -87,7 +87,7 @@ class RespiteResource {
 }
 
 /// National caregiver + crisis help lines (Phase 14.38). These refer
-/// Careblazers to professional support; per BUILD_SPEC.md §13.1 they do
+/// Holdclose to professional support; per BUILD_SPEC.md §13.1 they do
 /// not diagnose or prescribe. A local respite directory is deferred — the
 /// "search local respite" affordance launches [respiteSearchUrl] instead.
 const List<RespiteResource> respiteResources = <RespiteResource>[
@@ -104,8 +104,8 @@ const List<RespiteResource> respiteResources = <RespiteResource>[
     id: 'alz-helpline',
     name: "Alzheimer's Association Helpline",
     description:
-        'Around-the-clock support from specialists who understand '
-        'dementia caregiving — any hour, any day.',
+        'Around-the-clock support from specialists — any hour, any day. '
+        'Dementia-focused, but a warm first call for many caregivers.',
     phone: '1-800-272-3900',
     url: 'https://www.alz.org/help-support/resources/helpline',
   ),
@@ -144,14 +144,14 @@ Uri respiteSearchUrl() =>
     Uri.parse('https://www.google.com/search?q=respite+care+near+me');
 
 /// A curated Expert Q&A entry shown read-only in the Support card
-/// (Phase 14.38). Answers are operator-seeded in Dr. Natali's framework
-/// voice — there is no live answering in v1.
+/// (Phase 14.38). Answers are operator-seeded in a warm, evidence-based
+/// coaching voice — there is no live answering in v1.
 class ExpertAnswer {
   const ExpertAnswer({
     required this.id,
     required this.question,
     required this.answer,
-    this.attribution = 'Dr. Natali Edmonds, Dementia Careblazers',
+    this.attribution = 'Caregiving support',
   });
 
   /// Stable id used for the answer's widget key.
@@ -163,7 +163,8 @@ class ExpertAnswer {
   /// The seeded answer body, in the coaching framework voice.
   final String answer;
 
-  /// Who the answer is credited to. Defaults to Dr. Natali.
+  /// Who the answer is credited to. Defaults to a generic caregiving
+  /// support credit.
   final String attribution;
 }
 
@@ -174,7 +175,7 @@ const List<ExpertAnswer> expertAnswers = <ExpertAnswer>[
     id: 'permission-to-rest',
     question: 'I feel guilty taking any time for myself. Is that wrong?',
     answer:
-        'It is one of the most common feelings Careblazers carry, and it '
+        'It is one of the most common feelings caregivers carry, and it '
         'is not a sign you are doing anything wrong. Rest is not a reward '
         'you have to earn — it is part of how you keep showing up. A '
         'cared-for caregiver gives steadier care. Start small: one hour, '

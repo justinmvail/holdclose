@@ -8,14 +8,14 @@ import '../theme.dart';
 /// Composition, top to bottom:
 /// 1. A **32px icon** centered on an 11-radius colored chip
 ///    ([chipColor]). The chip color is pulled from
-///    [CareblazersColors] by the caller — the HTML reference's
+///    [HoldcloseColors] by the caller — the HTML reference's
 ///    coral/teal/amber/plum are placeholders the layout spec explicitly
 ///    says to discard, so we never adopt them.
-/// 2. A **15.5pt bold label** in navy ([CareblazersColors.primary]).
-/// 3. An **11pt sub-label** in body text ([CareblazersColors.text]).
+/// 2. A **15.5pt bold label** in navy ([HoldcloseColors.primary]).
+/// 3. An **11pt sub-label** in body text ([HoldcloseColors.text]).
 ///
 /// The tile is a [surfaceWarm]-filled card with an 18-radius outer
-/// corner and a 1.5px brand ([CareblazersColors.primary]) border, with a
+/// corner and a 1.5px brand ([HoldcloseColors.primary]) border, with a
 /// 96px minimum height so the hit area stays generous for the 65+
 /// audience. Tapping it fires [onTap].
 class HubTile extends StatelessWidget {
@@ -38,14 +38,14 @@ class HubTile extends StatelessWidget {
   /// Short descriptor under the label, 11pt body text.
   final String subLabel;
 
-  /// Chip background behind the icon — a [CareblazersColors] token chosen
+  /// Chip background behind the icon — a [HoldcloseColors] token chosen
   /// by the caller.
   final Color chipColor;
 
   /// Tap handler; fires once per tap.
   final VoidCallback onTap;
 
-  /// Icon tint on the chip. Defaults to [CareblazersColors.background]
+  /// Icon tint on the chip. Defaults to [HoldcloseColors.background]
   /// (warm white) for contrast on a saturated chip.
   final Color? iconColor;
 

@@ -59,7 +59,7 @@ class SignInScreen extends ConsumerStatefulWidget {
   /// screen test asserts the rendered text against — the two must stay in
   /// sync with the ARB entry.
   static const String tagline =
-      'We make caregiving for someone with dementia easier.';
+      'We make caring for someone you love a little easier.';
 
   @override
   ConsumerState<SignInScreen> createState() => _SignInScreenState();

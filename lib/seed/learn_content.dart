@@ -2,7 +2,7 @@
 /// (BUILD_SPEC.md §5.16, TASKS.md Phase 14.37).
 ///
 /// Two content kinds live here:
-///   * [LearnVideo] — short Careblazers framework videos. Real video
+///   * [LearnVideo] — short Holdclose framework videos. Real video
 ///     hosting is deferred to a later phase; the detail screen renders a
 ///     soft "coming soon" placeholder over this metadata.
 ///   * [LearnPlaybook] — "what do I do when…" step-by-step guides grouped
@@ -11,12 +11,12 @@
 /// Treat these lists as content, not config — the warm, de-escalating
 /// voice is load-bearing for the coaching promise. Like
 /// `community_guidelines.dart`, the operator updates this via a spec
-/// change (PR + Dr. Natali signoff), never at runtime. Plain const data
+/// change (PR + operator signoff), never at runtime. Plain const data
 /// classes (no freezed / drift) — this is bundled seed copy, not
 /// persisted state.
 library;
 
-/// A seeded Careblazers framework video shown in the Learn → Videos list.
+/// A seeded primer video shown in the Learn → Videos list.
 class LearnVideo {
   const LearnVideo({
     required this.id,
@@ -33,8 +33,8 @@ class LearnVideo {
   final String title;
 
   /// The YouTube video id — drives [youtubeUrl] (opened externally) and
-  /// [thumbnailUrl]. These are Dr. Natali's own public Dementia
-  /// Careblazers videos; the app links out to them rather than re-hosting.
+  /// [thumbnailUrl]. The app links out rather than re-hosting, so only
+  /// licensed/permitted videos belong here.
   final String youtubeId;
 
   /// Optional run length. Rendered as `m:ss` via [durationLabel] when
@@ -119,60 +119,14 @@ class LearnPlaybook {
   final List<PlaybookStep> steps;
 }
 
-/// The seeded framework videos — Dr. Natali's own popular Dementia
-/// Careblazers YouTube videos (verified channel: "Dementia Careblazers").
-/// The app links out to each one rather than re-hosting it; tapping a
-/// card opens the video on YouTube.
-const List<LearnVideo> learnVideos = <LearnVideo>[
-  LearnVideo(
-    id: 'top-three',
-    title: 'Top 3 must-watch videos on dementia care',
-    youtubeId: 'Zx0Qzfm00Nw',
-    blurb:
-        "Dr. Natali's three most essential lessons for every caregiver, "
-        'gathered into one place to start with.',
-  ),
-  LearnVideo(
-    id: 'lying',
-    title: 'Lying to someone with dementia',
-    youtubeId: '5EM1Iu_eIS4',
-    blurb:
-        "A kinder way to think about little 'fibs' — when stepping into "
-        "your loved one's reality is the more loving choice.",
-  ),
-  LearnVideo(
-    id: 'stages',
-    title: 'Stages of dementia caregiving: from chaos to calm',
-    youtubeId: '-JbqrkO935E',
-    blurb:
-        'The three stages every caregiver moves through, and how to tell '
-        'which one you are in right now.',
-  ),
-  LearnVideo(
-    id: 'one-thing',
-    title: 'The one thing every dementia caregiver can control',
-    youtubeId: 'sQdH7CWIn_U',
-    blurb:
-        "You cannot control the disease, but there is one thing you can — "
-        'and it changes the hardest moments.',
-  ),
-  LearnVideo(
-    id: 'early-signs',
-    title: "Early dementia signs caregivers wish they hadn't ignored",
-    youtubeId: 's70cm2aGHno',
-    blurb:
-        'Real caregivers on the early signs they look back on, so you can '
-        'recognise them sooner.',
-  ),
-  LearnVideo(
-    id: 'level-of-care',
-    title: 'Is it time? 8 signs it might be time for a different level of care',
-    youtubeId: '646gn3Vy6t8',
-    blurb:
-        'Eight honest signs that it may be time to consider more help, and '
-        'how to face that decision.',
-  ),
-];
+/// The seeded primer videos shown in the Learn tab's "Videos" section.
+///
+/// Emptied during the de-brand (2026-06): the previous list embedded a
+/// third party's branded YouTube videos, which can't ship under the new
+/// product without permission. The Learn screen hides the Videos section
+/// while this is empty; populate it with licensed/original, diagnosis-
+/// agnostic caregiving primers when they're available.
+const List<LearnVideo> learnVideos = <LearnVideo>[];
 
 /// The seeded playbooks (Phase 14.37), one or more per [LearnTopic]. The
 /// Learn screen groups these by `topic` in [LearnTopic] declaration order.

@@ -1,9 +1,9 @@
 import 'package:alchemist/alchemist.dart';
 import '../support/forum_cache_test_override.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/screens/community/community_feed_screen.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/screens/community/community_feed_screen.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,7 +103,7 @@ void main() {
                 child: MaterialApp(
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.background,
+                      color: holdcloseColors.background,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },
@@ -138,7 +138,7 @@ void main() {
                 child: MaterialApp(
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.background,
+                      color: holdcloseColors.background,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },
@@ -209,7 +209,7 @@ void main() {
                 child: MaterialApp(
                   builder: (BuildContext context, Widget? child) {
                     return ColoredBox(
-                      color: careblazersColors.background,
+                      color: holdcloseColors.background,
                       child: child ?? const SizedBox.shrink(),
                     );
                   },

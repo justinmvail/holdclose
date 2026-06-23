@@ -1,9 +1,9 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/health_log_entry.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/screens/medical/health_log_screen.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/health_log_entry.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/screens/medical/health_log_screen.dart';
+import 'package:holdclose/theme.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,11 +14,11 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 DateTime _fixedNow() => DateTime(2026, 6, 1, 12);
 
 HealthLogRepository _emptyRepo() =>
-    HealthLogRepository(CareblazersDatabase(NativeDatabase.memory()));
+    HealthLogRepository(HoldcloseDatabase(NativeDatabase.memory()));
 
 Future<HealthLogRepository> _populatedRepo() async {
   final HealthLogRepository repo =
-      HealthLogRepository(CareblazersDatabase(NativeDatabase.memory()));
+      HealthLogRepository(HoldcloseDatabase(NativeDatabase.memory()));
   HealthLogEntry e({
     required String id,
     required DateTime at,
@@ -90,7 +90,7 @@ Widget _host(HealthLogRepository repo) {
       child: MaterialApp.router(
         routerConfig: router,
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),

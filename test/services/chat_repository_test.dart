@@ -1,16 +1,16 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/services/chat_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/services/chat_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('ChatRepository — TASKS.md Phase 11.2', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late ChatRepository repo;
 
     setUp(() {
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       repo = ChatRepository(db);
     });
 

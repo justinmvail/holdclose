@@ -6,7 +6,7 @@ import '../seed/support_content.dart';
 /// TASKS.md Phase 14.38).
 ///
 /// Four rungs across the 10–50 raw-score range. The band drives both the
-/// headline and the Dr.-Natali-style [BurnoutResult.message] — the
+/// headline and the coaching-style [BurnoutResult.message] — the
 /// higher bands lean harder on "please reach out to a real person",
 /// honoring the §13.1 referral guardrail (this is wellbeing coaching,
 /// never a clinical diagnosis).

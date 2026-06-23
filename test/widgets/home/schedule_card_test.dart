@@ -1,5 +1,5 @@
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/widgets/home/schedule_card.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/widgets/home/schedule_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _patient = 'demo-patient-mary';

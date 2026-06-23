@@ -1,7 +1,7 @@
-import 'package:careblazers/l10n/app_localizations.dart';
-import 'package:careblazers/screens/community/community_guidelines_screen.dart';
-import 'package:careblazers/seed/community_guidelines.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/l10n/app_localizations.dart';
+import 'package:holdclose/screens/community/community_guidelines_screen.dart';
+import 'package:holdclose/seed/community_guidelines.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

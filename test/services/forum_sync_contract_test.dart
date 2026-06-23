@@ -1,6 +1,6 @@
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/services/fake_forum_api_client.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/services/fake_forum_api_client.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Contract pin for [FakeForumApiClient]'s sync engine.

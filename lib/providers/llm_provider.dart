@@ -1,60 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../models/behavior.dart';
-import '../models/decoder_result.dart';
-import '../models/triage.dart';
 import '../seed/activity_summary_prompt.dart';
-import '../seed/fake_llm_seeds.dart';
-import '../seed/system_prompt.dart';
 
-part 'llm_provider.freezed.dart';
 part 'llm_provider.g.dart';
-
-/// One token in a decoder script stream (BUILD_SPEC.md §6.1 + §7.3).
-///
-/// The shim's SSE chunks accumulate text bytes; [DecoderChunk.partial]
-/// carries the growing JSON string so the decoder result screen can
-/// render the word-by-word fade-in. [DecoderChunk.done] is the terminal
-/// success chunk — its [DecoderResult] is the parsed, validated whole.
-/// [DecoderChunk.error] terminates the stream on parse failure or
-/// transport error.
-@freezed
-sealed class DecoderChunk with _$DecoderChunk {
-  const factory DecoderChunk.partial({
-    required String accumulatedJson,
-  }) = DecoderChunkPartial;
-
-  const factory DecoderChunk.done({
-    required DecoderResult result,
-  }) = DecoderChunkDone;
-
-  const factory DecoderChunk.error({
-    required String message,
-  }) = DecoderChunkError;
-}
-
-/// The slice of [Patient] the LLM call actually needs
-/// (BUILD_SPEC.md §7.2).
-///
-/// Kept narrow on purpose: the system prompt forbids diagnosis claims
-/// and prognosis statements, so we only pass the two facts the user
-/// message template requires (stage + age). Everything else about the
-/// patient lives in `models/patient.dart` and is used by the crisis
-/// card, journal, etc. — not the LLM.
-@freezed
-abstract class PatientContext with _$PatientContext {
-  const factory PatientContext({
-    required String stage,
-    required int age,
-  }) = _PatientContext;
-}
 
 /// Which surface a [ActivityEvent] in the "catch me up" feed came from
 /// (Phase 14.12). Mirrors `RecentActivityOrigin` but lives here because
@@ -103,51 +57,38 @@ class ActivityEvent {
   int get hashCode => Object.hash(kind, summary, occurredAt);
 }
 
-/// Backend for the decoder LLM call (BUILD_SPEC.md §6.1).
+/// Backend for the Home "catch me up" recap LLM call (Phase 14.12).
 ///
-/// Two v1 implementations: [FakeLLMProvider] (canned + streamed for
-/// tests and the demo tour) and [ClaudeCLIProvider] (HTTP shim — POSTs
-/// to `tools/claude_shim.py` on `localhost:8765`). The app never
-/// imports either concrete class directly; it goes through
-/// [llmProvider] which picks based on `USE_FAKE_LLM`.
+/// Two v1 implementations: [FakeLLMProvider] (canned + streamed for tests
+/// and the demo tour) and [ClaudeCLIProvider] (HTTP shim — POSTs to
+/// `tools/claude_shim.py` on `localhost:8765`). The app never imports
+/// either concrete class directly; it goes through [llmProvider] which
+/// picks based on `USE_FAKE_LLM`.
 abstract class LLMProvider {
-  /// Stream the decoder script for [behavior] + [triage]. Yields
-  /// incremental [DecoderChunk]s as text arrives; terminates with
-  /// either [DecoderChunk.done] or [DecoderChunk.error].
-  Stream<DecoderChunk> generateDecoderScript({
-    required Behavior behavior,
-    required TriageAnswers triage,
-    required PatientContext patient,
-    required int attempt,
-  });
-
   /// Stream a single-paragraph, plain-language recap of the caregiver's
   /// last [lastNHours] of [events] for the Home "catch me up" card
   /// (Phase 14.12).
   ///
-  /// Each yielded string is the growing accumulated paragraph (the same
-  /// word-by-word contract the decoder uses); the last value is the whole
-  /// summary and the stream then closes. The recap is a warm, factual
-  /// recap of what happened — never a clinical assessment or a suggested
-  /// treatment plan.
+  /// Each yielded string is the growing accumulated paragraph (word by
+  /// word as bytes arrive); the last value is the whole summary and the
+  /// stream then closes. The recap is a warm, factual recap of what
+  /// happened — never a clinical assessment or a suggested treatment plan.
   Stream<String> generateActivitySummary({
     int lastNHours,
     required List<ActivityEvent> events,
   });
 }
 
-/// In-memory provider that streams hand-authored canned responses
-/// from [fakeLLMSeeds] (BUILD_SPEC.md §6.1 + §10.2).
+/// In-memory provider that streams a hand-authored canned recap
+/// (BUILD_SPEC.md §6.1 + §10.2).
 ///
-/// Streams the response JSON in [chunkSize]-token slices with [delay]
-/// between each, then emits [DecoderChunk.done] with the parsed
-/// [DecoderResult]. Used by `test/` widget tests and by the demo tour
-/// — never live in real-user app runs.
+/// Streams the response in [chunkSize]-token slices with [delay] between
+/// each. Used by `test/` widget tests and by the demo tour — never live
+/// in real-user app runs.
 class FakeLLMProvider implements LLMProvider {
   const FakeLLMProvider({
     this.chunkSize = 8,
     this.delay = const Duration(milliseconds: 60),
-    this.clock = _defaultClock,
   });
 
   /// Tokens per partial chunk (BUILD_SPEC.md §6.1 — fake streams in
@@ -157,49 +98,6 @@ class FakeLLMProvider implements LLMProvider {
   /// Inter-chunk delay (BUILD_SPEC.md §6.1 — 60ms between chunks).
   final Duration delay;
 
-  /// Injectable clock so tests can pin `generatedAt` deterministically.
-  final DateTime Function() clock;
-
-  static DateTime _defaultClock() => DateTime.now();
-
-  @override
-  Stream<DecoderChunk> generateDecoderScript({
-    required Behavior behavior,
-    required TriageAnswers triage,
-    required PatientContext patient,
-    required int attempt,
-  }) async* {
-    final DecoderResult canned =
-        fakeLLMSeeds[behavior.id] ?? _freeTextFallback();
-    final DecoderResult stamped = canned.copyWith(generatedAt: clock());
-
-    // Serialize without `generated_at` — the LLM doesn't emit that
-    // field in real output (it's set client-side at parse-done), so
-    // the streamed JSON the fake produces matches the shape of real
-    // shim responses.
-    final Map<String, dynamic> jsonShape = stamped.toJson()
-      ..remove('generatedAt')
-      ..remove('generated_at');
-    final String fullJson =
-        const JsonEncoder.withIndent('  ').convert(jsonShape);
-
-    final List<String> tokens = _tokenize(fullJson);
-    final StringBuffer buffer = StringBuffer();
-    for (int i = 0; i < tokens.length; i += chunkSize) {
-      final int end = (i + chunkSize) > tokens.length
-          ? tokens.length
-          : (i + chunkSize);
-      for (int j = i; j < end; j++) {
-        buffer.write(tokens[j]);
-      }
-      yield DecoderChunk.partial(accumulatedJson: buffer.toString());
-      if (end < tokens.length) {
-        await Future<void>.delayed(delay);
-      }
-    }
-    yield DecoderChunk.done(result: stamped);
-  }
-
   @override
   Stream<String> generateActivitySummary({
     int lastNHours = 24,
@@ -207,7 +105,7 @@ class FakeLLMProvider implements LLMProvider {
   }) async* {
     // Deterministic canned recap (BUILD_SPEC.md §6.1 — the fake never
     // calls out). Streams the hand-authored paragraph in the same
-    // [chunkSize]-token slices the decoder uses so the Home card shows
+    // [chunkSize]-token slices the real path uses so the Home card shows
     // the same word-by-word fade-in in the demo.
     final List<String> tokens = _tokenize(fakeActivitySummary);
     final StringBuffer buffer = StringBuffer();
@@ -235,27 +133,6 @@ class FakeLLMProvider implements LLMProvider {
     final RegExp re = RegExp(r'\s+|\S+');
     return re.allMatches(text).map((Match m) => m.group(0)!).toList();
   }
-
-  /// Soft, generic Natali-voice script for the free-text "Something
-  /// else — describe it" path (BUILD_SPEC.md §5.2). Keeps the demo
-  /// alive when the picker routes a behavior id outside the canonical
-  /// 8 without falling back to a crash.
-  DecoderResult _freeTextFallback() {
-    return DecoderResult(
-      say: const <String>[
-        "I'm right here with you. You're not alone in this moment.",
-        "Let's take a slow breath together — there's no rush.",
-        'Tell me what would feel a little better right now.',
-      ],
-      tweak: const <String>[
-        'Lower your voice and slow your pace. Sit beside them at eye level — small physical alignments calm the room.',
-      ],
-      dontSay: const <String>[
-        "Don't try to argue the facts or explain the situation. Comfort first; logic almost never lands in the moment.",
-      ],
-      generatedAt: clock(),
-    );
-  }
 }
 
 /// Base URL of the LLM shim (BUILD_SPEC.md §8 — `tools/claude_shim.py`).
@@ -278,46 +155,35 @@ const String claudeShimEndpoint = '$shimBaseUrl/generate';
 const String shimToken = String.fromEnvironment('SHIM_TOKEN', defaultValue: '');
 
 /// `Authorization` header for shim requests, or an empty map when no
-/// [shimToken] is configured. Shared by the decoder + chat backends.
+/// [shimToken] is configured. Shared by the recap + chat backends.
 Map<String, String> shimAuthHeaders() =>
     shimToken.isEmpty ? const <String, String>{} : <String, String>{
       'Authorization': 'Bearer $shimToken',
     };
 
 /// Bounded [Dio] for shim calls — a bare `Dio()` has NO timeouts, so a
-/// hung shim / dropped Funnel mid-stream would strand the decoder, chat,
+/// hung shim / dropped Funnel mid-stream would strand the recap, chat,
 /// or voice intent awaiting forever (bad for an app whose core promise
 /// is "what do I do RIGHT NOW"). For `ResponseType.stream` requests Dio
 /// applies `receiveTimeout` between chunks, so the generous 120s bounds
 /// a stall without cutting off a long, healthy generation. Shared by the
-/// decoder + chat backends.
+/// recap + chat backends.
 Dio buildShimDio() => Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 10),
       sendTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 120),
     ));
 
-/// Real, shim-backed provider (BUILD_SPEC.md §6.1 + §7.3).
+/// Real, shim-backed provider (BUILD_SPEC.md §6.1).
 ///
 /// POSTs `{system, user}` to [claudeShimEndpoint], consumes the SSE
 /// stream the shim forwards from `claude --print --output-format
-/// stream-json`, extracts text from each `assistant` event, accumulates
-/// the JSON the model emits, and yields [DecoderChunk]s:
-///
-/// - [DecoderChunk.partial] after every event with new text — the
-///   accumulated string may be partial-but-growing JSON; the decoder
-///   result screen renders it word-by-word as bytes arrive.
-/// - [DecoderChunk.done] once the accumulated buffer parses cleanly
-///   (the parser is run on every partial so the first successful parse
-///   wins — `stream-json` from claude code often emits one final
-///   `assistant` snapshot that completes the JSON in a single chunk).
-/// - [DecoderChunk.error] on transport failure, an `{"error": ...}`
-///   event from the shim, or a parse failure at end-of-stream.
+/// stream-json`, extracts text from each `assistant` event, and yields
+/// the growing accumulated paragraph for the Home "catch me up" recap.
 class ClaudeCLIProvider implements LLMProvider {
   const ClaudeCLIProvider({
     Dio? dio,
     this.endpoint = claudeShimEndpoint,
-    this.clock = _defaultClock,
   }) : _injectedDio = dio;
 
   /// Injected for tests — production constructs a fresh [Dio] per
@@ -326,203 +192,6 @@ class ClaudeCLIProvider implements LLMProvider {
 
   /// Override only for integration tests that pin a different port.
   final String endpoint;
-
-  /// Wall clock stamped onto [DecoderResult.generatedAt] when the
-  /// accumulated JSON parses. Injectable so tests can pin a fixed time.
-  final DateTime Function() clock;
-
-  static DateTime _defaultClock() => DateTime.now();
-
-  /// Build the user-message body per BUILD_SPEC.md §7.2. Canonical
-  /// behaviors emit `behavior: <label>`; anything outside
-  /// [Behavior.canonical] is treated as a free-text "Something else"
-  /// description and emits `behavior_freetext: <label>` instead.
-  ///
-  /// The label maps for the triage enums match the lowercase forms in
-  /// the §7.1 example input (`when: late afternoon / evening`,
-  /// `what_tried: tried to explain`, etc.) so the few-shot example
-  /// pins to the same vocabulary the live calls use.
-  static String buildUserMessage({
-    required Behavior behavior,
-    required TriageAnswers triage,
-    required PatientContext patient,
-    required int attempt,
-  }) {
-    final bool isCanonical = Behavior.byId(behavior.id) != null;
-    final String behaviorLine = isCanonical
-        ? 'behavior: ${behavior.label}'
-        : 'behavior_freetext: ${behavior.label}';
-    return <String>[
-      behaviorLine,
-      'when: ${_whenLabel(triage.when)}',
-      'what_changed: ${_whatChangedLabel(triage.whatChanged)}',
-      'what_tried: ${_whatTriedLabel(triage.whatTried)}',
-      'attempt: $attempt',
-      'patient_context: ${patient.stage}, age ${patient.age}',
-    ].join('\n');
-  }
-
-  @override
-  Stream<DecoderChunk> generateDecoderScript({
-    required Behavior behavior,
-    required TriageAnswers triage,
-    required PatientContext patient,
-    required int attempt,
-  }) async* {
-    final Dio dio = _injectedDio ?? buildShimDio();
-    final String userMessage = buildUserMessage(
-      behavior: behavior,
-      triage: triage,
-      patient: patient,
-      attempt: attempt,
-    );
-
-    Response<ResponseBody> response;
-    try {
-      response = await dio.post<ResponseBody>(
-        endpoint,
-        data: <String, String>{
-          'system': claudeSystemPrompt,
-          'user': userMessage,
-        },
-        options: Options(
-          responseType: ResponseType.stream,
-          contentType: Headers.jsonContentType,
-          headers: shimAuthHeaders(),
-        ),
-      );
-    } catch (e) {
-      yield DecoderChunk.error(message: 'shim request failed: $e');
-      return;
-    }
-
-    final ResponseBody? body = response.data;
-    if (body == null) {
-      yield const DecoderChunk.error(
-        message: 'shim returned an empty response body',
-      );
-      return;
-    }
-
-    final StringBuffer accumulated = StringBuffer();
-    DecoderResult? completed;
-    // Buffer raw bytes (not decoded text) so a multi-byte UTF-8
-    // sequence split across two `Uint8List` reads doesn't get mangled
-    // into a replacement char — the system prompt's voice includes
-    // em-dashes and smart quotes, which the model echoes back.
-    final List<int> rawBuffer = <int>[];
-
-    try {
-      await for (final Uint8List bytes in body.stream) {
-        rawBuffer.addAll(bytes);
-        while (true) {
-          final int sep = _indexOfDoubleNewline(rawBuffer);
-          if (sep == -1) break;
-          final List<int> eventBytes = rawBuffer.sublist(0, sep);
-          rawBuffer.removeRange(0, sep + _eventBoundaryLength(rawBuffer, sep));
-          final String event = utf8.decode(eventBytes);
-
-          for (final String rawLine in event.split('\n')) {
-            // CRLF tolerance: strip a trailing \r left by \r\n events.
-            final String line = rawLine.endsWith('\r')
-                ? rawLine.substring(0, rawLine.length - 1)
-                : rawLine;
-            if (!line.startsWith('data:')) continue;
-            // `data:`/`data: ` — strip the prefix + optional space.
-            final String payload =
-                line.substring(5).startsWith(' ')
-                    ? line.substring(6)
-                    : line.substring(5);
-            if (payload == '[DONE]') continue;
-
-            final _EventPayload parsed = _parseEvent(payload);
-            if (parsed.error != null) {
-              yield DecoderChunk.error(message: parsed.error!);
-              return;
-            }
-            if (parsed.text == null || parsed.text!.isEmpty) continue;
-
-            accumulated.write(parsed.text);
-            final String snapshot = accumulated.toString();
-            yield DecoderChunk.partial(accumulatedJson: snapshot);
-
-            // Tolerant parse attempt — partial JSON throws
-            // [FormatException]; the first chunk that parses
-            // cleanly is the completed result. Once we have one,
-            // subsequent events can't unwind it (the model only
-            // ever appends text).
-            completed ??= _tryParse(snapshot);
-          }
-        }
-      }
-      // The shim's final flush may omit the closing `\n\n` if the
-      // process exits cleanly; treat any trailing partial event the
-      // same way as a fully-terminated one.
-      if (rawBuffer.isNotEmpty) {
-        final String trailing = utf8.decode(rawBuffer);
-        rawBuffer.clear();
-        for (final String rawTrailing in trailing.split('\n')) {
-          final String line = rawTrailing.endsWith('\r')
-              ? rawTrailing.substring(0, rawTrailing.length - 1)
-              : rawTrailing;
-          if (!line.startsWith('data:')) continue;
-          final String payload =
-              line.substring(5).startsWith(' ')
-                  ? line.substring(6)
-                  : line.substring(5);
-          if (payload == '[DONE]') continue;
-          final _EventPayload parsed = _parseEvent(payload);
-          if (parsed.error != null) {
-            yield DecoderChunk.error(message: parsed.error!);
-            return;
-          }
-          if (parsed.text == null || parsed.text!.isEmpty) continue;
-          accumulated.write(parsed.text);
-          final String snapshot = accumulated.toString();
-          yield DecoderChunk.partial(accumulatedJson: snapshot);
-          completed ??= _tryParse(snapshot);
-        }
-      }
-    } catch (e) {
-      yield DecoderChunk.error(message: 'stream read failed: $e');
-      return;
-    }
-
-    if (completed != null) {
-      yield DecoderChunk.done(result: completed);
-      return;
-    }
-
-    // Last-ditch parse on whatever we accumulated. Empty buffer → no
-    // text ever arrived; otherwise we hand the FormatException's
-    // message back so the caller can surface it.
-    final String rawFinal = accumulated.toString().trim();
-    if (rawFinal.isEmpty) {
-      yield const DecoderChunk.error(
-        message: 'shim stream closed without emitting any script text',
-      );
-      return;
-    }
-    try {
-      final dynamic parsed = json.decode(_extractJsonObject(rawFinal));
-      if (parsed is! Map<String, dynamic>) {
-        yield const DecoderChunk.error(
-          message: 'decoder output was not a JSON object',
-        );
-        return;
-      }
-      final DecoderResult? result = _resultFromMap(parsed);
-      if (result == null) {
-        yield const DecoderChunk.error(
-          message: 'decoder output was missing required script fields',
-        );
-        return;
-      }
-      yield DecoderChunk.done(result: result);
-    } on FormatException catch (e) {
-      yield DecoderChunk.error(message: 'decoder JSON parse failed: ${e.message}');
-    }
-  }
 
   @override
   Stream<String> generateActivitySummary({
@@ -568,9 +237,9 @@ class ClaudeCLIProvider implements LLMProvider {
       throw Exception('shim returned an empty summary response body');
     }
 
-    // The recap is plain prose, not JSON — accumulate the text deltas and
-    // yield the growing paragraph, the same word-by-word contract the fake
-    // and the decoder use so the card streams identically in either mode.
+    // The recap is plain prose — accumulate the text deltas and yield the
+    // growing paragraph, the same word-by-word contract the fake uses so
+    // the card streams identically in either mode.
     final StringBuffer accumulated = StringBuffer();
     await for (final String delta in _streamTextDeltas(body)) {
       accumulated.write(delta);
@@ -607,9 +276,7 @@ class ClaudeCLIProvider implements LLMProvider {
   }
 
   /// Stream the text deltas from a shim SSE [body], throwing on a shim
-  /// `{"error": ...}` event. Shared SSE framing for the prose summary
-  /// path; [generateDecoderScript] inlines its own loop because it
-  /// re-parses the accumulated JSON after every delta.
+  /// `{"error": ...}` event.
   static Stream<String> _streamTextDeltas(ResponseBody body) async* {
     final List<int> rawBuffer = <int>[];
     await for (final Uint8List bytes in body.stream) {
@@ -648,78 +315,6 @@ class ClaudeCLIProvider implements LLMProvider {
       final String? text = parsed.text;
       if (text != null && text.isNotEmpty) yield text;
     }
-  }
-
-  /// Pull the JSON object out of [text], tolerating a Markdown code fence
-  /// (or stray pre/postamble) the live model sometimes wraps the result in
-  /// despite the "ONLY valid JSON" instruction. Returns the substring from
-  /// the first `{` to the last `}`; with no brace pair yet (still
-  /// streaming) the trimmed text is returned unchanged so the tolerant
-  /// parse simply fails and waits for more.
-  static String _extractJsonObject(String text) {
-    final int start = text.indexOf('{');
-    final int end = text.lastIndexOf('}');
-    if (start == -1 || end == -1 || end < start) return text.trim();
-    return text.substring(start, end + 1);
-  }
-
-  /// Try parsing [text] as a [DecoderResult]. Returns null if the JSON
-  /// is partial (still growing), doesn't yet contain the required
-  /// `say`/`tweak`/`dont_say` keys, or fails the content contract:
-  /// `say` AND `dont_say` must be NON-EMPTY lists of strings. The
-  /// "don't say" warning is part of the decoder's non-negotiable
-  /// guardrail output (CLAUDE.md) — a reply with `"dont_say": []` is a
-  /// malformed result, not a successful one, so the stream keeps
-  /// waiting / surfaces the parse error instead of rendering a script
-  /// with the safety rail missing.
-  DecoderResult? _tryParse(String text) {
-    try {
-      final dynamic parsed = json.decode(_extractJsonObject(text));
-      if (parsed is! Map<String, dynamic>) return null;
-      return _resultFromMap(parsed);
-    } on FormatException {
-      return null;
-    }
-  }
-
-  /// Construct a [DecoderResult] from decoded JSON, enforcing the content
-  /// contract (see [_tryParse]). Null when the shape or content is
-  /// malformed. Shared by the incremental parse and the final
-  /// stream-close parse so both paths apply identical strictness.
-  DecoderResult? _resultFromMap(Map<String, dynamic> parsed) {
-    if (parsed['say'] is! List ||
-        parsed['tweak'] is! List ||
-        parsed['dont_say'] is! List) {
-      return null;
-    }
-    final List<String>? say = _stringList(parsed['say']);
-    final List<String>? tweak = _stringList(parsed['tweak']);
-    final List<String>? dontSay = _stringList(parsed['dont_say']);
-    // Non-string elements (nested objects/arrays) are a malformed
-    // reply, not data to `toString()` into the caregiver's script.
-    if (say == null || tweak == null || dontSay == null) return null;
-    if (say.isEmpty || dontSay.isEmpty) return null;
-    return DecoderResult(
-      say: say,
-      tweak: tweak,
-      dontSay: dontSay,
-      generatedAt: clock(),
-    );
-  }
-
-  /// Strict string-list extraction: null when [raw] isn't a list or any
-  /// element isn't a plain string (a Map's `toString()` is Dart debug
-  /// text, never something to read aloud to a caregiver). Empty strings
-  /// are dropped.
-  static List<String>? _stringList(dynamic raw) {
-    if (raw is! List) return null;
-    final List<String> out = <String>[];
-    for (final dynamic e in raw) {
-      if (e is! String) return null;
-      final String trimmed = e.trim();
-      if (trimmed.isNotEmpty) out.add(trimmed);
-    }
-    return out;
   }
 
   /// Index of the first `\n\n` (0x0A 0x0A) byte pair in [bytes], or
@@ -790,67 +385,14 @@ class _EventPayload {
   final String? error;
 }
 
-/// Lowercase, human-readable form of [TriageWhen], matching the
-/// example input format in BUILD_SPEC.md §7.1.
-String _whenLabel(TriageWhen? w) {
-  if (w == null) return 'unknown';
-  switch (w) {
-    case TriageWhen.morning:
-      return 'morning';
-    case TriageWhen.afternoon:
-      return 'afternoon';
-    case TriageWhen.lateAfternoonEvening:
-      return 'late afternoon / evening';
-    case TriageWhen.night:
-      return 'night';
-    case TriageWhen.justStarted:
-      return "just started — don't know yet";
-  }
-}
-
-String _whatChangedLabel(TriageWhatChanged? w) {
-  if (w == null) return 'unknown';
-  switch (w) {
-    case TriageWhatChanged.nothing:
-      return 'nothing';
-    case TriageWhatChanged.schedule:
-      return 'schedule';
-    case TriageWhatChanged.medication:
-      return 'medication';
-    case TriageWhatChanged.health:
-      return 'health (UTI, illness)';
-    case TriageWhatChanged.environment:
-      return 'environment (new place, visitors)';
-    case TriageWhatChanged.dontKnow:
-      return "don't know";
-  }
-}
-
-String _whatTriedLabel(TriageWhatTried? w) {
-  if (w == null) return 'unknown';
-  switch (w) {
-    case TriageWhatTried.talked:
-      return 'talked to them about it';
-    case TriageWhatTried.triedToExplain:
-      return 'tried to explain';
-    case TriageWhatTried.walkedAway:
-      return 'walked away';
-    case TriageWhatTried.distracted:
-      return 'distracted them';
-    case TriageWhatTried.nothingYet:
-      return 'nothing yet — just started';
-  }
-}
-
 /// Build-time flag (BUILD_SPEC.md §1 — `USE_FAKE_LLM`).
 ///
 /// **Real engine by default.** A shipped/run build uses the live,
-/// shim-backed [ClaudeCLIProvider] for the decoder AND the Home
-/// catch-me-up recap — there is no fake in a real run. The one exception
-/// is `flutter test`, where the default flips to [FakeLLMProvider] so
-/// widget/golden tests never hit the network (a test can still override
-/// `llmProvider`, and most do). An explicit
-/// `--dart-define=USE_FAKE_LLM=true|false` always wins over both.
+/// shim-backed [ClaudeCLIProvider] for the Home catch-me-up recap — there
+/// is no fake in a real run. The one exception is `flutter test`, where
+/// the default flips to [FakeLLMProvider] so widget/golden tests never hit
+/// the network (a test can still override `llmProvider`, and most do). An
+/// explicit `--dart-define=USE_FAKE_LLM=true|false` always wins over both.
 bool get _useFakeLLM {
   if (const bool.hasEnvironment('USE_FAKE_LLM')) {
     return const bool.fromEnvironment('USE_FAKE_LLM');
@@ -871,9 +413,9 @@ bool get _isUnderFlutterTest {
 
 /// Public view of the fake-engine selection for SIBLING backends — the
 /// chat/voice backend keys off the same rule so a `USE_FAKE_LLM=true`
-/// demo build (and every `flutter test` run) is deterministic across
-/// the decoder AND chat, not just the decoder (2026-06-11; previously
-/// a DEMO_MODE run's chat still hit the live shim).
+/// demo build (and every `flutter test` run) is deterministic across the
+/// recap AND chat (2026-06-11; previously a DEMO_MODE run's chat still hit
+/// the live shim).
 bool get useFakeLLMEngine => _useFakeLLM;
 
 /// Riverpod-wired backend selection. Widgets and services read

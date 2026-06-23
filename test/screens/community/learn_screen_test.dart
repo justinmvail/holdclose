@@ -1,8 +1,8 @@
-import 'package:careblazers/providers/link_launcher_provider.dart';
-import 'package:careblazers/routing/router.dart' show CareblazersRoutes;
-import 'package:careblazers/screens/community/learn_playbook_detail_screen.dart';
-import 'package:careblazers/screens/community/learn_screen.dart';
-import 'package:careblazers/seed/learn_content.dart';
+import 'package:holdclose/providers/link_launcher_provider.dart';
+import 'package:holdclose/routing/router.dart' show HoldcloseRoutes;
+import 'package:holdclose/screens/community/learn_playbook_detail_screen.dart';
+import 'package:holdclose/screens/community/learn_screen.dart';
+import 'package:holdclose/seed/learn_content.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,7 +43,7 @@ GoRouter _buildTestRouter() {
       ),
       GoRoute(
         path: '/community/learn/playbooks/:id',
-        name: CareblazersRoutes.communityLearnPlaybook,
+        name: HoldcloseRoutes.communityLearnPlaybook,
         builder: (BuildContext _, GoRouterState state) =>
             LearnPlaybookDetailScreen(
           playbookId: state.pathParameters['id'] ?? '',
@@ -73,40 +73,30 @@ Future<GoRouter> _pumpRouted(WidgetTester tester,
 
 void main() {
   group('LearnScreen — list rendering (Phase 14.37)', () {
-    testWidgets('renders the Videos + Playbooks section headers',
+    testWidgets('shows the Playbooks header; hides Videos while none seeded',
         (WidgetTester tester) async {
       await _pumpScreen(tester);
 
-      expect(find.text('Videos'), findsOneWidget);
       expect(find.text('Playbooks'), findsOneWidget);
+      // The de-brand emptied the curated video list; the whole Videos
+      // section (header + cards) hides until licensed videos are seeded.
+      expect(learnVideos, isEmpty);
+      expect(find.text('Videos'), findsNothing);
     });
 
-    testWidgets('renders a tappable card for every seeded video',
+    testWidgets('renders no video cards while the seed list is empty',
         (WidgetTester tester) async {
       await _pumpScreen(tester);
 
-      for (final LearnVideo video in learnVideos) {
-        expect(
-          find.byKey(LearnScreen.videoCardKey(video.id)),
-          findsOneWidget,
-          reason: '${video.id} card should render',
-        );
-        expect(find.text(video.title), findsOneWidget);
-        // The whole card carries the YouTube semantics label so screen
-        // readers announce a single "Play <title> on YouTube" button.
-        expect(
-          find.byWidgetPredicate(
-            (Widget w) =>
-                w is Semantics &&
-                w.properties.button == true &&
-                w.properties.label == 'Play ${video.title} on YouTube',
-          ),
-          findsOneWidget,
-          reason: '${video.id} card should expose a YouTube semantics label',
-        );
-      }
-      // Sanity: the seed actually has videos to show.
-      expect(learnVideos, isNotEmpty);
+      // No seeded videos → no video cards anywhere in the list.
+      expect(
+        find.byWidgetPredicate(
+          (Widget w) =>
+              w is Semantics &&
+              (w.properties.label?.startsWith('Play ') ?? false),
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets('groups playbooks under a header for every non-empty topic',
@@ -133,24 +123,10 @@ void main() {
   });
 
   group('LearnScreen — navigation (Phase 14.37)', () {
-    testWidgets('tapping a video card deep-links straight to YouTube',
-        (WidgetTester tester) async {
-      final RecordingLinkLauncher launcher = RecordingLinkLauncher();
-      // No router needed — the card hands the URL to the launcher directly
-      // (no in-app detail screen anymore; fb_1780932492880889).
-      await _pumpScreen(tester, launcher: launcher);
-
-      final LearnVideo video = learnVideos.first;
-      final Finder card = find.byKey(LearnScreen.videoCardKey(video.id));
-      await tester.ensureVisible(card);
-      await tester.tap(card);
-      await tester.pumpAndSettle();
-
-      // The real Dementia Careblazers video URL is handed to the launcher,
-      // with no intervening detail screen.
-      expect(launcher.launched, hasLength(1));
-      expect(launcher.launched.single.toString(), video.youtubeUrl);
-    });
+    // The video deep-link path (a tap hands the URL to the launcher with no
+    // in-app detail screen; fb_1780932492880889) is retained in the screen
+    // for when licensed videos return, but there are no seeded videos to tap
+    // today, so the behavior isn't exercisable here.
 
     testWidgets(
         'a playbook row pushes the playbook detail with its ordered steps',
@@ -191,7 +167,11 @@ void main() {
 
   group('learn_content seed (Phase 14.37)', () {
     test('lookup helpers resolve seeded ids and reject unknown ones', () {
-      expect(learnVideoById(learnVideos.first.id), isNotNull);
+      // No seeded videos today, so only the negative video lookup is
+      // exercisable; the playbook lookups still resolve a real id.
+      if (learnVideos.isNotEmpty) {
+        expect(learnVideoById(learnVideos.first.id), isNotNull);
+      }
       expect(learnVideoById('nope'), isNull);
       expect(learnPlaybookById(learnPlaybooks.first.id), isNotNull);
       expect(learnPlaybookById('nope'), isNull);
@@ -225,7 +205,7 @@ void main() {
       expect(v.durationLabel, isNull);
     });
 
-    test('every seeded video is a real Careblazers YouTube link', () {
+    test('every seeded video is a real Holdclose YouTube link', () {
       for (final LearnVideo v in learnVideos) {
         expect(v.youtubeId, isNotEmpty);
         expect(v.youtubeUrl, 'https://www.youtube.com/watch?v=${v.youtubeId}');

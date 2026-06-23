@@ -1,4 +1,4 @@
-import 'package:careblazers/models/health_log_entry.dart';
+import 'package:holdclose/models/health_log_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

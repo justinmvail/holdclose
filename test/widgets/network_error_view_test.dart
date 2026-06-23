@@ -1,6 +1,6 @@
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/network_error_view.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/network_error_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,7 +23,7 @@ Future<void> _pump(
     MaterialApp(
       theme: ThemeData(
         textTheme: ThemeData.light().textTheme,
-        scaffoldBackgroundColor: careblazersColors.background,
+        scaffoldBackgroundColor: holdcloseColors.background,
       ),
       home: Scaffold(
         body: NetworkErrorView(
@@ -100,7 +100,7 @@ void main() {
           tester.widget<ElevatedButton>(find.byType(ElevatedButton));
       final Color? bg = button.style?.backgroundColor
           ?.resolve(<WidgetState>{});
-      expect(bg, careblazersColors.cta);
+      expect(bg, holdcloseColors.cta);
     });
   });
 

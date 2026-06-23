@@ -34,7 +34,7 @@ PatientIdFactory patientSetupIdFactory(Ref ref) => _defaultPatientIdFactory;
 ///
 /// The first-run flow is welcome carousel → sign-in → **this screen**.
 /// A real (non-demo) install lands here with no [Patient] on file; the
-/// router redirect (`careblazersRedirect`) holds the caregiver here
+/// router redirect (`holdcloseRedirect`) holds the caregiver here
 /// until they save one, then lets them through to Home. In `DEMO_MODE`
 /// the seeded Mary means the gate is already satisfied, so this screen
 /// is skipped.

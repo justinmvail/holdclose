@@ -1,6 +1,6 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/home/catch_me_up_card.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/home/catch_me_up_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,7 +18,7 @@ const String _summary =
 /// [summary] so the golden render stays deterministic. No `theme:` is
 /// passed — per `flutter_test_config.dart` goldens avoid dragging
 /// google_fonts through the framework; the card pulls its brand colors
-/// directly off `careblazersColors`.
+/// directly off `holdcloseColors`.
 Widget _host(String summary, double height) => ProviderScope(
       overrides: <Override>[
         catchMeUpProvider.overrideWith(() => _StubCatchMeUp(summary)),
@@ -28,7 +28,7 @@ Widget _host(String summary, double height) => ProviderScope(
         height: height,
         child: MaterialApp(
           home: ColoredBox(
-            color: careblazersColors.background,
+            color: holdcloseColors.background,
             child: const Padding(
               padding: EdgeInsets.all(16),
               child: CatchMeUpCard(),

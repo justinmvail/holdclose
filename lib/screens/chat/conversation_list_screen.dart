@@ -284,7 +284,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             "When something's confusing — a behavior you haven't seen "
             'before, a phrase that keeps coming up — start a chat and '
-            "Dr. Natali's framework will meet you there.",
+            'a coach who knows your loved one will meet you there.',
             style: textTheme.bodyLarge?.copyWith(
               color: context.cb.text,
             ),

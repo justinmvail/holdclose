@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { comments, posts, profiles } from '../src/db/schema';
 
 const SECRET = env.FORUM_JWT_SECRET;
-const ORIGIN = 'https://forum.careblazers.local';
+const ORIGIN = 'https://forum.holdclose.local';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 

@@ -1,6 +1,6 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/services/medication_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/services/medication_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// windows did not appear under Today's doses. Mirrors exactly what
 /// `medication_form_screen.dart` writes.
 void main() {
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late MedicationRepository repo;
 
   // "Now" = mid-afternoon today, the moment Judd added the med.
@@ -18,7 +18,7 @@ void main() {
   const String pid = 'demo-patient-mary';
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = MedicationRepository(db, clock: () => now);
   });
   tearDown(() async => db.close());

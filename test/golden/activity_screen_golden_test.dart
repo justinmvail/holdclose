@@ -1,7 +1,7 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/models/medication.dart' show DoseStatus;
-import 'package:careblazers/screens/team/activity_screen.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/models/medication.dart' show DoseStatus;
+import 'package:holdclose/screens/team/activity_screen.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -79,7 +79,7 @@ Widget _host(List<ActivityFeedItem> items) {
       child: MaterialApp(
         home: const ActivityScreen(),
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),

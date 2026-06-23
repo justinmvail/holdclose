@@ -1,7 +1,7 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/health_log_entry.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/screens/medical/health_log_screen.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/health_log_entry.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/screens/medical/health_log_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -98,11 +98,11 @@ Future<void> _pumpScreen(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late CareblazersDatabase db;
+  late HoldcloseDatabase db;
   late HealthLogRepository repo;
 
   setUp(() {
-    db = CareblazersDatabase(NativeDatabase.memory());
+    db = HoldcloseDatabase(NativeDatabase.memory());
     repo = HealthLogRepository(db);
   });
 

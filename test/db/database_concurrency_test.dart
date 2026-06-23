@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/sync_service.dart' show SyncOutbox;
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/sync_service.dart' show SyncOutbox;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// (2026-06-08).
 ///
 /// In production each repository AND the sync engine opened a SEPARATE
-/// `CareblazersDatabase` connection to the SAME on-disk file. Once
+/// `HoldcloseDatabase` connection to the SAME on-disk file. Once
 /// sync-everything wired feature writes (chat, loved-one setup, …) to fire
 /// alongside the sync engine, a write on one connection racing a write on
 /// another threw `SqliteException(5): database is locked` — surfacing as
@@ -24,7 +24,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// throw "database is locked" even with WAL + busy_timeout (they fight for
 /// ~2 min then fail). So WAL alone is not the fix — the fix is using ONE
 /// connection. These tests guard exactly that:
-///   1. [CareblazersDatabase.open] returns a process-wide SINGLETON, so the
+///   1. [HoldcloseDatabase.open] returns a process-wide SINGLETON, so the
 ///      whole app shares one connection (drift serialises its writes).
 ///   2. that single connection takes concurrent writes from a feature repo
 ///      AND the sync engine without locking — the user-visible behaviour.
@@ -32,7 +32,7 @@ import 'package:flutter_test/flutter_test.dart';
 ///      any single consumer).
 void main() {
   group('shared single DB connection (the real lock fix)', () {
-    tearDown(CareblazersDatabase.resetSharedForTest);
+    tearDown(HoldcloseDatabase.resetSharedForTest);
 
     test('open() returns the SAME instance every call (one connection)', () {
       final Directory tmp = Directory.systemTemp.createTempSync('cb_singleton');
@@ -41,9 +41,9 @@ void main() {
       // Two opens with DIFFERENT executors: the second executor is ignored
       // and the first shared instance is returned — proving there is exactly
       // one connection no matter how many providers call open().
-      final CareblazersDatabase a = CareblazersDatabase.openShared(
+      final HoldcloseDatabase a = HoldcloseDatabase.openShared(
           NativeDatabase(File('${tmp.path}/a.sqlite')));
-      final CareblazersDatabase b = CareblazersDatabase.openShared(
+      final HoldcloseDatabase b = HoldcloseDatabase.openShared(
           NativeDatabase(File('${tmp.path}/b.sqlite')));
 
       expect(identical(a, b), isTrue,
@@ -55,7 +55,7 @@ void main() {
       final Directory tmp = Directory.systemTemp.createTempSync('cb_noopclose');
       addTearDown(() => tmp.deleteSync(recursive: true));
 
-      final CareblazersDatabase db = CareblazersDatabase.openShared(
+      final HoldcloseDatabase db = HoldcloseDatabase.openShared(
           NativeDatabase(File('${tmp.path}/c.sqlite')));
 
       // Simulate one keepAlive provider's `ref.onDispose(db.close)` firing.
@@ -75,7 +75,7 @@ void main() {
       // The production shape AFTER the fix: a feature repo and the sync
       // engine share ONE connection. drift serialises the writes, so the
       // exact race that used to throw "database is locked" now just works.
-      final CareblazersDatabase db = CareblazersDatabase.openShared(
+      final HoldcloseDatabase db = HoldcloseDatabase.openShared(
           NativeDatabase(File('${tmp.path}/d.sqlite')));
       final ChatRepository chat = ChatRepository(db);
       final SyncOutbox outbox = SyncOutbox(db);

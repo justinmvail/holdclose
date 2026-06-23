@@ -1,5 +1,5 @@
-import 'package:careblazers/seed/support_content.dart';
-import 'package:careblazers/services/burnout_score.dart';
+import 'package:holdclose/seed/support_content.dart';
+import 'package:holdclose/services/burnout_score.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Build a 10-item answer list where every item is [value].

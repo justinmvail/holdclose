@@ -1,4 +1,4 @@
-import 'package:careblazers/db/database.dart';
+import 'package:holdclose/db/database.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// `PRAGMA foreign_keys = ON` runs in beforeOpen, AFTER onUpgrade).
 void main() {
   test('a fresh install carries the v20 secondary indices', () async {
-    final CareblazersDatabase db = CareblazersDatabase.testInstance();
+    final HoldcloseDatabase db = HoldcloseDatabase.testInstance();
     addTearDown(db.close);
 
     final List<QueryRow> rows = await db
@@ -35,7 +35,7 @@ void main() {
 
   test('the orphan-repair SQL removes window entries whose window is gone '
       'and leaves intact ones alone', () async {
-    final CareblazersDatabase db = CareblazersDatabase.testInstance();
+    final HoldcloseDatabase db = HoldcloseDatabase.testInstance();
     addTearDown(db.close);
 
     // Build the v15 orphan state by hand: with FKs OFF (exactly the
@@ -59,7 +59,7 @@ void main() {
     await db.customStatement('PRAGMA foreign_keys = ON');
 
     await db.customStatement(
-      CareblazersDatabase.cleanupOrphanedWindowEntriesSql,
+      HoldcloseDatabase.cleanupOrphanedWindowEntriesSql,
     );
 
     final List<QueryRow> left = await db

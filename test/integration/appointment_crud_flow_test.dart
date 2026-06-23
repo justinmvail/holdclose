@@ -2,7 +2,7 @@
 /// §5.13 Medical hub → Appointments tile → the list / form / detail
 /// screens), per TASKS.md Phase 15.7.
 ///
-/// These drive the *real* [CareblazersApp] over the shared Phase 15
+/// These drive the *real* [HoldcloseApp] over the shared Phase 15
 /// harness (in-memory drift, pinned clock, no-op TTS/analytics/
 /// notifications) and assert real navigation + drift persistence — never
 /// goldens. Five caregiver flows:
@@ -43,18 +43,18 @@ library;
 
 import 'dart:async';
 
-import 'package:careblazers/models/appointment.dart';
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/routing/router.dart';
-import 'package:careblazers/screens/appointment/appointment_detail_screen.dart';
-import 'package:careblazers/screens/appointment/appointment_form_screen.dart';
-import 'package:careblazers/screens/appointment/appointment_list_screen.dart';
-import 'package:careblazers/screens/medical/medical_hub_screen.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/providers/patient_timeline_provider.dart';
-import 'package:careblazers/widgets/home/schedule_card.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/routing/router.dart';
+import 'package:holdclose/screens/appointment/appointment_detail_screen.dart';
+import 'package:holdclose/screens/appointment/appointment_form_screen.dart';
+import 'package:holdclose/screens/appointment/appointment_list_screen.dart';
+import 'package:holdclose/screens/medical/medical_hub_screen.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/providers/patient_timeline_provider.dart';
+import 'package:holdclose/widgets/home/schedule_card.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:flutter/material.dart';
 // `Provider` in [models/appointment.dart] collides with riverpod's own
 // `Provider` class — `hide` keeps the model name resolvable here without
@@ -89,7 +89,7 @@ const Provider _ortega = Provider(
 /// unwired — `patientHealthLogEvents` and `patientCarePlanEvents` —
 /// straight to empty (the sanctioned "override each source via the
 /// existing per-source providers" seam on [patientTimelineEvents]).
-/// Their backends call `CareblazersDatabase.open()` (the real on-disk
+/// Their backends call `HoldcloseDatabase.open()` (the real on-disk
 /// handle), which never resolves under `flutter test`, so the Home
 /// Schedule card's `patientTimelineEvents` watch would otherwise hang in
 /// its loading skeleton and the seeded appointments never render. None of
@@ -118,7 +118,7 @@ void main() {
   group('Appointment CRUD — empty state (Phase 15.7)', () {
     testWidgets('Medical → Appointments shows the empty body, no sections',
         (WidgetTester tester) async {
-      await pumpCareblazersApp(tester, extraOverrides: _formOverrides());
+      await pumpHoldcloseApp(tester, extraOverrides: _formOverrides());
 
       await _openAppointmentList(tester);
 
@@ -140,7 +140,7 @@ void main() {
     testWidgets('empty list → form → Save writes the row into Upcoming',
         (WidgetTester tester) async {
       final ProviderContainer container =
-          await pumpCareblazersApp(tester, extraOverrides: _formOverrides());
+          await pumpHoldcloseApp(tester, extraOverrides: _formOverrides());
       await _useWideSurface(tester);
       await container.read(providerRepositoryBackendProvider)
           .upsertProvider(_ortega);
@@ -215,7 +215,7 @@ void main() {
     testWidgets('tap row → detail renders → edit the time → detail updates',
         (WidgetTester tester) async {
       final ProviderContainer container =
-          await pumpCareblazersApp(tester, extraOverrides: _formOverrides());
+          await pumpHoldcloseApp(tester, extraOverrides: _formOverrides());
       await _useWideSurface(tester);
       await _seedProvider(container);
       await _seedAppointment(
@@ -244,7 +244,7 @@ void main() {
       // Open the edit form (no on-screen Edit button — pushed through the
       // production router, like the Phase 15.6 dose-log programmatic push).
       unawaited(container
-          .read(careblazersRouterProvider)
+          .read(holdcloseRouterProvider)
           .push('/appointments/appt-edit/edit'));
       await tester.pumpAndSettle();
       expect(find.byType(AppointmentFormScreen), findsOneWidget);
@@ -283,7 +283,7 @@ void main() {
     testWidgets('an upcoming-status visit in the past lands under "Past"',
         (WidgetTester tester) async {
       final ProviderContainer container =
-          await pumpCareblazersApp(tester, extraOverrides: _formOverrides());
+          await pumpHoldcloseApp(tester, extraOverrides: _formOverrides());
       await _seedProvider(container);
       await _seedAppointment(
         container,
@@ -321,7 +321,7 @@ void main() {
     testWidgets('Schedule card surfaces today + tomorrow visits',
         (WidgetTester tester) async {
       final ProviderContainer container =
-          await pumpCareblazersApp(tester, extraOverrides: _formOverrides());
+          await pumpHoldcloseApp(tester, extraOverrides: _formOverrides());
       await _seedProvider(container);
       // A later visit (no driver) + a sooner one. Both must surface on
       // the Schedule card — the sooner one under "Today", the later one

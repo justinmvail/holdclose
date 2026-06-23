@@ -1,20 +1,17 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/main.dart';
-import 'package:careblazers/models/behavior.dart';
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/models/care_shift.dart';
-import 'package:careblazers/models/care_task.dart';
-import 'package:careblazers/models/decoder_result.dart';
-import 'package:careblazers/models/expense.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/patient.dart';
-import 'package:careblazers/models/settings.dart';
-import 'package:careblazers/models/triage.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/main.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/models/care_shift.dart';
+import 'package:holdclose/models/care_task.dart';
+import 'package:holdclose/models/expense.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/models/patient.dart';
+import 'package:holdclose/models/settings.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,21 +22,11 @@ DateTime _fixedClock() => DateTime.utc(2026, 5, 29, 19, 0);
 
 JournalEntry _preexistingEntry() => JournalEntry(
       id: 'pre-existing-entry',
-      behavior: Behavior.byId('upset')!,
-      triage: const TriageAnswers(
-        when: TriageWhen.morning,
-        whatChanged: TriageWhatChanged.nothing,
-        whatTried: TriageWhatTried.talked,
-      ),
-      result: DecoderResult(
-        say: const <String>['carried-over line'],
-        tweak: const <String>['carried-over tweak'],
-        dontSay: const <String>['carried-over warning'],
-        generatedAt: _fixedClock(),
-      ),
-      outcome: JournalOutcome.positive,
-      attempt: 0,
       createdAt: _fixedClock(),
+      occurredAt: _fixedClock(),
+      situationText: 'carried-over situation',
+      attemptsText: 'carried-over attempt',
+      notes: 'carried-over note',
     );
 
 Patient _patient(String id, String name) => Patient(
@@ -181,7 +168,7 @@ void main() {
 
   group('maybeRestampCareCirclePatient — multi-patient migration (Issue #6)',
       () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late CareTasksRepository tasksRepo;
     late CareShiftsRepository shiftsRepo;
     late ExpensesRepository expensesRepo;
@@ -189,7 +176,7 @@ void main() {
 
     setUp(() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       tasksRepo = CareTasksRepository(db);
       shiftsRepo = CareShiftsRepository(db);
       expensesRepo = ExpensesRepository(db);

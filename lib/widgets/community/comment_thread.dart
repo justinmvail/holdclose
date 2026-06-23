@@ -531,7 +531,7 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
               hintText: widget.hintText ??
                   (parent == null
                       ? 'Share something supportive…'
-                      : 'Reply to this Careblazer…'),
+                      : 'Reply to this caregiver…'),
               border: InputBorder.none,
               isDense: true,
               hintStyle: textTheme.bodyMedium?.copyWith(

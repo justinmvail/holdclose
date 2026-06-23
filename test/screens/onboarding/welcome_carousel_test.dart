@@ -1,6 +1,6 @@
-import 'package:careblazers/l10n/app_localizations.dart';
-import 'package:careblazers/providers/onboarding_provider.dart';
-import 'package:careblazers/screens/onboarding/welcome_carousel.dart';
+import 'package:holdclose/l10n/app_localizations.dart';
+import 'package:holdclose/providers/onboarding_provider.dart';
+import 'package:holdclose/screens/onboarding/welcome_carousel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,9 +70,9 @@ void main() {
       await _pumpCarousel(tester);
 
       final WelcomeCarouselPage page1 = WelcomeCarousel.pages[0];
-      expect(page1.title, 'Careblazers');
+      expect(page1.title, 'Holdclose');
       expect(page1.body,
-          'We make caregiving for someone with dementia easier.');
+          'We make caring for someone you love a little easier.');
       expect(find.text(page1.title), findsOneWidget);
       expect(find.text(page1.body), findsOneWidget);
     });
@@ -86,7 +86,7 @@ void main() {
       final WelcomeCarouselPage page2 = WelcomeCarousel.pages[1];
       expect(page2.title, 'Your pocket coach for the hard moments.');
       expect(page2.body,
-          startsWith('When sundowning hits, when she accuses you of something'));
+          startsWith('When the day turns hard, when you don'));
       expect(find.text(page2.title), findsOneWidget);
       expect(find.text(page2.body), findsOneWidget);
     });
@@ -99,8 +99,8 @@ void main() {
       await _tapCta(tester); // → page 3
 
       final WelcomeCarouselPage page3 = WelcomeCarousel.pages[2];
-      expect(page3.title, 'Your journal fills itself.');
-      expect(page3.body, startsWith('Every coaching moment auto-logs.'));
+      expect(page3.title, 'A journal that travels with you.');
+      expect(page3.body, startsWith('Jot down the moments that matter'));
       expect(find.text(page3.title), findsOneWidget);
       expect(find.text(page3.body), findsOneWidget);
     });

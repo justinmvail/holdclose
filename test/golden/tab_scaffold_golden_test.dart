@@ -1,6 +1,6 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/tab_scaffold.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/tab_scaffold.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,7 +21,7 @@ void main() {
             child: ProviderScope(
               child: Container(
                 width: 400,
-                color: careblazersColors.background,
+                color: holdcloseColors.background,
                 child: TabScaffoldBar(
                   currentIndex: 0,
                   onDestinationSelected: (_) {},

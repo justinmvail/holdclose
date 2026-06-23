@@ -1,12 +1,12 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/appointment.dart';
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/providers/home_clock_provider.dart';
-import 'package:careblazers/providers/patient_timeline_provider.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/home/schedule_card.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/providers/home_clock_provider.dart';
+import 'package:holdclose/providers/patient_timeline_provider.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/home/schedule_card.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 // hide Provider — clashes with the care-model Provider used to seed the
@@ -57,7 +57,7 @@ Future<void> _pumpCard(
         ),
       ],
       child: MaterialApp(
-        theme: careblazersLightTheme,
+        theme: holdcloseLightTheme,
         home: const Scaffold(
           body: SingleChildScrollView(child: ScheduleCard()),
         ),
@@ -291,8 +291,8 @@ void main() {
     '(fb_1781099457246946)',
     (WidgetTester tester) async {
       final DateTime now = DateTime(2026, 6, 1, 11);
-      final CareblazersDatabase db =
-          CareblazersDatabase(NativeDatabase.memory());
+      final HoldcloseDatabase db =
+          HoldcloseDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       // The appointment FKs to a provider — seed it (same db) first.
       await ProviderRepository(db).upsertProvider(const Provider(
@@ -332,7 +332,7 @@ void main() {
           appointmentRepositoryProvider.overrideWithValue(repo),
         ],
         child: MaterialApp(
-          theme: careblazersLightTheme,
+          theme: holdcloseLightTheme,
           home: const Scaffold(
             body: SingleChildScrollView(child: ScheduleCard()),
           ),

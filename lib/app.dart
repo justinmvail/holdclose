@@ -16,29 +16,29 @@ import 'services/circle_deep_link_handler.dart';
 import 'theme.dart';
 import 'widgets/feedback/feedback_overlay.dart';
 
-/// Root widget. Wires MaterialApp.router to `careblazersLightTheme`
-/// + `careblazersDarkTheme` with system-mode fallback.
+/// Root widget. Wires MaterialApp.router to `holdcloseLightTheme`
+/// + `holdcloseDarkTheme` with system-mode fallback.
 ///
 /// Stateful so the GoRouter is constructed once and survives rebuilds
 /// — GoRouter holds navigation state internally.
-class CareblazersApp extends ConsumerStatefulWidget {
-  const CareblazersApp({super.key, this.router});
+class HoldcloseApp extends ConsumerStatefulWidget {
+  const HoldcloseApp({super.key, this.router});
 
   /// Optional injected router for tests. Defaults to the production
-  /// `careblazersRouterProvider`, which wires the auth + onboarding
+  /// `holdcloseRouterProvider`, which wires the auth + onboarding
   /// redirect (BUILD_SPEC.md §5.11 + §5.12).
   final GoRouter? router;
 
   @override
-  ConsumerState<CareblazersApp> createState() => _CareblazersAppState();
+  ConsumerState<HoldcloseApp> createState() => _HoldcloseAppState();
 }
 
-class _CareblazersAppState extends ConsumerState<CareblazersApp> {
+class _HoldcloseAppState extends ConsumerState<HoldcloseApp> {
   late final GoRouter _router =
-      widget.router ?? ref.read(careblazersRouterProvider);
+      widget.router ?? ref.read(holdcloseRouterProvider);
 
   // Care Circle invite LINKS (2026-06-08). Listens for incoming
-  // `careblazers://join/<token>` deep links (cold-start + warm) and a
+  // `holdclose://join/<token>` deep links (cold-start + warm) and a
   // sign-in transition that replays a token stashed while signed out. All
   // fail-safe — any wiring error is swallowed so a deep-link plugin hiccup
   // can never block app launch.
@@ -123,7 +123,7 @@ class _CareblazersAppState extends ConsumerState<CareblazersApp> {
     if (navContext == null || !navContext.mounted) return;
     switch (outcome) {
       case CircleJoinConfirmationRequired(:final token):
-        // NEVER auto-join from a link: a tapped careblazers://join/<x>
+        // NEVER auto-join from a link: a tapped holdclose://join/<x>
         // re-binds this device's care circle (and starts syncing the
         // caregiver's data to its members), so it requires an explicit,
         // informed yes.
@@ -190,15 +190,15 @@ class _CareblazersAppState extends ConsumerState<CareblazersApp> {
     final FontSizeMultiplier fontSize =
         ref.watch(settingsProvider.select((AppSettings s) => s.fontSize));
     return MaterialApp.router(
-      title: 'Careblazers',
+      title: 'Holdclose',
       debugShowCheckedModeBanner: false,
-      theme: careblazersLightTheme,
-      darkTheme: careblazersDarkTheme,
+      theme: holdcloseLightTheme,
+      darkTheme: holdcloseDarkTheme,
       // Driven by the user's dark-mode preference via
       // `nightThemeModeProvider`: follow the phone (system) by default,
       // or always-on / always-off / scheduled per the Appearance
       // setting. Brand colors are theme-aware (`context.cb` reads the
-      // active CareblazersColors extension), so both palettes render the
+      // active HoldcloseColors extension), so both palettes render the
       // same screens correctly.
       themeMode: ref.watch(nightThemeModeProvider),
       // Localization / i18n (#18). Registers the generated

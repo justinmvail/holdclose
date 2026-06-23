@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:careblazers/services/document_blob_service.dart';
-import 'package:careblazers/services/fake_forum_api_client.dart';
+import 'package:holdclose/services/document_blob_service.dart';
+import 'package:holdclose/services/fake_forum_api_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

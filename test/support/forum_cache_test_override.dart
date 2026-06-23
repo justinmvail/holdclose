@@ -1,5 +1,5 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/providers/forum_post_cache_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/providers/forum_post_cache_provider.dart';
 import 'package:drift/native.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
@@ -9,5 +9,5 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// resolution. Add this to the test's ProviderScope overrides.
 Override forumPostCacheTestOverride() =>
     forumPostCacheRepositoryProvider.overrideWithValue(
-      ForumPostCacheRepository(CareblazersDatabase(NativeDatabase.memory())),
+      ForumPostCacheRepository(HoldcloseDatabase(NativeDatabase.memory())),
     );

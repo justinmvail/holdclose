@@ -1,20 +1,20 @@
 import 'dart:async';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/chat.dart';
-import 'package:careblazers/providers/pending_chat_message_provider.dart';
-import 'package:careblazers/services/chat_actions.dart'
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/providers/pending_chat_message_provider.dart';
+import 'package:holdclose/services/chat_actions.dart'
     show ChatActionExecutor;
-import 'package:careblazers/providers/voice_capture_provider.dart';
-import 'package:careblazers/screens/chat/chat_screen.dart';
-import 'package:careblazers/screens/chat/conversation_list_screen.dart'
+import 'package:holdclose/providers/voice_capture_provider.dart';
+import 'package:holdclose/screens/chat/chat_screen.dart';
+import 'package:holdclose/screens/chat/conversation_list_screen.dart'
     show conversationDisplayTitle;
-import 'package:careblazers/services/chat_repository.dart';
-import 'package:careblazers/services/chat_service.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/caption_fade.dart';
-import 'package:careblazers/widgets/message_body.dart';
-import 'package:careblazers/widgets/path_header.dart';
+import 'package:holdclose/services/chat_repository.dart';
+import 'package:holdclose/services/chat_service.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/caption_fade.dart';
+import 'package:holdclose/widgets/message_body.dart';
+import 'package:holdclose/widgets/path_header.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -141,7 +141,7 @@ Future<void> _foreground(WidgetTester tester) async {
 Future<({
   ChatRepository repo,
   _ScriptedBackend backend,
-  CareblazersDatabase db,
+  HoldcloseDatabase db,
 })> _pump(
   WidgetTester tester, {
   required String conversationId,
@@ -157,7 +157,7 @@ Future<({
   await tester.binding.setSurfaceSize(const Size(420, 1000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   final ChatRepository repo = ChatRepository(db);
   await repo.createConversation(
     id: conversationId,
@@ -211,7 +211,7 @@ Future<({
       ],
       child: MaterialApp.router(
         theme: ThemeData(
-          scaffoldBackgroundColor: careblazersColors.background,
+          scaffoldBackgroundColor: holdcloseColors.background,
         ),
         routerConfig: router,
       ),
@@ -318,7 +318,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-send',
@@ -386,7 +386,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-noop',
@@ -570,7 +570,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-err',
@@ -619,7 +619,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-retry',
@@ -704,7 +704,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-hydrated-retry',
@@ -750,7 +750,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-sleep',
@@ -800,7 +800,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-clean',
@@ -834,7 +834,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-idle',
@@ -897,7 +897,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-vrace',
@@ -1188,7 +1188,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-pending',
@@ -1223,7 +1223,7 @@ void main() {
       final ({
         ChatRepository repo,
         _ScriptedBackend backend,
-        CareblazersDatabase db,
+        HoldcloseDatabase db,
       }) p = await _pump(
         tester,
         conversationId: 'convo-mine',

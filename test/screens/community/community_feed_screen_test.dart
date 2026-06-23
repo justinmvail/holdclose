@@ -1,7 +1,7 @@
 import '../../support/forum_cache_test_override.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/screens/community/community_feed_screen.dart';
-import 'package:careblazers/services/forum_api_client.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/screens/community/community_feed_screen.dart';
+import 'package:holdclose/services/forum_api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

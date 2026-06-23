@@ -1,4 +1,4 @@
-import 'package:careblazers/models/care_circle_membership.dart';
+import 'package:holdclose/models/care_circle_membership.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -151,24 +151,17 @@ CareEvent careEventFromCarePlanRoutine(
 }
 
 CareEvent careEventFromJournalEntry(JournalEntry entry) {
-  // Wizard-authored entries surface the caregiver's situation text as
-  // the activity feed sentence (matching the pre-unified
-  // [recentActivityJournalSummary] behavior); decoder auto-logs fall
-  // back to the behavior label.
-  String subtitle = entry.behavior.label;
-  if (entry.wizardKind) {
-    final String? situation = entry.situationText?.trim();
-    if (situation != null && situation.isNotEmpty) {
-      subtitle = situation;
-    } else {
-      subtitle = 'Journal note';
-    }
-  }
+  // The activity feed sentence is the caregiver's own situation text;
+  // entries without one (e.g. a bare voice/photo note) read as a plain
+  // "Journal note".
+  final String? situation = entry.situationText?.trim();
+  final String summary =
+      (situation != null && situation.isNotEmpty) ? situation : 'Journal note';
   return CareEvent(
     id: 'journal-${entry.id}',
     kind: CareEventKind.journalEntry,
-    title: entry.behavior.label,
-    subtitle: subtitle,
+    title: summary,
+    subtitle: summary,
     start: entry.createdAt,
     patientId: fallbackPatientId,
     externalRef: entry.id,
@@ -235,9 +228,9 @@ Future<List<CareEvent>> patientHealthLogEvents(Ref ref) async {
 
 /// All journal entries for the patient, projected onto the timeline.
 ///
-/// Reads from [journalEntriesProvider] via `.future` so a decoder
-/// auto-log or a wizard journal entry flows in without explicit
-/// invalidation — same cadence the Home Recent Activity card uses.
+/// Reads from [journalEntriesProvider] via `.future` so a new journal
+/// entry flows in without explicit invalidation — same cadence the Home
+/// Recent Activity card uses.
 /// Care plan routines expanded across the forecast horizon
 /// (-1 day .. +30 days from the clock provider). Mirrors the
 /// [patientDoseEvents] dose-expansion shape: each occurrence becomes a

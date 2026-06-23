@@ -1,8 +1,8 @@
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/active_patient_provider.dart';
-import 'package:careblazers/screens/medication/dose_log_screen.dart';
-import 'package:careblazers/services/medication_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/active_patient_provider.dart';
+import 'package:holdclose/screens/medication/dose_log_screen.dart';
+import 'package:holdclose/services/medication_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,7 +41,7 @@ void main() {
 
   test('dosesToday goes stale once kept alive, and invalidation refreshes it',
       () async {
-    final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+    final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final MedicationRepository repo =
         MedicationRepository(db, clock: () => now);

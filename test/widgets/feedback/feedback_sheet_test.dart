@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/providers/voice_capture_provider.dart';
-import 'package:careblazers/services/feedback_service.dart';
-import 'package:careblazers/services/log_buffer.dart';
-import 'package:careblazers/theme.dart';
-import 'package:careblazers/widgets/feedback/feedback_sheet.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/voice_capture_provider.dart';
+import 'package:holdclose/services/feedback_service.dart';
+import 'package:holdclose/services/log_buffer.dart';
+import 'package:holdclose/theme.dart';
+import 'package:holdclose/widgets/feedback/feedback_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,7 +37,7 @@ void main() {
           voiceCaptureProvider.overrideWithValue(voiceCapture),
       ],
       child: MaterialApp(
-        theme: careblazersLightTheme,
+        theme: holdcloseLightTheme,
         home: Scaffold(
           body: Builder(
             builder: (BuildContext ctx) => ElevatedButton(

@@ -1,23 +1,23 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/providers/tts_provider.dart';
-import 'package:careblazers/screens/settings/settings_screen.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/data_exporter.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/providers/tts_provider.dart';
+import 'package:holdclose/screens/settings/settings_screen.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/data_exporter.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,19 +26,19 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 /// Pump the Settings screen with the data-export seams overridden so the
 /// "Back up my data" row runs end-to-end without hitting the drift file
-/// (`CareblazersDatabase.open()`) or the `share_plus` platform channel:
+/// (`HoldcloseDatabase.open()`) or the `share_plus` platform channel:
 ///   - [exportSourcesProvider] → sources backed by an in-memory DB +
 ///     [InMemoryStorageProvider] (seeded with the demo loved one).
 ///   - [dataFileSharerProvider] → [RecordingDataFileSharer] so the test
 ///     asserts the bytes + filename the row handed off.
 ///   - storage + tts are pinned the same way the sibling settings test
 ///     does so the screen renders without sqlite / flutter_tts.
-Future<({RecordingDataFileSharer sharer, CareblazersDatabase db})>
+Future<({RecordingDataFileSharer sharer, HoldcloseDatabase db})>
     _pumpSettings(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(420, 2600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
-  final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+  final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
   addTearDown(() async => db.close());
   final InMemoryStorageProvider storage = InMemoryStorageProvider();
   await storage.upsertPatient(maryHenderson());
@@ -88,7 +88,7 @@ void main() {
 
     testWidgets('tapping the row invokes the exporter and shares the JSON',
         (WidgetTester tester) async {
-      final ({RecordingDataFileSharer sharer, CareblazersDatabase db}) pumped =
+      final ({RecordingDataFileSharer sharer, HoldcloseDatabase db}) pumped =
           await _pumpSettings(tester);
 
       await tester.scrollUntilVisible(

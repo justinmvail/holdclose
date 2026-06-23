@@ -1,7 +1,7 @@
 import '../screens/team/circle_qr_screen.dart' show circleQrScheme;
 
-/// Deep-link host for a care-circle invite: `careblazers://join/<token>`.
-/// This is the LINK channel parallel to the QR's `careblazers:circle:<token>`
+/// Deep-link host for a care-circle invite: `holdclose://join/<token>`.
+/// This is the LINK channel parallel to the QR's `holdclose:circle:<token>`
 /// payload — both carry the same single-use invite token redeemed by
 /// `POST /circles/join` (see [ForumApiClient.joinCircle]).
 const String circleJoinHost = 'join';
@@ -9,7 +9,7 @@ const String circleJoinHost = 'join';
 /// Build the shareable HTTPS invite link for [token] given the backend
 /// [origin] (the `FORUM_API_URL` WITHOUT its `/api/v1` suffix). The Worker
 /// serves a public landing page at `GET /join/:token` that bounces into the
-/// app via the `careblazers://join/<token>` deep link.
+/// app via the `holdclose://join/<token>` deep link.
 String circleInviteLink({required String origin, required String token}) {
   final String trimmed =
       origin.endsWith('/') ? origin.substring(0, origin.length - 1) : origin;
@@ -20,19 +20,19 @@ String circleInviteLink({required String origin, required String token}) {
 /// null when the URI isn't one of ours / carries no token.
 ///
 /// Accepts BOTH channels for symmetry:
-///   * `careblazers://join/<token>`   (host `join`, first path segment)
-///   * `careblazers:circle:<token>`   (the QR payload scheme)
+///   * `holdclose://join/<token>`   (host `join`, first path segment)
+///   * `holdclose:circle:<token>`   (the QR payload scheme)
 String? parseCircleInviteToken(Uri uri) {
-  // QR-style opaque scheme: `careblazers:circle:<token>`. Uri parses this as
-  // scheme=careblazers, path=`circle:<token>` (no authority), so match on the
+  // QR-style opaque scheme: `holdclose:circle:<token>`. Uri parses this as
+  // scheme=holdclose, path=`circle:<token>` (no authority), so match on the
   // raw string the same way the scanner does.
   final String raw = uri.toString();
   if (raw.startsWith(circleQrScheme)) {
     final String token = raw.substring(circleQrScheme.length).trim();
     return token.isEmpty ? null : token;
   }
-  // Link-style: `careblazers://join/<token>`.
-  if (uri.scheme == 'careblazers' && uri.host == circleJoinHost) {
+  // Link-style: `holdclose://join/<token>`.
+  if (uri.scheme == 'holdclose' && uri.host == circleJoinHost) {
     final List<String> segments =
         uri.pathSegments.where((String s) => s.isNotEmpty).toList();
     if (segments.isEmpty) return null;

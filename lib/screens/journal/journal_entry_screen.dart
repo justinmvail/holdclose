@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../models/behavior.dart';
-import '../../models/decoder_result.dart';
 import '../../models/journal_entry.dart';
 import '../../providers/journal_entries_provider.dart';
 import '../../providers/photo_attacher_provider.dart';
@@ -38,9 +36,8 @@ class JournalEntryScreen extends ConsumerStatefulWidget {
   static const Key voiceChipKey = Key('journal-entry-voice-chip');
   static const Key photoButtonKey = Key('journal-entry-photo');
   static const Key photoThumbnailKey = Key('journal-entry-photo-thumb');
-  static const Key behaviorChipKey = Key('journal-entry-behavior-chip');
-  static const Key outcomeChipKey = Key('journal-entry-outcome-chip');
-  static const Key scriptsSectionKey = Key('journal-entry-scripts');
+  static const Key situationSectionKey = Key('journal-entry-situation');
+  static const Key attemptsSectionKey = Key('journal-entry-attempts');
   static const Key notFoundKey = Key('journal-entry-not-found');
 
   @override
@@ -122,8 +119,8 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Delete this entry?'),
         content: const Text(
-          "You can't undo this. The decoder script and any notes "
-          'will be removed.',
+          "You can't undo this. This entry and any notes, voice "
+          'memo, or photo will be removed.',
         ),
         actions: <Widget>[
           TextButton(
@@ -265,19 +262,24 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
           children: <Widget>[
             _EntryPathHeader(title: _formatHeaderDateTime(entry.createdAt)),
             const SizedBox(height: 20),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                _BehaviorChip(behavior: entry.behavior),
-                _OutcomeChip(outcome: entry.outcome),
-              ],
-            ),
-            const SizedBox(height: 24),
-            const _SectionHeader(label: 'What you tried'),
-            const SizedBox(height: 8),
-            _ScriptsSection(result: entry.result),
-            const SizedBox(height: 24),
+            if (_clean(entry.situationText) case final String situation) ...<Widget>[
+              const _SectionHeader(label: 'What happened'),
+              const SizedBox(height: 8),
+              _ReadOnlyBlock(
+                blockKey: JournalEntryScreen.situationSectionKey,
+                text: situation,
+              ),
+              const SizedBox(height: 24),
+            ],
+            if (_clean(entry.attemptsText) case final String attempts) ...<Widget>[
+              const _SectionHeader(label: 'What you tried'),
+              const SizedBox(height: 8),
+              _ReadOnlyBlock(
+                blockKey: JournalEntryScreen.attemptsSectionKey,
+                text: attempts,
+              ),
+              const SizedBox(height: 24),
+            ],
             const _SectionHeader(label: 'Notes'),
             const SizedBox(height: 8),
             TextField(
@@ -381,176 +383,30 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _BehaviorChip extends StatelessWidget {
-  const _BehaviorChip({required this.behavior});
+/// Read-only display of a caregiver-authored field (the situation or the
+/// attempts text) on the entry detail screen.
+class _ReadOnlyBlock extends StatelessWidget {
+  const _ReadOnlyBlock({required this.blockKey, required this.text});
 
-  final Behavior behavior;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    return Container(
-      key: JournalEntryScreen.behaviorChipKey,
-      decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text(behavior.glyph, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: 6),
-          Text(
-            behavior.label,
-            style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.primary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OutcomeChip extends StatelessWidget {
-  const _OutcomeChip({required this.outcome});
-
-  final JournalOutcome outcome;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    final ({String label, Color color, IconData icon}) shape = switch (outcome) {
-      JournalOutcome.positive => (
-          label: 'That helped',
-          color: context.cb.success,
-          icon: Icons.check_circle_outline,
-        ),
-      JournalOutcome.triedDifferent => (
-          label: 'Tried a different approach',
-          color: context.cb.primarySoft,
-          icon: Icons.swap_horiz,
-        ),
-      JournalOutcome.error => (
-          label: "Coach couldn't be reached",
-          color: context.cb.accentDeep,
-          icon: Icons.error_outline,
-        ),
-      JournalOutcome.pending => (
-          label: 'No outcome yet',
-          color: context.cb.primarySoft,
-          icon: Icons.schedule,
-        ),
-    };
-    return Container(
-      key: JournalEntryScreen.outcomeChipKey,
-      decoration: BoxDecoration(
-        color: shape.color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(shape.icon, size: 16, color: shape.color),
-          const SizedBox(width: 6),
-          Text(
-            shape.label,
-            style: textTheme.bodyMedium?.copyWith(color: shape.color),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Read-only quote of the decoder scripts (BUILD_SPEC.md §5.6 — "the
-/// decoder scripts (read-only quote of what was shown)"). Reproduces
-/// the §5.4 sections in compact form so the caregiver sees the same
-/// say / tweak / don't-say they tapped through, without the outcome
-/// buttons.
-class _ScriptsSection extends StatelessWidget {
-  const _ScriptsSection({required this.result});
-
-  final DecoderResult result;
+  final Key blockKey;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Container(
-      key: JournalEntryScreen.scriptsSectionKey,
+      key: blockKey,
+      width: double.infinity,
       decoration: BoxDecoration(
         color: context.cb.surfaceWarm,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          if (result.say.isNotEmpty) ...<Widget>[
-            Text(
-              'Try saying:',
-              style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            for (final String line in result.say)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  '"$line"',
-                  style: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.text,
-                  ),
-                ),
-              ),
-          ],
-          if (result.tweak.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 12),
-            Text(
-              'In the room:',
-              style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            for (final String line in result.tweak)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  '•  $line',
-                  style: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.text,
-                  ),
-                ),
-              ),
-          ],
-          if (result.dontSay.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 12),
-            Text(
-              "Don't say:",
-              style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.accentDeep,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            for (final String line in result.dontSay)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  '✗  $line',
-                  style: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.text,
-                  ),
-                ),
-              ),
-          ],
-        ],
+      child: Text(
+        text,
+        style: textTheme.bodyLarge?.copyWith(
+          color: context.cb.text,
+        ),
       ),
     );
   }
@@ -687,3 +543,11 @@ class _PhotoRow extends StatelessWidget {
 
 String _formatHeaderDateTime(DateTime t) =>
     '${monthAbbreviations[t.month - 1]} ${t.day} · ${formatClock12h(t)}';
+
+/// Trimmed text, or null when the field is null/blank — lets the detail
+/// body use a `case final String` pattern to drop empty sections.
+String? _clean(String? raw) {
+  final String? trimmed = raw?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+  return trimmed;
+}

@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:careblazers/l10n/app_localizations.dart';
-import 'package:careblazers/providers/auth_provider.dart';
-import 'package:careblazers/providers/loved_one_lookup_provider.dart';
-import 'package:careblazers/providers/settings_provider.dart';
-import 'package:careblazers/screens/onboarding/sign_in_screen.dart';
+import 'package:holdclose/l10n/app_localizations.dart';
+import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/loved_one_lookup_provider.dart';
+import 'package:holdclose/providers/settings_provider.dart';
+import 'package:holdclose/screens/onboarding/sign_in_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,7 +30,7 @@ class _SpyAuthProvider implements AuthProvider {
 
   static const User _user = User(
     id: 'spy-user',
-    email: 'spy@careblazers.app',
+    email: 'spy@holdclose.app',
     name: 'Spy Caregiver',
   );
 
@@ -146,11 +146,11 @@ Future<({_SpyAuthProvider spy, GoRouter router})> _pumpSignIn(
 
 void main() {
   group('SignInScreen — BUILD_SPEC.md §5.12 layout', () {
-    testWidgets('renders Careblazers wordmark + tagline',
+    testWidgets('renders Holdclose wordmark + tagline',
         (WidgetTester tester) async {
       await _pumpSignIn(tester);
 
-      expect(find.text('Careblazers'), findsOneWidget);
+      expect(find.text('Holdclose'), findsOneWidget);
       expect(find.text(SignInScreen.tagline), findsOneWidget);
     });
 

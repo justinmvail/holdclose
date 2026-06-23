@@ -1,31 +1,31 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:careblazers/db/database.dart';
-import 'package:careblazers/db/tables.dart';
-import 'package:careblazers/models/appointment.dart';
-import 'package:careblazers/models/health_log_entry.dart';
-import 'package:careblazers/models/care_circle_membership.dart';
-import 'package:careblazers/models/care_event.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/models/document.dart';
-import 'package:careblazers/models/expense.dart';
-import 'package:careblazers/models/journal_entry.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/providers/care_circle_provider.dart';
-import 'package:careblazers/providers/care_events_provider.dart';
-import 'package:careblazers/providers/care_plan_provider.dart';
-import 'package:careblazers/providers/care_shifts_provider.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart';
-import 'package:careblazers/providers/documents_provider.dart';
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/providers/health_log_provider.dart';
-import 'package:careblazers/providers/storage_provider.dart';
-import 'package:careblazers/seed/mary_henderson.dart';
-import 'package:careblazers/services/appointment_repository.dart';
-import 'package:careblazers/services/data_exporter.dart';
-import 'package:careblazers/services/medication_repository.dart';
-import 'package:careblazers/services/provider_repository.dart';
+import 'package:holdclose/db/database.dart';
+import 'package:holdclose/db/tables.dart';
+import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/models/health_log_entry.dart';
+import 'package:holdclose/models/care_circle_membership.dart';
+import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/models/document.dart';
+import 'package:holdclose/models/expense.dart';
+import 'package:holdclose/models/journal_entry.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/care_circle_provider.dart';
+import 'package:holdclose/providers/care_events_provider.dart';
+import 'package:holdclose/providers/care_plan_provider.dart';
+import 'package:holdclose/providers/care_shifts_provider.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
+import 'package:holdclose/providers/documents_provider.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/providers/health_log_provider.dart';
+import 'package:holdclose/providers/storage_provider.dart';
+import 'package:holdclose/seed/mary_henderson.dart';
+import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/data_exporter.dart';
+import 'package:holdclose/services/medication_repository.dart';
+import 'package:holdclose/services/provider_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_test/flutter_test.dart';
@@ -35,7 +35,7 @@ DateTime _fixedNow() => DateTime.utc(2026, 6, 4, 9, 30);
 
 /// Assemble an [ExportSources] over [db] (+ [storage]) — every drift repo
 /// shares the one in-memory connection, mirroring the production wiring.
-ExportSources _sourcesFor(CareblazersDatabase db, StorageProvider storage) => (
+ExportSources _sourcesFor(HoldcloseDatabase db, StorageProvider storage) => (
       storage: storage,
       medications: MedicationRepository(db),
       appointments: AppointmentRepository(db),
@@ -52,14 +52,14 @@ ExportSources _sourcesFor(CareblazersDatabase db, StorageProvider storage) => (
 
 void main() {
   group('DataExporter.gather — Issue #20', () {
-    late CareblazersDatabase db;
+    late HoldcloseDatabase db;
     late DriftStorageProvider storage;
     late ExportSources sources;
 
     setUp(() {
       // One in-memory DB shared across every repo — the same SQLite file the
       // real app shares, just memory-backed and isolated per test.
-      db = CareblazersDatabase(NativeDatabase.memory());
+      db = HoldcloseDatabase(NativeDatabase.memory());
       storage = DriftStorageProvider(db);
       sources = _sourcesFor(db, storage);
     });
@@ -384,8 +384,8 @@ void main() {
 
         // The full populated doc round-trips through importInto cleanly too,
         // so the backup is restorable, not just writable.
-        final CareblazersDatabase dstDb =
-            CareblazersDatabase(NativeDatabase.memory());
+        final HoldcloseDatabase dstDb =
+            HoldcloseDatabase(NativeDatabase.memory());
         addTearDown(() async => dstDb.close());
         final DriftStorageProvider dstStorage = DriftStorageProvider(dstDb);
         final ExportSources dst = _sourcesFor(dstDb, dstStorage);
@@ -439,7 +439,7 @@ void main() {
 
   group('DataExporter.exportAndShare — Issue #20', () {
     test('hands a date-stamped JSON file to the sharer', () async {
-      final CareblazersDatabase db = CareblazersDatabase(NativeDatabase.memory());
+      final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
       addTearDown(() async => db.close());
       final DriftStorageProvider storage = DriftStorageProvider(db);
       await storage.upsertPatient(maryHenderson());
@@ -451,7 +451,7 @@ void main() {
 
       final String filename = await exporter.exportAndShare(sources, sharer);
 
-      expect(filename, 'careblazers-backup-2026-06-04.json');
+      expect(filename, 'holdclose-backup-2026-06-04.json');
       expect(sharer.shared, hasLength(1));
       final ({Uint8List bytes, String filename, String mimeType}) call =
           sharer.shared.single;
@@ -473,8 +473,8 @@ void main() {
       'every section',
       () async {
         // ── Source store: seed a cross-section spanning the FK chains. ──
-        final CareblazersDatabase srcDb =
-            CareblazersDatabase(NativeDatabase.memory());
+        final HoldcloseDatabase srcDb =
+            HoldcloseDatabase(NativeDatabase.memory());
         addTearDown(() async => srcDb.close());
         final DriftStorageProvider srcStorage = DriftStorageProvider(srcDb);
         final ExportSources src = _sourcesFor(srcDb, srcStorage);
@@ -567,8 +567,8 @@ void main() {
             jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
 
         // ── Destination store: fresh + empty. ──
-        final CareblazersDatabase dstDb =
-            CareblazersDatabase(NativeDatabase.memory());
+        final HoldcloseDatabase dstDb =
+            HoldcloseDatabase(NativeDatabase.memory());
         addTearDown(() async => dstDb.close());
         final DriftStorageProvider dstStorage = DriftStorageProvider(dstDb);
         final ExportSources dst = _sourcesFor(dstDb, dstStorage);
@@ -609,8 +609,8 @@ void main() {
     );
 
     test('import tolerates a doc missing optional sections', () async {
-      final CareblazersDatabase db =
-          CareblazersDatabase(NativeDatabase.memory());
+      final HoldcloseDatabase db =
+          HoldcloseDatabase(NativeDatabase.memory());
       addTearDown(() async => db.close());
       final DriftStorageProvider storage = DriftStorageProvider(db);
       final ExportSources sources = _sourcesFor(db, storage);

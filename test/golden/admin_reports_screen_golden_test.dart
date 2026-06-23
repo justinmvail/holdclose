@@ -1,8 +1,8 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/models/forum.dart';
-import 'package:careblazers/screens/community/admin_reports_screen.dart';
-import 'package:careblazers/services/forum_api_client.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/models/forum.dart';
+import 'package:holdclose/screens/community/admin_reports_screen.dart';
+import 'package:holdclose/services/forum_api_client.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -87,7 +87,7 @@ Widget _host(_FakeForumApiClient client) {
       child: MaterialApp.router(
         routerConfig: router,
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),

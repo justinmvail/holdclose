@@ -1,11 +1,11 @@
 import 'package:alchemist/alchemist.dart';
-import 'package:careblazers/models/caregiver.dart';
-import 'package:careblazers/models/expense.dart';
-import 'package:careblazers/providers/care_tasks_provider.dart'
+import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/models/expense.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart'
     show currentCaregiverIdProvider;
-import 'package:careblazers/providers/expenses_provider.dart';
-import 'package:careblazers/screens/team/expenses_screen.dart';
-import 'package:careblazers/theme.dart';
+import 'package:holdclose/providers/expenses_provider.dart';
+import 'package:holdclose/screens/team/expenses_screen.dart';
+import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -97,7 +97,7 @@ Widget _host({required List<ExpenseMonthGroup> groups}) {
       child: MaterialApp(
         home: const ExpensesScreen(),
         builder: (BuildContext context, Widget? child) => ColoredBox(
-          color: careblazersColors.background,
+          color: holdcloseColors.background,
           child: child ?? const SizedBox.shrink(),
         ),
       ),

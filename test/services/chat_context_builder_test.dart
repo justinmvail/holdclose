@@ -1,7 +1,7 @@
-import 'package:careblazers/models/care_plan_routine.dart';
-import 'package:careblazers/models/medication.dart';
-import 'package:careblazers/models/patient.dart';
-import 'package:careblazers/services/chat_context_builder.dart';
+import 'package:holdclose/models/care_plan_routine.dart';
+import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/models/patient.dart';
+import 'package:holdclose/services/chat_context_builder.dart';
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_test/flutter_test.dart';
 

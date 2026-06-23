@@ -5,14 +5,14 @@ import 'package:flutter/services.dart';
 import 'tts_provider.dart';
 
 /// Channel name shared with the iOS/Android native bridges
-/// (BUILD_SPEC.md Phase 9.2 — `careblazers/tts`).
+/// (BUILD_SPEC.md Phase 9.2 — `holdclose/tts`).
 ///
 /// Exposed as a top-level const so the platform stubs can match the
 /// exact string the Dart side dials. Keep in sync with the
 /// FlutterMethodChannel registration in
 /// `ios/Runner/AppDelegate.swift` and the MethodChannel registration
 /// in `android/.../MainActivity.kt`.
-const String bundledTtsChannelName = 'careblazers/tts';
+const String bundledTtsChannelName = 'holdclose/tts';
 
 /// On-device neural-TTS backend (BUILD_SPEC.md Phase 9 — Piper voice
 /// model running through ONNX Runtime, bundled at ~30 MB).
@@ -98,7 +98,7 @@ class BundledTTSProvider implements TTSProvider {
 
   /// Async factory with transparent OS fallback (BUILD_SPEC.md Phase 9.7).
   ///
-  /// Probes the `careblazers/tts` MethodChannel by invoking `probe`.
+  /// Probes the `holdclose/tts` MethodChannel by invoking `probe`.
   /// The native bridge resolves the call once its `ORTSession` (iOS)
   /// or `OrtSession` (Android) is healthy; it throws
   /// [PlatformException] with code `ONNX_LOAD_FAILED` when ONNX
@@ -141,9 +141,9 @@ class BundledTTSProvider implements TTSProvider {
 
 /// Default WARN sink for [BundledTTSProvider.createOrFallback]. One
 /// line via `dart:developer` at level 900 (WARNING) under the
-/// `careblazers.tts` logger name — matches what `flutter run` /
+/// `holdclose.tts` logger name — matches what `flutter run` /
 /// `adb logcat` / `Console.app` filter on. Tests inject an alternate
 /// sink to capture the call without touching the real logger.
 void _defaultTtsWarn(String message) {
-  developer.log(message, name: 'careblazers.tts', level: 900);
+  developer.log(message, name: 'holdclose.tts', level: 900);
 }

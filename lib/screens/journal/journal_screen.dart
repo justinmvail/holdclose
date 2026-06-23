@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../models/behavior.dart';
 import '../../models/journal_entry.dart';
 import '../../providers/journal_entries_provider.dart';
 import '../../providers/pattern_detector_provider.dart';
@@ -163,8 +162,9 @@ void showJournalAddSheet(BuildContext context) {
             ListTile(
               key: JournalScreen.wizardOptionKey,
               leading: const Icon(Icons.menu_book_outlined),
-              title: const Text('Coaching wizard'),
-              subtitle: const Text('Guided steps with Dr. Natali\'s script.'),
+              title: const Text('Guided entry'),
+              subtitle: const Text('Step through when, what happened, and '
+                  'what you tried.'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 context.push('/journal/new');
@@ -201,7 +201,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Your journal fills itself.',
+            'Your journal, in your words.',
             style: textTheme.headlineMedium?.copyWith(
               color: context.cb.primary,
             ),
@@ -209,8 +209,8 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Each time you use the decoder, the moment gets logged here '
-            'automatically. Try it once and come back.',
+            'Jot down the moments that matter — what happened, what you '
+            'tried, what helped. Add your first one whenever you’re ready.',
             style: textTheme.bodyLarge?.copyWith(
               color: context.cb.text,
             ),
@@ -219,7 +219,7 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 32),
           Semantics(
             button: true,
-            label: 'Open the decoder. Start logging your first moment.',
+            label: 'Add your first journal entry.',
             child: ElevatedButton(
               key: JournalScreen.emptyCtaKey,
               style: ElevatedButton.styleFrom(
@@ -227,9 +227,9 @@ class _EmptyState extends StatelessWidget {
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
-              onPressed: () => context.push('/decoder/behavior'),
+              onPressed: () => showJournalAddSheet(context),
               child: Text(
-                'Open the decoder',
+                'Add your first entry',
                 style: Theme.of(context)
                     .textTheme
                     .labelLarge
@@ -365,7 +365,7 @@ class _WeekSummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '📊  ${stats.thisWeek} incidents logged',
+            '📊  ${stats.thisWeek} entries logged',
             style: textTheme.bodyLarge?.copyWith(
               color: context.cb.text,
             ),
@@ -377,26 +377,6 @@ class _WeekSummaryCard extends StatelessWidget {
               color: context.cb.primarySoft,
             ),
           ),
-          if (stats.topBehaviors.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 12),
-            Text(
-              'Most common:',
-              style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
-              ),
-            ),
-            const SizedBox(height: 4),
-            for (final _BehaviorCount bc in stats.topBehaviors)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text(
-                  '${bc.glyph}  ${bc.label} · ${bc.count}',
-                  style: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.text,
-                  ),
-                ),
-              ),
-          ],
         ],
       ),
     );
@@ -487,12 +467,12 @@ class _EntryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final String time = formatClock12h(entry.createdAt);
-    final String? whatWorked = _whatWorkedSub(entry);
+    final String title = _entryTitle(entry);
+    final String? sub = _entrySub(entry);
 
     return Semantics(
       button: true,
-      label:
-          '${entry.behavior.label} at $time. Double-tap to open this entry.',
+      label: '$title at $time. Double-tap to open this entry.',
       child: Material(
         color: context.cb.background,
         child: InkWell(
@@ -503,9 +483,10 @@ class _EntryTile extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  entry.behavior.glyph,
-                  style: const TextStyle(fontSize: 28),
+                Icon(
+                  Icons.edit_note_outlined,
+                  size: 26,
+                  color: context.cb.primarySoft,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -513,15 +494,17 @@ class _EntryTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        '$time   ${entry.behavior.label}',
+                        '$time   $title',
                         style: textTheme.bodyLarge?.copyWith(
                           color: context.cb.primary,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      if (whatWorked != null) ...<Widget>[
+                      if (sub != null) ...<Widget>[
                         const SizedBox(height: 2),
                         Text(
-                          whatWorked,
+                          sub,
                           style: textTheme.bodyMedium?.copyWith(
                             color: context.cb.primarySoft,
                           ),
@@ -549,42 +532,24 @@ class _EntryTile extends StatelessWidget {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// "What worked" sub-line for an entry tile (BUILD_SPEC.md §5.5).
-///
-/// Returns null when there is nothing useful to show — the tile then
-/// renders without a second row instead of an empty-looking gap.
-String? _whatWorkedSub(JournalEntry entry) {
-  switch (entry.outcome) {
-    case JournalOutcome.positive:
-      if (entry.result.tweak.isNotEmpty) {
-        return 'What worked: ${entry.result.tweak.first}';
-      }
-      if (entry.result.say.isNotEmpty) {
-        return 'What worked: ${entry.result.say.first}';
-      }
-      return 'That helped.';
-    case JournalOutcome.triedDifferent:
-      return 'Tried a different approach.';
-    case JournalOutcome.error:
-      return "Couldn't reach the coach.";
-    case JournalOutcome.pending:
-      return null;
-  }
+/// Title line for an entry tile — the first line of the caregiver's
+/// situation text, or a plain "Journal note" when the entry has none.
+String _entryTitle(JournalEntry entry) {
+  final String? s = entry.situationText?.trim();
+  if (s != null && s.isNotEmpty) return s.split('\n').first;
+  return 'Journal note';
 }
 
-@immutable
-class _BehaviorCount {
-  const _BehaviorCount({
-    required this.id,
-    required this.label,
-    required this.glyph,
-    required this.count,
-  });
-
-  final String id;
-  final String label;
-  final String glyph;
-  final int count;
+/// Optional second line for an entry tile — a preview of what the
+/// caregiver tried, or their notes. Null when there's nothing to show.
+String? _entrySub(JournalEntry entry) {
+  final String? attempts = entry.attemptsText?.trim();
+  if (attempts != null && attempts.isNotEmpty) {
+    return attempts.split('\n').first;
+  }
+  final String? notes = entry.notes?.trim();
+  if (notes != null && notes.isNotEmpty) return notes.split('\n').first;
+  return null;
 }
 
 @immutable
@@ -592,52 +557,31 @@ class _WeekStats {
   const _WeekStats({
     required this.thisWeek,
     required this.lastWeek,
-    required this.topBehaviors,
   });
 
   final int thisWeek;
   final int lastWeek;
-  final List<_BehaviorCount> topBehaviors;
 
   /// Bucket [entries] (already 30-day windowed) into the two 7-day
-  /// windows the summary card compares, and rank the top-3 behaviors
-  /// over the current window.
+  /// windows the summary card compares.
   factory _WeekStats.from(List<JournalEntry> entries, DateTime now) {
     final DateTime thisWeekCutoff = now.subtract(const Duration(days: 7));
     final DateTime lastWeekCutoff = now.subtract(const Duration(days: 14));
 
     int thisWeek = 0;
     int lastWeek = 0;
-    final Map<String, int> counts = <String, int>{};
-    final Map<String, Behavior> behaviors = <String, Behavior>{};
 
     for (final JournalEntry e in entries) {
       if (e.createdAt.isAfter(thisWeekCutoff)) {
         thisWeek += 1;
-        counts[e.behavior.id] = (counts[e.behavior.id] ?? 0) + 1;
-        behaviors[e.behavior.id] = e.behavior;
       } else if (e.createdAt.isAfter(lastWeekCutoff)) {
         lastWeek += 1;
       }
     }
 
-    final List<MapEntry<String, int>> ranked = counts.entries.toList()
-      ..sort((MapEntry<String, int> a, MapEntry<String, int> b) =>
-          b.value.compareTo(a.value));
-    final List<_BehaviorCount> top = <_BehaviorCount>[
-      for (final MapEntry<String, int> r in ranked.take(3))
-        _BehaviorCount(
-          id: r.key,
-          label: behaviors[r.key]!.label,
-          glyph: behaviors[r.key]!.glyph,
-          count: r.value,
-        ),
-    ];
-
     return _WeekStats(
       thisWeek: thisWeek,
       lastWeek: lastWeek,
-      topBehaviors: top,
     );
   }
 

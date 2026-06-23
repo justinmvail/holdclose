@@ -46,8 +46,8 @@ class PathHeaderCrumb {
 /// **Only the Home root suppresses the breadcrumb** — its trail is just
 /// "Home", a self-referential crumb that adds nothing.
 ///
-/// Brand tokens (BUILD_SPEC.md §3.1): navy ([CareblazersColors.primary])
-/// for crumb + title text, [CareblazersColors.primarySoft] for the `›`
+/// Brand tokens (BUILD_SPEC.md §3.1): navy ([HoldcloseColors.primary])
+/// for crumb + title text, [HoldcloseColors.primarySoft] for the `›`
 /// separators.
 class PathHeader extends StatelessWidget {
   const PathHeader({
