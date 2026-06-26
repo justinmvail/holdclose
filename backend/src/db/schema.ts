@@ -268,6 +268,39 @@ export const reports = sqliteTable(
   ],
 );
 
+// Per-call LLM usage ledger. One row per /chat completion: who, when,
+// which model, the real token counts the inference host returns, and the
+// derived cost in MICRO-DOLLARS ($1 = 1_000_000), stored as an integer so
+// summing for the daily caps can't drift. This table is the single source
+// of truth for three things: (a) per-user daily token quotas, (b) the
+// global daily spend circuit breaker, and (c) raw cost measurement. It
+// stores token COUNTS only — never prompt/response text (that's PHI and
+// the host already saw it; we don't need a second copy).
+export const llmUsage = sqliteTable(
+  'llm_usage',
+  {
+    id: uuidColumn().primaryKey(),
+    userId: text('user_id').notNull(),
+    createdAt: timestampColumn('created_at').notNull(),
+    model: text().notNull(),
+    // Which app surface drove this call ('chat' | 'recap' | …). One
+    // endpoint serves every LLM feature; this tag is what lets cost
+    // reporting split spend per surface without separate routes.
+    feature: text().notNull().default('chat'),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    costMicros: integer('cost_micros').notNull().default(0),
+  },
+  (t) => [
+    // The per-user daily quota query: WHERE user_id = ? AND created_at >= ?
+    index('llm_usage_user_created_idx').on(t.userId, t.createdAt),
+    // The global daily spend query: WHERE created_at >= ?
+    index('llm_usage_created_idx').on(t.createdAt),
+  ],
+);
+
+export type LlmUsage = typeof llmUsage.$inferSelect;
+
 export const profilesRelations = relations(profiles, ({ many }) => ({
   posts: many(posts),
   comments: many(comments),

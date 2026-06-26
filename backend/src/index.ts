@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 
 import { auth, type AuthBindings, type AuthVariables } from './middleware/auth';
 import { authRouter } from './routes/auth';
+import { chatRouter, type ChatBindings } from './routes/chat';
 import { circlesRouter } from './routes/circles';
 import { commentsRouter } from './routes/comments';
 import { documentsRouter } from './routes/documents';
@@ -14,7 +15,8 @@ import { votesRouter } from './routes/votes';
 import { handleScheduled, type WatchdogEnv } from './watchdog';
 import type { Context } from 'hono';
 
-export type Bindings = AuthBindings & {
+export type Bindings = AuthBindings &
+  ChatBindings & {
   FORUM_DB: D1Database;
   FORUM_MEDIA: R2Bucket;
   // R2 bucket holding caregiver document scans (emergency card / POA / ID
@@ -74,6 +76,11 @@ api.route('/profiles', profilesRouter());
 api.route('/circles', circlesRouter());
 api.route('/reports', reportsRouter());
 api.route('/sync', syncRouter());
+// LLM coach proxy. Behind the forum JWT (mounted after auth() above) so
+// every call is tied to a real account — the chokepoint where per-user
+// quotas + the global daily spend cap are enforced and token usage is
+// logged. The inference host's API key lives only here, never on-device.
+api.route('/chat', chatRouter());
 api.route('/documents', documentsRouter());
 api.route('/votes', votesRouter());
 

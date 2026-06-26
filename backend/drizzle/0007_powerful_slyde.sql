@@ -1,0 +1,1 @@
+ALTER TABLE `llm_usage` ADD `feature` text DEFAULT 'chat' NOT NULL;
