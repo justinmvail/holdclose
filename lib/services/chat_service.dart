@@ -8,13 +8,16 @@ import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/chat.dart';
+import '../providers/forum_jwt_provider.dart' show forumSessionManagerProvider;
 import '../providers/llm_provider.dart'
     show buildShimDio, claudeShimEndpoint, shimAuthHeaders, useFakeLLMEngine;
 import '../seed/chat_system_prompt.dart';
+import 'api_chat_backend.dart';
 import 'chat_actions.dart';
 import 'chat_context_builder.dart';
 import 'chat_repository.dart';
 import 'feedback_service.dart' show alphaFeedbackEnabled;
+import 'forum_api_client.dart' show forumApiBaseUrl, forumBackendConfigured;
 
 part 'chat_service.g.dart';
 
@@ -1182,9 +1185,25 @@ class DemoChatBackend implements ChatLLMBackend {
 /// harnesses still override this provider with their own scripted
 /// backends.
 @Riverpod(keepAlive: true)
-ChatLLMBackend chatLLMBackend(Ref ref) => useFakeLLMEngine
-    ? const DemoChatBackend()
-    : const ClaudeShimChatBackend();
+ChatLLMBackend chatLLMBackend(Ref ref) {
+  // Deterministic fake first (every `flutter test`, and the DEMO_MODE
+  // pitch build via --dart-define=USE_FAKE_LLM=true) — never touches the
+  // network.
+  if (useFakeLLMEngine) return const DemoChatBackend();
+  // Shipped/alpha build with a real Worker baked in
+  // (--dart-define=FORUM_API_URL=...) → route the coach THROUGH the Worker
+  // so per-user quotas + the global daily spend cap are enforced and the
+  // inference key never lives on-device. The session JWT (with refresh) is
+  // supplied by ForumSessionManager.
+  if (forumBackendConfigured) {
+    return ApiChatBackend(
+      baseUrl: forumApiBaseUrl,
+      tokenLoader: ref.watch(forumSessionManagerProvider).currentToken,
+    );
+  }
+  // No backend configured → the local dev shim (localhost:8765 / SHIM_URL).
+  return const ClaudeShimChatBackend();
+}
 
 /// Riverpod-wired singleton (TASKS.md Phase 11.3). Screens and tests
 /// that want the chat orchestrator read `ref.watch(chatServiceProvider)`

@@ -33,6 +33,13 @@ const String _compileTimeForumApiUrl = String.fromEnvironment(
 /// tests + local-only/demo builds never instantiate the real auth path.
 final bool forumBackendConfigured = _compileTimeForumApiUrl.trim().isNotEmpty;
 
+/// The baked-in Worker origin (`--dart-define=FORUM_API_URL=...`), or an
+/// empty string when none was configured. Public so sibling backends that
+/// hit the same Worker — e.g. [ApiChatBackend] — can build their endpoint
+/// (`$forumApiBaseUrl$forumApiVersionPrefix/chat`) without re-reading the
+/// environment. Gate on [forumBackendConfigured] before using it.
+const String forumApiBaseUrl = _compileTimeForumApiUrl;
+
 /// All Hono routes mount under this prefix (BUILD_SPEC.md §13 / Phase
 /// 13.3 — `app.route('/api/v1', api)`). Centralized so a future v2
 /// flip only touches one line.

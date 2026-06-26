@@ -7,6 +7,9 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../seed/activity_summary_prompt.dart';
+import '../services/forum_api_client.dart'
+    show forumApiBaseUrl, forumApiVersionPrefix, forumBackendConfigured;
+import 'forum_jwt_provider.dart' show forumSessionManagerProvider;
 
 part 'llm_provider.g.dart';
 
@@ -385,6 +388,152 @@ class _EventPayload {
   final String? error;
 }
 
+/// Production [LLMProvider] for the Home "catch me up" recap in shipped
+/// builds: routes the recap through the **Cloudflare Worker**
+/// (`POST /api/v1/chat`, tagged `feature: 'recap'`) — the SAME gatekept
+/// endpoint the chat coach uses ([ApiChatBackend]). So the recap is now
+/// behind the per-user quotas + global daily spend cap, the inference key
+/// stays server-side, and usage is logged. No dedicated recap route: one
+/// endpoint, one `feature` tag for accounting.
+///
+/// The recap is one-shot prose, so this buffers the Worker's neutral SSE
+/// (`data: {"text":…}` / `[DONE]`; `{"error":…}` throws) into the growing
+/// paragraph [generateActivitySummary] yields — same contract as
+/// [ClaudeCLIProvider] and [FakeLLMProvider].
+class ApiLLMProvider implements LLMProvider {
+  ApiLLMProvider({
+    required this.baseUrl,
+    required this.tokenLoader,
+    Dio? dio,
+  }) : _injectedDio = dio;
+
+  /// The Worker origin (`FORUM_API_URL`); the route prefix is appended.
+  final String baseUrl;
+
+  /// Supplies a fresh session JWT per request (refresh handled upstream).
+  final Future<String> Function() tokenLoader;
+
+  final Dio? _injectedDio;
+
+  String get _endpoint {
+    final String trimmed = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    return '$trimmed$forumApiVersionPrefix/chat';
+  }
+
+  @override
+  Stream<String> generateActivitySummary({
+    int lastNHours = 24,
+    required List<ActivityEvent> events,
+  }) async* {
+    // Empty day — don't burn a call (and don't touch the caps).
+    if (events.isEmpty) {
+      yield '';
+      return;
+    }
+
+    final Dio dio = _injectedDio ?? buildShimDio();
+    final String userMessage = ClaudeCLIProvider.buildActivityUserMessage(
+      lastNHours: lastNHours,
+      events: events,
+    );
+
+    final String token;
+    try {
+      token = await tokenLoader();
+    } catch (e) {
+      throw Exception('summary auth failed: $e');
+    }
+
+    Response<ResponseBody> response;
+    try {
+      response = await dio.post<ResponseBody>(
+        _endpoint,
+        data: <String, String>{
+          'system': activitySummarySystemPrompt,
+          'user': userMessage,
+          'feature': 'recap',
+        },
+        options: Options(
+          responseType: ResponseType.stream,
+          contentType: Headers.jsonContentType,
+          headers: <String, Object>{'Authorization': 'Bearer $token'},
+          // Read the status ourselves so 429/503/413 surface as a thrown
+          // Exception (the Home card's AsyncValue.guard mutes it to the
+          // "couldn't put together your recap" line — never a red box).
+          validateStatus: (_) => true,
+        ),
+      );
+    } catch (e) {
+      throw Exception('summary request failed: $e');
+    }
+
+    final int status = response.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
+      throw Exception('summary backend error ($status)');
+    }
+
+    final ResponseBody? body = response.data;
+    if (body == null) {
+      throw Exception('summary returned an empty response body');
+    }
+
+    final StringBuffer accumulated = StringBuffer();
+    await for (final String delta in _workerTextDeltas(body)) {
+      accumulated.write(delta);
+      yield accumulated.toString();
+    }
+  }
+
+  /// Stream the text deltas from the Worker's neutral SSE [body],
+  /// throwing on a `{"error": …}` event. Reuses [ClaudeCLIProvider]'s
+  /// byte-framing helpers (same library) so a multi-byte glyph split
+  /// across reads stays intact.
+  static Stream<String> _workerTextDeltas(ResponseBody body) async* {
+    final List<int> rawBuffer = <int>[];
+    await for (final Uint8List bytes in body.stream) {
+      rawBuffer.addAll(bytes);
+      while (true) {
+        final int sep = ClaudeCLIProvider._indexOfDoubleNewline(rawBuffer);
+        if (sep == -1) break;
+        final List<int> eventBytes = rawBuffer.sublist(0, sep);
+        rawBuffer.removeRange(
+            0, sep + ClaudeCLIProvider._eventBoundaryLength(rawBuffer, sep));
+        yield* _workerDeltasFromEvent(utf8.decode(eventBytes));
+      }
+    }
+    if (rawBuffer.isNotEmpty) {
+      yield* _workerDeltasFromEvent(utf8.decode(rawBuffer));
+    }
+  }
+
+  static Stream<String> _workerDeltasFromEvent(String event) async* {
+    for (final String rawLine in event.split('\n')) {
+      final String line = rawLine.endsWith('\r')
+          ? rawLine.substring(0, rawLine.length - 1)
+          : rawLine;
+      if (!line.startsWith('data:')) continue;
+      final String payload = line.substring(5).startsWith(' ')
+          ? line.substring(6)
+          : line.substring(5);
+      if (payload == '[DONE]') continue;
+      final dynamic obj;
+      try {
+        obj = json.decode(payload);
+      } on FormatException {
+        continue;
+      }
+      if (obj is! Map<String, dynamic>) continue;
+      if (obj['error'] is String) {
+        throw Exception('summary generation failed: ${obj['error']}');
+      }
+      final dynamic text = obj['text'];
+      if (text is String && text.isNotEmpty) yield text;
+    }
+  }
+}
+
 /// Build-time flag (BUILD_SPEC.md §1 — `USE_FAKE_LLM`).
 ///
 /// **Real engine by default.** A shipped/run build uses the live,
@@ -422,5 +571,19 @@ bool get useFakeLLMEngine => _useFakeLLM;
 /// `ref.watch(llmProvider)` and get whichever impl the build mode
 /// picked — they never see the concrete class.
 @Riverpod(keepAlive: true)
-LLMProvider llm(Ref ref) =>
-    _useFakeLLM ? const FakeLLMProvider() : const ClaudeCLIProvider();
+LLMProvider llm(Ref ref) {
+  // Deterministic fake under `flutter test` / USE_FAKE_LLM=true.
+  if (_useFakeLLM) return const FakeLLMProvider();
+  // Shipped/alpha build with a real Worker baked in → route the recap
+  // THROUGH the Worker (same gatekept /api/v1/chat the coach uses, tagged
+  // feature:'recap') so it's behind the quotas + global cap and the key
+  // stays server-side.
+  if (forumBackendConfigured) {
+    return ApiLLMProvider(
+      baseUrl: forumApiBaseUrl,
+      tokenLoader: ref.watch(forumSessionManagerProvider).currentToken,
+    );
+  }
+  // No backend configured → the local dev shim.
+  return const ClaudeCLIProvider();
+}
