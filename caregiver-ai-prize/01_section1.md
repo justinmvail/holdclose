@@ -22,10 +22,16 @@ need — often when the caregiver's hands are literally full. Left unmet, the
 consequences are the ones ACL's mission exists to prevent: caregiver burnout,
 medication errors, family conflict, and premature, costly institutionalization.
 
-This need is not abstract to us. Holdclose was built by a developer who lived
-dementia in his own family [grandfather], and shaped with friends who are
-themselves family caregivers of aging and dementia-affected parents. We are not
-guessing at the problem; we have carried it.
+This need is not abstract to us. Holdclose was built by a **U.S. Air Force
+veteran** who spent a decade working inside VA benefits systems (the Veterans
+Benefits Management System) and who has repeatedly helped care for his own
+father — a **100% disabled veteran**. It was shaped further with friends who are
+themselves family caregivers of aging and dementia-affected parents. We have not
+guessed at this problem; we have lived it — including at the exact intersection
+this Challenge and its VA partner serve: the estimated **5.5 million Americans
+caring for a veteran**, a population served by the VA Caregiver Support Program
+yet still stretched thin. Holdclose serves *any* care situation, but its roots
+are in caring for those who served.
 
 ## Solution Design
 

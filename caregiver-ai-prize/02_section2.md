@@ -35,12 +35,18 @@ the engineering is done; the work ahead is validation, refinement, and reach.
 
 ## Team & Roles
 
-**[Your Name] — Founder & Developer.** Built Holdclose end-to-end: product
-design, the Flutter iOS/Android app, the server backend, and the AI
-integration. [One line of relevant background.] Motivated by direct family
-experience with dementia caregiving. **Planned additions:** caregiver and
-clinical advisors secured through partnerships (see letters of support,
-Appendix) to strengthen co-design and real-world validation in Phases 2–3.
+**[Your Name] — Founder & Developer.** A **U.S. Air Force veteran** with over a
+decade building and supporting federal health and benefits systems — including
+**ten years on the Veterans Benefits Management System (VBMS)** and prior work
+in health-benefits software (Benefitfocus). He built Holdclose end-to-end:
+product design, the Flutter iOS/Android app, the server backend, and the AI
+integration. His motivation is personal — he has repeatedly cared for his
+father, a **100% disabled veteran** — and he built the assistant he wished he'd
+had. This combination of **deep VA/health-systems expertise and lived caregiving
+experience** is a rare fit for building responsibly at the intersection of aging,
+disability, and veteran care. **Planned additions:** caregiver and clinical
+advisors secured through partnerships (see letters of support, Appendix) to
+strengthen co-design and real-world validation in Phases 2–3.
 
 ## Performance Metrics
 
