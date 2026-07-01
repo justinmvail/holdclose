@@ -75,6 +75,15 @@ non-diagnostic, an uncertainty/escalation path to human help, and human-in-the-
 loop confirmation before any action changes care data. The architecture is
 **model-agnostic**, so Holdclose is not dependent on any single AI provider.
 
+**Existing vs. new AI methods.** Holdclose does *not* train a new model — it
+builds on **existing large language models** (model-agnostic; currently
+[Cerebras]). Its distinct contribution is the **data-grounding layer**
+(`chat_context_builder`): the loved one's real, *sanitized* care data — meds, dose
+windows, appointments, journal — is assembled into the model's context at
+inference, so a general-purpose LLM becomes a coach that knows *your specific
+person*. That combination — proven foundation models + a novel, privacy-guarded
+context-assembly pipeline with human-in-the-loop guardrails — is the technology.
+
 ## End-User Input
 
 Holdclose's design has been shaped by family caregivers from the start.

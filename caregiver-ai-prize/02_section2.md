@@ -8,10 +8,13 @@
 Holdclose is **already built, tested, and running on device** — [Flutter, iOS +
 Android; unit, widget, golden, and end-to-end integration suites green; a
 deployed server backend (Cloudflare Worker) for care-circle sync]. Unlike
-concept submissions, we can **begin caregiver piloting immediately via
-TestFlight**, and public availability requires only App Store approval (in
-progress) — not further development. This materially de-risks Phases 2 and 3:
-the engineering is done; the work ahead is validation, refinement, and reach.
+concept submissions, Holdclose is **distributable to caregivers today**: a
+shareable install link via **Google Play Open Testing** (and Apple TestFlight),
+plus a live product presence at **junocode.studio**. Reviewers and testers can
+see and install a **real, working product — not a concept.** Public store release
+requires only store approval — not further development. This materially de-risks
+Phases 2 and 3: the engineering is done; the work ahead is validation,
+refinement, and reach.
 
 ## Implementation, Testing & Evaluation Strategy
 
