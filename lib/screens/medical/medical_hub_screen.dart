@@ -45,6 +45,13 @@ class MedicalHubScreen extends ConsumerWidget {
           chipColor: context.cb.primary,
         ),
         _MedicalTileSpec(
+          icon: Icons.person_search_outlined,
+          label: 'Find a provider',
+          subLabel: 'search clinicians (NPI)',
+          route: '/find-provider',
+          chipColor: context.cb.link,
+        ),
+        _MedicalTileSpec(
           icon: Icons.medication_outlined,
           label: 'Medications',
           subLabel: 'doses & reminders',
