@@ -6,6 +6,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/appointment.dart';
+import '../models/care_task.dart';
 import '../models/medication.dart';
 
 part 'notifications_provider.g.dart';
@@ -347,6 +348,38 @@ List<ScheduledNotification> appointmentReminders({
     ));
   }
   return out;
+}
+
+/// Derive a stable 32-bit notification id for a task's due-date reminder.
+/// The `0xC` nibble keeps it clear of the dose (`0x0-0x7`) and appointment
+/// (`0xA`/`0xB`) id spaces.
+int taskNotificationId(String taskId) {
+  final int base = taskId.hashCode & 0x00FFFFFF;
+  return (base << 4) | 0xC;
+}
+
+/// One reminder at a follow-up task's [CareTask.dueAt] (the follow-up
+/// tracker's reminders). Empty when the task has no due time, is already
+/// completed, or the due time has passed — so clearing the date or marking
+/// it done schedules nothing. Deep-links to the task board.
+List<ScheduledNotification> taskReminders({
+  required CareTask task,
+  required DateTime now,
+}) {
+  final DateTime? due = task.dueAt;
+  if (due == null || task.completedAt != null) {
+    return const <ScheduledNotification>[];
+  }
+  if (!due.isAfter(now)) return const <ScheduledNotification>[];
+  return <ScheduledNotification>[
+    ScheduledNotification(
+      id: taskNotificationId(task.id),
+      title: 'Follow-up due',
+      body: task.title,
+      scheduledFor: due,
+      deepLink: '/team/tasks',
+    ),
+  ];
 }
 
 DateTime? _nextWindowedOccurrence({

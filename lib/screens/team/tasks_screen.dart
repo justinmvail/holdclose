@@ -8,6 +8,8 @@ import '../../models/care_task.dart';
 import '../../models/caregiver.dart';
 import '../../providers/active_patient_provider.dart';
 import '../../providers/care_tasks_provider.dart';
+import '../../providers/notifications_provider.dart';
+import '../../services/notification_scheduler.dart';
 import '../../theme.dart';
 import '../../widgets/form/form_error_view.dart';
 import '../../widgets/form/format.dart';
@@ -499,7 +501,10 @@ class _TaskCardMenu extends ConsumerWidget {
         false;
     if (!confirmed) return;
 
+    final NotificationScheduler scheduler =
+        ref.read(notificationSchedulerProvider);
     await ref.read(careTasksProvider.notifier).removeTask(task.id);
+    await scheduler.cancelForTask(task.id);
     if (!context.mounted) return;
     Navigator.of(context).pop();
   }
@@ -556,8 +561,12 @@ class _Actions extends ConsumerWidget {
             key: TasksScreen.completeButtonKey(task.id),
             label: 'Complete',
             icon: Icons.check,
-            onPressed: () =>
-                ref.read(careTasksProvider.notifier).complete(task.id),
+            onPressed: () async {
+              await ref.read(careTasksProvider.notifier).complete(task.id);
+              await ref
+                  .read(notificationSchedulerProvider)
+                  .cancelForTask(task.id);
+            },
           ),
           const SizedBox(width: 12),
           _SecondaryAction(
@@ -860,7 +869,22 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
             assigneeCaregiverId: _assigneeId,
             patientId: patientId,
           );
+    // Capture before awaits so a mid-save unmount doesn't read a disposed
+    // ref. A follow-up with a due date schedules a reminder (and asks for
+    // permission the first time); rescheduleForTask also cancels a reminder
+    // when an edit clears the due date.
+    final NotificationScheduler scheduler =
+        ref.read(notificationSchedulerProvider);
+    final NotificationsProvider notifications = ref.read(notificationsProvider);
     await ref.read(careTasksProvider.notifier).addTask(task);
+    if (task.dueAt != null) {
+      final NotificationPermission current =
+          await notifications.currentPermission();
+      if (current == NotificationPermission.notDetermined) {
+        await notifications.requestPermission();
+      }
+    }
+    await scheduler.rescheduleForTask(task.id);
 
     if (!mounted) return;
     Navigator.of(context).pop();

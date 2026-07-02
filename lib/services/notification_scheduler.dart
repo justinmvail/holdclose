@@ -1,8 +1,10 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/appointment.dart';
+import '../models/care_task.dart';
 import '../models/medication.dart';
 import '../models/settings.dart';
+import '../providers/care_tasks_provider.dart';
 import '../providers/notifications_provider.dart';
 import '../providers/settings_provider.dart';
 import 'appointment_repository.dart';
@@ -31,6 +33,7 @@ class NotificationScheduler {
     required this.notifications,
     required this.medicationRepository,
     required this.appointmentRepository,
+    required this.careTaskRepository,
     required this.settings,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
@@ -38,12 +41,15 @@ class NotificationScheduler {
   final NotificationsProvider notifications;
   final MedicationRepository medicationRepository;
   final AppointmentRepository appointmentRepository;
+  final CareTasksRepository careTaskRepository;
   final AppSettings settings;
   final DateTime Function() _clock;
 
   bool get _medsEnabled => settings.notificationsEnabled;
 
   bool get _apptsEnabled => settings.notificationsEnabled;
+
+  bool get _tasksEnabled => settings.notificationsEnabled;
 
   /// Cancel-and-(re)schedule every reminder for [medicationId]. Reads
   /// the current [DoseSchedule] rows through
@@ -119,6 +125,25 @@ class NotificationScheduler {
   Future<void> cancelForAppointment(String appointmentId) =>
       _cancelAppointmentReminders(appointmentId);
 
+  /// Cancel-and-(re)schedule the due-date reminder for a follow-up [taskId].
+  /// No-op when the gate is off (still cancels), when the task is gone,
+  /// completed, or has no future due time.
+  Future<List<ScheduledNotification>> rescheduleForTask(String taskId) async {
+    await _cancelTaskReminders(taskId);
+    if (!_tasksEnabled) return const <ScheduledNotification>[];
+    final CareTask? task = await careTaskRepository.getTask(taskId);
+    if (task == null) return const <ScheduledNotification>[];
+    final List<ScheduledNotification> targets =
+        taskReminders(task: task, now: _clock());
+    for (final ScheduledNotification n in targets) {
+      await notifications.schedule(n);
+    }
+    return targets;
+  }
+
+  /// Cancel a task's reminder without rescheduling (complete / delete).
+  Future<void> cancelForTask(String taskId) => _cancelTaskReminders(taskId);
+
   /// Cancel-every-reminder-the-app-scheduled hammer (BUILD_SPEC.md
   /// Phase 12.8). The Settings → master "Use trackers" off toggle
   /// calls this so the caregiver flipping to lean-app mode mid-day
@@ -138,6 +163,10 @@ class NotificationScheduler {
       appointmentNotificationId(appointmentId, 1),
     ]);
   }
+
+  Future<void> _cancelTaskReminders(String taskId) async {
+    await notifications.cancelMany(<int>[taskNotificationId(taskId)]);
+  }
 }
 
 /// Riverpod-wired singleton (BUILD_SPEC.md Phase 12.8).
@@ -153,6 +182,7 @@ NotificationScheduler notificationScheduler(Ref ref) {
     notifications: ref.watch(notificationsProvider),
     medicationRepository: ref.watch(medicationRepositoryBackendProvider),
     appointmentRepository: ref.watch(appointmentRepositoryBackendProvider),
+    careTaskRepository: ref.watch(careTasksRepositoryProvider),
     settings: ref.watch(settingsProvider),
   );
 }
