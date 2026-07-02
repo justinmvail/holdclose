@@ -9,6 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
+/// Fixed "now" just after the seeded entries' date (2026-05-29) so the
+/// storage's 30-day journal window includes them regardless of the host's
+/// real clock — otherwise these are time-bomb tests.
+DateTime _fixedNow() => DateTime.utc(2026, 5, 30, 12);
+
 /// Spying recorder that captures every call without touching a real
 /// audio plugin (BUILD_SPEC.md §5.6 — "mock the audio plugin"). Returns
 /// a deterministic path so the journal-entry screen's "🔊 attached"
@@ -97,7 +102,7 @@ Future<({
   await tester.binding.setSurfaceSize(const Size(420, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
-  final InMemoryStorageProvider storage = InMemoryStorageProvider();
+  final InMemoryStorageProvider storage = InMemoryStorageProvider(clock: _fixedNow);
   addTearDown(storage.dispose);
   await storage.insertJournalEntry(seedEntry);
 
@@ -203,7 +208,7 @@ void main() {
         (WidgetTester tester) async {
       // Seed an unrelated entry so the storage stream resolves, then
       // navigate to a bogus id.
-      final InMemoryStorageProvider storage = InMemoryStorageProvider();
+      final InMemoryStorageProvider storage = InMemoryStorageProvider(clock: _fixedNow);
       addTearDown(storage.dispose);
       await storage.insertJournalEntry(_entry(id: 'real-entry'));
 

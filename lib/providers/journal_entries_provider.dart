@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../models/journal_entry.dart';
@@ -32,19 +33,32 @@ Stream<List<JournalEntry>> journalEntries(Ref ref) {
 @Riverpod(keepAlive: true)
 DateTime Function() journalScreenClock(Ref ref) => DateTime.now;
 
-/// One row from the journal stream, filtered by id (BUILD_SPEC.md §5.6).
+/// A reactive stream of the ENTIRE journal history — no time window. The
+/// detail/edit screen reads a single entry through this (via
+/// [journalEntryById]) so a caregiver can open ANY entry, including one
+/// older than the on-screen [journalWindow] (a deep link, or a visit-prep
+/// jump). A save still propagates because it's a live watch. Plain provider
+/// (no codegen) so it needs no build_runner step. The window is effectively
+/// unbounded — every entry, newest first.
+final journalHistoryProvider =
+    StreamProvider.autoDispose<List<JournalEntry>>((Ref ref) {
+  final StorageProvider storage = ref.watch(storageProvider);
+  return storage.watchJournalEntries(window: const Duration(days: 36500));
+});
+
+/// One entry from the full journal history, filtered by id (BUILD_SPEC.md
+/// §5.6).
 ///
-/// Resolves to null when the id isn't found — covers two cases the
-/// entry detail screen handles the same way: a deep-link to a deleted
-/// entry, and the moment after the user taps "Delete" but before
-/// `context.pop` fires. The screen reads through this rather than
-/// [journalEntriesProvider] directly so a save from the detail editor
-/// propagates back through the shared drift watch — no manual
-/// invalidation needed.
+/// Resolves to null when the id isn't found — covers a deep-link to a
+/// deleted entry, and the moment after the user taps "Delete" but before
+/// `context.pop` fires. Reads through [journalHistoryProvider] (the whole
+/// history, not the trailing 30-day window) so ANY entry is openable and a
+/// save from the detail editor propagates back through the shared watch —
+/// no manual invalidation needed.
 @Riverpod(keepAlive: false)
 AsyncValue<JournalEntry?> journalEntryById(Ref ref, String id) {
   final AsyncValue<List<JournalEntry>> async =
-      ref.watch(journalEntriesProvider);
+      ref.watch(journalHistoryProvider);
   return async.whenData((List<JournalEntry> entries) {
     for (final JournalEntry e in entries) {
       if (e.id == id) return e;
