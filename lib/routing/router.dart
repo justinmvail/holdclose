@@ -24,6 +24,7 @@ import '../screens/journal/journal_wizard_screen.dart';
 import '../screens/medical/care_plan_routine_form.dart';
 import '../screens/medical/care_plan_routines_screen.dart';
 import '../screens/medical/emergency_card_edit_screen.dart';
+import '../screens/medical/care_summary_screen.dart';
 import '../screens/medical/emergency_card_screen.dart';
 import '../screens/medical/find_provider_screen.dart';
 import '../screens/medical/insurance_appeal_screen.dart';
@@ -90,6 +91,7 @@ class HoldcloseRoutes {
   static const String medicationScanReview = 'medication-scan-review';
   static const String scanDocument = 'scan-document';
   static const String findProvider = 'find-provider';
+  static const String careSummary = 'care-summary';
   static const String medicationEdit = 'medication-edit';
   static const String medicationDoseLog = 'medication-dose-log';
   static const String medicationWindowList = 'medication-window-list';
@@ -481,6 +483,13 @@ GoRouter buildRouter({
                 name: HoldcloseRoutes.findProvider,
                 builder: (BuildContext context, GoRouterState state) =>
                     const FindProviderScreen(),
+              ),
+              // Shareable care summary (PDF) for provider coordination.
+              GoRoute(
+                path: '/care-summary',
+                name: HoldcloseRoutes.careSummary,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const CareSummaryScreen(),
               ),
               GoRoute(
                 path: '/medications',

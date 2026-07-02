@@ -52,6 +52,13 @@ class MedicalHubScreen extends ConsumerWidget {
           chipColor: context.cb.link,
         ),
         _MedicalTileSpec(
+          icon: Icons.summarize_outlined,
+          label: 'Care summary',
+          subLabel: 'share with a clinician',
+          route: '/care-summary',
+          chipColor: context.cb.accentDeep,
+        ),
+        _MedicalTileSpec(
           icon: Icons.medication_outlined,
           label: 'Medications',
           subLabel: 'doses & reminders',

@@ -180,6 +180,75 @@ class PdfExporter {
     return doc.save();
   }
 
+  /// A concise, shareable **care summary** for provider coordination —
+  /// conditions, allergies, active medications, and upcoming appointments on
+  /// one packet (no behavior journal). Closes the "coordinating between
+  /// doctors" gap: the caregiver hands the same current picture to every
+  /// clinician. Reuses the crisis + packet render helpers.
+  Future<Uint8List> careSummary({
+    required Patient patient,
+    List<String> conditions = const <String>[],
+    List<String> allergies = const <String>[],
+    List<MedicationWithSchedules> medications =
+        const <MedicationWithSchedules>[],
+    List<AppointmentWithProvider> appointments =
+        const <AppointmentWithProvider>[],
+    String? caregiverName,
+  }) async {
+    final pw.Document doc = pw.Document(compress: compress);
+    final DateTime now = clock();
+    final List<AppointmentWithProvider> upcoming = appointments
+        .where((AppointmentWithProvider a) =>
+            a.appointment.status == AppointmentStatus.upcoming &&
+            !a.appointment.startsAt.isBefore(now))
+        .toList()
+      ..sort((AppointmentWithProvider a, AppointmentWithProvider b) =>
+          a.appointment.startsAt.compareTo(b.appointment.startsAt));
+
+    doc.addPage(
+      pw.MultiPage(
+        margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 48),
+        footer: _pageFooter,
+        build: (pw.Context ctx) => <pw.Widget>[
+          pw.Text('Holdclose',
+              style: pw.TextStyle(
+                  color: _navy, fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          pw.Text('Care summary',
+              style: pw.TextStyle(
+                  color: _navy, fontSize: 28, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 18),
+          _coverRow('Loved one', patient.name),
+          _coverRow('Age', patient.age.toString()),
+          _coverRow('Date', _formatDate(now)),
+          if ((caregiverName ?? '').trim().isNotEmpty)
+            _coverRow('Caregiver', caregiverName!.trim()),
+          if (conditions.isNotEmpty) ...<pw.Widget>[
+            pw.SizedBox(height: 20),
+            _crisisBulletGroup('Conditions', conditions),
+          ],
+          if (allergies.isNotEmpty) ...<pw.Widget>[
+            pw.SizedBox(height: 14),
+            _crisisBulletGroup('Allergies', allergies),
+          ],
+          if (medications.isNotEmpty) ...<pw.Widget>[
+            pw.SizedBox(height: 24),
+            _medicationsHeading(medications.length),
+            pw.SizedBox(height: 8),
+            _medicationsTable(medications),
+          ],
+          if (upcoming.isNotEmpty) ...<pw.Widget>[
+            pw.SizedBox(height: 24),
+            _appointmentsHeading(upcoming.length),
+            pw.SizedBox(height: 8),
+            _appointmentsTable(upcoming),
+          ],
+        ],
+      ),
+    );
+    return doc.save();
+  }
+
   /// Hand [bytes] to the OS share sheet via `printing`. Thin wrapper so
   /// the journal + crisis screens depend on a single seam rather than
   /// importing `printing` directly.

@@ -24,6 +24,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 const List<(String, IconData, String)> _expected = <(String, IconData, String)>[
   ('Scan a document', Icons.document_scanner_outlined, '/scan'),
   ('Find a provider', Icons.person_search_outlined, '/find-provider'),
+  ('Care summary', Icons.summarize_outlined, '/care-summary'),
   ('Medications', Icons.medication_outlined, '/medications'),
   ('Schedule', Icons.schedule_outlined, '/team/calendar?from=medical'),
   ('Appointments', Icons.event_outlined, '/appointments'),
@@ -121,7 +122,7 @@ void main() {
 
       final List<HubTile> tiles =
           tester.widgetList<HubTile>(find.byType(HubTile)).toList();
-      expect(tiles.length, 9);
+      expect(tiles.length, 10);
       expect(
         tiles.map((HubTile t) => t.label).toList(),
         <String>[for (final (String label, _, _) in _expected) label],
@@ -155,7 +156,7 @@ void main() {
       final List<HubTile> tiles =
           tester.widgetList<HubTile>(find.byType(HubTile)).toList();
       // The base tiles plus the gated Care Circle tile (route /team).
-      expect(tiles.length, 10);
+      expect(tiles.length, 11);
       expect(tiles.last.label, 'Care Circle');
       expect(
         find.byKey(MedicalHubScreen.tileKey('/team')),
