@@ -89,6 +89,66 @@ Future<Map<String, dynamic>?> shimExtractJson({
   }
 }
 
+/// Text-only one-shot: POST `{system, user}` (no image) to the shim's
+/// `/extract` route and return the parsed JSON object, or null. Used by
+/// grounded coach features (visit-prep questions, insurance-appeal drafts)
+/// that want a structured JSON reply without an image.
+Future<Map<String, dynamic>?> shimObjectFromPrompt({
+  required String systemPrompt,
+  required String userPrompt,
+  Dio? dio,
+  String? endpoint,
+}) async {
+  final Dio d = dio ?? buildShimDio();
+  try {
+    final Response<dynamic> resp = await d.post<dynamic>(
+      endpoint ?? '$shimBaseUrl/extract',
+      data: <String, dynamic>{'system': systemPrompt, 'user': userPrompt},
+      options: Options(
+        contentType: Headers.jsonContentType,
+        headers: shimAuthHeaders(),
+      ),
+    );
+    return jsonMapFromResponseBody(resp.data);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Prod text-only variant of [shimObjectFromPrompt] — routes through the
+/// Worker's `/extract` route with a bearer token. Dormant until the route
+/// ships.
+Future<Map<String, dynamic>?> workerObjectFromPrompt({
+  required String systemPrompt,
+  required String userPrompt,
+  required String baseUrl,
+  required Future<String> Function() tokenLoader,
+  Dio? dio,
+}) async {
+  final String token;
+  try {
+    token = await tokenLoader();
+  } catch (_) {
+    return null;
+  }
+  final String trimmed =
+      baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+  final Dio d = dio ?? buildShimDio();
+  try {
+    final Response<dynamic> resp = await d.post<dynamic>(
+      '$trimmed$forumApiVersionPrefix/extract',
+      data: <String, dynamic>{'system': systemPrompt, 'user': userPrompt},
+      options: Options(
+        contentType: Headers.jsonContentType,
+        headers: <String, String>{'Authorization': 'Bearer $token'},
+      ),
+    );
+    return jsonMapFromResponseBody(resp.data);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Prod path: POST the image + [systemPrompt] to the Worker's `/extract`
 /// route (bearer session token) and return the parsed JSON map, or null.
 /// Dormant until the Worker route ships (only selected when a

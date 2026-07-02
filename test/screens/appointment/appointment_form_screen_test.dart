@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:holdclose/db/database.dart';
 import 'package:holdclose/models/appointment.dart' as model;
 import 'package:holdclose/models/appointment_draft.dart';
+import 'package:holdclose/providers/visit_prep_provider.dart';
 import 'package:holdclose/screens/appointment/appointment_form_screen.dart';
 import 'package:holdclose/screens/appointment/appointment_list_screen.dart';
 import 'package:holdclose/services/appointment_repository.dart';
@@ -66,6 +67,7 @@ Future<({
   String? editAppointmentId,
   String Function()? idFactory,
   AppointmentDraft? draft,
+  List<Override> extraOverrides = const <Override>[],
 }) async {
   // Tall viewport so the whole form builds — with the inline add-provider
   // sub-form open (the scan path pre-fills it) the layout is long, and the
@@ -129,6 +131,7 @@ Future<({
         appointmentFormIdFactoryProvider
             .overrideWithValue(idFactory ?? _counterFactory()),
         appointmentListClockProvider.overrideWithValue(_fixedNow),
+        ...extraOverrides,
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -845,6 +848,39 @@ void main() {
       // The matched provider is shown, and the seeded fields pre-filled.
       expect(find.text('Dr. Newcomer'), findsWidgets);
       expect(find.text('Suite 200'), findsOneWidget);
+    });
+  });
+
+  group('AppointmentFormScreen — suggest questions (AI visit prep)', () {
+    testWidgets('adds the picked questions to the agenda',
+        (WidgetTester tester) async {
+      await _pumpForm(
+        tester,
+        apptRepo: apptRepo,
+        providerRepo: providerRepo,
+        db: db,
+        // Avoid gathering the real care snapshot; the fake service ignores it.
+        extraOverrides: <Override>[
+          careContextTextProvider.overrideWith((Ref ref) async => 'snapshot'),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(
+          find.byKey(AppointmentFormScreen.suggestQuestionsKey));
+      await tester.tap(find.byKey(AppointmentFormScreen.suggestQuestionsKey));
+      await tester.pumpAndSettle();
+
+      // The picker sheet shows the fake questions; add them all.
+      expect(find.text('Add to agenda'), findsOneWidget);
+      await tester.tap(find.text('Add to agenda'));
+      await tester.pumpAndSettle();
+
+      // The fake returns four questions → four agenda rows now exist.
+      expect(find.byKey(AppointmentFormScreen.agendaItemFieldKey(0)),
+          findsOneWidget);
+      expect(find.byKey(AppointmentFormScreen.agendaItemFieldKey(3)),
+          findsOneWidget);
     });
   });
 }
