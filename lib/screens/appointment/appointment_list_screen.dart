@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 // `Provider` in [models/appointment.dart] collides with riverpod's
 // own `Provider` class — `hide` keeps the model name resolvable in
@@ -7,11 +9,15 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/appointment.dart';
+import '../../models/appointment_draft.dart';
+import '../../providers/appointment_scanner_provider.dart';
 import '../../services/appointment_repository.dart';
+import '../../services/appointment_scanner.dart';
 import '../../theme.dart';
 import '../../widgets/form/form_error_view.dart';
 import '../../widgets/form/format.dart';
 import '../../widgets/path_header.dart';
+import '../scan_capture.dart';
 
 part 'appointment_list_screen.g.dart';
 
@@ -131,6 +137,7 @@ class AppointmentListScreen extends ConsumerWidget {
   static const Key emptyStateKey = Key('appointment-list-empty');
   static const Key emptyCtaKey = Key('appointment-list-empty-cta');
   static const Key fabKey = Key('appointment-list-fab');
+  static const Key scanButtonKey = Key('appointment-list-scan');
   static const Key upcomingSectionKey = Key('appointment-list-upcoming');
   static const Key pastSectionKey = Key('appointment-list-past');
 
@@ -162,6 +169,23 @@ class AppointmentListScreen extends ConsumerWidget {
     }
   }
 
+  /// Scan an appointment card → pre-fill the add form with the AI's read.
+  /// A cancelled pick does nothing; an unreadable card still opens the form
+  /// (blank) with a hint, so nothing is ever saved without the caregiver.
+  static Future<void> _scanAppointment(
+      BuildContext context, WidgetRef ref) async {
+    final AppointmentScanner scanner = ref.read(appointmentScannerProvider);
+    final AppointmentDraft? draft = await captureScanDraft<AppointmentDraft>(
+      context,
+      ref,
+      extract: (String path) => scanner.extractFromImage(imagePath: path),
+      emptyDraft: const AppointmentDraft(),
+    );
+    if (draft == null || !context.mounted) return; // cancelled
+    if (draft.isEmpty) showScanCouldNotReadHint(context);
+    unawaited(context.push('/appointments/new', extra: draft));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<AppointmentListData> async =
@@ -174,10 +198,10 @@ class AppointmentListScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: PathHeader(
-                breadcrumbs: <PathHeaderCrumb>[
+                breadcrumbs: const <PathHeaderCrumb>[
                   PathHeaderCrumb(label: 'Home', route: '/'),
                   PathHeaderCrumb(label: 'Care', route: '/medical'),
                   PathHeaderCrumb(label: 'Appointments'),
@@ -185,6 +209,19 @@ class AppointmentListScreen extends ConsumerWidget {
                 title: 'Appointments',
                 backLabel: 'Back to Care',
                 leadingIcon: Icons.event_outlined,
+                // Scan an appointment card → pre-fill the add form.
+                trailing: IconButton(
+                  key: AppointmentListScreen.scanButtonKey,
+                  tooltip: 'Scan an appointment card',
+                  iconSize: 24,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints.tightFor(width: 24, height: 24),
+                  visualDensity: VisualDensity.compact,
+                  color: context.cb.primary,
+                  icon: const Icon(Icons.document_scanner_outlined),
+                  onPressed: () => _scanAppointment(context, ref),
+                ),
               ),
             ),
             Expanded(

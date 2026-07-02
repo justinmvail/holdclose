@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:holdclose/db/database.dart';
 import 'package:holdclose/models/appointment.dart' as model;
+import 'package:holdclose/models/appointment_draft.dart';
 import 'package:holdclose/screens/appointment/appointment_form_screen.dart';
 import 'package:holdclose/screens/appointment/appointment_list_screen.dart';
 import 'package:holdclose/services/appointment_repository.dart';
@@ -64,8 +65,12 @@ Future<({
   required HoldcloseDatabase db,
   String? editAppointmentId,
   String Function()? idFactory,
+  AppointmentDraft? draft,
 }) async {
-  await tester.binding.setSurfaceSize(const Size(420, 1400));
+  // Tall viewport so the whole form builds — with the inline add-provider
+  // sub-form open (the scan path pre-fills it) the layout is long, and the
+  // lazy ListView only realizes what fits.
+  await tester.binding.setSurfaceSize(const Size(420, 2600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final List<String> popped = <String>[];
@@ -89,7 +94,7 @@ Future<({
             path: 'new',
             parentNavigatorKey: rootKey,
             builder: (BuildContext context, GoRouterState state) =>
-                const AppointmentFormScreen(),
+                AppointmentFormScreen(initialDraft: draft),
           ),
           GoRoute(
             path: ':id',
@@ -783,6 +788,63 @@ void main() {
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Care'), findsOneWidget);
       expect(find.text('Appointments'), findsOneWidget);
+    });
+  });
+
+  group('AppointmentFormScreen — scanned-draft hydration', () {
+    const AppointmentDraft draft = AppointmentDraft(
+      providerName: 'Dr. Newcomer',
+      providerRole: model.ProviderRole.neurologist,
+      providerPhone: '843-767-4500',
+      providerAddress: '2135 Ashley Phosphate Rd',
+      location: 'Suite 200',
+      dateText: '6/15/2026',
+      timeText: '2:30 PM',
+      durationMinutes: 45,
+      reason: 'Follow-up visit',
+      notes: 'Arrive 15 minutes early.',
+    );
+
+    testWidgets('pre-fills fields + opens a pre-filled add-provider form',
+        (WidgetTester tester) async {
+      // No matching provider on file → the inline add-provider form opens.
+      await _pumpForm(
+        tester,
+        apptRepo: apptRepo,
+        providerRepo: providerRepo,
+        db: db,
+        draft: draft,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Suite 200'), findsOneWidget); // location
+      expect(find.text('45'), findsOneWidget); // duration
+      expect(find.text('Arrive 15 minutes early.'), findsOneWidget); // notes
+      expect(find.text('Follow-up visit'), findsOneWidget); // agenda item
+      // Add-provider form opened, pre-filled with the scanned provider.
+      expect(find.byKey(AppointmentFormScreen.newProviderNameFieldKey),
+          findsOneWidget);
+      expect(find.text('Dr. Newcomer'), findsOneWidget);
+    });
+
+    testWidgets('selects an existing provider that matches by name',
+        (WidgetTester tester) async {
+      await _seedProvider(db, id: 'prov-9', name: 'Dr. Newcomer');
+      await _pumpForm(
+        tester,
+        apptRepo: apptRepo,
+        providerRepo: providerRepo,
+        db: db,
+        draft: draft,
+      );
+      await tester.pumpAndSettle();
+
+      // Matched the existing provider → the add-provider form stays closed.
+      expect(find.byKey(AppointmentFormScreen.newProviderNameFieldKey),
+          findsNothing);
+      // The matched provider is shown, and the seeded fields pre-filled.
+      expect(find.text('Dr. Newcomer'), findsWidgets);
+      expect(find.text('Suite 200'), findsOneWidget);
     });
   });
 }

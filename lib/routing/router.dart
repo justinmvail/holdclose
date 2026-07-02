@@ -31,6 +31,7 @@ import '../screens/medical/medical_hub_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
 import '../screens/appointment/appointment_list_screen.dart';
+import '../models/appointment_draft.dart';
 import '../models/medication_draft.dart';
 import '../screens/medication/dose_log_screen.dart';
 import '../screens/medication/dose_window_list_screen.dart';
@@ -537,6 +538,11 @@ GoRouter buildRouter({
                       // appointment lands on the day the caregiver viewed.
                       initialDate: _calendarDateParam(
                           state.uri.queryParameters['date']),
+                      // The appointment scan passes an AppointmentDraft via
+                      // extra to pre-fill the form.
+                      initialDraft: state.extra is AppointmentDraft
+                          ? state.extra as AppointmentDraft
+                          : null,
                     ),
                   ),
                   GoRoute(

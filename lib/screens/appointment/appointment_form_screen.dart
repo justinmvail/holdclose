@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/appointment.dart';
+import '../../models/appointment_draft.dart';
 import '../../providers/notifications_provider.dart';
 import '../../providers/patient_timeline_provider.dart' show invalidatePatientTimeline;
 import '../../services/appointment_repository.dart';
@@ -106,10 +107,17 @@ class AppointmentFormScreen extends ConsumerStatefulWidget {
     this.appointmentId,
     this.initialNotes,
     this.initialDate,
+    this.initialDraft,
   });
 
   /// Non-null on the edit path; null on the add path.
   final String? appointmentId;
+
+  /// A scanned appointment card's proposed fields (add path only). Seeds
+  /// date/time, location, duration, an agenda item, and notes, and either
+  /// selects a matching provider or pre-fills the inline add-provider form.
+  /// The caregiver reviews and approves everything before saving.
+  final AppointmentDraft? initialDraft;
 
   /// A day pre-selected on the add path — passed by the Schedule
   /// calendar's "Add" affordance (`?date=YYYY-MM-DD`) so the new
@@ -220,6 +228,69 @@ class _AppointmentFormScreenState
       final String seed = widget.initialNotes?.trim() ?? '';
       if (seed.isNotEmpty) _notes.text = seed;
     }
+
+    // Scanned-card seed (add path): pre-fill the fields the scan read. The
+    // provider is reconciled separately once the provider list loads.
+    if (!widget.isEdit && widget.initialDraft != null) {
+      final AppointmentDraft d = widget.initialDraft!;
+      final DateTime? s = d.startsAt;
+      if (s != null) _startsAt = s;
+      if ((d.location ?? '').trim().isNotEmpty) {
+        _location.text = d.location!.trim();
+      }
+      if ((d.notes ?? '').trim().isNotEmpty) _notes.text = d.notes!.trim();
+      if (d.durationMinutes != null && d.durationMinutes! > 0) {
+        _duration.text = d.durationMinutes!.toString();
+      }
+      if ((d.reason ?? '').trim().isNotEmpty) {
+        _agenda = <TextEditingController>[
+          TextEditingController(text: d.reason!.trim()),
+        ];
+      }
+    }
+  }
+
+  bool _draftProviderReconciled = false;
+
+  /// Once the provider list loads, reconcile a scanned provider: select an
+  /// existing one that matches by name, or open the inline add-provider form
+  /// pre-filled so the caregiver can create it with one tap. Runs once.
+  void _reconcileDraftProvider(List<Provider> providers) {
+    if (_draftProviderReconciled) return;
+    if (widget.isEdit || widget.initialDraft == null) {
+      _draftProviderReconciled = true;
+      return;
+    }
+    final String name = (widget.initialDraft!.providerName ?? '').trim();
+    if (name.isEmpty) {
+      _draftProviderReconciled = true;
+      return;
+    }
+    _draftProviderReconciled = true;
+    final AppointmentDraft d = widget.initialDraft!;
+    Provider? match;
+    for (final Provider p in providers) {
+      if (p.name.trim().toLowerCase() == name.toLowerCase()) {
+        match = p;
+        break;
+      }
+    }
+    // Defer to after this frame — we're inside build via the providers
+    // .when(data:) callback, so we can't setState synchronously.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (match != null) {
+        _onProviderSelected(match.id, providers);
+      } else {
+        setState(() {
+          _addingProvider = true;
+          _newProviderName.text = name;
+          _newProviderRole = d.providerRole ?? ProviderRole.doctor;
+          _newProviderPhone.text = (d.providerPhone ?? '').trim();
+          _newProviderAddress.text = (d.providerAddress ?? '').trim();
+        });
+      }
+    });
   }
 
   @override
@@ -533,13 +604,16 @@ class _AppointmentFormScreenState
                           color: context.cb.text,
                         ),
                       ),
-                      data: (List<Provider> providers) => _ProviderPicker(
-                        providers: providers,
-                        selectedId: _selectedProviderId,
-                        onChanged: (String? id) =>
-                            _onProviderSelected(id, providers),
-                        onAddTapped: _startInlineProvider,
-                      ),
+                      data: (List<Provider> providers) {
+                        _reconcileDraftProvider(providers);
+                        return _ProviderPicker(
+                          providers: providers,
+                          selectedId: _selectedProviderId,
+                          onChanged: (String? id) =>
+                              _onProviderSelected(id, providers),
+                          onAddTapped: _startInlineProvider,
+                        );
+                      },
                     ),
                   ),
                   if (_addingProvider) ...<Widget>[
