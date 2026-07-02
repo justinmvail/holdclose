@@ -11,6 +11,7 @@ abstract class NpiProviderService {
   Future<List<ProviderSearchResult>?> search({
     String? name,
     String? specialty,
+    String? city,
     String? state,
     String? postalCode,
   });
@@ -28,6 +29,7 @@ class RealNpiProviderService implements NpiProviderService {
   Future<List<ProviderSearchResult>?> search({
     String? name,
     String? specialty,
+    String? city,
     String? state,
     String? postalCode,
   }) async {
@@ -42,6 +44,7 @@ class RealNpiProviderService implements NpiProviderService {
       if ((name ?? '').trim().isNotEmpty) 'last_name': name!.trim(),
       if ((specialty ?? '').trim().isNotEmpty)
         'taxonomy_description': specialty!.trim(),
+      if ((city ?? '').trim().isNotEmpty) 'city': city!.trim(),
       if ((state ?? '').trim().isNotEmpty) 'state': state!.trim(),
       if ((postalCode ?? '').trim().isNotEmpty) 'postal_code': postalCode!.trim(),
     };
@@ -63,6 +66,7 @@ class FakeNpiProviderService implements NpiProviderService {
   Future<List<ProviderSearchResult>?> search({
     String? name,
     String? specialty,
+    String? city,
     String? state,
     String? postalCode,
   }) async {

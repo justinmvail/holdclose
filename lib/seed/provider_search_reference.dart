@@ -1,0 +1,342 @@
+/// Static reference lists that power the type-ahead on the Find-a-provider
+/// screen. All offline (no extra API/dependency): the NPI Registry has no
+/// suggestion endpoint, so we suggest from curated lists and still allow
+/// free text for anything not listed (small towns, uncommon specialties).
+///
+/// - [usStates] backs the State field and [normalizeStateCode] resolves a
+///   typed name or code down to the 2-letter code the NPI API expects.
+/// - [clinicianSpecialties] backs the Specialty field (NPI taxonomy
+///   descriptions).
+/// - [majorUsCities] backs the City field, optionally filtered by the
+///   chosen state.
+library;
+
+/// A US state / territory: 2-letter [code] + full [name].
+typedef UsState = ({String code, String name});
+
+const List<UsState> usStates = <UsState>[
+  (code: 'AL', name: 'Alabama'),
+  (code: 'AK', name: 'Alaska'),
+  (code: 'AZ', name: 'Arizona'),
+  (code: 'AR', name: 'Arkansas'),
+  (code: 'CA', name: 'California'),
+  (code: 'CO', name: 'Colorado'),
+  (code: 'CT', name: 'Connecticut'),
+  (code: 'DE', name: 'Delaware'),
+  (code: 'DC', name: 'District of Columbia'),
+  (code: 'FL', name: 'Florida'),
+  (code: 'GA', name: 'Georgia'),
+  (code: 'HI', name: 'Hawaii'),
+  (code: 'ID', name: 'Idaho'),
+  (code: 'IL', name: 'Illinois'),
+  (code: 'IN', name: 'Indiana'),
+  (code: 'IA', name: 'Iowa'),
+  (code: 'KS', name: 'Kansas'),
+  (code: 'KY', name: 'Kentucky'),
+  (code: 'LA', name: 'Louisiana'),
+  (code: 'ME', name: 'Maine'),
+  (code: 'MD', name: 'Maryland'),
+  (code: 'MA', name: 'Massachusetts'),
+  (code: 'MI', name: 'Michigan'),
+  (code: 'MN', name: 'Minnesota'),
+  (code: 'MS', name: 'Mississippi'),
+  (code: 'MO', name: 'Missouri'),
+  (code: 'MT', name: 'Montana'),
+  (code: 'NE', name: 'Nebraska'),
+  (code: 'NV', name: 'Nevada'),
+  (code: 'NH', name: 'New Hampshire'),
+  (code: 'NJ', name: 'New Jersey'),
+  (code: 'NM', name: 'New Mexico'),
+  (code: 'NY', name: 'New York'),
+  (code: 'NC', name: 'North Carolina'),
+  (code: 'ND', name: 'North Dakota'),
+  (code: 'OH', name: 'Ohio'),
+  (code: 'OK', name: 'Oklahoma'),
+  (code: 'OR', name: 'Oregon'),
+  (code: 'PA', name: 'Pennsylvania'),
+  (code: 'RI', name: 'Rhode Island'),
+  (code: 'SC', name: 'South Carolina'),
+  (code: 'SD', name: 'South Dakota'),
+  (code: 'TN', name: 'Tennessee'),
+  (code: 'TX', name: 'Texas'),
+  (code: 'UT', name: 'Utah'),
+  (code: 'VT', name: 'Vermont'),
+  (code: 'VA', name: 'Virginia'),
+  (code: 'WA', name: 'Washington'),
+  (code: 'WV', name: 'West Virginia'),
+  (code: 'WI', name: 'Wisconsin'),
+  (code: 'WY', name: 'Wyoming'),
+  (code: 'PR', name: 'Puerto Rico'),
+];
+
+/// Resolve a free-typed state field to the 2-letter code the NPI API wants.
+///
+/// Accepts a bare code ('sc'), a full name ('south carolina'), or the
+/// combined suggestion label this screen commits ('South Carolina — SC').
+/// Returns '' when nothing matches so the caller simply omits the param.
+String normalizeStateCode(String raw) {
+  final String t = raw.trim();
+  if (t.isEmpty) return '';
+
+  // Suggestion label form: "South Carolina — SC" (take the trailing code).
+  final int dash = t.lastIndexOf('—');
+  if (dash != -1) {
+    final String tail = t.substring(dash + 1).trim().toUpperCase();
+    if (_isKnownCode(tail)) return tail;
+  }
+
+  final String upper = t.toUpperCase();
+  if (upper.length == 2 && _isKnownCode(upper)) return upper;
+
+  final String lower = t.toLowerCase();
+  for (final UsState s in usStates) {
+    if (s.name.toLowerCase() == lower) return s.code;
+  }
+  // Loose: full name appears somewhere in the typed text.
+  for (final UsState s in usStates) {
+    if (lower.contains(s.name.toLowerCase())) return s.code;
+  }
+  return '';
+}
+
+bool _isKnownCode(String code) =>
+    usStates.any((UsState s) => s.code == code);
+
+/// Suggestion label shown in the State type-ahead ("South Carolina — SC").
+String stateLabel(UsState s) => '${s.name} — ${s.code}';
+
+/// Common clinician specialties (NPI taxonomy descriptions). Not exhaustive
+/// — the field still accepts free text.
+const List<String> clinicianSpecialties = <String>[
+  'Allergy & Immunology',
+  'Anesthesiology',
+  'Audiology',
+  'Cardiology',
+  'Chiropractor',
+  'Dentist',
+  'Dermatology',
+  'Dietitian, Registered',
+  'Emergency Medicine',
+  'Endocrinology',
+  'Family Medicine',
+  'Gastroenterology',
+  'Geriatric Medicine',
+  'Gynecology',
+  'Hematology & Oncology',
+  'Hospice and Palliative Medicine',
+  'Infectious Disease',
+  'Internal Medicine',
+  'Nephrology',
+  'Neurology',
+  'Neurosurgery',
+  'Nurse Practitioner',
+  'Obstetrics & Gynecology',
+  'Occupational Therapy',
+  'Oncology',
+  'Ophthalmology',
+  'Optometry',
+  'Oral & Maxillofacial Surgery',
+  'Orthopaedic Surgery',
+  'Otolaryngology (ENT)',
+  'Pain Medicine',
+  'Pediatrics',
+  'Physical Medicine & Rehabilitation',
+  'Physical Therapy',
+  'Physician Assistant',
+  'Plastic Surgery',
+  'Podiatry',
+  'Psychiatry',
+  'Psychology',
+  'Pulmonary Disease',
+  'Radiology',
+  'Rheumatology',
+  'Social Worker, Clinical',
+  'Speech-Language Pathology',
+  'Surgery, General',
+  'Urology',
+];
+
+/// A US city + its state code (for state-aware suggestions).
+typedef UsCity = ({String name, String state});
+
+/// Major US cities (roughly by population, broadly spread across states).
+/// Suggestions only — the City field accepts free text for smaller towns.
+const List<UsCity> majorUsCities = <UsCity>[
+  (name: 'New York', state: 'NY'),
+  (name: 'Los Angeles', state: 'CA'),
+  (name: 'Chicago', state: 'IL'),
+  (name: 'Houston', state: 'TX'),
+  (name: 'Phoenix', state: 'AZ'),
+  (name: 'Philadelphia', state: 'PA'),
+  (name: 'San Antonio', state: 'TX'),
+  (name: 'San Diego', state: 'CA'),
+  (name: 'Dallas', state: 'TX'),
+  (name: 'San Jose', state: 'CA'),
+  (name: 'Austin', state: 'TX'),
+  (name: 'Jacksonville', state: 'FL'),
+  (name: 'Fort Worth', state: 'TX'),
+  (name: 'Columbus', state: 'OH'),
+  (name: 'Charlotte', state: 'NC'),
+  (name: 'San Francisco', state: 'CA'),
+  (name: 'Indianapolis', state: 'IN'),
+  (name: 'Seattle', state: 'WA'),
+  (name: 'Denver', state: 'CO'),
+  (name: 'Washington', state: 'DC'),
+  (name: 'Boston', state: 'MA'),
+  (name: 'El Paso', state: 'TX'),
+  (name: 'Nashville', state: 'TN'),
+  (name: 'Detroit', state: 'MI'),
+  (name: 'Oklahoma City', state: 'OK'),
+  (name: 'Portland', state: 'OR'),
+  (name: 'Las Vegas', state: 'NV'),
+  (name: 'Memphis', state: 'TN'),
+  (name: 'Louisville', state: 'KY'),
+  (name: 'Baltimore', state: 'MD'),
+  (name: 'Milwaukee', state: 'WI'),
+  (name: 'Albuquerque', state: 'NM'),
+  (name: 'Tucson', state: 'AZ'),
+  (name: 'Fresno', state: 'CA'),
+  (name: 'Sacramento', state: 'CA'),
+  (name: 'Kansas City', state: 'MO'),
+  (name: 'Mesa', state: 'AZ'),
+  (name: 'Atlanta', state: 'GA'),
+  (name: 'Omaha', state: 'NE'),
+  (name: 'Colorado Springs', state: 'CO'),
+  (name: 'Raleigh', state: 'NC'),
+  (name: 'Long Beach', state: 'CA'),
+  (name: 'Virginia Beach', state: 'VA'),
+  (name: 'Miami', state: 'FL'),
+  (name: 'Oakland', state: 'CA'),
+  (name: 'Minneapolis', state: 'MN'),
+  (name: 'Tulsa', state: 'OK'),
+  (name: 'Bakersfield', state: 'CA'),
+  (name: 'Wichita', state: 'KS'),
+  (name: 'Arlington', state: 'TX'),
+  (name: 'Aurora', state: 'CO'),
+  (name: 'Tampa', state: 'FL'),
+  (name: 'New Orleans', state: 'LA'),
+  (name: 'Cleveland', state: 'OH'),
+  (name: 'Honolulu', state: 'HI'),
+  (name: 'Anaheim', state: 'CA'),
+  (name: 'Lexington', state: 'KY'),
+  (name: 'Stockton', state: 'CA'),
+  (name: 'Corpus Christi', state: 'TX'),
+  (name: 'Henderson', state: 'NV'),
+  (name: 'Riverside', state: 'CA'),
+  (name: 'Newark', state: 'NJ'),
+  (name: 'Saint Paul', state: 'MN'),
+  (name: 'Santa Ana', state: 'CA'),
+  (name: 'Cincinnati', state: 'OH'),
+  (name: 'Irvine', state: 'CA'),
+  (name: 'Orlando', state: 'FL'),
+  (name: 'Pittsburgh', state: 'PA'),
+  (name: 'St. Louis', state: 'MO'),
+  (name: 'Greensboro', state: 'NC'),
+  (name: 'Jersey City', state: 'NJ'),
+  (name: 'Anchorage', state: 'AK'),
+  (name: 'Lincoln', state: 'NE'),
+  (name: 'Plano', state: 'TX'),
+  (name: 'Durham', state: 'NC'),
+  (name: 'Buffalo', state: 'NY'),
+  (name: 'Chandler', state: 'AZ'),
+  (name: 'Chattanooga', state: 'TN'),
+  (name: 'Fort Wayne', state: 'IN'),
+  (name: 'Boise', state: 'ID'),
+  (name: 'Richmond', state: 'VA'),
+  (name: 'Des Moines', state: 'IA'),
+  (name: 'Spokane', state: 'WA'),
+  (name: 'Baton Rouge', state: 'LA'),
+  (name: 'Tacoma', state: 'WA'),
+  (name: 'Birmingham', state: 'AL'),
+  (name: 'Rochester', state: 'NY'),
+  (name: 'Salt Lake City', state: 'UT'),
+  (name: 'Little Rock', state: 'AR'),
+  (name: 'Columbia', state: 'SC'),
+  (name: 'Charleston', state: 'SC'),
+  (name: 'North Charleston', state: 'SC'),
+  (name: 'Greenville', state: 'SC'),
+  (name: 'Providence', state: 'RI'),
+  (name: 'Jackson', state: 'MS'),
+  (name: 'Knoxville', state: 'TN'),
+  (name: 'Worcester', state: 'MA'),
+  (name: 'Grand Rapids', state: 'MI'),
+  (name: 'Fayetteville', state: 'NC'),
+  (name: 'Huntsville', state: 'AL'),
+  (name: 'Montgomery', state: 'AL'),
+  (name: 'Mobile', state: 'AL'),
+  (name: 'Savannah', state: 'GA'),
+  (name: 'Augusta', state: 'GA'),
+  (name: 'Fort Lauderdale', state: 'FL'),
+  (name: 'Tallahassee', state: 'FL'),
+  (name: 'Cape Coral', state: 'FL'),
+  (name: 'Fort Myers', state: 'FL'),
+  (name: 'Sarasota', state: 'FL'),
+  (name: 'Gainesville', state: 'FL'),
+  (name: 'Pensacola', state: 'FL'),
+  (name: 'Naples', state: 'FL'),
+  (name: 'Dayton', state: 'OH'),
+  (name: 'Akron', state: 'OH'),
+  (name: 'Toledo', state: 'OH'),
+  (name: 'Madison', state: 'WI'),
+  (name: 'Reno', state: 'NV'),
+  (name: 'Chesapeake', state: 'VA'),
+  (name: 'Norfolk', state: 'VA'),
+  (name: 'Arlington', state: 'VA'),
+  (name: 'Scottsdale', state: 'AZ'),
+  (name: 'Gilbert', state: 'AZ'),
+  (name: 'Glendale', state: 'AZ'),
+  (name: 'Fremont', state: 'CA'),
+  (name: 'San Bernardino', state: 'CA'),
+  (name: 'Modesto', state: 'CA'),
+  (name: 'Fontana', state: 'CA'),
+  (name: 'Oxnard', state: 'CA'),
+  (name: 'Moreno Valley', state: 'CA'),
+  (name: 'Huntington Beach', state: 'CA'),
+  (name: 'Glendale', state: 'CA'),
+  (name: 'Santa Clarita', state: 'CA'),
+  (name: 'Garden Grove', state: 'CA'),
+  (name: 'Chula Vista', state: 'CA'),
+  (name: 'Irving', state: 'TX'),
+  (name: 'Laredo', state: 'TX'),
+  (name: 'Lubbock', state: 'TX'),
+  (name: 'Garland', state: 'TX'),
+  (name: 'Amarillo', state: 'TX'),
+  (name: 'Grand Prairie', state: 'TX'),
+  (name: 'McKinney', state: 'TX'),
+  (name: 'Frisco', state: 'TX'),
+  (name: 'Brownsville', state: 'TX'),
+  (name: 'Killeen', state: 'TX'),
+  (name: 'Pasadena', state: 'TX'),
+  (name: 'Hartford', state: 'CT'),
+  (name: 'New Haven', state: 'CT'),
+  (name: 'Stamford', state: 'CT'),
+  (name: 'Bridgeport', state: 'CT'),
+  (name: 'Wilmington', state: 'DE'),
+  (name: 'Manchester', state: 'NH'),
+  (name: 'Portland', state: 'ME'),
+  (name: 'Burlington', state: 'VT'),
+  (name: 'Billings', state: 'MT'),
+  (name: 'Fargo', state: 'ND'),
+  (name: 'Sioux Falls', state: 'SD'),
+  (name: 'Cheyenne', state: 'WY'),
+  (name: 'Charleston', state: 'WV'),
+  (name: 'Cedar Rapids', state: 'IA'),
+  (name: 'Overland Park', state: 'KS'),
+  (name: 'Springfield', state: 'MO'),
+  (name: 'Springfield', state: 'IL'),
+  (name: 'Springfield', state: 'MA'),
+  (name: 'Peoria', state: 'IL'),
+  (name: 'Naperville', state: 'IL'),
+  (name: 'Evansville', state: 'IN'),
+  (name: 'South Bend', state: 'IN'),
+  (name: 'Ann Arbor', state: 'MI'),
+  (name: 'Lansing', state: 'MI'),
+  (name: 'Flint', state: 'MI'),
+  (name: 'Allentown', state: 'PA'),
+  (name: 'Erie', state: 'PA'),
+  (name: 'Trenton', state: 'NJ'),
+  (name: 'Paterson', state: 'NJ'),
+  (name: 'Albany', state: 'NY'),
+  (name: 'Syracuse', state: 'NY'),
+  (name: 'Yonkers', state: 'NY'),
+];
