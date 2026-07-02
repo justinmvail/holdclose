@@ -6,7 +6,7 @@
 ## Understanding of Need
 
 Family caregiving is not a single hard moment — it is a relentless, often
-full-time job made of thousands of them. More than 53 million Americans care
+full-time job made of thousands of them. An estimated 63 million Americans care
 for an aging or ill family member, most without training, many while holding
 other jobs and raising their own children. They manage medications and narrow
 dose windows, track shifting symptoms, coordinate appointments and other family
@@ -75,6 +75,31 @@ non-diagnostic, an uncertainty/escalation path to human help, and human-in-the-
 loop confirmation before any action changes care data. The architecture is
 **model-agnostic**, so Holdclose is not dependent on any single AI provider.
 
+**Readiness self-assessment.** TRL-3 is the eligibility floor; **Holdclose
+clears it and stands above it — a working, tested system demonstrated in a
+realistic environment, not a proof-of-concept.** We map our evidence to ACL's
+five readiness elements:
+
+- **Concept feasibility** — The approach combines *existing* foundation models
+  with a *custom* data-grounding pipeline; feasibility is established by the
+  running system, not by simulation alone.
+- **Experimental validation** — A full prototype is built and exercised: unit,
+  widget, golden, and end-to-end integration suites run green, and the app runs
+  on physical iOS and Android devices.
+- **Testing in a relevant environment** — The coach operates against real,
+  sanitized care data (medications, dose windows, appointments, journal) on the
+  actual phones caregivers use — the true environment of use, not a lab bench.
+- **Critical technical elements identified and tested** — The load-bearing
+  elements — the `chat_context_builder` grounding layer, the human-in-the-loop
+  confirmation flow, and the safety/uncertainty guardrails — are each built and
+  verified, not aspirational.
+- **Traceable documentation** — Architecture, tests, and safety guardrails are
+  version-controlled and documented, so every claim above traces to code.
+
+In short, Holdclose sits well beyond TRL-3 (a functioning system demonstrated in
+a realistic setting), while remaining honest that operational proof *at scale* —
+outcome data from a caregiver cohort — is precisely the work of Phases 2 and 3.
+
 **Existing vs. new AI methods.** Holdclose does *not* train a new model — it
 builds on **existing large language models** (model-agnostic; currently
 [Cerebras]). Its distinct contribution is the **data-grounding layer**
@@ -100,7 +125,54 @@ through Phases 2 and 3.
 
 ## Supporting Research
 
-[To add — 4–6 citations: AARP/NAC "Caregiving in the U.S." on caregiver
-prevalence and burden; literature on caregiver burnout → institutionalization;
-the value of just-in-time, personalized caregiver support; medication-adherence
-/ error-reduction evidence. Draft list to follow.]
+The need Holdclose addresses — and the specific features we built — are
+corroborated by the Challenge sponsor's own evidence base, most directly the
+**Caregiver Action Network (CAN) 2026 Caregiver Tech Insights Survey** (n = 272
+family caregivers), presented at ACL's May 28, 2026 Challenge webinar. CAN is a
+partner organization supporting this Challenge, so this data reflects the exact
+population and priorities ACL is targeting.
+
+**The burden is real and quantified.** An estimated 63 million U.S. family
+caregivers provide roughly **$600 billion** in unpaid care each year, averaging
+**27 hours per week**, and half report at least one negative financial impact
+(ACL Caregiver AI webinar, May 2026). Coordination alone is a second job:
+**37% of caregivers spend 11+ hours per week *just on care coordination***, and
+nearly **one in three** describe their care situation as fragmented — citing
+information scattered across systems and too many providers (CAN 2026).
+
+**Caregivers are already reaching for AI — and want it grounded and
+trustworthy.** **59%** have used AI and **33%** use it regularly for caregiving;
+the leading uses are **understanding a diagnosis or condition (44%)**,
+**preparing questions for doctor visits (32%)**, **organizing medical
+information (27%)**, and **emotional support (24%)** (CAN 2026). These are
+precisely the jobs Holdclose's data-grounded coach performs — the difference
+being that its guidance is grounded in the loved one's real record rather than a
+blank chatbox.
+
+**The feature set maps to the tasks caregivers most want help with.** The most
+time-consuming coordination tasks are **managing medications and refills (50%)**
+and **scheduling appointments (46%)** — the exact functions of Holdclose's
+medication/dose-window tracking and appointment management. Asked what they would
+most like to delegate, caregivers named tracking follow-ups and care plans (43%),
+managing prescription refills (43%), coordinating between doctors (41%), and
+scheduling (40%) (CAN 2026).
+
+**The adoption barriers validate our core design choices.** The top barriers to
+caregiver technology adoption are **cost (43%)**, **not knowing which products to
+trust (42%)**, **privacy and security concerns (40%)**, and **lack of time to set
+tools up (34%)** (CAN 2026). Holdclose answers each directly: an **affordable**
+model; a **trustworthy, non-diagnostic** coach whose reasoning is visible and
+grounded; a **local-first** privacy architecture; and a **single, low-setup** app
+(22% of caregivers explicitly prefer "everything in one consolidated app").
+
+**Primary sources.**
+- Caregiver Action Network, *Caregiver Tech Insights Survey: Findings Report
+  2026* (n = 272 family caregivers). caregiveraction.org/tech-insights-survey
+- ACL, *Smart Innovation for Better Care — The Caregiver Experience* (Caregiver
+  AI Prize Challenge informational webinar), May 28, 2026.
+- U.S. HHS / ACL, Caregiver AI Prize Challenge launch materials, 2026 (care-gap
+  and direct-care-workforce projections).
+
+[Optional, if page budget allows: AARP/NAC *Caregiving in the U.S. 2025*; AARP
+*Valuing the Invaluable 2023* ($600B unpaid-care valuation); peer-reviewed
+literature on caregiver burden → premature institutionalization.]

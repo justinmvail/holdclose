@@ -21,7 +21,7 @@ Legend: ✅ done · ⚠️ drafted-but-needs-real-data · ❌ missing · 👤 on
 | **Existing vs. new AI methods** | ✅ (upgraded) | now explicit: existing LLMs (model-agnostic) + the *new* data-grounding |
 | AI dev stage (TRL 3+) | ✅ | built, tested app — exceeds TRL-3 |
 | **End users shaped design** | ⚠️ 👤 | alpha feedback = seed; need tester count/quotes from the trial |
-| **Promising data/research/prior work** | ❌ 🤖 | citations — I'll pull (caregiver-burden, adherence, just-in-time support) |
+| **Promising data/research/prior work** | ✅ 🤖 | DONE — §1 Supporting Research now cites the CAN 2026 Tech Insights Survey (sponsor partner data), each stat mapped to a Holdclose feature |
 
 ## §2 Implementation Approach
 | Prompt | Status | Note |
@@ -79,7 +79,7 @@ Legend: ✅ done · ⚠️ drafted-but-needs-real-data · ❌ missing · 👤 on
 ## THE SHORT LIST — what we're actually lacking (in priority order)
 1. **👤 Documented caregiver feedback** (tester count + quotes + what changed) — your #1 gap; the trial provides it.
 2. **👤 2–3 letters of support** — covers the Partnerships criterion + appendix. Cold outreach.
-3. **🤖 Supporting-research citations (§1)** — I'll pull these.
+3. ~~**🤖 Supporting-research citations (§1)**~~ — ✅ DONE (CAN 2026 survey woven into §1).
 4. **👤 Your contact info + confirm bio specifics + the grandfather/family-experience line** — fills the `[BRACKETS]`.
 5. **🤖 (optional, high-value) Data Output Logs** — run the coach through the Protocol-9-Delta safety probe; strong TRL evidence.
 6. **👤 SAM.gov UEI** — quick, expedites the payout.
