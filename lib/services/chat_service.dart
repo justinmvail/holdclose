@@ -16,7 +16,7 @@ import 'api_chat_backend.dart';
 import 'chat_actions.dart';
 import 'chat_context_builder.dart';
 import 'chat_repository.dart';
-import 'feedback_service.dart' show alphaFeedbackEnabled;
+import 'feedback_service.dart' show feedbackUiEnabled;
 import 'forum_api_client.dart' show forumApiBaseUrl, forumBackendConfigured;
 
 part 'chat_service.g.dart';
@@ -1077,7 +1077,7 @@ class ChatService {
     String friendly = chatFriendlyErrorMessage;
     // Alpha builds append the raw cause so a tester can screenshot the exact
     // failure (production hides it behind the friendly line). Render-only.
-    if (alphaFeedbackEnabled) {
+    if (feedbackUiEnabled) {
       String raw = body.substring(errIdx + chatErrorMarkerPrefix.length).trim();
       if (raw.endsWith(']')) raw = raw.substring(0, raw.length - 1).trim();
       if (raw.isNotEmpty) {

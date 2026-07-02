@@ -27,7 +27,7 @@ import 'services/sync_service.dart';
 
 /// Build-time switch for the comprehensive test-data seed
 /// (`--dart-define=SEED_DEMO=true`). Off by default — only the
-/// `tools/seed_demo.sh` builds set it. Distinct from `DEMO_MODE` (the pitch
+/// `tools/run_device.sh SEED=1` builds set it. Distinct from `DEMO_MODE` (the pitch
 /// demo's reset-to-Mary), so a normal build never wipes a tester's data.
 const bool _seedDemoEnabled = bool.fromEnvironment('SEED_DEMO');
 
@@ -98,7 +98,7 @@ Future<void> main() async {
   // reset state flash through.
   await maybeResetForDemo(container, demoMode: demoModeEnabled);
 
-  // Comprehensive test-data seed (tools/seed_demo.sh). One-shot per build:
+  // Comprehensive test-data seed (tools/run_device.sh SEED=1). One-shot per build:
   // wipes the database and lays down six months of every data type, guarded
   // by a token so it seeds exactly once per script run and then leaves the
   // tester's edits alone on later launches.
@@ -179,7 +179,7 @@ Future<void> _bootstrapSync(ProviderContainer container) async {
     sync.startInterval();
     await sync.syncNow();
     // After the circle is bound, optionally force-push EVERY local row up
-    // (tools/seed_demo.sh data is written before the circle exists, so it
+    // (seeded (SEED=1) data is written before the circle exists, so it
     // never auto-syncs). One-shot per token.
     await maybeResyncAll(container, sync);
     // A returning caregiver on a fresh install has their loved one on the
@@ -278,7 +278,7 @@ Future<void> maybeResetForDemo(
   await container.read(seedRepositoryProvider).ensurePatient();
 }
 
-/// Comprehensive test-data seed wiring (`tools/seed_demo.sh`).
+/// Comprehensive test-data seed wiring (`tools/run_device.sh SEED=1`).
 ///
 /// When [_seedDemoEnabled] is set AND a non-empty [_seedDemoToken] is baked
 /// in that DIFFERS from the last-applied token in SharedPreferences, this

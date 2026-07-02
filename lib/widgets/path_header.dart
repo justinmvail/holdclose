@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../services/feedback_service.dart'
-    show alphaFeedbackEnabled, feedbackTriggerProvider;
+    show feedbackUiEnabled, feedbackTriggerProvider;
 import '../theme.dart';
 
 /// One segment of a [PathHeader] breadcrumb trail (BUILD_SPEC.md §4.1
@@ -247,7 +247,7 @@ class PathHeader extends StatelessWidget {
 /// Plain [StatelessWidget] so it imposes NO ProviderScope requirement on
 /// the ~30 screens that use [PathHeader] — only the alpha-only report
 /// button needs riverpod, and it lives in its own [ConsumerWidget] that
-/// isn't built unless [alphaFeedbackEnabled].
+/// isn't built unless [feedbackUiEnabled].
 class _HeaderActions extends StatelessWidget {
   const _HeaderActions();
 
@@ -257,7 +257,7 @@ class _HeaderActions extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         // Report a problem — alpha only; hidden in production builds.
-        if (alphaFeedbackEnabled) const _ReportButton(),
+        if (feedbackUiEnabled) const _ReportButton(),
         // Profile & settings — always present, top-right on every screen.
         IconButton(
           key: PathHeader.profileButtonKey,
@@ -281,7 +281,7 @@ class _HeaderActions extends StatelessWidget {
 
 /// The alpha-only report "!" — a [ConsumerWidget] so it can fire the
 /// trigger the screenshot host ([FeedbackOverlay]) listens for. Only built
-/// when [alphaFeedbackEnabled], so the (always-present) ProviderScope of a
+/// when [feedbackUiEnabled], so the (always-present) ProviderScope of a
 /// real alpha build is the only place it ever mounts.
 class _ReportButton extends ConsumerWidget {
   const _ReportButton();

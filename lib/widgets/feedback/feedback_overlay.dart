@@ -19,7 +19,7 @@ import 'feedback_sheet.dart';
 /// Inert unless enabled — when off it returns [child] verbatim (no
 /// [RepaintBoundary], no listener), so production, `flutter test`, and
 /// every golden render exactly as before. [enabled] defaults to
-/// [alphaFeedbackEnabled]; tests pass it explicitly to drive the on-path.
+/// [feedbackUiEnabled]; tests pass it explicitly to drive the on-path.
 class FeedbackOverlay extends ConsumerStatefulWidget {
   const FeedbackOverlay({
     super.key,
@@ -28,7 +28,7 @@ class FeedbackOverlay extends ConsumerStatefulWidget {
     this.navigatorContext,
     bool? enabled,
     this.captureOverride,
-  }) : enabled = enabled ?? alphaFeedbackEnabled;
+  }) : enabled = enabled ?? feedbackUiEnabled;
 
   final Widget child;
 

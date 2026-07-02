@@ -8,7 +8,6 @@ import '../../l10n/app_localizations.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/loved_one_lookup_provider.dart';
 import '../../providers/settings_provider.dart' show demoModeEnabled;
-import '../../services/feedback_service.dart' show alphaFeedbackEnabled;
 import '../../theme.dart';
 
 /// Sign-in (BUILD_SPEC.md §5.12).
@@ -25,13 +24,14 @@ import '../../theme.dart';
 /// without leaving the screen, so the caregiver can retry.
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key, bool? alphaMode, bool? showGoogleInAlpha})
-      : alphaMode = alphaMode ?? alphaFeedbackEnabled,
+      : alphaMode = alphaMode ?? alphaAuthEnabled,
         showGoogleInAlpha = showGoogleInAlpha ?? googleSignInConfigured;
 
   /// Alpha-tester mode: Google-ONLY (user decision). Shows just the
   /// "Continue with Google" button so every tester becomes a real,
   /// backend-verified account. There is no local "just start" bypass.
-  /// Defaults to the `ALPHA_FEEDBACK` build flag; tests pass it explicitly.
+  /// Defaults to the `ALPHA_AUTH` build flag (or the legacy `ALPHA_FEEDBACK`
+  /// umbrella); tests pass it explicitly.
   final bool alphaMode;
 
   /// Whether the alpha build baked in a Google Web client id. Defaults to

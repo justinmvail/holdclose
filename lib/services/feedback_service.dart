@@ -29,6 +29,17 @@ import '../providers/llm_provider.dart' show shimBaseUrl, shimAuthHeaders;
 const bool alphaFeedbackEnabled =
     bool.fromEnvironment('ALPHA_FEEDBACK', defaultValue: false);
 
+/// Enables ONLY the in-app feedback UI — the report button, the screenshot
+/// overlay, and the alpha error detail in chat — independent of the
+/// Google-gated alpha-tester AUTH flow ([alphaFeedbackEnabled], which forces
+/// [AlphaAuthProvider]). Set `--dart-define=FEEDBACK=true` to dogfood on a
+/// DEMO_MODE device build (fake auth, no Google/backend needed) and still
+/// file reports. Full alpha builds get it for free. Production / tests /
+/// goldens leave both false, so nothing renders.
+// ignore: do_not_use_environment
+const bool feedbackUiEnabled = alphaFeedbackEnabled ||
+    bool.fromEnvironment('FEEDBACK', defaultValue: false);
+
 /// DEMO_MODE mirror, read locally so this service stays decoupled from the
 /// settings provider.
 // ignore: do_not_use_environment

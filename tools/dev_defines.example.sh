@@ -1,7 +1,7 @@
 # tools/dev_defines.example.sh
 #
 # Copy this to tools/dev_defines.sh (which is gitignored) and fill in the
-# values for your dev backend. tools/seed_demo.sh sources it so the secrets
+# values for your dev backend. tools/run_device.sh (AUTH=google) sources it so the secrets
 # never land in git. All values are dev-only.
 #
 #   cp tools/dev_defines.example.sh tools/dev_defines.sh

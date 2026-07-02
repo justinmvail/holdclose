@@ -223,10 +223,10 @@ class _HoldcloseAppState extends ConsumerState<HoldcloseApp> {
           data: base.copyWith(
             textScaler: TextScaler.linear(fontSize.scale),
           ),
-          // Alpha-testing feedback affordance. Inert (returns the child
-          // verbatim) unless the build set `--dart-define=ALPHA_FEEDBACK
-          // =true`, so production + tests + goldens are unaffected. Reads
-          // the live route straight off the GoRouter instance.
+          // Feedback affordance. Inert (returns the child verbatim) unless
+          // the build set `--dart-define=FEEDBACK=true` (or the legacy
+          // `ALPHA_FEEDBACK` umbrella), so production + tests + goldens are
+          // unaffected. Reads the live route straight off the GoRouter.
           child: FeedbackOverlay(
             currentRoute: () =>
                 _router.routerDelegate.currentConfiguration.uri.toString(),

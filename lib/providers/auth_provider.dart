@@ -603,9 +603,19 @@ const bool _useFake = _demoMode || _useFakeAuth;
 /// replaces the canned [FakeAuthProvider], so every tester is a distinct,
 /// persisted, attributable account. Demo-tour and widget-test builds (no
 /// ALPHA_FEEDBACK) keep [FakeAuthProvider].
+/// Real-Google-auth (alpha tester) mode — now its OWN flag, split from the
+/// feedback UI. `--dart-define=ALPHA_AUTH=true` selects [AlphaAuthProvider]
+/// (Google verified by the backend). The legacy `ALPHA_FEEDBACK` umbrella
+/// still turns on BOTH auth + feedback UI so existing tester-build commands
+/// keep working. Public so the sign-in screen shows the Google-only flow
+/// under it.
 // ignore: do_not_use_environment
-const bool _alphaTesterMode =
+const bool _alphaAuth = bool.fromEnvironment('ALPHA_AUTH', defaultValue: false);
+// ignore: do_not_use_environment
+const bool _alphaFeedbackLegacy =
     bool.fromEnvironment('ALPHA_FEEDBACK', defaultValue: false);
+const bool alphaAuthEnabled = _alphaAuth || _alphaFeedbackLegacy;
+const bool _alphaTesterMode = alphaAuthEnabled;
 
 /// The Web OAuth client id (`--dart-define=GOOGLE_SERVER_CLIENT_ID=...`).
 /// Passed to `GoogleSignIn.serverClientId` so the issued ID token's `aud`
