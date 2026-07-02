@@ -38,6 +38,13 @@ class MedicalHubScreen extends ConsumerWidget {
   }) =>
       <_MedicalTileSpec>[
         _MedicalTileSpec(
+          icon: Icons.document_scanner_outlined,
+          label: 'Scan a document',
+          subLabel: 'Rx, appointment, insurance card',
+          route: '/scan',
+          chipColor: context.cb.primary,
+        ),
+        _MedicalTileSpec(
           icon: Icons.medication_outlined,
           label: 'Medications',
           subLabel: 'doses & reminders',

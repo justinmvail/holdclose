@@ -22,6 +22,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// the pushed URI but is not part of the matched route path (see
 /// [_matchedPath]).
 const List<(String, IconData, String)> _expected = <(String, IconData, String)>[
+  ('Scan a document', Icons.document_scanner_outlined, '/scan'),
   ('Medications', Icons.medication_outlined, '/medications'),
   ('Schedule', Icons.schedule_outlined, '/team/calendar?from=medical'),
   ('Appointments', Icons.event_outlined, '/appointments'),
@@ -119,7 +120,7 @@ void main() {
 
       final List<HubTile> tiles =
           tester.widgetList<HubTile>(find.byType(HubTile)).toList();
-      expect(tiles.length, 7);
+      expect(tiles.length, 8);
       expect(
         tiles.map((HubTile t) => t.label).toList(),
         <String>[for (final (String label, _, _) in _expected) label],
@@ -153,7 +154,7 @@ void main() {
       final List<HubTile> tiles =
           tester.widgetList<HubTile>(find.byType(HubTile)).toList();
       // The seven base tiles plus the gated Care Circle tile (route /team).
-      expect(tiles.length, 8);
+      expect(tiles.length, 9);
       expect(tiles.last.label, 'Care Circle');
       expect(
         find.byKey(MedicalHubScreen.tileKey('/team')),

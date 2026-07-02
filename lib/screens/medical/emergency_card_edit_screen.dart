@@ -15,7 +15,13 @@ import 'emergency_card_screen.dart'
 /// `emergencyCardsProvider.notifier.updateCard`. Reached from the card's
 /// Edit action at `/medical/cards/emergency/edit`.
 class EmergencyCardEditScreen extends ConsumerWidget {
-  const EmergencyCardEditScreen({super.key});
+  const EmergencyCardEditScreen({super.key, this.scannedInsurance});
+
+  /// Optional insurance read from an insurance-card scan — pre-fills the
+  /// insurance fields (the caregiver reviews before saving). Field-level:
+  /// only fills what the scan actually read, never clobbering existing card
+  /// values.
+  final Insurance? scannedInsurance;
 
   static const Key bodyKey = Key('emergency-card-edit-body');
   static const Key conditionsFieldKey = Key('emergency-card-edit-conditions');
@@ -62,8 +68,10 @@ class EmergencyCardEditScreen extends ConsumerWidget {
                   child: Text("We couldn't load the emergency card.",
                       style: Theme.of(context).textTheme.bodyLarge),
                 ),
-                data: (EmergencyCardView view) =>
-                    _EmergencyCardForm(view: view),
+                data: (EmergencyCardView view) => _EmergencyCardForm(
+                  view: view,
+                  scannedInsurance: scannedInsurance,
+                ),
               ),
             ),
           ],
@@ -74,9 +82,10 @@ class EmergencyCardEditScreen extends ConsumerWidget {
 }
 
 class _EmergencyCardForm extends ConsumerStatefulWidget {
-  const _EmergencyCardForm({required this.view});
+  const _EmergencyCardForm({required this.view, this.scannedInsurance});
 
   final EmergencyCardView view;
+  final Insurance? scannedInsurance;
 
   @override
   ConsumerState<_EmergencyCardForm> createState() => _EmergencyCardFormState();
@@ -105,10 +114,21 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
     _allergies =
         TextEditingController(text: (card?.allergies ?? <String>[]).join('\n'));
     final Insurance? ins = card?.insurance;
-    _carrier = TextEditingController(text: ins?.carrier ?? '');
-    _policy = TextEditingController(text: ins?.policyNumber ?? '');
-    _group = TextEditingController(text: ins?.groupNumber ?? '');
-    _insurancePhone = TextEditingController(text: ins?.phone ?? '');
+    final Insurance? scan = widget.scannedInsurance;
+    // Prefer a scanned value only when it's non-empty, so an insurance-card
+    // scan fills the blanks without clobbering what's already on file.
+    String pick(String? scanned, String? existing) =>
+        (scanned != null && scanned.trim().isNotEmpty)
+            ? scanned.trim()
+            : (existing ?? '');
+    _carrier =
+        TextEditingController(text: pick(scan?.carrier, ins?.carrier));
+    _policy =
+        TextEditingController(text: pick(scan?.policyNumber, ins?.policyNumber));
+    _group =
+        TextEditingController(text: pick(scan?.groupNumber, ins?.groupNumber));
+    _insurancePhone =
+        TextEditingController(text: pick(scan?.phone, ins?.phone));
     _contacts = (card?.emergencyContacts ?? <EmergencyContact>[])
         .map(_ContactCtrls.from)
         .toList();

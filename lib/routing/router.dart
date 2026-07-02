@@ -29,10 +29,12 @@ import '../screens/medical/insurance_appeal_screen.dart';
 import '../screens/medical/health_log_entry_form.dart';
 import '../screens/medical/health_log_screen.dart';
 import '../screens/medical/medical_hub_screen.dart';
+import '../screens/scan_document_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
 import '../screens/appointment/appointment_list_screen.dart';
 import '../models/appointment_draft.dart';
+import '../models/document.dart' show Insurance;
 import '../models/medication_draft.dart';
 import '../screens/medication/dose_log_screen.dart';
 import '../screens/medication/dose_window_list_screen.dart';
@@ -85,6 +87,7 @@ class HoldcloseRoutes {
   static const String medicationList = 'medication-list';
   static const String medicationForm = 'medication-form';
   static const String medicationScanReview = 'medication-scan-review';
+  static const String scanDocument = 'scan-document';
   static const String medicationEdit = 'medication-edit';
   static const String medicationDoseLog = 'medication-dose-log';
   static const String medicationWindowList = 'medication-window-list';
@@ -393,7 +396,11 @@ GoRouter buildRouter({
                         path: 'edit',
                         name: HoldcloseRoutes.medicalCardsEmergencyEdit,
                         builder: (BuildContext context, GoRouterState state) =>
-                            const EmergencyCardEditScreen(),
+                            EmergencyCardEditScreen(
+                          scannedInsurance: state.extra is Insurance
+                              ? state.extra as Insurance
+                              : null,
+                        ),
                       ),
                     ],
                   ),
@@ -455,6 +462,16 @@ GoRouter buildRouter({
               ),
               // Medications — the Care hub's "Medications" tile + Home's
               // dose-log shortcut. In the Care branch so the tab bar stays.
+              // Unified "scan any document" entry — routes each type to its
+              // extractor + review flow. In the Care branch so the pushes it
+              // makes (med review, appointment form, emergency edit) stay
+              // in-branch and the tab bar stays.
+              GoRoute(
+                path: '/scan',
+                name: HoldcloseRoutes.scanDocument,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const ScanDocumentScreen(),
+              ),
               GoRoute(
                 path: '/medications',
                 name: HoldcloseRoutes.medicationList,
