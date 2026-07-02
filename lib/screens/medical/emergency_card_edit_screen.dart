@@ -89,6 +89,7 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
   late final TextEditingController _carrier;
   late final TextEditingController _policy;
   late final TextEditingController _group;
+  late final TextEditingController _insurancePhone;
   late final List<_ContactCtrls> _contacts;
   late DonorStatus _donor;
   bool _saving = false;
@@ -107,6 +108,7 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
     _carrier = TextEditingController(text: ins?.carrier ?? '');
     _policy = TextEditingController(text: ins?.policyNumber ?? '');
     _group = TextEditingController(text: ins?.groupNumber ?? '');
+    _insurancePhone = TextEditingController(text: ins?.phone ?? '');
     _contacts = (card?.emergencyContacts ?? <EmergencyContact>[])
         .map(_ContactCtrls.from)
         .toList();
@@ -122,6 +124,7 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
       _carrier,
       _policy,
       _group,
+      _insurancePhone,
     ]) {
       c.dispose();
     }
@@ -161,6 +164,9 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
         carrier: _carrier.text.trim(),
         policyNumber: _policy.text.trim(),
         groupNumber: _group.text.trim(),
+        phone: _insurancePhone.text.trim().isEmpty
+            ? null
+            : _insurancePhone.text.trim(),
       ),
       donorStatus: _donor,
       attachmentPath: existing?.attachmentPath,
@@ -240,6 +246,12 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
             _TextField(label: 'Policy number', controller: _policy),
             const SizedBox(height: 12),
             _TextField(label: 'Group number', controller: _group),
+            const SizedBox(height: 12),
+            _TextField(
+              label: 'Member-services phone',
+              controller: _insurancePhone,
+              keyboardType: TextInputType.phone,
+            ),
             const SizedBox(height: 28),
             _SectionLabel('Organ donor', textTheme: textTheme),
             const SizedBox(height: 8),
@@ -351,14 +363,20 @@ class _MultilineField extends StatelessWidget {
 }
 
 class _TextField extends StatelessWidget {
-  const _TextField({required this.label, required this.controller});
+  const _TextField({
+    required this.label,
+    required this.controller,
+    this.keyboardType,
+  });
 
   final String label;
   final TextEditingController controller;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) => TextField(
         controller: controller,
+        keyboardType: keyboardType,
         decoration: InputDecoration(labelText: label),
       );
 }

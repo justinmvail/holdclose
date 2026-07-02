@@ -73,6 +73,11 @@ abstract class Insurance with _$Insurance {
     required String carrier,
     required String policyNumber,
     required String groupNumber,
+
+    /// Member-services / claims phone — for the "calling insurance
+    /// companies" pain point. Optional + nullable so older cards (stored as
+    /// a JSON payload) simply have none; tap-to-call on the card.
+    String? phone,
   }) = _Insurance;
 
   factory Insurance.fromJson(Map<String, dynamic> json) =>
