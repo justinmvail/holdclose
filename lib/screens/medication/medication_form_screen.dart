@@ -93,6 +93,14 @@ class MedicationFormScreen extends ConsumerStatefulWidget {
   static const Key routeDropdownKey = Key('medication-form-route');
   static const Key prescriberFieldKey = Key('medication-form-prescriber');
   static const Key notesFieldKey = Key('medication-form-notes');
+  static const Key rxNumberFieldKey = Key('medication-form-rxnumber');
+  static const Key quantityFieldKey = Key('medication-form-quantity');
+  static const Key refillsFieldKey = Key('medication-form-refills');
+  static const Key pharmacyNameFieldKey = Key('medication-form-pharmacy-name');
+  static const Key pharmacyPhoneFieldKey =
+      Key('medication-form-pharmacy-phone');
+  static const Key dateFilledFieldKey = Key('medication-form-date-filled');
+  static const Key discardAfterFieldKey = Key('medication-form-discard-after');
   static const Key submitButtonKey = Key('medication-form-submit');
   static const Key endDateFieldKey = Key('medication-form-end-date');
   static const Key endDateClearKey = Key('medication-form-end-date-clear');
@@ -158,6 +166,15 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
   final TextEditingController _dosage = TextEditingController();
   final TextEditingController _prescriber = TextEditingController();
   final TextEditingController _notes = TextEditingController();
+  // Prescription-label details (optional; populated by the AI scan or by
+  // hand). Round-tripped so a scanned med's refills/pharmacy are editable.
+  final TextEditingController _rxNumber = TextEditingController();
+  final TextEditingController _quantity = TextEditingController();
+  final TextEditingController _refills = TextEditingController();
+  final TextEditingController _pharmacyName = TextEditingController();
+  final TextEditingController _pharmacyPhone = TextEditingController();
+  final TextEditingController _dateFilled = TextEditingController();
+  final TextEditingController _discardAfter = TextEditingController();
   String _dosageUnit = _defaultDosageUnit;
   MedicationRoute _route = MedicationRoute.oral;
   /// Optional end date — when set, the medication disappears from the
@@ -204,6 +221,13 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
     _dosageUnit = parsed.unit;
     _prescriber.text = med.prescriber ?? '';
     _notes.text = med.notes ?? '';
+    _rxNumber.text = med.rxNumber ?? '';
+    _quantity.text = med.quantity ?? '';
+    _refills.text = med.refills ?? '';
+    _pharmacyName.text = med.pharmacyName ?? '';
+    _pharmacyPhone.text = med.pharmacyPhone ?? '';
+    _dateFilled.text = med.dateFilled ?? '';
+    _discardAfter.text = med.discardAfter ?? '';
     _route = med.route;
     _endsAt = med.endsAt;
     // Edit path: pull the existing entries so the chip set reflects
@@ -288,6 +312,13 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
     _dosage.dispose();
     _prescriber.dispose();
     _notes.dispose();
+    _rxNumber.dispose();
+    _quantity.dispose();
+    _refills.dispose();
+    _pharmacyName.dispose();
+    _pharmacyPhone.dispose();
+    _dateFilled.dispose();
+    _discardAfter.dispose();
     super.dispose();
   }
 
@@ -308,6 +339,11 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
     final String prescriber = _prescriber.text.trim();
     final String notes = _notes.text.trim();
     final String amount = _dosage.text.trim();
+    String? clean(TextEditingController c) {
+      final String t = c.text.trim();
+      return t.isEmpty ? null : t;
+    }
+
     final Medication medication = Medication(
       id: medicationId,
       name: _name.text.trim(),
@@ -318,6 +354,13 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
       route: _route,
       prescriber: prescriber.isEmpty ? null : prescriber,
       notes: notes.isEmpty ? null : notes,
+      rxNumber: clean(_rxNumber),
+      quantity: clean(_quantity),
+      refills: clean(_refills),
+      pharmacyName: clean(_pharmacyName),
+      pharmacyPhone: clean(_pharmacyPhone),
+      dateFilled: clean(_dateFilled),
+      discardAfter: clean(_discardAfter),
       endsAt: _endsAt,
     );
 
@@ -613,6 +656,84 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                       decoration: const InputDecoration(
                         hintText: 'e.g. Take with food. Watch for drowsiness.',
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Prescription details (optional)',
+                    style: textTheme.titleSmall?.copyWith(
+                      color: context.cb.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  LabelledField(
+                    label: 'Rx number',
+                    child: TextFormField(
+                      key: MedicationFormScreen.rxNumberFieldKey,
+                      controller: _rxNumber,
+                      decoration:
+                          const InputDecoration(hintText: 'e.g. 1687749'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  LabelledField(
+                    label: 'Quantity',
+                    child: TextFormField(
+                      key: MedicationFormScreen.quantityFieldKey,
+                      controller: _quantity,
+                      decoration: const InputDecoration(hintText: 'e.g. 180'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  LabelledField(
+                    label: 'Refills remaining',
+                    child: TextFormField(
+                      key: MedicationFormScreen.refillsFieldKey,
+                      controller: _refills,
+                      decoration: const InputDecoration(hintText: 'e.g. 3'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  LabelledField(
+                    label: 'Pharmacy',
+                    child: TextFormField(
+                      key: MedicationFormScreen.pharmacyNameFieldKey,
+                      controller: _pharmacyName,
+                      textCapitalization: TextCapitalization.words,
+                      decoration:
+                          const InputDecoration(hintText: 'e.g. CVS Pharmacy'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  LabelledField(
+                    label: 'Pharmacy phone',
+                    child: TextFormField(
+                      key: MedicationFormScreen.pharmacyPhoneFieldKey,
+                      controller: _pharmacyPhone,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                          hintText: 'e.g. 843-767-4500'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  LabelledField(
+                    label: 'Date filled',
+                    child: TextFormField(
+                      key: MedicationFormScreen.dateFilledFieldKey,
+                      controller: _dateFilled,
+                      decoration:
+                          const InputDecoration(hintText: 'e.g. 12/3/21'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  LabelledField(
+                    label: 'Discard after',
+                    child: TextFormField(
+                      key: MedicationFormScreen.discardAfterFieldKey,
+                      controller: _discardAfter,
+                      decoration:
+                          const InputDecoration(hintText: 'e.g. 12/3/22'),
                     ),
                   ),
                   const SizedBox(height: 16),

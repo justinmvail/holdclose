@@ -126,6 +126,34 @@ abstract class Medication with _$Medication {
     /// card (e.g. "take with food", "watch for drowsiness").
     String? notes,
 
+    /// --- Prescription-label details (optional; populated by the AI label
+    /// scan or entered by hand). All free-text/verbatim so a transcription
+    /// traces back to the printed label, and all nullable so older rows +
+    /// manual entries simply leave them empty. Stored in the same JSON
+    /// payload as the rest of the model — no schema migration. ---
+
+    /// Rx (prescription) number printed on the label — needed to phone in
+    /// a refill.
+    String? rxNumber,
+
+    /// Quantity dispensed, as printed ("180", "30 tablets").
+    String? quantity,
+
+    /// Refills remaining, as printed ("3", "0", "3 by 5/27/22").
+    String? refills,
+
+    /// Dispensing pharmacy name ("CVS Pharmacy").
+    String? pharmacyName,
+
+    /// Dispensing pharmacy phone — for refill calls.
+    String? pharmacyPhone,
+
+    /// Date the prescription was filled, verbatim as printed.
+    String? dateFilled,
+
+    /// "Discard after" / use-by date, verbatim as printed.
+    String? discardAfter,
+
     /// Soft-delete tombstone. Null for a live medication; set to the
     /// deletion instant when the caregiver removes it. The repository
     /// excludes tombstoned rows from every derived view.

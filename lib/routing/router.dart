@@ -31,9 +31,11 @@ import '../screens/medical/medical_hub_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
 import '../screens/appointment/appointment_list_screen.dart';
+import '../models/medication_draft.dart';
 import '../screens/medication/dose_log_screen.dart';
 import '../screens/medication/dose_window_list_screen.dart';
 import '../screens/medication/medication_form_screen.dart';
+import '../screens/medication/medication_import_review_screen.dart';
 import '../screens/medication/medication_list_screen.dart';
 import '../screens/onboarding/loved_one_setup_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
@@ -79,6 +81,7 @@ class HoldcloseRoutes {
   static const String chatThread = 'chat-thread';
   static const String medicationList = 'medication-list';
   static const String medicationForm = 'medication-form';
+  static const String medicationScanReview = 'medication-scan-review';
   static const String medicationEdit = 'medication-edit';
   static const String medicationDoseLog = 'medication-dose-log';
   static const String medicationWindowList = 'medication-window-list';
@@ -457,6 +460,21 @@ GoRouter buildRouter({
                     // 14.14) pre-fills the dose-note field from it.
                     builder: (BuildContext context, GoRouterState state) =>
                         DoseLogScreen(initialNote: VoiceIntake.doseNote(state.extra)),
+                  ),
+                  // Review + approve a scanned prescription. The scan
+                  // handler pushes a [MedicationDraft] via `extra`; a
+                  // missing/blank draft opens the screen empty for manual
+                  // entry. Two-segment literal path so it never shadows the
+                  // `:id/edit` param route below.
+                  GoRoute(
+                    path: 'scan/review',
+                    name: HoldcloseRoutes.medicationScanReview,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        MedicationImportReviewScreen(
+                      draft: state.extra is MedicationDraft
+                          ? state.extra as MedicationDraft
+                          : const MedicationDraft(),
+                    ),
                   ),
                   // Edit a medication, pre-filled from its saved row (Phase
                   // 15.6). `:id/edit` is a two-segment path so it never

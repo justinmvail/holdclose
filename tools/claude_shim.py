@@ -32,6 +32,10 @@ PORT = int(os.environ.get("SHIM_PORT", "8765"))
 MAX_GENERATE_BYTES = 256 * 1024
 MAX_FEEDBACK_BYTES = 6 * 1024 * 1024
 MAX_PHONEMIZE_BYTES = 64 * 1024
+# /extract carries a base64 phone photo of a prescription label (a
+# ~2048px JPEG the app pre-compresses to well under the backend's 8 MB
+# doc cap; base64 inflates ~33%). 12 MB leaves comfortable headroom.
+MAX_EXTRACT_BYTES = 12 * 1024 * 1024
 
 # Hard wall-clock ceiling on one `claude` invocation. A hung CLI (auth
 # prompt, network stall) otherwise pins a worker thread + child process
@@ -66,6 +70,46 @@ CLAUDE_CMD = "claude"
 # (~10k tokens) and scan the tree before answering — pure waste for a chat
 # completion. An empty cwd drops all of it. Created once at startup.
 CHAT_CWD = tempfile.mkdtemp(prefix="careblazers-shim-chat-")
+
+
+def _shrink_image_for_cli(data, max_px=1536, target_bytes=180_000):
+    """Re-compress an image so the `claude` CLI reliably attaches it.
+
+    The CLI silently DROPS an `@`-mentioned image once the file grows past
+    ~200 KB (it passes the raw path as text instead — the model then says
+    "I don't see an image"). Phone photos land at 300-600 KB even after the
+    app's 2048px/q80 downscale, so we shrink again here: cap the longest
+    edge at [max_px] and step JPEG quality down until under [target_bytes].
+    A prescription label stays legible well below this. Also applies EXIF
+    orientation so the label is upright. Falls back to the original bytes
+    if Pillow isn't installed (the CLI will then drop oversized images —
+    install Pillow: `pip3 install Pillow`).
+
+    This is only a DEV backstop for the CLI's attachment ceiling — the real
+    fix is client-side (the app captures a small, vision-optimized image, so
+    a correct upload arrives already under [target_bytes] and passes through
+    here untouched). It only re-encodes when an oversized image slips in.
+    """
+    if len(data) <= target_bytes:
+        return data
+    try:
+        import io
+
+        from PIL import Image, ImageOps
+
+        im = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+        im.thumbnail((max_px, max_px))
+        out = data
+        for quality in (80, 70, 60, 50, 40):
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=quality)
+            out = buf.getvalue()
+            if len(out) <= target_bytes:
+                break
+        return out
+    except Exception as exc:
+        sys.stderr.write(f"[shim] image shrink skipped ({exc}); sending as-is\n")
+        return data
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -114,6 +158,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._feedback()
         if self.path == "/phonemize":
             return self._phonemize()
+        if self.path == "/extract":
+            return self._extract()
         if self.path != "/generate":
             return self._bad(404, "Not Found")
         body = self._read_body(MAX_GENERATE_BYTES)
@@ -323,6 +369,124 @@ class Handler(BaseHTTPRequestHandler):
             f"[shim] stored feedback {safe_id} "
             f"({payload.get('category')}) from {payload.get('tester_name')!r}\n"
         )
+
+    def _extract(self):
+        """POST /extract {"system": "...", "user": "...",
+        "image_base64": "..."} → 200 {"text": "<model reply>"}.
+
+        Backs the AI prescription-scan feature: writes the posted image to
+        a temp file inside CHAT_CWD, references it with an `@`-mention so
+        the `claude` CLI attaches it to the message, runs a ONE-SHOT
+        (non-streaming) completion, and returns the model's full reply
+        text. The app parses the JSON medication fields out of that text
+        and shows them on a human-approval screen — the shim itself does
+        no interpretation. Pure transcription; no data is persisted here.
+        """
+        body = self._read_body(MAX_EXTRACT_BYTES)
+        if body is None:
+            return
+        try:
+            payload = json.loads(body)
+            system = payload["system"]
+            user = payload.get("user", "")
+            image_b64 = payload.get("image_base64")
+        except Exception as exc:
+            return self._bad(400, f"bad request: {exc}")
+
+        # Materialize the image INSIDE CHAT_CWD so an `@`-mention resolves
+        # without a read-permission prompt (the file is within the working
+        # dir). Cleaned up in `finally` regardless of outcome.
+        image_path = None
+        if image_b64:
+            try:
+                img_bytes = base64.b64decode(image_b64)
+                # Shrink below the CLI's ~200 KB @-attachment ceiling so the
+                # model actually receives the image instead of the path text.
+                img_bytes = _shrink_image_for_cli(img_bytes)
+                fd, image_path = tempfile.mkstemp(suffix=".jpg", dir=CHAT_CWD)
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(img_bytes)
+            except Exception as exc:
+                return self._bad(400, f"bad image: {exc}")
+
+        user_with_image = user
+        if image_path:
+            user_with_image = f"{user}\n\n@{image_path}".strip()
+
+        cmd = [
+            CLAUDE_CMD, "--print", "--verbose", "--output-format", "stream-json",
+            "--effort", "low",
+            "--model", "claude-sonnet-4-6",
+            "--system-prompt", system,
+            "--tools",
+            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+            "--exclude-dynamic-system-prompt-sections",
+            "--disable-slash-commands",
+            user_with_image,
+        ]
+        try:
+            env = {**os.environ, "MAX_THINKING_TOKENS": "0"}
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, cwd=CHAT_CWD, env=env,
+            )
+            try:
+                stdout, stderr = proc.communicate(
+                    timeout=GENERATE_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+                return self._send_json({"error": "the scan timed out"})
+
+            if proc.returncode != 0:
+                sys.stderr.write(
+                    "[shim] extract claude exited %s: %s\n"
+                    % (proc.returncode, (stderr or "").strip()[:2000])
+                )
+                return self._send_json(
+                    {"error": "the scan backend hit an error"})
+
+            # Accumulate text from every `assistant` event's text blocks.
+            text_parts = []
+            for line in (stdout or "").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                if isinstance(obj, dict) and obj.get("type") == "assistant":
+                    message = obj.get("message") or {}
+                    for block in message.get("content") or []:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            text_parts.append(block.get("text") or "")
+            reply = "".join(text_parts)
+            sys.stderr.write(
+                "[shim] extract: image=%dB reply_len=%d snip=%r\n"
+                % (len(img_bytes) if image_b64 else 0, len(reply), reply[:240])
+            )
+            return self._send_json({"text": reply})
+        except FileNotFoundError:
+            return self._send_json({"error": "claude binary not found on PATH"})
+        except Exception as exc:
+            sys.stderr.write(f"[shim] extract failed: {exc}\n")
+            return self._send_json({"error": "the scan backend hit an error"})
+        finally:
+            if image_path:
+                try:
+                    os.remove(image_path)
+                except OSError:
+                    pass
+
+    def _send_json(self, obj):
+        """Write a compact JSON body with a 200 + Content-Length."""
+        out = json.dumps(obj).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
 
     def _phonemize(self):
         """POST /phonemize {"text": "...", "voice": "en-us"} → 200

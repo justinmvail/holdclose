@@ -30,7 +30,10 @@ Future<MedicationRepository> _pumpForm(
   String? editId,
   String idValue = '1',
 }) async {
-  await tester.binding.setSurfaceSize(const Size(440, 1600));
+  // Tall viewport so the whole form (now incl. the optional prescription-
+  // details section) builds — the day/window pickers sit below it in the
+  // lazy ListView and tests need them realized to tap.
+  await tester.binding.setSurfaceSize(const Size(440, 2800));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final GlobalKey<NavigatorState> rootKey = GlobalKey<NavigatorState>();

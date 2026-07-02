@@ -43,19 +43,36 @@ import '../providers/voice_note_recorder_provider.dart';
 /// attached" here, since the photo seam has no permission-exception
 /// channel (unlike voice).
 class RealPhotoAttacher implements PhotoAttacher {
-  RealPhotoAttacher({ImagePicker? picker, this.source = ImageSource.gallery})
-      : _picker = picker ?? ImagePicker();
+  RealPhotoAttacher({ImagePicker? picker}) : _picker = picker ?? ImagePicker();
 
   final ImagePicker _picker;
 
-  /// Which OS surface to open. Defaults to the photo library; a camera
-  /// variant can be wired by constructing with [ImageSource.camera].
-  final ImageSource source;
-
   @override
-  Future<String?> pickPhoto() async {
+  Future<String?> pickPhoto({
+    PhotoSource source = PhotoSource.library,
+    int maxSide = 2048,
+    int quality = 80,
+  }) async {
     try {
-      final XFile? file = await _picker.pickImage(source: source);
+      // Downscale + JPEG-compress at capture. Keeps uploads well under the
+      // backend's 8 MB doc cap (MAX_BLOB_BYTES) — modern phone photos can be
+      // 8–15 MB raw, which would 413 on the document route — and keeps
+      // avatars / forum images fast to sync. Callers override [maxSide]/
+      // [quality] for a smaller vision-model upload (the prescription scan).
+      final XFile? file = await _picker.pickImage(
+        source: source == PhotoSource.camera
+            ? ImageSource.camera
+            : ImageSource.gallery,
+        imageQuality: quality,
+        maxWidth: maxSide.toDouble(),
+        maxHeight: maxSide.toDouble(),
+        // Do NOT read/preserve full EXIF metadata. Its default (true) makes
+        // image_picker touch photo GPS/location data, which triggers an iOS
+        // location-permission prompt — unwanted here, and we never want GPS
+        // coordinates baked into a photo of a medication label or medical
+        // document (privacy-by-design; Caregiver AI Principle 1).
+        requestFullMetadata: false,
+      );
       return file?.path;
     } catch (_) {
       // Cancelled, no camera, or permission denied — the journal entry

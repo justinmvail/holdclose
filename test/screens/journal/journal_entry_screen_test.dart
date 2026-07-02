@@ -52,7 +52,11 @@ class _SpyPhotoAttacher implements PhotoAttacher {
   String? nextPath = 'photo-fixture-1.jpg';
 
   @override
-  Future<String?> pickPhoto() async {
+  Future<String?> pickPhoto({
+    PhotoSource source = PhotoSource.library,
+    int maxSide = 2048,
+    int quality = 80,
+  }) async {
     events.add('pick');
     return nextPath;
   }

@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/medication.dart';
+import '../../models/medication_draft.dart';
 import '../../providers/active_patient_provider.dart';
 import '../../providers/patient_timeline_provider.dart';
 import '../../services/medication_repository.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
+import 'prescription_scan_flow.dart';
 
 part 'medication_list_screen.g.dart';
 
@@ -103,6 +107,7 @@ class MedicationListScreen extends ConsumerWidget {
   static const Key emptyStateKey = Key('medication-list-empty');
   static const Key emptyCtaKey = Key('medication-list-empty-cta');
   static const Key fabKey = Key('medication-list-fab');
+  static const Key scanButtonKey = Key('medication-list-scan');
 
   /// The delete-confirmation dialog (a long-press on a med card).
   static const Key deleteDialogKey = Key('medication-list-delete-dialog');
@@ -138,22 +143,42 @@ class MedicationListScreen extends ConsumerWidget {
                 title: 'Medications',
                 backLabel: 'Back to Care',
                 leadingIcon: Icons.medication_outlined,
-                // Per-screen action — opens the dose-window manager so
-                // caregivers can rename / re-anchor / delete windows
-                // without going through the form picker.
-                trailing: IconButton(
-                  tooltip: 'Manage time windows',
-                  iconSize: 24,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 24,
-                    height: 24,
-                  ),
-                  visualDensity: VisualDensity.compact,
-                  color: context.cb.primary,
-                  icon: const Icon(Icons.schedule_outlined),
-                  onPressed: () =>
-                      context.push('/medications/windows'),
+                // Per-screen actions — scan a prescription (AI photo →
+                // human-approved import) and open the dose-window manager
+                // (rename / re-anchor / delete windows without the form
+                // picker).
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    IconButton(
+                      key: MedicationListScreen.scanButtonKey,
+                      tooltip: 'Scan a prescription',
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 24,
+                        height: 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      color: context.cb.primary,
+                      icon: const Icon(Icons.document_scanner_outlined),
+                      onPressed: () => _scanPrescription(context, ref),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      tooltip: 'Manage time windows',
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 24,
+                        height: 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      color: context.cb.primary,
+                      icon: const Icon(Icons.schedule_outlined),
+                      onPressed: () => context.push('/medications/windows'),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -187,6 +212,20 @@ class MedicationListScreen extends ConsumerWidget {
         orElse: () => null,
       ),
     );
+  }
+
+  /// Scan a prescription: pick a photo, extract a [MedicationDraft] via
+  /// the AI scanner, then open the review screen for human approval.
+  /// Every path is guarded — a cancelled pick or an unreadable image
+  /// still lands the caregiver on the (blank) review screen for manual
+  /// entry, and nothing is saved without their explicit tap.
+  Future<void> _scanPrescription(BuildContext context, WidgetRef ref) async {
+    final MedicationDraft? draft = await capturePrescriptionDraft(context, ref);
+    // null → the caregiver cancelled. Otherwise open the review screen even
+    // on an empty read: the scan just saves typing, and they can still enter
+    // the medication by hand.
+    if (draft == null || !context.mounted) return;
+    unawaited(context.push('/medications/scan/review', extra: draft));
   }
 }
 
