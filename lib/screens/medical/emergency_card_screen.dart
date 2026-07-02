@@ -111,6 +111,7 @@ class EmergencyCardScreen extends ConsumerWidget {
   static const Key allergiesSectionKey = Key('emergency-card-allergies');
   static const Key contactsSectionKey = Key('emergency-card-contacts');
   static const Key insuranceCallKey = Key('emergency-card-insurance-call');
+  static const Key insuranceAppealKey = Key('emergency-card-insurance-appeal');
   static const Key insuranceSectionKey = Key('emergency-card-insurance');
   static const Key donorSectionKey = Key('emergency-card-donor');
 
@@ -664,6 +665,20 @@ class _InsuranceBlock extends ConsumerWidget {
             ),
           ),
         ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: EmergencyCardScreen.insuranceAppealKey,
+            onPressed: () =>
+                context.push('/insurance-appeal', extra: ins.carrier),
+            icon: const Icon(Icons.description_outlined, size: 18),
+            label: const Text('Draft an appeal letter'),
+            style: TextButton.styleFrom(
+              foregroundColor: context.cb.primary,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
       ],
     );
   }

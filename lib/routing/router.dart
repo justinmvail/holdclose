@@ -25,6 +25,7 @@ import '../screens/medical/care_plan_routine_form.dart';
 import '../screens/medical/care_plan_routines_screen.dart';
 import '../screens/medical/emergency_card_edit_screen.dart';
 import '../screens/medical/emergency_card_screen.dart';
+import '../screens/medical/insurance_appeal_screen.dart';
 import '../screens/medical/health_log_entry_form.dart';
 import '../screens/medical/health_log_screen.dart';
 import '../screens/medical/medical_hub_screen.dart';
@@ -71,6 +72,7 @@ class HoldcloseRoutes {
   static const String signIn = 'sign-in';
   static const String setup = 'setup';
   static const String settings = 'settings';
+  static const String insuranceAppeal = 'insurance-appeal';
   // Multi-patient "Loved ones" manager (Issue #6). `lovedOnes` → the
   // switcher/manager; `lovedOnesAdd` → the setup wizard reused in add
   // mode to append + activate another loved one.
@@ -201,6 +203,18 @@ GoRouter buildRouter({
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const SettingsScreen(),
+      ),
+      // AI insurance-appeal helper — reached from the emergency card's
+      // insurance block; pushes onto the root navigator so it covers the
+      // tab bar. `extra` optionally carries the carrier name.
+      GoRoute(
+        path: '/insurance-appeal',
+        name: HoldcloseRoutes.insuranceAppeal,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            InsuranceAppealScreen(
+          carrier: state.extra is String ? state.extra as String : null,
+        ),
       ),
       // Multi-patient "Loved ones" manager (Issue #6) — reached from
       // Settings → "Loved ones". The `add` child reuses the onboarding
