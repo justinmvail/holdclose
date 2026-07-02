@@ -597,24 +597,16 @@ const bool _useFakeAuth = bool.fromEnvironment(
 
 const bool _useFake = _demoMode || _useFakeAuth;
 
-/// Build-time flag (`ALPHA_FEEDBACK`). When set, the app runs in
-/// alpha-tester mode: an [AlphaAuthProvider] (REAL Google verified by the
-/// backend, plus a local "just start" name + per-install id fallback)
-/// replaces the canned [FakeAuthProvider], so every tester is a distinct,
-/// persisted, attributable account. Demo-tour and widget-test builds (no
-/// ALPHA_FEEDBACK) keep [FakeAuthProvider].
-/// Real-Google-auth (alpha tester) mode — now its OWN flag, split from the
-/// feedback UI. `--dart-define=ALPHA_AUTH=true` selects [AlphaAuthProvider]
-/// (Google verified by the backend). The legacy `ALPHA_FEEDBACK` umbrella
-/// still turns on BOTH auth + feedback UI so existing tester-build commands
-/// keep working. Public so the sign-in screen shows the Google-only flow
-/// under it.
+/// Real-Google-auth (alpha tester) mode — `--dart-define=ALPHA_AUTH=true`
+/// selects an [AlphaAuthProvider] (REAL Google verified by the backend), so
+/// every tester is a distinct, persisted, attributable account, replacing
+/// the canned [FakeAuthProvider]. A wholly separate concern from the feedback
+/// UI ([feedbackUiEnabled] / `FEEDBACK`). Demo-tour and widget-test builds
+/// leave it off and keep [FakeAuthProvider]. Public so the sign-in screen
+/// shows the Google-only flow under it.
 // ignore: do_not_use_environment
-const bool _alphaAuth = bool.fromEnvironment('ALPHA_AUTH', defaultValue: false);
-// ignore: do_not_use_environment
-const bool _alphaFeedbackLegacy =
-    bool.fromEnvironment('ALPHA_FEEDBACK', defaultValue: false);
-const bool alphaAuthEnabled = _alphaAuth || _alphaFeedbackLegacy;
+const bool alphaAuthEnabled =
+    bool.fromEnvironment('ALPHA_AUTH', defaultValue: false);
 const bool _alphaTesterMode = alphaAuthEnabled;
 
 /// The Web OAuth client id (`--dart-define=GOOGLE_SERVER_CLIENT_ID=...`).

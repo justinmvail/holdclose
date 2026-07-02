@@ -21,23 +21,15 @@ import '../providers/llm_provider.dart' show shimBaseUrl, shimAuthHeaders;
 /// endpoint ([FeedbackSender]) which appends them to a JSONL + screenshot
 /// folder on the operator's machine.
 
-/// Whether the in-app Report affordance is live. **Off by default** so
-/// production, `flutter test`, and every golden never render the button
-/// or touch the outbox — no golden shifts. Turn on for tester builds with
-/// `--dart-define=ALPHA_FEEDBACK=true`.
+/// Whether the in-app feedback UI is live — the report button, the
+/// screenshot overlay, and the raw error detail in chat. **Off by default**
+/// so production, `flutter test`, and every golden never render the button
+/// or touch the outbox — no golden shifts. A wholly separate concern from
+/// auth: `--dart-define=FEEDBACK=true` turns it on with ZERO effect on
+/// sign-in, so you can dogfood on a DEMO_MODE (fake-auth) build or an
+/// ALPHA_AUTH (real-Google) build alike.
 // ignore: do_not_use_environment
-const bool alphaFeedbackEnabled =
-    bool.fromEnvironment('ALPHA_FEEDBACK', defaultValue: false);
-
-/// Enables ONLY the in-app feedback UI — the report button, the screenshot
-/// overlay, and the alpha error detail in chat — independent of the
-/// Google-gated alpha-tester AUTH flow ([alphaFeedbackEnabled], which forces
-/// [AlphaAuthProvider]). Set `--dart-define=FEEDBACK=true` to dogfood on a
-/// DEMO_MODE device build (fake auth, no Google/backend needed) and still
-/// file reports. Full alpha builds get it for free. Production / tests /
-/// goldens leave both false, so nothing renders.
-// ignore: do_not_use_environment
-const bool feedbackUiEnabled = alphaFeedbackEnabled ||
+const bool feedbackUiEnabled =
     bool.fromEnvironment('FEEDBACK', defaultValue: false);
 
 /// DEMO_MODE mirror, read locally so this service stays decoupled from the

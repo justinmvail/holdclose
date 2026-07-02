@@ -30,8 +30,7 @@ class SignInScreen extends ConsumerStatefulWidget {
   /// Alpha-tester mode: Google-ONLY (user decision). Shows just the
   /// "Continue with Google" button so every tester becomes a real,
   /// backend-verified account. There is no local "just start" bypass.
-  /// Defaults to the `ALPHA_AUTH` build flag (or the legacy `ALPHA_FEEDBACK`
-  /// umbrella); tests pass it explicitly.
+  /// Defaults to the `ALPHA_AUTH` build flag; tests pass it explicitly.
   final bool alphaMode;
 
   /// Whether the alpha build baked in a Google Web client id. Defaults to
