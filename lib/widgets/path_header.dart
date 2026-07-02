@@ -206,7 +206,20 @@ class PathHeader extends StatelessWidget {
             constraints: const BoxConstraints.tightFor(width: 44, height: 44),
             color: context.cb.primary,
             tooltip: 'Back',
-            onPressed: () => context.go(backRoute),
+            // Prefer a true stack pop so Back returns wherever the user came
+            // FROM — essential for screens reachable from many places (e.g.
+            // Settings, pushed from the header gear on any screen; popping to
+            // the Home breadcrumb would strand them). Fall back to the parent
+            // crumb's route only when there's nothing to pop (a tab-branch
+            // root, or a deep link opened cold). The tappable breadcrumbs
+            // still handle explicit parent jumps.
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go(backRoute);
+              }
+            },
           ),
           const SizedBox(width: 4),
         ],
