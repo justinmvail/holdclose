@@ -1,5 +1,6 @@
 import 'package:holdclose/db/database.dart';
 import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/link_launcher_provider.dart';
 import 'package:holdclose/providers/storage_provider.dart';
 import 'package:holdclose/screens/medication/medication_list_screen.dart';
 import 'package:holdclose/services/medication_repository.dart';
@@ -54,6 +55,7 @@ MedicationWindowEntry _entry(String id, String medId, String windowId) =>
 Future<({MedicationRepository repo, List<String> nav})> _pumpList(
   WidgetTester tester, {
   required MedicationRepository repo,
+  List<Override> extraOverrides = const <Override>[],
 }) async {
   await tester.binding.setSurfaceSize(const Size(440, 1600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -111,6 +113,7 @@ Future<({MedicationRepository repo, List<String> nav})> _pumpList(
         // on-device sqlite and falls back to 'demo-patient-mary' (the
         // windows above are keyed on it), so behaviour is unchanged.
         storageBackendProvider.overrideWithValue(InMemoryStorageProvider()),
+        ...extraOverrides,
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -282,6 +285,55 @@ void main() {
       expect(await repo.listMedications(), hasLength(1));
       expect(
           find.byKey(MedicationListScreen.tileKey('m-ibu')), findsOneWidget);
+    });
+  });
+
+  group('MedicationListScreen — refill runway', () {
+    testWidgets('shows a "No refills left" chip + Call, and dials the pharmacy',
+        (WidgetTester tester) async {
+      final RecordingLinkLauncher launcher = RecordingLinkLauncher();
+      await repo.upsertWindow(_window('w-morning', 'Morning'));
+      await repo.upsertMedication(const Medication(
+        id: 'm-tiz',
+        name: 'Tizanidine',
+        dosage: '2 mg',
+        route: MedicationRoute.oral,
+        quantity: '180',
+        refills: '0',
+        pharmacyName: 'CVS Pharmacy',
+        pharmacyPhone: '843-767-4500',
+        dateFilled: '12/3/21',
+      ));
+      await repo.upsertEntry(_entry('e-tiz', 'm-tiz', 'w-morning'));
+
+      await _pumpList(tester, repo: repo, extraOverrides: <Override>[
+        linkLauncherProvider.overrideWithValue(launcher),
+      ]);
+
+      expect(
+          find.byKey(MedicationListScreen.supplyKey('m-tiz')), findsOneWidget);
+      expect(find.text('No refills left'), findsOneWidget);
+
+      await tester
+          .tap(find.byKey(MedicationListScreen.callPharmacyKey('m-tiz')));
+      await tester.pumpAndSettle();
+
+      expect(launcher.launched, hasLength(1));
+      expect(launcher.launched.single, Uri(scheme: 'tel', path: '8437674500'));
+    });
+
+    testWidgets('no runway line for a med without label data',
+        (WidgetTester tester) async {
+      await repo.upsertWindow(_window('w-morning', 'Morning'));
+      await repo.upsertMedication(_med('m-plain', 'Aspirin'));
+      await repo.upsertEntry(_entry('e-plain', 'm-plain', 'w-morning'));
+
+      await _pumpList(tester, repo: repo);
+
+      expect(find.byKey(MedicationListScreen.supplyKey('m-plain')),
+          findsNothing);
+      expect(find.byKey(MedicationListScreen.callPharmacyKey('m-plain')),
+          findsNothing);
     });
   });
 }
