@@ -1,7 +1,9 @@
 import 'package:holdclose/db/database.dart';
 import 'package:holdclose/models/appointment.dart';
+import 'package:holdclose/models/care_task.dart';
 import 'package:holdclose/models/medication.dart';
 import 'package:holdclose/models/settings.dart';
+import 'package:holdclose/providers/care_tasks_provider.dart';
 import 'package:holdclose/providers/notifications_provider.dart';
 import 'package:holdclose/services/appointment_repository.dart';
 import 'package:holdclose/services/medication_repository.dart';
@@ -28,12 +30,14 @@ void main() {
   late MedicationRepository meds;
   late AppointmentRepository appts;
   late ProviderRepository providers;
+  late CareTasksRepository tasks;
   late NoopNotificationsProvider notifications;
 
   NotificationScheduler scheduler({bool enabled = true}) => NotificationScheduler(
         notifications: notifications,
         medicationRepository: meds,
         appointmentRepository: appts,
+        careTaskRepository: tasks,
         settings: AppSettings.defaults().copyWith(notificationsEnabled: enabled),
         clock: () => now,
       );
@@ -43,6 +47,7 @@ void main() {
     meds = MedicationRepository(db, clock: () => now);
     appts = AppointmentRepository(db, clock: () => now);
     providers = ProviderRepository(db);
+    tasks = CareTasksRepository(db);
     notifications = NoopNotificationsProvider();
   });
 
@@ -217,6 +222,68 @@ void main() {
       await s.rescheduleForAppointment('a-1');
       expect((await notifications.pending()).isNotEmpty, isTrue);
       await s.cancelAll();
+      expect(await notifications.pending(), isEmpty);
+    });
+  });
+
+  group('rescheduleForTask', () {
+    CareTask task({
+      String id = 't-1',
+      DateTime? dueAt,
+      DateTime? completedAt,
+    }) =>
+        CareTask(
+          id: id,
+          title: 'Call the neurologist',
+          patientId: 'p1',
+          dueAt: dueAt,
+          completedAt: completedAt,
+        );
+
+    test('schedules a reminder at the due time with the task deep link',
+        () async {
+      await tasks.upsertTask(task(dueAt: DateTime(2026, 6, 10, 15, 0)));
+      final List<ScheduledNotification> targets =
+          await scheduler().rescheduleForTask('t-1');
+
+      expect(targets, hasLength(1));
+      final ScheduledNotification n = targets.single;
+      expect(n.title, 'Follow-up due');
+      expect(n.body, 'Call the neurologist');
+      expect(n.scheduledFor, DateTime(2026, 6, 10, 15, 0));
+      expect(n.deepLink, '/team/tasks');
+    });
+
+    test('no due date, a completed task, or a past due schedules nothing',
+        () async {
+      await tasks.upsertTask(task(id: 't-none'));
+      await tasks.upsertTask(task(
+          id: 't-done',
+          dueAt: DateTime(2026, 6, 10),
+          completedAt: DateTime(2026, 6, 9)));
+      await tasks.upsertTask(task(id: 't-past', dueAt: DateTime(2026, 6, 7)));
+
+      expect(await scheduler().rescheduleForTask('t-none'), isEmpty);
+      expect(await scheduler().rescheduleForTask('t-done'), isEmpty);
+      expect(await scheduler().rescheduleForTask('t-past'), isEmpty);
+    });
+
+    test('cancelForTask clears the reminder', () async {
+      await tasks.upsertTask(task(dueAt: DateTime(2026, 6, 10, 15, 0)));
+      final NotificationScheduler s = scheduler();
+      await s.rescheduleForTask('t-1');
+      expect(await notifications.pending(), hasLength(1));
+      await s.cancelForTask('t-1');
+      expect(await notifications.pending(), isEmpty);
+    });
+
+    test('the gate OFF schedules nothing but still clears prior', () async {
+      await tasks.upsertTask(task(dueAt: DateTime(2026, 6, 10, 15, 0)));
+      await scheduler().rescheduleForTask('t-1');
+      expect(await notifications.pending(), hasLength(1));
+      final List<ScheduledNotification> targets =
+          await scheduler(enabled: false).rescheduleForTask('t-1');
+      expect(targets, isEmpty);
       expect(await notifications.pending(), isEmpty);
     });
   });

@@ -117,9 +117,15 @@ abstract class StorageProvider {
 /// `createdAtMs` to its own column so the windowed watch query filters
 /// + orders without parsing every blob.
 class DriftStorageProvider with SyncSinkHost implements StorageProvider {
-  DriftStorageProvider(this._db);
+  DriftStorageProvider(this._db, {DateTime Function()? clock})
+      : _clock = clock ?? DateTime.now;
 
   final HoldcloseDatabase _db;
+
+  /// Wall clock the windowed journal query anchors "now" on. Injectable
+  /// (mirroring [InMemoryStorageProvider]) so date-window tests are
+  /// deterministic instead of depending on the host's real time.
+  final DateTime Function() _clock;
 
   /// Close the underlying database. The riverpod provider wires this
   /// to `ref.onDispose`.
@@ -130,7 +136,7 @@ class DriftStorageProvider with SyncSinkHost implements StorageProvider {
     Duration window = const Duration(days: 30),
   }) {
     final int cutoffMs =
-        DateTime.now().subtract(window).millisecondsSinceEpoch;
+        _clock().subtract(window).millisecondsSinceEpoch;
     final query = _db.select(_db.journalEntriesTable)
       ..where((t) => t.createdAtMs.isBiggerOrEqualValue(cutoffMs))
       ..orderBy(<OrderClauseGenerator<$JournalEntriesTableTable>>[

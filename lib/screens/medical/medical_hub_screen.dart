@@ -38,6 +38,27 @@ class MedicalHubScreen extends ConsumerWidget {
   }) =>
       <_MedicalTileSpec>[
         _MedicalTileSpec(
+          icon: Icons.document_scanner_outlined,
+          label: 'Scan a document',
+          subLabel: 'Rx, appointment, insurance card',
+          route: '/scan',
+          chipColor: context.cb.primary,
+        ),
+        _MedicalTileSpec(
+          icon: Icons.person_search_outlined,
+          label: 'Find a provider',
+          subLabel: 'search clinicians (NPI)',
+          route: '/find-provider',
+          chipColor: context.cb.link,
+        ),
+        _MedicalTileSpec(
+          icon: Icons.summarize_outlined,
+          label: 'Care summary',
+          subLabel: 'share with a clinician',
+          route: '/care-summary',
+          chipColor: context.cb.accentDeep,
+        ),
+        _MedicalTileSpec(
           icon: Icons.medication_outlined,
           label: 'Medications',
           subLabel: 'doses & reminders',

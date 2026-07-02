@@ -1,4 +1,6 @@
+import 'package:holdclose/models/document.dart';
 import 'package:holdclose/models/medication.dart';
+import 'package:holdclose/providers/link_launcher_provider.dart';
 import 'package:holdclose/screens/medical/emergency_card_screen.dart';
 import 'package:holdclose/seed/mary_henderson.dart';
 import 'package:holdclose/widgets/path_header.dart';
@@ -83,6 +85,50 @@ void main() {
       expect(find.byType(PathHeader), findsOneWidget);
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Care'), findsOneWidget);
+    });
+  });
+
+  group('EmergencyCardScreen — insurance call', () {
+    testWidgets('shows the member-services phone + Call, and dials it',
+        (WidgetTester tester) async {
+      final RecordingLinkLauncher launcher = RecordingLinkLauncher();
+      final EmergencyCardView view = EmergencyCardView(
+        patient: maryHenderson(),
+        card: EmergencyCard(
+          id: 'card-1',
+          patientId: 'demo-patient-mary',
+          updatedAt: DateTime(2026, 6, 1),
+          conditions: const <String>[],
+          medications: const <String>[],
+          allergies: const <String>[],
+          emergencyContacts: const <EmergencyContact>[],
+          insurance: const Insurance(
+            carrier: 'BlueCross',
+            policyNumber: 'P1',
+            groupNumber: 'G1',
+            phone: '800-555-1212',
+          ),
+          donorStatus: DonorStatus.unknown,
+        ),
+        medications: const <Medication>[],
+      );
+
+      await _pump(
+        tester,
+        overrides: <Override>[
+          emergencyCardViewProvider.overrideWith((Ref ref) async => view),
+          linkLauncherProvider.overrideWithValue(launcher),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('800-555-1212'), findsOneWidget);
+
+      await tester.tap(find.byKey(EmergencyCardScreen.insuranceCallKey));
+      await tester.pumpAndSettle();
+
+      expect(launcher.launched, hasLength(1));
+      expect(launcher.launched.single, Uri(scheme: 'tel', path: '8005551212'));
     });
   });
 }

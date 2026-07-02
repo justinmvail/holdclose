@@ -15,7 +15,13 @@ import 'emergency_card_screen.dart'
 /// `emergencyCardsProvider.notifier.updateCard`. Reached from the card's
 /// Edit action at `/medical/cards/emergency/edit`.
 class EmergencyCardEditScreen extends ConsumerWidget {
-  const EmergencyCardEditScreen({super.key});
+  const EmergencyCardEditScreen({super.key, this.scannedInsurance});
+
+  /// Optional insurance read from an insurance-card scan — pre-fills the
+  /// insurance fields (the caregiver reviews before saving). Field-level:
+  /// only fills what the scan actually read, never clobbering existing card
+  /// values.
+  final Insurance? scannedInsurance;
 
   static const Key bodyKey = Key('emergency-card-edit-body');
   static const Key conditionsFieldKey = Key('emergency-card-edit-conditions');
@@ -62,8 +68,10 @@ class EmergencyCardEditScreen extends ConsumerWidget {
                   child: Text("We couldn't load the emergency card.",
                       style: Theme.of(context).textTheme.bodyLarge),
                 ),
-                data: (EmergencyCardView view) =>
-                    _EmergencyCardForm(view: view),
+                data: (EmergencyCardView view) => _EmergencyCardForm(
+                  view: view,
+                  scannedInsurance: scannedInsurance,
+                ),
               ),
             ),
           ],
@@ -74,9 +82,10 @@ class EmergencyCardEditScreen extends ConsumerWidget {
 }
 
 class _EmergencyCardForm extends ConsumerStatefulWidget {
-  const _EmergencyCardForm({required this.view});
+  const _EmergencyCardForm({required this.view, this.scannedInsurance});
 
   final EmergencyCardView view;
+  final Insurance? scannedInsurance;
 
   @override
   ConsumerState<_EmergencyCardForm> createState() => _EmergencyCardFormState();
@@ -89,6 +98,7 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
   late final TextEditingController _carrier;
   late final TextEditingController _policy;
   late final TextEditingController _group;
+  late final TextEditingController _insurancePhone;
   late final List<_ContactCtrls> _contacts;
   late DonorStatus _donor;
   bool _saving = false;
@@ -104,9 +114,21 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
     _allergies =
         TextEditingController(text: (card?.allergies ?? <String>[]).join('\n'));
     final Insurance? ins = card?.insurance;
-    _carrier = TextEditingController(text: ins?.carrier ?? '');
-    _policy = TextEditingController(text: ins?.policyNumber ?? '');
-    _group = TextEditingController(text: ins?.groupNumber ?? '');
+    final Insurance? scan = widget.scannedInsurance;
+    // Prefer a scanned value only when it's non-empty, so an insurance-card
+    // scan fills the blanks without clobbering what's already on file.
+    String pick(String? scanned, String? existing) =>
+        (scanned != null && scanned.trim().isNotEmpty)
+            ? scanned.trim()
+            : (existing ?? '');
+    _carrier =
+        TextEditingController(text: pick(scan?.carrier, ins?.carrier));
+    _policy =
+        TextEditingController(text: pick(scan?.policyNumber, ins?.policyNumber));
+    _group =
+        TextEditingController(text: pick(scan?.groupNumber, ins?.groupNumber));
+    _insurancePhone =
+        TextEditingController(text: pick(scan?.phone, ins?.phone));
     _contacts = (card?.emergencyContacts ?? <EmergencyContact>[])
         .map(_ContactCtrls.from)
         .toList();
@@ -122,6 +144,7 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
       _carrier,
       _policy,
       _group,
+      _insurancePhone,
     ]) {
       c.dispose();
     }
@@ -161,6 +184,9 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
         carrier: _carrier.text.trim(),
         policyNumber: _policy.text.trim(),
         groupNumber: _group.text.trim(),
+        phone: _insurancePhone.text.trim().isEmpty
+            ? null
+            : _insurancePhone.text.trim(),
       ),
       donorStatus: _donor,
       attachmentPath: existing?.attachmentPath,
@@ -240,6 +266,12 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
             _TextField(label: 'Policy number', controller: _policy),
             const SizedBox(height: 12),
             _TextField(label: 'Group number', controller: _group),
+            const SizedBox(height: 12),
+            _TextField(
+              label: 'Member-services phone',
+              controller: _insurancePhone,
+              keyboardType: TextInputType.phone,
+            ),
             const SizedBox(height: 28),
             _SectionLabel('Organ donor', textTheme: textTheme),
             const SizedBox(height: 8),
@@ -351,14 +383,20 @@ class _MultilineField extends StatelessWidget {
 }
 
 class _TextField extends StatelessWidget {
-  const _TextField({required this.label, required this.controller});
+  const _TextField({
+    required this.label,
+    required this.controller,
+    this.keyboardType,
+  });
 
   final String label;
   final TextEditingController controller;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) => TextField(
         controller: controller,
+        keyboardType: keyboardType,
         decoration: InputDecoration(labelText: label),
       );
 }

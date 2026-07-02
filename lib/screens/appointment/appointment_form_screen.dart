@@ -7,11 +7,14 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/appointment.dart';
+import '../../models/appointment_draft.dart';
 import '../../providers/notifications_provider.dart';
+import '../../providers/visit_prep_provider.dart';
 import '../../providers/patient_timeline_provider.dart' show invalidatePatientTimeline;
 import '../../services/appointment_repository.dart';
 import '../../services/notification_scheduler.dart';
 import '../../services/provider_repository.dart';
+import '../../services/visit_prep_service.dart';
 import '../../theme.dart';
 import '../../widgets/form/form_error_view.dart';
 import '../../widgets/form/format.dart';
@@ -106,10 +109,17 @@ class AppointmentFormScreen extends ConsumerStatefulWidget {
     this.appointmentId,
     this.initialNotes,
     this.initialDate,
+    this.initialDraft,
   });
 
   /// Non-null on the edit path; null on the add path.
   final String? appointmentId;
+
+  /// A scanned appointment card's proposed fields (add path only). Seeds
+  /// date/time, location, duration, an agenda item, and notes, and either
+  /// selects a matching provider or pre-fills the inline add-provider form.
+  /// The caregiver reviews and approves everything before saving.
+  final AppointmentDraft? initialDraft;
 
   /// A day pre-selected on the add path — passed by the Schedule
   /// calendar's "Add" affordance (`?date=YYYY-MM-DD`) so the new
@@ -152,6 +162,8 @@ class AppointmentFormScreen extends ConsumerStatefulWidget {
   static const Key notesFieldKey = Key('appointment-form-notes');
   static const Key submitButtonKey = Key('appointment-form-submit');
   static const Key addAgendaButtonKey = Key('appointment-form-add-agenda');
+  static const Key suggestQuestionsKey =
+      Key('appointment-form-suggest-questions');
 
   static Key agendaItemFieldKey(int index) =>
       Key('appointment-form-agenda-item-$index');
@@ -190,6 +202,7 @@ class _AppointmentFormScreenState
 
   bool _hydrated = false;
   bool _submitting = false;
+  bool _suggesting = false;
 
   @override
   void initState() {
@@ -220,6 +233,69 @@ class _AppointmentFormScreenState
       final String seed = widget.initialNotes?.trim() ?? '';
       if (seed.isNotEmpty) _notes.text = seed;
     }
+
+    // Scanned-card seed (add path): pre-fill the fields the scan read. The
+    // provider is reconciled separately once the provider list loads.
+    if (!widget.isEdit && widget.initialDraft != null) {
+      final AppointmentDraft d = widget.initialDraft!;
+      final DateTime? s = d.startsAt;
+      if (s != null) _startsAt = s;
+      if ((d.location ?? '').trim().isNotEmpty) {
+        _location.text = d.location!.trim();
+      }
+      if ((d.notes ?? '').trim().isNotEmpty) _notes.text = d.notes!.trim();
+      if (d.durationMinutes != null && d.durationMinutes! > 0) {
+        _duration.text = d.durationMinutes!.toString();
+      }
+      if ((d.reason ?? '').trim().isNotEmpty) {
+        _agenda = <TextEditingController>[
+          TextEditingController(text: d.reason!.trim()),
+        ];
+      }
+    }
+  }
+
+  bool _draftProviderReconciled = false;
+
+  /// Once the provider list loads, reconcile a scanned provider: select an
+  /// existing one that matches by name, or open the inline add-provider form
+  /// pre-filled so the caregiver can create it with one tap. Runs once.
+  void _reconcileDraftProvider(List<Provider> providers) {
+    if (_draftProviderReconciled) return;
+    if (widget.isEdit || widget.initialDraft == null) {
+      _draftProviderReconciled = true;
+      return;
+    }
+    final String name = (widget.initialDraft!.providerName ?? '').trim();
+    if (name.isEmpty) {
+      _draftProviderReconciled = true;
+      return;
+    }
+    _draftProviderReconciled = true;
+    final AppointmentDraft d = widget.initialDraft!;
+    Provider? match;
+    for (final Provider p in providers) {
+      if (p.name.trim().toLowerCase() == name.toLowerCase()) {
+        match = p;
+        break;
+      }
+    }
+    // Defer to after this frame — we're inside build via the providers
+    // .when(data:) callback, so we can't setState synchronously.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (match != null) {
+        _onProviderSelected(match.id, providers);
+      } else {
+        setState(() {
+          _addingProvider = true;
+          _newProviderName.text = name;
+          _newProviderRole = d.providerRole ?? ProviderRole.doctor;
+          _newProviderPhone.text = (d.providerPhone ?? '').trim();
+          _newProviderAddress.text = (d.providerAddress ?? '').trim();
+        });
+      }
+    });
   }
 
   @override
@@ -464,6 +540,59 @@ class _AppointmentFormScreenState
     }
   }
 
+  /// AI doctor-visit prep: suggest questions grounded in the loved one's
+  /// care data + what the caregiver already wants to cover, then let them
+  /// pick which to add as agenda bullets. Never advice — questions only.
+  Future<void> _suggestQuestions() async {
+    if (_suggesting) return;
+    setState(() => _suggesting = true);
+    final VisitPrepService service = ref.read(visitPrepServiceProvider);
+    String careContext = '';
+    try {
+      careContext = await ref.read(careContextTextProvider.future);
+    } catch (_) {
+      careContext = '';
+    }
+    final List<String> already = <String>[
+      for (final TextEditingController c in _agenda)
+        if (c.text.trim().isNotEmpty) c.text.trim(),
+      if (_notes.text.trim().isNotEmpty) _notes.text.trim(),
+    ];
+    List<String>? questions;
+    try {
+      questions = await service.suggestQuestions(
+        careContext: careContext,
+        reason: already.isEmpty ? null : already.join('; '),
+      );
+    } catch (_) {
+      questions = null;
+    }
+    if (!mounted) return;
+    setState(() => _suggesting = false);
+    if (questions == null || questions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          "Couldn't suggest questions right now — add agenda items by hand.",
+        ),
+      ));
+      return;
+    }
+    final List<String>? picked = await showModalBottomSheet<List<String>>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (BuildContext sheetContext) =>
+          _QuestionPickerSheet(questions: questions!),
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    setState(() {
+      _agenda = <TextEditingController>[
+        ..._agenda,
+        for (final String q in picked) TextEditingController(text: q),
+      ];
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final AsyncValue<AppointmentDetailData?> hydration = ref.watch(
@@ -533,13 +662,16 @@ class _AppointmentFormScreenState
                           color: context.cb.text,
                         ),
                       ),
-                      data: (List<Provider> providers) => _ProviderPicker(
-                        providers: providers,
-                        selectedId: _selectedProviderId,
-                        onChanged: (String? id) =>
-                            _onProviderSelected(id, providers),
-                        onAddTapped: _startInlineProvider,
-                      ),
+                      data: (List<Provider> providers) {
+                        _reconcileDraftProvider(providers);
+                        return _ProviderPicker(
+                          providers: providers,
+                          selectedId: _selectedProviderId,
+                          onChanged: (String? id) =>
+                              _onProviderSelected(id, providers),
+                          onAddTapped: _startInlineProvider,
+                        );
+                      },
                     ),
                   ),
                   if (_addingProvider) ...<Widget>[
@@ -649,14 +781,32 @@ class _AppointmentFormScreenState
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      key: AppointmentFormScreen.addAgendaButtonKey,
-                      onPressed: _addAgendaItem,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add agenda item'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: context.cb.primary,
-                      ),
+                    child: Wrap(
+                      spacing: 4,
+                      children: <Widget>[
+                        TextButton.icon(
+                          key: AppointmentFormScreen.addAgendaButtonKey,
+                          onPressed: _addAgendaItem,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add agenda item'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: context.cb.primary,
+                          ),
+                        ),
+                        // AI doctor-visit prep: suggest questions grounded in
+                        // the loved one's care data, add the chosen ones as
+                        // agenda bullets.
+                        TextButton.icon(
+                          key: AppointmentFormScreen.suggestQuestionsKey,
+                          onPressed: _suggesting ? null : _suggestQuestions,
+                          icon: const Icon(Icons.auto_awesome_outlined),
+                          label: Text(
+                              _suggesting ? 'Thinking…' : 'Suggest questions'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: context.cb.cta,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -1014,6 +1164,89 @@ class _PickerField extends StatelessWidget {
                   color: context.cb.text,
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet of AI-suggested visit questions — a checkbox each (all
+/// selected by default); "Add to agenda" pops the chosen list.
+class _QuestionPickerSheet extends StatefulWidget {
+  const _QuestionPickerSheet({required this.questions});
+
+  final List<String> questions;
+
+  @override
+  State<_QuestionPickerSheet> createState() => _QuestionPickerSheetState();
+}
+
+class _QuestionPickerSheetState extends State<_QuestionPickerSheet> {
+  late final List<bool> _checked =
+      List<bool>.filled(widget.questions.length, true);
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme tt = Theme.of(context).textTheme;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Questions to ask',
+                style: tt.titleLarge?.copyWith(
+                  color: context.cb.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              "Suggested from your loved one's recent care. Pick the ones to "
+              'add to the agenda — you can edit them after.',
+              style: tt.bodyMedium?.copyWith(color: context.cb.primarySoft),
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    for (int i = 0; i < widget.questions.length; i++)
+                      CheckboxListTile(
+                        value: _checked[i],
+                        onChanged: (bool? v) =>
+                            setState(() => _checked[i] = v ?? false),
+                        title: Text(widget.questions[i]),
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        activeColor: context.cb.cta,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: () {
+                final List<String> selected = <String>[
+                  for (int i = 0; i < widget.questions.length; i++)
+                    if (_checked[i]) widget.questions[i],
+                ];
+                Navigator.of(context).pop(selected);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: context.cb.cta,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: const Text('Add to agenda'),
             ),
           ],
         ),

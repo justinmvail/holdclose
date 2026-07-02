@@ -8,6 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
+/// Fixed "now" just after the fixed-date fixtures (createdAt 2026-05-29) so
+/// the 30-day journal window includes them regardless of the host's real
+/// clock — these tests were time-bombs otherwise.
+DateTime _fixedNow() => DateTime.utc(2026, 5, 30, 12);
+
 void main() {
   // ---- Shared fixtures -----------------------------------------------------
 
@@ -63,7 +68,9 @@ void main() {
 
     setUp(() {
       db = HoldcloseDatabase(NativeDatabase.memory());
-      storage = DriftStorageProvider(db);
+      // Pin "now" just after the fixtures' fixed dates so the 30-day journal
+      // window includes them regardless of the host's real clock.
+      storage = DriftStorageProvider(db, clock: _fixedNow);
     });
 
     tearDown(() async {
@@ -281,7 +288,7 @@ void main() {
     late InMemoryStorageProvider storage;
 
     setUp(() {
-      storage = InMemoryStorageProvider();
+      storage = InMemoryStorageProvider(clock: _fixedNow);
     });
 
     tearDown(() async {
@@ -425,7 +432,8 @@ void main() {
 
   group('storageProvider riverpod wiring', () {
     test('override hook swaps in a custom impl', () async {
-      final InMemoryStorageProvider fake = InMemoryStorageProvider();
+      final InMemoryStorageProvider fake =
+          InMemoryStorageProvider(clock: _fixedNow);
       addTearDown(fake.dispose);
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[

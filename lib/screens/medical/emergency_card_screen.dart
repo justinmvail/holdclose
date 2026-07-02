@@ -110,6 +110,8 @@ class EmergencyCardScreen extends ConsumerWidget {
   static const Key medicationsSectionKey = Key('emergency-card-medications');
   static const Key allergiesSectionKey = Key('emergency-card-allergies');
   static const Key contactsSectionKey = Key('emergency-card-contacts');
+  static const Key insuranceCallKey = Key('emergency-card-insurance-call');
+  static const Key insuranceAppealKey = Key('emergency-card-insurance-appeal');
   static const Key insuranceSectionKey = Key('emergency-card-insurance');
   static const Key donorSectionKey = Key('emergency-card-donor');
 
@@ -630,21 +632,53 @@ Uri _telUri(String phone) {
 // Insurance block
 // ---------------------------------------------------------------------------
 
-class _InsuranceBlock extends StatelessWidget {
+class _InsuranceBlock extends ConsumerWidget {
   const _InsuranceBlock({required this.insurance});
 
   final Insurance? insurance;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final Insurance? ins = insurance;
     if (ins == null) return const _EmptyLine(label: 'Not on file');
+    final String phone = (ins.phone ?? '').trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _LabeledValue(label: 'Carrier', value: ins.carrier),
         _LabeledValue(label: 'Policy', value: ins.policyNumber),
         _LabeledValue(label: 'Group', value: ins.groupNumber),
+        if (phone.isNotEmpty) ...<Widget>[
+          _LabeledValue(label: 'Phone', value: phone),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: EmergencyCardScreen.insuranceCallKey,
+              onPressed: () =>
+                  ref.read(linkLauncherProvider).launch(_telUri(phone)),
+              icon: const Icon(Icons.call, size: 18),
+              label: const Text('Call insurer'),
+              style: TextButton.styleFrom(
+                foregroundColor: context.cb.cta,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+        ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: EmergencyCardScreen.insuranceAppealKey,
+            onPressed: () =>
+                context.push('/insurance-appeal', extra: ins.carrier),
+            icon: const Icon(Icons.description_outlined, size: 18),
+            label: const Text('Draft an appeal letter'),
+            style: TextButton.styleFrom(
+              foregroundColor: context.cb.primary,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
       ],
     );
   }

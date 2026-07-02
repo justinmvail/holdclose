@@ -171,6 +171,50 @@ void main() {
       expect(_path(router), '/'); // parent is the auto-prepended Home
     });
 
+    testWidgets('Back pops to the pusher, not the crumb parent, when pushed',
+        (WidgetTester tester) async {
+      // Reproduces the Settings bug: a page reachable from many places
+      // (pushed via the header gear) whose only crumb parent is Home. Back
+      // must return where the user came FROM, not jump to Home.
+      Widget page(String label, [Widget? body]) =>
+          Scaffold(body: body ?? Center(child: Text(label)));
+      final GoRouter router = GoRouter(
+        initialLocation: '/elsewhere',
+        routes: <RouteBase>[
+          GoRoute(path: '/', builder: (_, __) => page('HOME')),
+          GoRoute(path: '/elsewhere', builder: (_, __) => page('ELSEWHERE')),
+          GoRoute(
+            path: '/settings',
+            builder: (_, __) => page(
+              'SETTINGS',
+              const PathHeader(
+                breadcrumbs: <PathHeaderCrumb>[
+                  PathHeaderCrumb(label: 'Home', route: '/'),
+                  PathHeaderCrumb(label: 'Settings'),
+                ],
+                title: 'Settings',
+              ),
+            ),
+          ),
+        ],
+      );
+      await _pumpRouter(tester, router);
+      expect(find.text('ELSEWHERE'), findsOneWidget);
+
+      router.push('/settings'); // as the header gear does
+      await tester.pumpAndSettle();
+      // Settings is now on top; the pusher is offstage beneath it.
+      expect(find.byKey(PathHeader.backButtonKey), findsOneWidget);
+      expect(find.text('ELSEWHERE'), findsNothing);
+
+      await tester.tap(find.byKey(PathHeader.backButtonKey));
+      await tester.pumpAndSettle();
+      // Back returned to the pusher — NOT the Home crumb.
+      expect(find.text('ELSEWHERE'), findsOneWidget);
+      expect(find.text('HOME'), findsNothing);
+      expect(find.byKey(PathHeader.backButtonKey), findsNothing);
+    });
+
     testWidgets('the Home root has NO back button',
         (WidgetTester tester) async {
       await _pumpRouter(

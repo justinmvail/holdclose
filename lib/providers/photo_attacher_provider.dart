@@ -20,10 +20,29 @@ part 'photo_attacher_provider.g.dart';
 ///
 /// When a real camera/library plugin lands, only the concrete impl
 /// changes — consumers keep reading through [photoAttacherProvider].
+/// Which OS surface a photo pick should open. Kept plugin-agnostic (no
+/// `image_picker` import here) so the interface + test fakes stay decoupled
+/// from the concrete capture plugin; [RealPhotoAttacher] maps it to an
+/// `ImageSource`.
+enum PhotoSource { camera, library }
+
 abstract class PhotoAttacher {
-  /// Present the OS picker (camera + library) and return the chosen
-  /// image's on-device path. Returns null if the user cancelled.
-  Future<String?> pickPhoto();
+  /// Present the OS picker and return the chosen image's on-device path,
+  /// or null if the user cancelled. [source] selects the camera vs. the
+  /// photo library; it defaults to the library so existing callers
+  /// (journal, expenses) keep their behavior.
+  ///
+  /// [maxSide] / [quality] bound the captured image at pick time (the
+  /// plugin downscales + JPEG-compresses). Defaults suit stored photos
+  /// (journal, docs). Callers that upload the image to a vision model —
+  /// the prescription scan — pass a smaller [maxSide]/[quality] so the
+  /// upload is small on every backend (labels stay legible ~1500px), NOT
+  /// relying on any server to shrink it.
+  Future<String?> pickPhoto({
+    PhotoSource source = PhotoSource.library,
+    int maxSide = 2048,
+    int quality = 80,
+  });
 }
 
 /// No-op impl used by production until an `image_picker`-backed
@@ -33,7 +52,12 @@ class NoopPhotoAttacher implements PhotoAttacher {
   const NoopPhotoAttacher();
 
   @override
-  Future<String?> pickPhoto() async => 'assets/seed/sample-photo-1.jpg';
+  Future<String?> pickPhoto({
+    PhotoSource source = PhotoSource.library,
+    int maxSide = 2048,
+    int quality = 80,
+  }) async =>
+      'assets/seed/sample-photo-1.jpg';
 }
 
 /// Whether to use real device capture (camera / microphone / dictation)

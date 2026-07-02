@@ -395,6 +395,10 @@ Finder tabFor(String label) => find.descendant(
 Future<void> openCareCircle(WidgetTester tester) async {
   await tester.tap(tabFor('Care'));
   await tester.pumpAndSettle();
+  // The Care Circle tile is last in the grid; scroll it into view before
+  // tapping (the grid grew as tiles were added).
+  await tester.ensureVisible(findHubTile('Care Circle'));
+  await tester.pumpAndSettle();
   await tester.tap(findHubTile('Care Circle'));
   await tester.pumpAndSettle();
   expect(find.byType(CareTeamHubScreen), findsOneWidget);

@@ -44,7 +44,7 @@ void main() {
               ],
               child: SizedBox(
                 width: 420,
-                height: 1100,
+                height: 1900,
                 child: MaterialApp.router(
                   routerConfig: _goldenRouter(),
                   builder: (BuildContext context, Widget? child) {

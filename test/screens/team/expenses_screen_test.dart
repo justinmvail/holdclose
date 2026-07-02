@@ -28,7 +28,11 @@ class _FakePhotoAttacher implements PhotoAttacher {
   int calls = 0;
 
   @override
-  Future<String?> pickPhoto() async {
+  Future<String?> pickPhoto({
+    PhotoSource source = PhotoSource.library,
+    int maxSide = 2048,
+    int quality = 80,
+  }) async {
     calls++;
     return path;
   }

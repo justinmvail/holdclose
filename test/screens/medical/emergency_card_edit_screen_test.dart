@@ -140,8 +140,8 @@ void main() {
         (WidgetTester tester) async {
       await _pumpEdit(tester, view: _view(card: null), repo: repo);
 
-      // 3 list fields + 3 insurance fields, zero contact rows.
-      expect(find.byType(TextField), findsNWidgets(6));
+      // 3 list fields + 4 insurance fields, zero contact rows.
+      expect(find.byType(TextField), findsNWidgets(7));
       expect(find.byKey(EmergencyCardEditScreen.saveButtonKey), findsOneWidget);
       // Donor defaults to Unknown — the segment exists.
       expect(find.text('Unknown'), findsOneWidget);
@@ -164,15 +164,15 @@ void main() {
         (WidgetTester tester) async {
       await _pumpEdit(tester, view: _view(card: _existingCard()), repo: repo);
 
-      // 3 list + 3 insurance + 3 (one contact) = 9.
-      expect(find.byType(TextField), findsNWidgets(9));
+      // 3 list + 4 insurance + 3 (one contact) = 10.
+      expect(find.byType(TextField), findsNWidgets(10));
 
       await tester.ensureVisible(
           find.byKey(EmergencyCardEditScreen.addContactKey));
       await tester.tap(find.byKey(EmergencyCardEditScreen.addContactKey));
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsNWidgets(12));
+      expect(find.byType(TextField), findsNWidgets(13));
     });
 
     testWidgets('removing a contact drops its row',
@@ -184,8 +184,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Jane Doe'), findsNothing);
-      // Back down to 3 list + 3 insurance fields.
-      expect(find.byType(TextField), findsNWidgets(6));
+      // Back down to 3 list + 4 insurance fields.
+      expect(find.byType(TextField), findsNWidgets(7));
     });
   });
 

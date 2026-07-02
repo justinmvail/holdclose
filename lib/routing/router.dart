@@ -24,16 +24,24 @@ import '../screens/journal/journal_wizard_screen.dart';
 import '../screens/medical/care_plan_routine_form.dart';
 import '../screens/medical/care_plan_routines_screen.dart';
 import '../screens/medical/emergency_card_edit_screen.dart';
+import '../screens/medical/care_summary_screen.dart';
 import '../screens/medical/emergency_card_screen.dart';
+import '../screens/medical/find_provider_screen.dart';
+import '../screens/medical/insurance_appeal_screen.dart';
 import '../screens/medical/health_log_entry_form.dart';
 import '../screens/medical/health_log_screen.dart';
 import '../screens/medical/medical_hub_screen.dart';
+import '../screens/scan_document_screen.dart';
 import '../screens/appointment/appointment_detail_screen.dart';
 import '../screens/appointment/appointment_form_screen.dart';
 import '../screens/appointment/appointment_list_screen.dart';
+import '../models/appointment_draft.dart';
+import '../models/document.dart' show Insurance;
+import '../models/medication_draft.dart';
 import '../screens/medication/dose_log_screen.dart';
 import '../screens/medication/dose_window_list_screen.dart';
 import '../screens/medication/medication_form_screen.dart';
+import '../screens/medication/medication_import_review_screen.dart';
 import '../screens/medication/medication_list_screen.dart';
 import '../screens/onboarding/loved_one_setup_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
@@ -68,6 +76,7 @@ class HoldcloseRoutes {
   static const String signIn = 'sign-in';
   static const String setup = 'setup';
   static const String settings = 'settings';
+  static const String insuranceAppeal = 'insurance-appeal';
   // Multi-patient "Loved ones" manager (Issue #6). `lovedOnes` → the
   // switcher/manager; `lovedOnesAdd` → the setup wizard reused in add
   // mode to append + activate another loved one.
@@ -79,6 +88,10 @@ class HoldcloseRoutes {
   static const String chatThread = 'chat-thread';
   static const String medicationList = 'medication-list';
   static const String medicationForm = 'medication-form';
+  static const String medicationScanReview = 'medication-scan-review';
+  static const String scanDocument = 'scan-document';
+  static const String findProvider = 'find-provider';
+  static const String careSummary = 'care-summary';
   static const String medicationEdit = 'medication-edit';
   static const String medicationDoseLog = 'medication-dose-log';
   static const String medicationWindowList = 'medication-window-list';
@@ -197,6 +210,18 @@ GoRouter buildRouter({
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const SettingsScreen(),
+      ),
+      // AI insurance-appeal helper — reached from the emergency card's
+      // insurance block; pushes onto the root navigator so it covers the
+      // tab bar. `extra` optionally carries the carrier name.
+      GoRoute(
+        path: '/insurance-appeal',
+        name: HoldcloseRoutes.insuranceAppeal,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            InsuranceAppealScreen(
+          carrier: state.extra is String ? state.extra as String : null,
+        ),
       ),
       // Multi-patient "Loved ones" manager (Issue #6) — reached from
       // Settings → "Loved ones". The `add` child reuses the onboarding
@@ -375,7 +400,11 @@ GoRouter buildRouter({
                         path: 'edit',
                         name: HoldcloseRoutes.medicalCardsEmergencyEdit,
                         builder: (BuildContext context, GoRouterState state) =>
-                            const EmergencyCardEditScreen(),
+                            EmergencyCardEditScreen(
+                          scannedInsurance: state.extra is Insurance
+                              ? state.extra as Insurance
+                              : null,
+                        ),
                       ),
                     ],
                   ),
@@ -437,6 +466,31 @@ GoRouter buildRouter({
               ),
               // Medications — the Care hub's "Medications" tile + Home's
               // dose-log shortcut. In the Care branch so the tab bar stays.
+              // Unified "scan any document" entry — routes each type to its
+              // extractor + review flow. In the Care branch so the pushes it
+              // makes (med review, appointment form, emergency edit) stay
+              // in-branch and the tab bar stays.
+              GoRoute(
+                path: '/scan',
+                name: HoldcloseRoutes.scanDocument,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const ScanDocumentScreen(),
+              ),
+              // Find-a-provider (NPI Registry search) — saves matches as
+              // Providers, so they're pickable when booking an appointment.
+              GoRoute(
+                path: '/find-provider',
+                name: HoldcloseRoutes.findProvider,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const FindProviderScreen(),
+              ),
+              // Shareable care summary (PDF) for provider coordination.
+              GoRoute(
+                path: '/care-summary',
+                name: HoldcloseRoutes.careSummary,
+                builder: (BuildContext context, GoRouterState state) =>
+                    const CareSummaryScreen(),
+              ),
               GoRoute(
                 path: '/medications',
                 name: HoldcloseRoutes.medicationList,
@@ -457,6 +511,21 @@ GoRouter buildRouter({
                     // 14.14) pre-fills the dose-note field from it.
                     builder: (BuildContext context, GoRouterState state) =>
                         DoseLogScreen(initialNote: VoiceIntake.doseNote(state.extra)),
+                  ),
+                  // Review + approve a scanned prescription. The scan
+                  // handler pushes a [MedicationDraft] via `extra`; a
+                  // missing/blank draft opens the screen empty for manual
+                  // entry. Two-segment literal path so it never shadows the
+                  // `:id/edit` param route below.
+                  GoRoute(
+                    path: 'scan/review',
+                    name: HoldcloseRoutes.medicationScanReview,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        MedicationImportReviewScreen(
+                      draft: state.extra is MedicationDraft
+                          ? state.extra as MedicationDraft
+                          : const MedicationDraft(),
+                    ),
                   ),
                   // Edit a medication, pre-filled from its saved row (Phase
                   // 15.6). `:id/edit` is a two-segment path so it never
@@ -519,6 +588,11 @@ GoRouter buildRouter({
                       // appointment lands on the day the caregiver viewed.
                       initialDate: _calendarDateParam(
                           state.uri.queryParameters['date']),
+                      // The appointment scan passes an AppointmentDraft via
+                      // extra to pre-fill the form.
+                      initialDraft: state.extra is AppointmentDraft
+                          ? state.extra as AppointmentDraft
+                          : null,
                     ),
                   ),
                   GoRoute(

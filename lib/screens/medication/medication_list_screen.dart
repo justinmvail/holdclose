@@ -1,14 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../models/medication.dart';
+import '../../models/medication_draft.dart';
 import '../../providers/active_patient_provider.dart';
+import '../../providers/link_launcher_provider.dart';
 import '../../providers/patient_timeline_provider.dart';
 import '../../services/medication_repository.dart';
+import '../../services/medication_supply.dart';
 import '../../theme.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/path_header.dart';
+import 'prescription_scan_flow.dart';
 
 part 'medication_list_screen.g.dart';
 
@@ -103,6 +110,7 @@ class MedicationListScreen extends ConsumerWidget {
   static const Key emptyStateKey = Key('medication-list-empty');
   static const Key emptyCtaKey = Key('medication-list-empty-cta');
   static const Key fabKey = Key('medication-list-fab');
+  static const Key scanButtonKey = Key('medication-list-scan');
 
   /// The delete-confirmation dialog (a long-press on a med card).
   static const Key deleteDialogKey = Key('medication-list-delete-dialog');
@@ -115,6 +123,10 @@ class MedicationListScreen extends ConsumerWidget {
       Key('medication-list-windows-$medicationId');
   static Key deleteIconKey(String medicationId) =>
       Key('medication-list-delete-$medicationId');
+  static Key supplyKey(String medicationId) =>
+      Key('medication-list-supply-$medicationId');
+  static Key callPharmacyKey(String medicationId) =>
+      Key('medication-list-call-$medicationId');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -138,22 +150,42 @@ class MedicationListScreen extends ConsumerWidget {
                 title: 'Medications',
                 backLabel: 'Back to Care',
                 leadingIcon: Icons.medication_outlined,
-                // Per-screen action — opens the dose-window manager so
-                // caregivers can rename / re-anchor / delete windows
-                // without going through the form picker.
-                trailing: IconButton(
-                  tooltip: 'Manage time windows',
-                  iconSize: 24,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 24,
-                    height: 24,
-                  ),
-                  visualDensity: VisualDensity.compact,
-                  color: context.cb.primary,
-                  icon: const Icon(Icons.schedule_outlined),
-                  onPressed: () =>
-                      context.push('/medications/windows'),
+                // Per-screen actions — scan a prescription (AI photo →
+                // human-approved import) and open the dose-window manager
+                // (rename / re-anchor / delete windows without the form
+                // picker).
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    IconButton(
+                      key: MedicationListScreen.scanButtonKey,
+                      tooltip: 'Scan a prescription',
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 24,
+                        height: 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      color: context.cb.primary,
+                      icon: const Icon(Icons.document_scanner_outlined),
+                      onPressed: () => _scanPrescription(context, ref),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      tooltip: 'Manage time windows',
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 24,
+                        height: 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      color: context.cb.primary,
+                      icon: const Icon(Icons.schedule_outlined),
+                      onPressed: () => context.push('/medications/windows'),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -188,6 +220,20 @@ class MedicationListScreen extends ConsumerWidget {
       ),
     );
   }
+
+  /// Scan a prescription: pick a photo, extract a [MedicationDraft] via
+  /// the AI scanner, then open the review screen for human approval.
+  /// Every path is guarded — a cancelled pick or an unreadable image
+  /// still lands the caregiver on the (blank) review screen for manual
+  /// entry, and nothing is saved without their explicit tap.
+  Future<void> _scanPrescription(BuildContext context, WidgetRef ref) async {
+    final MedicationDraft? draft = await capturePrescriptionDraft(context, ref);
+    // null → the caregiver cancelled. Otherwise open the review screen even
+    // on an empty read: the scan just saves typing, and they can still enter
+    // the medication by hand.
+    if (draft == null || !context.mounted) return;
+    unawaited(context.push('/medications/scan/review', extra: draft));
+  }
 }
 
 class _PopulatedList extends StatelessWidget {
@@ -215,6 +261,16 @@ class _MedicationCard extends ConsumerWidget {
     final TextTheme tt = Theme.of(context).textTheme;
     final Medication med = item.medication;
     final String windowsLabel = _summariseWindows(context, item.windows);
+    // Refill runway from the captured label fields + how many scheduled
+    // (non-as-needed) doses this med takes per day.
+    final MedicationSupply supply = computeMedicationSupply(
+      med,
+      scheduledDosesPerDay:
+          item.windows.where((DoseWindow w) => !w.isAsNeeded).length,
+      now: ref.watch(medicationListClockProvider)(),
+    );
+    final String? pharmacyPhone =
+        (med.pharmacyPhone ?? '').trim().isEmpty ? null : med.pharmacyPhone;
     return Semantics(
       button: true,
       label: '${med.name}, ${med.dosage}. '
@@ -285,6 +341,38 @@ class _MedicationCard extends ConsumerWidget {
                   ),
                 ),
               ),
+              if (supply.status != SupplyStatus.unknown) ...<Widget>[
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    Expanded(
+                      child: _SupplyLine(
+                        key: MedicationListScreen.supplyKey(med.id),
+                        supply: supply,
+                      ),
+                    ),
+                    if (pharmacyPhone != null)
+                      Semantics(
+                        button: true,
+                        label: 'Call ${med.pharmacyName ?? 'the pharmacy'} '
+                            'to refill ${med.name}.',
+                        child: TextButton.icon(
+                          key: MedicationListScreen.callPharmacyKey(med.id),
+                          onPressed: () => ref
+                              .read(linkLauncherProvider)
+                              .launch(_pharmacyTelUri(pharmacyPhone)),
+                          icon: const Icon(Icons.call, size: 18),
+                          label: const Text('Call'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: context.cb.cta,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -335,6 +423,83 @@ class _MedicationCard extends ConsumerWidget {
     await repo.softDeleteMedication(med.id);
     ref.invalidate(medicationListProvider);
     invalidatePatientTimeline(ref);
+  }
+}
+
+/// Build a dialable `tel:` URI from a free-text pharmacy phone, stripping
+/// formatting but keeping a leading `+` for international numbers.
+Uri _pharmacyTelUri(String phone) {
+  final String digits = phone
+      .replaceAll(RegExp(r'[^0-9+]'), '')
+      .replaceAll(RegExp(r'(?!^)\+'), '');
+  return Uri(scheme: 'tel', path: digits);
+}
+
+/// One-line refill-runway summary for a medication card. A calm subtitle
+/// when supply is fine; a salmon "Refill soon" / "No refills left" chip when
+/// it needs attention. Pure display of [computeMedicationSupply]'s result.
+class _SupplyLine extends StatelessWidget {
+  const _SupplyLine({super.key, required this.supply});
+
+  final MedicationSupply supply;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme tt = Theme.of(context).textTheme;
+
+    // Calm, informational parts (refills left / estimated supply length).
+    final List<String> parts = <String>[];
+    final int? refills = supply.refillsRemaining;
+    if (refills != null && refills > 0) {
+      parts.add('$refills refill${refills == 1 ? '' : 's'} left');
+    }
+    if (supply.daysOfSupply != null) {
+      parts.add('≈${supply.daysOfSupply}-day supply');
+    }
+
+    if (!supply.needsAttention) {
+      if (parts.isEmpty) return const SizedBox.shrink();
+      return Text(
+        parts.join(' · '),
+        style: tt.bodyMedium?.copyWith(color: context.cb.primarySoft),
+      );
+    }
+
+    // Needs attention → a chip + a short reason.
+    final bool out = supply.status == SupplyStatus.outOfRefills;
+    final String chipText = out ? 'No refills left' : 'Refill soon';
+    final String reason = out
+        ? 'Contact the prescriber to renew.'
+        : (supply.runOutDate != null
+            ? 'Runs out ${formatMonthDayYear(supply.runOutDate!)}.'
+            : 'Running low.');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: context.cb.cta.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            chipText,
+            style: tt.labelMedium?.copyWith(
+              color: context.cb.cta,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            reason,
+            style: tt.bodyMedium?.copyWith(color: context.cb.text),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 }
 

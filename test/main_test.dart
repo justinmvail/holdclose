@@ -53,7 +53,10 @@ Patient _preexistingPatient() => _patient('pre-existing-patient', 'Someone Else'
   required bool resetOnLaunch,
   bool withPatient = true,
 }) {
-  final InMemoryStorageProvider storage = InMemoryStorageProvider();
+  // Pin "now" to the fixtures' era so the 30-day journal window includes the
+  // seeded + demo entries regardless of the host's real clock.
+  final InMemoryStorageProvider storage =
+      InMemoryStorageProvider(clock: _fixedClock);
   addTearDown(storage.dispose);
   // Pre-populate so the "state survives" assertions have something to
   // assert against — and so the "reset wiped it" assertions can verify

@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Network access. Flutter auto-injects this into the debug + profile
+         manifests, so it's easy to miss that RELEASE builds (the Play Store
+         build) need it declared here or the app has NO network: the AI
+         coach, care-circle backend sync, document scan, and provider search
+         all silently fail. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Device-capture permissions (#8). Required by the record +
          speech_to_text plugins (mic) and image_picker (camera + gallery)
          so the journal photo/voice-note attach + Add-sheet voice button
