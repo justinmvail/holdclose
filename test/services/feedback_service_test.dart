@@ -42,7 +42,9 @@ void main() {
       // Host platform under `flutter test` is the desktop OS, not empty.
       expect(r.platform, isNotEmpty);
       expect(r.demoMode, isFalse); // no DEMO_MODE define in tests
-      expect(r.appVersion, '0.1.0+2');
+      // Single source of truth (BuildInfo): version name + 'dev' stamp when
+      // no APP_VERSION/BUILD_STAMP defines are set (i.e. under `flutter test`).
+      expect(r.appVersion, '0.1.0+dev');
       expect(r.buildStamp, 'dev'); // no BUILD_STAMP define in tests
       expect(r.logs, ''); // none attached
     });

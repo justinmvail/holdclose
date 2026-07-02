@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../config/build_info.dart';
 import '../../models/settings.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -1103,25 +1104,36 @@ class _AccountSection extends ConsumerWidget {
 class _AboutSection extends StatelessWidget {
   const _AboutSection();
 
-  static const String _appVersion = '0.1.0';
-
-  /// A per-build stamp injected via `--dart-define=BUILD_STAMP=...` so a
-  /// tester can VERIFY a freshly-pushed build actually landed (the version
-  /// name alone never changes). Defaults to 'dev' for un-stamped builds.
-  static const String _buildStamp =
-      String.fromEnvironment('BUILD_STAMP', defaultValue: 'dev');
-
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    // Version name + per-build stamp come from the single source of truth
+    // (BuildInfo). run_device.sh injects the distinct epoch build number and
+    // git/context; a plain `flutter run` shows "0.1.0 (build dev)" with no
+    // second line — identical to the historical render, so the golden holds.
+    final String? contextLine = BuildInfo.contextLine;
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        _SectionHeader(title: 'About'),
+        const _SectionHeader(title: 'About'),
         _SectionCard(
           child: ListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text('App version'),
-            subtitle: Text('$_appVersion (build $_buildStamp)'),
+            title: const Text('App version'),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text('${BuildInfo.versionName} (build ${BuildInfo.buildStamp})'),
+                if (contextLine != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      contextLine,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ],

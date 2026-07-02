@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/build_info.dart';
 import '../providers/llm_provider.dart' show shimBaseUrl, shimAuthHeaders;
 
 /// In-app alpha bug/feedback reporter (alpha testing).
@@ -33,18 +34,9 @@ const bool alphaFeedbackEnabled =
 // ignore: do_not_use_environment
 const bool _demoMode = bool.fromEnvironment('DEMO_MODE', defaultValue: false);
 
-/// App version stamped on each report. Defaults to the pubspec version;
-/// override per-build with `--dart-define=APP_VERSION=...`.
-// ignore: do_not_use_environment
-const String _appVersion =
-    String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0+2');
-
-/// The per-build stamp (same one Settings → About shows). Stamped on every
-/// report so the operator knows EXACTLY which build a tester was on — the
-/// app_version default goes stale, the build stamp doesn't.
-// ignore: do_not_use_environment
-const String _buildStamp =
-    String.fromEnvironment('BUILD_STAMP', defaultValue: 'dev');
+/// App version + per-build stamp stamped on each report come from the single
+/// source of truth ([BuildInfo]); the scripts inject them per build so the
+/// operator knows EXACTLY which build a tester was on.
 
 /// The shim feedback endpoint, built from the same base URL the LLM shim
 /// uses (so a tester build's `--dart-define=SHIM_URL=...` covers both).
@@ -132,10 +124,10 @@ class FeedbackReport {
       platform: _safePlatform(),
       osVersion: _safeOsVersion(),
       demoMode: _demoMode,
-      appVersion: _appVersion,
+      appVersion: BuildInfo.fullVersion,
       createdAt: now,
       hasScreenshot: hasScreenshot,
-      buildStamp: _buildStamp,
+      buildStamp: BuildInfo.buildStamp,
       logs: logs,
     );
   }
