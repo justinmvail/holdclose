@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 
 import '../../models/appointment.dart' show Provider, ProviderRole;
 import '../../models/provider_search_result.dart';
+import '../../providers/link_launcher_provider.dart';
 import '../../providers/npi_provider_provider.dart';
 import '../../seed/provider_search_reference.dart';
 import '../../services/npi_provider_service.dart';
@@ -297,7 +298,14 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
   }
 }
 
-class _ResultCard extends StatelessWidget {
+/// tel: URI from a free-form phone string (mirrors emergency_card_screen).
+Uri _telUri(String phone) {
+  final String digits =
+      phone.replaceAll(RegExp(r'[^0-9+]'), '').replaceAll(RegExp(r'(?!^)\+'), '');
+  return Uri(scheme: 'tel', path: digits);
+}
+
+class _ResultCard extends ConsumerWidget {
   const _ResultCard({
     required this.result,
     required this.saved,
@@ -309,8 +317,16 @@ class _ResultCard extends StatelessWidget {
   final VoidCallback onSave;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final TextTheme tt = Theme.of(context).textTheme;
+    final TextStyle? sub = tt.bodyMedium?.copyWith(color: context.cb.primarySoft);
+    // "Charleston, SC 29401" — city/state plus ZIP when present.
+    final String cityStateZip = <String>[
+      if (result.displayLocation.isNotEmpty) result.displayLocation,
+      if ((result.postalCode ?? '').trim().isNotEmpty) result.postalCode!.trim(),
+    ].join(' ');
+    final String? phone =
+        (result.phone ?? '').trim().isEmpty ? null : result.phone!.trim();
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
@@ -330,13 +346,44 @@ class _ResultCard extends StatelessWidget {
                         color: context.cb.primary,
                         fontWeight: FontWeight.w700)),
                 if ((result.specialty ?? '').isNotEmpty)
-                  Text(result.specialty!,
-                      style:
-                          tt.bodyMedium?.copyWith(color: context.cb.text)),
-                if (result.displayLocation.isNotEmpty)
-                  Text(result.displayLocation,
-                      style: tt.bodyMedium
-                          ?.copyWith(color: context.cb.primarySoft)),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(result.specialty!,
+                        style: tt.bodyMedium?.copyWith(color: context.cb.text)),
+                  ),
+                if ((result.addressLine ?? '').trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(result.addressLine!.trim(), style: sub),
+                  ),
+                if (cityStateZip.isNotEmpty)
+                  Text(cityStateZip, style: sub),
+                if (phone != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: InkWell(
+                      onTap: () =>
+                          ref.read(linkLauncherProvider).launch(_telUri(phone)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(Icons.call, size: 16, color: context.cb.cta),
+                          const SizedBox(width: 4),
+                          Text(phone,
+                              style: tt.bodyMedium?.copyWith(
+                                  color: context.cb.cta,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                if ((result.npi ?? '').trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('NPI ${result.npi!.trim()}',
+                        style: tt.bodySmall
+                            ?.copyWith(color: context.cb.primarySoft)),
+                  ),
               ],
             ),
           ),

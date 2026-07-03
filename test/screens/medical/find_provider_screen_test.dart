@@ -94,6 +94,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('John Berger, MD'), findsOneWidget);
+    // The card surfaces the full doctor + practice details (fb_1783039822948375
+    // — "we want all the information about the doctor and business"), not just
+    // city/state: street, city/state+ZIP, tap-to-call phone, and NPI.
+    expect(find.text('2135 Ashley Phosphate Rd'), findsOneWidget);
+    expect(find.text('North Charleston, SC 29456'), findsOneWidget);
+    expect(find.text('843-767-4500'), findsOneWidget);
+    expect(find.text('NPI 1234567890'), findsOneWidget);
 
     await tester.tap(find.byKey(FindProviderScreen.saveKey('1234567890')));
     await tester.pumpAndSettle();
