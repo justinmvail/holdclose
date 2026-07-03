@@ -316,10 +316,30 @@ class _ResultCard extends ConsumerWidget {
   final bool saved;
   final VoidCallback onSave;
 
+  /// A labelled "Label  value" line — returns null (omitted) when [value] is
+  /// blank, so the card shows only the fields the NPI record actually has.
+  Widget? _line(BuildContext context, TextTheme tt, String label, String? value) {
+    final String v = (value ?? '').trim();
+    if (v.isEmpty) return null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Text.rich(TextSpan(
+        style: tt.bodyMedium?.copyWith(color: context.cb.primarySoft),
+        children: <InlineSpan>[
+          if (label.isNotEmpty)
+            TextSpan(
+                text: '$label  ',
+                style: TextStyle(
+                    color: context.cb.text, fontWeight: FontWeight.w600)),
+          TextSpan(text: v),
+        ],
+      )),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final TextTheme tt = Theme.of(context).textTheme;
-    final TextStyle? sub = tt.bodyMedium?.copyWith(color: context.cb.primarySoft);
     // "Charleston, SC 29401" — city/state plus ZIP when present.
     final String cityStateZip = <String>[
       if (result.displayLocation.isNotEmpty) result.displayLocation,
@@ -327,6 +347,45 @@ class _ResultCard extends ConsumerWidget {
     ].join(' ');
     final String? phone =
         (result.phone ?? '').trim().isEmpty ? null : result.phone!.trim();
+    final String specialties = result.specialties.isNotEmpty
+        ? result.specialties.join(', ')
+        : (result.specialty ?? '');
+
+    // Every field the record carries, in order — blanks return null and are
+    // filtered out below.
+    final List<Widget> lines = <Widget?>[
+      Text(result.displayName,
+          style: tt.titleMedium
+              ?.copyWith(color: context.cb.primary, fontWeight: FontWeight.w700)),
+      _line(context, tt, 'Type', result.providerType),
+      _line(context, tt, 'Specialty', specialties),
+      _line(context, tt, 'License', result.license),
+      _line(context, tt, 'Address', result.addressLine),
+      _line(context, tt, '', result.addressLine2),
+      _line(context, tt, '', cityStateZip),
+      if (phone != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: InkWell(
+            onTap: () => ref.read(linkLauncherProvider).launch(_telUri(phone)),
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.call, size: 16, color: context.cb.cta),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text('Call  $phone',
+                      overflow: TextOverflow.ellipsis,
+                      style: tt.bodyMedium?.copyWith(
+                          color: context.cb.cta, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      _line(context, tt, 'Fax', result.fax),
+      _line(context, tt, 'NPI', result.npi),
+    ].whereType<Widget>().toList();
+
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
@@ -340,51 +399,7 @@ class _ResultCard extends ConsumerWidget {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(result.displayName,
-                    style: tt.titleMedium?.copyWith(
-                        color: context.cb.primary,
-                        fontWeight: FontWeight.w700)),
-                if ((result.specialty ?? '').isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(result.specialty!,
-                        style: tt.bodyMedium?.copyWith(color: context.cb.text)),
-                  ),
-                if ((result.addressLine ?? '').trim().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(result.addressLine!.trim(), style: sub),
-                  ),
-                if (cityStateZip.isNotEmpty)
-                  Text(cityStateZip, style: sub),
-                if (phone != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: InkWell(
-                      onTap: () =>
-                          ref.read(linkLauncherProvider).launch(_telUri(phone)),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Icon(Icons.call, size: 16, color: context.cb.cta),
-                          const SizedBox(width: 4),
-                          Text(phone,
-                              style: tt.bodyMedium?.copyWith(
-                                  color: context.cb.cta,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ),
-                if ((result.npi ?? '').trim().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text('NPI ${result.npi!.trim()}',
-                        style: tt.bodySmall
-                            ?.copyWith(color: context.cb.primarySoft)),
-                  ),
-              ],
+              children: lines,
             ),
           ),
           const SizedBox(width: 8),

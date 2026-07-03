@@ -74,14 +74,20 @@ class FakeNpiProviderService implements NpiProviderService {
       ProviderSearchResult(
         name: 'John Berger',
         credential: 'MD',
+        enumerationType: 'NPI-1',
         specialty: 'Neurology',
+        specialties: <String>['Neurology', 'Vascular Neurology'],
+        license: '1631 SC',
         city: 'North Charleston',
         state: 'SC',
         postalCode: '29456',
         phone: '843-767-4500',
+        fax: '843-767-4599',
         addressLine: '2135 Ashley Phosphate Rd',
+        addressLine2: 'Suite 200',
         npi: '1234567890',
       ),
+      // Deliberately sparse — most fields blank, so the card must OMIT them.
       ProviderSearchResult(
         name: 'Aisha Patel',
         credential: 'MD',
@@ -119,17 +125,23 @@ List<ProviderSearchResult> parseNpiResults(dynamic data) {
             .join(' ');
     if (name.trim().isEmpty) continue;
 
-    // Primary taxonomy (specialty).
+    // Taxonomies: primary specialty (+ its license), and every listed desc.
     String? specialty;
+    String? license;
+    final List<String> specialties = <String>[];
     final dynamic taxes = r['taxonomies'];
     if (taxes is List) {
       for (final dynamic t in taxes) {
-        if (t is Map) {
-          specialty ??= s(t['desc']);
-          if (t['primary'] == true) {
-            specialty = s(t['desc']);
-            break;
-          }
+        if (t is! Map) continue;
+        final String? desc = s(t['desc']);
+        if (desc != null && !specialties.contains(desc)) specialties.add(desc);
+        specialty ??= desc;
+        if (t['primary'] == true) {
+          specialty = desc;
+          license = <String?>[s(t['license']), s(t['state'])]
+              .where((String? e) => e != null)
+              .join(' ');
+          if (license.isEmpty) license = null;
         }
       }
     }
@@ -152,12 +164,17 @@ List<ProviderSearchResult> parseNpiResults(dynamic data) {
     out.add(ProviderSearchResult(
       name: name,
       credential: s(basic['credential']),
+      enumerationType: s(r['enumeration_type']),
       specialty: specialty,
+      specialties: specialties,
+      license: license,
       city: s(loc?['city']),
       state: s(loc?['state']),
       postalCode: s(loc?['postal_code']),
       phone: s(loc?['telephone_number']),
+      fax: s(loc?['fax_number']),
       addressLine: s(loc?['address_1']),
+      addressLine2: s(loc?['address_2']),
       npi: s(r['number']),
     ));
   }

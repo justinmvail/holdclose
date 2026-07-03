@@ -94,13 +94,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('John Berger, MD'), findsOneWidget);
-    // The card surfaces the full doctor + practice details (fb_1783039822948375
-    // — "we want all the information about the doctor and business"), not just
-    // city/state: street, city/state+ZIP, tap-to-call phone, and NPI.
-    expect(find.text('2135 Ashley Phosphate Rd'), findsOneWidget);
+    // The card surfaces EVERY field the NPI record carries (fb_1783039822948375
+    // — "put all the fields on the card"): type, all specialties, license,
+    // street + suite, city/state+ZIP, tap-to-call phone, fax, NPI.
+    expect(find.textContaining('Individual'), findsOneWidget); // Type
+    expect(find.textContaining('Vascular Neurology'), findsOneWidget); // specialties
+    expect(find.textContaining('1631 SC'), findsOneWidget); // License
+    expect(find.textContaining('2135 Ashley Phosphate Rd'), findsOneWidget);
+    expect(find.textContaining('Suite 200'), findsOneWidget);
     expect(find.text('North Charleston, SC 29456'), findsOneWidget);
-    expect(find.text('843-767-4500'), findsOneWidget);
-    expect(find.text('NPI 1234567890'), findsOneWidget);
+    expect(find.textContaining('843-767-4500'), findsOneWidget); // Call
+    expect(find.textContaining('843-767-4599'), findsOneWidget); // Fax
+    expect(find.textContaining('1234567890'), findsOneWidget); // NPI
+
+    // The sparse provider (Aisha Patel) has no license/suite/phone/fax — those
+    // labels must NOT appear a second time (blank fields are omitted entirely).
+    expect(find.textContaining('License'), findsOneWidget);
+    expect(find.textContaining('Fax'), findsOneWidget);
 
     await tester.tap(find.byKey(FindProviderScreen.saveKey('1234567890')));
     await tester.pumpAndSettle();
