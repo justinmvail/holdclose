@@ -42,7 +42,7 @@ Legend: ✅ done · ⚠️ drafted-but-needs-real-data · ❌ missing · 👤 on
 | Transparency | ✅ | grounded, non-diagnostic, uncertainty flagged |
 | Realistic usability testing | ✅ | alpha + planned trial |
 | Home/org integration | ✅ | |
-| Interoperability (EMR/assistive) | ⚠️ | roadmap-honest (planned, not current) |
+| Interoperability (EMR/assistive) | ⚠️ | partial: provider-shareable care-summary PDF ships now; EMR/assistive interop still roadmap |
 
 ## §4 Alignment with the 7 Caregiver AI Principles
 | Status | Note |

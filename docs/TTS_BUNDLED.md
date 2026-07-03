@@ -20,7 +20,7 @@
 - `onnxruntime-objc 1.18.x` Pod added to `ios/Podfile`.
 - `ios/Runner/TTSBridge.swift` — owns the `ORTSession`, AVAudioEngine
   player node, voice-config parser, and an espeak-ng phonemizer
-  protocol. The bridge registers the `careblazers/tts` MethodChannel
+  protocol. The bridge registers the `holdclose/tts` MethodChannel
   and handles `speak`, `cancel`, `availableVoices`.
 - `ios/Runner/AppDelegate.swift` — replaces the Phase 9.2 stub with a
   single call to `TTSBridge.register(with:)`.
@@ -64,19 +64,34 @@ cd ios && pod install && cd ..
 flutter run -d <iphone-device-id>
 ```
 
-Then in the running app:
+Then, to exercise the bundled voice on-device:
 
-1. Land on the **Home** screen.
-2. Tap **Decode a behavior**.
-3. Pick any behavior tile (e.g., **Repeating questions**).
-4. Step through the three triage screens, tapping any answer at each.
-5. Wait for the **Result** screen to render.
-6. Tap the 🔊 PLAY button on the result.
-7. **Expectation**: hear Amy speak the first "say" line. First-token
-   latency target is < 500 ms on A14+; CPU fallback is < ~2 s.
+1. Open **Settings** (gear icon) → **Read scripts aloud**.
+2. Confirm the master **Read scripts aloud** toggle is on and
+   **High-quality bundled voice** is on — that pair is what routes
+   `ttsProvider` to `BundledTTSProvider` (Piper Amy) instead of the OS
+   or no-op path.
+3. The shipping UI has no tap-to-play button yet. The Behavior Decoder
+   that hosted the old 🔊 PLAY affordance was removed in the Holdclose
+   pivot, and read-aloud on coach replies / the Emergency Card is a
+   later phase (no `.speak()` caller exists in `lib/` outside the
+   provider itself). Drive the bundled path with the sample-regen
+   harness, which calls `TTSEngine.synthesize` directly on the device:
 
-A passing smoke run is the audio playing through the device speaker
-without distortion. If the device is silent:
+   ```
+   tools/regen_tts_samples.sh ios
+   ```
+
+   (or run `testRegenerateAudioQualitySamples` from the RunnerTests
+   scheme in Xcode.)
+4. **Expectation**: the harness writes one WAV per script under
+   `docs/tts_samples/en_US-amy-medium/ios/` (each path echoed as a
+   `PHASE_10_4_REGEN` log line). Play a WAV back and hear Amy speak the
+   line cleanly. First-token latency target is < 500 ms on A14+; CPU
+   fallback is < ~2 s.
+
+A passing smoke run is a non-empty WAV that plays back without
+distortion. If no audio is produced:
 
 - Confirm the model bundled: `flutter build ios --analyze-size`
   should show `en_US-amy-medium.onnx` in the assets envelope.
@@ -112,7 +127,7 @@ catalog.
 - `android/app/src/main/kotlin/com/careblazers/careblazers/TTSBridge.kt`
   — owns the `OrtSession`, AudioTrack player, voice-config parser,
   and an espeak-ng phonemizer interface. The bridge registers the
-  `careblazers/tts` MethodChannel and handles `speak`, `cancel`,
+  `holdclose/tts` MethodChannel and handles `speak`, `cancel`,
   `availableVoices`.
 - `android/app/src/main/kotlin/com/careblazers/careblazers/MainActivity.kt`
   — replaces the Phase 9.2 stub with a single call to
@@ -151,7 +166,7 @@ converts to int16 (clamped to [-1.0, 1.0] then scaled to
 `Short.MAX_VALUE`) and streams to an `AudioTrack` configured for
 `USAGE_MEDIA` / `CONTENT_TYPE_SPEECH`, `MODE_STREAM`, and the
 host's `getMinBufferSize`. `cancel()` pauses + flushes + releases
-the track so a rapid-tap on the per-line ▶ button doesn't queue
+the track so a rapid re-trigger of `speak()` doesn't queue
 overlapping audio.
 
 ## Manual smoke sequence (Android)
@@ -164,19 +179,31 @@ flutter pub get
 flutter run -d <android-device-id>
 ```
 
-Then in the running app:
+Then, to exercise the bundled voice on-device:
 
-1. Land on the **Home** screen.
-2. Tap **Decode a behavior**.
-3. Pick any behavior tile (e.g., **Repeating questions**).
-4. Step through the three triage screens, tapping any answer at each.
-5. Wait for the **Result** screen to render.
-6. Tap the 🔊 PLAY button on the result.
-7. **Expectation**: hear Amy speak the first "say" line. First-token
-   latency target is < 500 ms on a Pixel 6+ via NNAPI; CPU fallback
-   is < ~2 s.
+1. Open **Settings** (gear icon) → **Read scripts aloud**.
+2. Confirm the master **Read scripts aloud** toggle is on and
+   **High-quality bundled voice** is on — that pair routes `ttsProvider`
+   to `BundledTTSProvider` (Piper Amy) instead of the OS or no-op path.
+3. The shipping UI has no tap-to-play button yet (the Behavior Decoder
+   that hosted the old 🔊 PLAY affordance was removed in the Holdclose
+   pivot; read-aloud on coach replies / the Emergency Card is a later
+   phase, and no `.speak()` caller exists in `lib/` outside the provider
+   itself). Drive the bundled path with the sample-regen harness, which
+   calls `TTSEngine.synthesize` directly on the device:
 
-If the device is silent:
+   ```
+   tools/regen_tts_samples.sh          # iOS + Android
+   ```
+
+   (or run the `regenerateAudioQualitySamples` instrumented test via
+   `./gradlew :app:connectedDebugAndroidTest`.)
+4. **Expectation**: the harness pulls one WAV per script into
+   `docs/tts_samples/en_US-amy-medium/android/`. Play a WAV back and
+   hear Amy speak the line cleanly. First-token latency target is
+   < 500 ms on a Pixel 6+ via NNAPI; CPU fallback is < ~2 s.
+
+If no audio is produced:
 
 - Confirm the model bundled: `flutter build apk --analyze-size`
   should show `en_US-amy-medium.onnx` in the assets envelope.
@@ -221,9 +248,14 @@ AVAudioEngine / AudioTrack write of non-silent PCM. Inspect via:
 Protocol per device:
 
 1. Cold-launch the app (no ORTSession cached).
-2. Run through Home → Decoder → Triage → Result.
-3. Tap the per-line ▶ button once to warm the session. Discard.
-4. Tap ▶ five more times back-to-back. Record each `firstTokenMs`.
+2. In **Settings → Read scripts aloud**, confirm the master toggle and
+   **High-quality bundled voice** are on so `ttsProvider` resolves to
+   `BundledTTSProvider`.
+3. Trigger one bundled `speak()` to warm the session — run the
+   sample-regen harness, or a scratch test that calls `TTSEngine.speak`
+   — and discard its `firstTokenMs`.
+4. Trigger five more `speak()` calls back-to-back. Record each
+   `firstTokenMs`.
 5. Report **median of the five** in the results table below.
 
 Five samples filter out one-off jitter (background app churn, GC
@@ -425,7 +457,7 @@ production, but real:
   first inference call throws.
 - **Bridge unavailable.** The native plugin failed to register —
   e.g., a Phase 9.2 stub build is running, or the pod / AAR didn't
-  link. The `careblazers/tts` MethodChannel surfaces a
+  link. The `holdclose/tts` MethodChannel surfaces a
   `MissingPluginException` on the first invocation.
 
 The Dart slice handles all three the same way:
@@ -437,11 +469,10 @@ invoking `probe`. The native bridge returns null when the
 - **Probe succeeds** → factory returns a `BundledTTSProvider` wired
   to the same channel. Caller is none the wiser.
 - **Probe throws `PlatformException`** → factory logs a single
-  WARN line via `dart:developer` (`name: 'careblazers.tts'`,
+  WARN line via `dart:developer` (`name: 'holdclose.tts'`,
   `level: 900`) carrying the platform code + message, then returns
-  an `OSTTSProvider`. The decoder result screen, library card
-  screen, and any other `TTSProvider` consumer keep working — they
-  just route through `flutter_tts` instead of the bundled voice.
+  an `OSTTSProvider`. Every `TTSProvider` consumer keeps working —
+  it just routes through `flutter_tts` instead of the bundled voice.
 - **Probe throws `MissingPluginException`** → same fallback path,
   same WARN line, framed as "bridge unavailable" instead of "probe
   failed."
@@ -969,12 +1000,15 @@ code changes, no espeak config tweaks.
    reads voice metadata from this catalog — the native side doesn't
    enumerate.
 
-5. **Smoke-test on a real device.** Tap a decoder result's ▶ button
-   with the new voice selected:
-     - **iOS**: `flutter run -d <iphone-device-id>`. The bridge picks
-       up the new `phoneme_id_map` automatically from
-       `<voice-id>.onnx.json`.
-     - **Android**: `flutter run -d <android-device-id>`. Same path.
+5. **Smoke-test on a real device.** Select the new voice in
+   **Settings → Read scripts aloud**, then exercise the bundled path
+   with the sample-regen harness, which drives `TTSEngine.synthesize`
+   using the selected voice:
+     - **iOS**: `tools/regen_tts_samples.sh ios` (or the RunnerTests
+       regen XCTest). The bridge picks up the new `phoneme_id_map`
+       automatically from `<voice-id>.onnx.json`.
+     - **Android**: `tools/regen_tts_samples.sh` against a plugged-in
+       device (or the instrumented regen test). Same path.
 
 That's it. No `vendor_espeak_ng.sh` re-run is needed (the espeak data
 dir is voice-agnostic), no `pod install` (no native dependency

@@ -5,16 +5,18 @@
 
 ## Deployment Readiness
 
-Holdclose is **already built, tested, and running on device** — [Flutter, iOS +
-Android; unit, widget, golden, and end-to-end integration suites green; a
-deployed server backend (Cloudflare Worker) for care-circle sync]. Unlike
-concept submissions, Holdclose is **distributable to caregivers today**: a
-shareable install link via **Google Play Open Testing** (and Apple TestFlight),
-plus a live product presence at **junocode.studio**. Reviewers and testers can
-see and install a **real, working product — not a concept.** Public store release
-requires only store approval — not further development. This materially de-risks
-Phases 2 and 3: the engineering is done; the work ahead is validation,
-refinement, and reach.
+Holdclose is **already built, tested, and running on physical devices** —
+Flutter, iOS + Android; unit, widget, golden, and end-to-end integration
+suites green; and a working Cloudflare Worker backend (Hono + D1 + R2) for
+care-circle sync, Google sign-in, and chat, exercised in development behind a
+private tunnel. Unlike concept submissions, Holdclose is a **real, working
+product, not a mockup** — the full app installs and runs on a caregiver's own
+phone today. The remaining steps to a public install link are **operational,
+not engineering**: production deploy of the (already-built) backend and store
+enrollment (Google Play organization registration + internal/Open Testing,
+Apple TestFlight) are in progress within the submission window. This
+materially de-risks Phases 2 and 3: the engineering is done; the work ahead is
+deployment, validation, and reach.
 
 ## Implementation, Testing & Evaluation Strategy
 

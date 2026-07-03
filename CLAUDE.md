@@ -24,7 +24,12 @@ in this repo.
 caregivers an **AI coach that actually knows their loved one's
 situation**, wrapped in a full caregiving suite: medications + dose
 windows, appointments, a shared Care Circle (server-synced), health log,
-emergency card, journal, and a community forum. The unifying wedge is the
+emergency card, journal, and a community forum — plus a **medical-
+coordination layer**: AI scan-to-import for prescriptions, appointment
+cards, and insurance cards (each human-approved); AI doctor-visit-prep
+questions; AI insurance-appeal letter drafts; NPI provider search (Find a
+provider); a shareable care-summary PDF; refill-runway alerts; and
+tap-to-call for providers, pharmacy, and insurance. The unifying wedge is the
 **chat coach**, grounded in the loved one's real care data — meds, dose
 windows, appointments, history, journal, the care circle — via
 `chat_context_builder`. That grounding is the moat: a coach that knows
@@ -122,18 +127,28 @@ careblazers/                # repo DIRECTORY name (pubspec name: is holdclose)
                             # warm white #f8f6f3) via HoldcloseColors/context.hc
     routing/router.dart     # go_router: 4-tab StatefulShellRoute + redirects
     l10n/                   # gen-l10n ARB (onboarding screens only so far)
-    providers/              # ~42 riverpod providers + backend interfaces
-    models/                 # 20 freezed data classes (patient, medication, …)
-    services/               # ~24 services: chat_service + chat_actions +
+    config/                 # build_info.dart — single source of truth for
+                            # version name + per-build stamp (Settings→About)
+    providers/              # ~51 riverpod providers + backend interfaces
+    models/                 # ~18 freezed data classes (patient, medication, …)
+    services/               # ~33 services: chat_service + chat_actions +
                             # chat_context_builder (the data-grounded coach),
                             # sync_service + sync_sink, forum_api_client,
-                            # repositories, pdf_exporter, pattern_detector, …
+                            # repositories, pdf_exporter, pattern_detector,
+                            # the AI scanners (prescription/appointment/
+                            # insurance_card + document_scan_transport),
+                            # visit_prep, insurance_appeal, npi_provider,
+                            # medication_supply (refill runway), …
     screens/
       home_screen.dart      # chat-root dashboard (greeting + schedule card)
       journal/              # journal, journal_entry, journal_wizard
-      medical/              # Care-tab hub: medical_hub, health_log, care_plan, emergency_card
-      medication/           # medication_list/form, dose_log, dose_window_list
-      appointment/          # appointment list/detail/form
+      medical/              # Care-tab hub: medical_hub, health_log, routines,
+                            # emergency_card, find_provider, care_summary,
+                            # insurance_appeal
+      medication/           # medication_list/form, dose_log, dose_window_list,
+                            # prescription_scan_flow, medication_import_review
+      appointment/          # appointment list/detail/form (+ scan, visit-prep)
+      scan_document_screen.dart  # generalized AI document scan entry (/scan)
       team/                 # Care Circle hub: care_team_hub, calendar, tasks, shifts, …
       chat/                 # conversation_list, chat_screen (the coach)
       community/            # feed, post detail/compose, learn, support, guidelines
@@ -142,12 +157,18 @@ careblazers/                # repo DIRECTORY name (pubspec name: is holdclose)
     widgets/                # tab_scaffold (4-tab bar + center mic), path_header, …
     db/                     # drift: database.dart (migrations), tables.dart
     seed/                   # seeded loved one (post-stroke demo persona),
-                            # sample data, system prompts, learn/support/
+                            # sample data, system prompts, AI extraction
+                            # prompts (prescription/appointment/visit-prep/
+                            # insurance-appeal/insurance-card), learn/support/
                             # guidelines content (general-purpose, no Natali)
   test/                     # mirrors lib/: providers/ services/ screens/ … golden/
   integration_test/         # demo_tour.dart, critical_path_smoke_test.dart
   backend/                  # Cloudflare Worker (Hono + drizzle + D1 + R2)
-  tools/                    # claude_shim.py, dev_defines, seed/cert scripts
+  tools/                    # run_device.sh (the device runner) + build_ipa.sh,
+                            # claude_shim.py, dev_defines(.example).sh,
+                            # seed/cert/tts/espeak scripts, README.md
+  caregiver-ai-prize/       # HHS/ACL Caregiver AI Prize packet (task #4)
+  feedback/                 # alpha bug-report queue (gitignored; TRIAGE.md)
   docs/                     # MENU_LAYOUT_SPEC, CHAT_FEATURE, TTS_BUNDLED
   ios/ android/
 ```
@@ -222,27 +243,50 @@ careblazers/                # repo DIRECTORY name (pubspec name: is holdclose)
 
 ### Building / running
 
+**`tools/run_device.sh` is the ONE device build+install script** (see
+`tools/README.md` for the full flag reference). Env-configured:
+
 ```bash
 flutter pub get
 cd ios && pod install && cd ..
-flutter run -d <device-id>
-flutter test
-flutter test integration_test/
-flutter analyze
+
+tools/run_device.sh                     # AUTH=demo: fake auth, LAN shim, no backend
+AUTH=google tools/run_device.sh         # real Google sign-in (ALPHA_AUTH) + backend
+AUTH=google SEED=1 tools/run_device.sh  # ...plus a fresh seeded dataset
+# knobs: AUTH=demo|google  SEED=1  DEVICE=<id>  SHIM_URL=<url>
+# AUTH=google auto-sources tools/dev_defines.sh (Google client ids + backend)
+
+tools/build_ipa.sh                      # release IPA (stamps real CFBundleVersion)
+
+# raw commands still valid:
+flutter run -d <device-id>   # simulator/quick fallback (no build-stamp)
+flutter test  •  flutter test integration_test/  •  flutter analyze
 ```
+
+Every `run_device.sh` compile gets a **distinct epoch build number** shown in
+**Settings → About** (via `lib/config/build_info.dart`) so a tester can
+confirm which binary landed. The report button is always on (`FEEDBACK`).
+
+**Feature flags (`--dart-define`, all default off/empty — scripts set them):**
+`DEMO_MODE` (fake auth+seed) · `ALPHA_AUTH` (real Google) · `FEEDBACK` (report
+button) — the last two are orthogonal (the old `ALPHA_FEEDBACK` umbrella was
+retired). Plus `USE_FAKE_LLM`, `USE_REAL_CAPTURE`, `SHIM_URL`/`SHIM_TOKEN`,
+`FORUM_API_URL` (Worker origin; app appends `/api/v1`), `SEED_DEMO`/
+`SEED_TOKEN`, `GOOGLE_*_CLIENT_ID`, and the build-stamp defines
+(`BUILD_STAMP`/`APP_VERSION`/`GIT_SHA`/`GIT_BRANCH`/`BUILD_TIME`).
 
 ### Running the local LLM shim (dev mode)
 
 ```bash
-# In one terminal:
-python3 tools/claude_shim.py
-# In another:
-flutter run -d <ios-simulator-id>
+# Bind to the LAN so a phone can reach it:
+SHIM_HOST=0.0.0.0 SHIM_PORT=8765 python3 tools/claude_shim.py
 ```
 
-The shim listens on `http://localhost:8765` and shells out to your
-local `claude` CLI (uses your Claude Max subscription, zero per-call
-cost). `ClaudeCLIProvider` POSTs to it.
+The shim shells out to your local `claude` CLI (zero per-call cost); routes:
+`/generate`, `/extract` (image+text scan), `/feedback`, `/phonemize`. The app
+reaches it via `SHIM_URL` (LAN, not localhost, on device). The `/extract`
+route silently shrinks oversized images — the `claude` CLI drops `@`-mentioned
+images over ~200 KB, so scan captures are shrunk client-side too.
 
 ### Running the demo tour
 

@@ -37,7 +37,24 @@ July 2026 sessions with additional caregivers.
   in a crisis, bridging the home-to-hospital gap.
 - **Care Circle** — server-backed sync shares the care picture across a family
   or care team on multiple devices (calendar, tasks, shifts, expenses).
-- **Cards & Docs scanning** — capture insurance cards and key documents.
-- **Roadmap:** provider-shareable care summaries, and — longer term —
-  interoperability with health records/EMRs and assistive devices. [State
-  current capability vs. planned honestly; don't overclaim.]
+- **AI scan-to-import** — photograph a prescription label, appointment card,
+  or insurance card and the app extracts the fields into a structured draft
+  the caregiver reviews and approves before anything is saved (a second,
+  explicit human-in-the-loop gate). Prescriptions become medications;
+  appointment cards become appointments with reminders; insurance cards fill
+  the Emergency Card.
+- **AI visit prep & appeals** — one tap drafts relevant, non-diagnostic
+  questions to bring to a doctor's visit; another drafts an insurance-appeal
+  letter (explicitly not legal or medical advice) the caregiver edits and
+  sends.
+- **Find a provider** — searches the free public CMS NPI Registry by name,
+  specialty, and city/state to add a clinician to the care record.
+- **Provider-shareable care summary** — one tap generates a shareable PDF of
+  the essentials (crisis info, medications, appointments) for a new doctor or
+  ER visit — bridging the coordination gap the CAN survey flags (41% of
+  caregivers struggle to coordinate between providers).
+- **Refill-runway alerts & tap-to-call** — arithmetic on the caregiver's own
+  captured label data flags when a medication is running low, with a
+  one-tap call to the pharmacy; providers and insurers are tap-to-call too.
+- **Roadmap:** deeper interoperability with health records/EMRs and
+  assistive/home devices remains genuinely future work.

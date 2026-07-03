@@ -525,9 +525,11 @@ class VoiceIntentChat extends VoiceIntentOutcome {
 ///      [ChatDeltaText] append the fragment to the assistant's [body]
 ///      and re-persist via [ChatRepository.appendMessage]
 ///      (`insertOnConflictUpdate` overwrites the row in place).
-///   4. On stream-close, parse `[card:<id>]` markers in the final body
-///      into the [Message.citations] list (deduplicated, first-seen
-///      order) and flip `streamingDone: true`.
+///   4. On stream-close, execute any `[action:<name> …]` tool markers in
+///      the final body and record their result references in
+///      [Message.citations] (deduplicated, first-seen order, e.g.
+///      `journal:<id>`), strip the markers from the shown body, and flip
+///      `streamingDone: true`.
 ///   5. On [ChatDeltaError], mark the partial assistant message done
 ///      and surface the error message to the stream subscriber.
 ///

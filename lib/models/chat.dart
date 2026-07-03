@@ -51,11 +51,13 @@ abstract class Conversation with _$Conversation {
 /// assistant's streamed reply (TASKS.md Phase 11.1 + 11.3).
 ///
 /// [body] accumulates token-by-token while the LLM streams; once the
-/// final chunk arrives [streamingDone] flips to true and
-/// [ChatService] parses `[card:<id>]` markers in [body] into
-/// [citations] (a list of library card IDs the assistant cited per
-/// Phase 11.5). User-authored messages always have [streamingDone]
-/// true and an empty [citations] list.
+/// final chunk arrives [streamingDone] flips to true. [citations] holds
+/// action-result references produced by executing the reply's
+/// `[action:<name> …]` tool markers — e.g. a `journal:<entry_id>` chip
+/// that deep-links to the created entry (see [ChatService] +
+/// `chat_actions.dart`; the old library-card `[card:<id>]` model is
+/// retired). User-authored messages always have [streamingDone] true and
+/// an empty [citations] list.
 @freezed
 abstract class Message with _$Message {
   const factory Message({

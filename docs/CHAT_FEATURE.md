@@ -1,15 +1,13 @@
 # Chat coach
 
-> **Updated for the pivot (2026-06-22).** The chat coach is now the
-> product's **primary (and only) coaching surface** — the Behavior
-> Decoder it was originally built alongside is being **removed**, and the
-> Dr. Natali / Dementia Careblazers framing is being **stripped**.
-> Throughout this doc: ignore "decoder" cross-references (obsolete), read
-> "Careblazer" as "caregiver," and read the "Dr. Natali" voice/citation
-> labels as **brand-neutral** (e.g. "a coaching note on \<topic\>", not
-> "Dr. Natali on \<topic\>"). The app is **general-purpose caregiving**,
-> not dementia-only. The file locations and parsing mechanics below are
-> still accurate. See [`CLAUDE.md`](../CLAUDE.md) → **Direction**.
+> **Current as of the pivot + tool-action refactor.** Holdclose is
+> **general-purpose caregiving** (not dementia-only), and the chat coach
+> is the product's **primary coaching surface** — the old Behavior
+> Decoder and the Dr. Natali / Dementia Careblazers framing are gone. The
+> earlier version of this doc described a `[card:<id>]` citation / library-
+> card model that **no longer exists** and has been removed here. What the
+> coach actually emits now are `[action:<name> …]` tool markers; this doc
+> describes that. See [`CLAUDE.md`](../CLAUDE.md) → **Direction**.
 
 The chat coach is a multi-turn caregiving companion, grounded in the
 loved one's real care data — meds, dose windows, appointments, history,
@@ -19,6 +17,14 @@ already knows *their* situation, so they never have to re-explain it the
 way they would to a blank chatbot. **That data-grounding is the wedge** —
 it's what makes this more than "just use the AI."
 
+Beyond talking, the coach can **act in the app on the caregiver's
+behalf** — logging a journal entry, recording a medication they name,
+scheduling an appointment, navigating to a screen — by ending a reply
+with an `[action:…]` tool marker the chat service parses out and
+executes. The coach is the caregiver's hands in the app; it only ever
+transcribes what the caregiver says, never suggests a medication, dose,
+or diagnosis.
+
 ## Where things live
 
 | Concern | File |
@@ -26,190 +32,237 @@ it's what makes this more than "just use the AI."
 | Conversation + Message models | `lib/models/chat.dart` |
 | Drift tables + migration | `lib/db/tables.dart`, `lib/db/database.dart` |
 | Persistence | `lib/services/chat_repository.dart` |
-| Streaming orchestrator | `lib/services/chat_service.dart` |
+| Streaming orchestrator + backends | `lib/services/chat_service.dart` |
+| Prod (Worker) chat backend | `lib/services/api_chat_backend.dart` |
+| Tool/action catalog | `lib/services/chat_actions.dart` |
+| Current-data grounding | `lib/services/chat_context_builder.dart` |
 | System prompt (verbatim) | `lib/seed/chat_system_prompt.dart` |
-| Citation chip renderer | `lib/widgets/message_body.dart` |
-| Screens (Phase 11.4) | `lib/screens/chat/` |
+| Action-result chip renderer | `lib/widgets/message_body.dart` |
+| Screens | `lib/screens/chat/` |
 
-The chat backend is wired through the **same `tools/claude_shim.py`
-bridge** the decoder uses (BUILD_SPEC.md §8). No new transport, no
-new keys — `ClaudeShimChatBackend` POSTs `{system, user}` to
-`http://localhost:8765/generate` and folds the SSE response into
-`ChatDeltaText` events. The shim shells out to your local `claude`
-CLI subscription, so chat is zero-per-call cost in dev mode.
+## Transport — three-way backend selection
 
-## System-prompt customization
+`ChatService` never imports a concrete backend; it goes through the
+`chatLLMBackend` provider at the bottom of `chat_service.dart`, which
+picks one of three implementations by build mode (in this order):
 
-The chat system prompt lives in `lib/seed/chat_system_prompt.dart` as
-a single `const String chatSystemPrompt`. It is the **only** source of
+1. **`DemoChatBackend`** (fake) — selected whenever `useFakeLLMEngine`
+   is true (every `flutter test`, and the `DEMO_MODE` pitch build via
+   `--dart-define=USE_FAKE_LLM=true`). Streams a short canned coaching
+   reply in word chunks so the streaming UI animates exactly as live,
+   with no network. It never emits an `[action:…]` tag — demo chat
+   reads, it doesn't write.
+
+2. **`ApiChatBackend`** (production) — selected when a real Worker origin
+   is baked in (`forumBackendConfigured`, i.e. `--dart-define=FORUM_API_URL=…`).
+   POSTs `{system, user, feature: "chat"}` with the caregiver's session
+   JWT to `POST /api/v1/chat` on the **Cloudflare Worker**
+   (`lib/services/api_chat_backend.dart`). The Worker is the gatekeeping
+   chokepoint: it holds the inference-host key (never on-device),
+   enforces per-user daily token quotas + a global daily spend cap, and
+   logs usage. The app consumes a vendor-neutral SSE stream
+   (`data: {"text":"…"}` per fragment, then `data: [DONE]`;
+   `data: {"error":"…"}` on failure), so the model/vendor never appears
+   on the wire.
+
+3. **`ClaudeShimChatBackend`** (dev shim) — the fallback when no backend
+   is configured. POSTs `{system, user, partial: true}` to the local dev
+   shim (`localhost:8765` / `SHIM_URL`, `/generate`), which shells out to
+   your local `claude` CLI subscription (zero per-call cost in dev). It
+   folds the SSE `stream-json` response into `ChatDeltaText` events.
+
+All three collapse multi-turn history into the single `user` payload via
+`ClaudeShimChatBackend.formatHistory`, so Worker, shim, and fake speak
+one contract. Test harnesses override `chatLLMBackendProvider` with their
+own scripted backends.
+
+## Per-message flow
+
+`ChatService.sendMessage` (in `chat_service.dart`):
+
+1. Append the caregiver's turn as a `MessageRole.user` row and yield it.
+2. Insert an empty assistant placeholder (`streamingDone: false`) — the
+   chat screen renders this as the "typing…" bubble.
+3. Build the system prompt: `chatSystemPrompt` plus a **fresh** current-
+   data snapshot appended each turn (see below). A snapshot failure
+   degrades to no snapshot — it never sinks the turn.
+4. Stream deltas from the backend; on each `ChatDeltaText`, append the
+   fragment to the body and re-persist.
+5. On stream-close, run `_executeActions` over the final raw body (parse
+   + execute any `[action:…]` markers), strip the markers from the
+   displayed text via `stripActionMarkers`, stamp the resulting
+   citations onto `Message.citations`, and flip `streamingDone: true`.
+6. On `ChatDeltaError` (or any thrown exception after the user turn), fold
+   a `[chat error: …]` sentinel into the assistant body so the failed
+   turn stays visible and retryable. Every display path runs the body
+   through `ChatService.displayBody` first, which swaps the raw sentinel
+   for the caregiver-facing `chatFriendlyErrorMessage` — the raw
+   transport detail never reaches the caregiver.
+
+A one-shot auto-title (`generateChatTitle`) fires fire-and-forget after
+the first assistant reply lands, naming the thread from its opening
+exchange.
+
+## System prompt
+
+The chat system prompt lives in `lib/seed/chat_system_prompt.dart` as a
+single `const String chatSystemPrompt`. It is the **only** source of
 voice for the chat coach — `ChatService` passes it through to every
-backend invocation as the `system` field.
+backend invocation as the `system` field. (`voiceIntentSystemPrompt` in
+the same file wraps it with a hands-free "act now" addendum for the
+center-mic flow.)
 
-It is structurally similar to the decoder's `claudeSystemPrompt` (six
-core principles, the 5 Causes framework, the family vocabulary, the
-"never claim to be Dr. Natali" identity line), but two things differ:
+Its sections:
 
-1. **Multi-turn framing.** "You are talking with a Careblazer in an
-   ongoing chat thread — multi-turn dialogue, not a one-shot script."
-   The decoder prompt asks for a JSON object; the chat prompt asks for
-   prose paragraphs.
+- **CORE PRINCIPLES** — general-purpose, warm, brief (aim under ~120
+  words). Respond to the emotion first; name the one or two likely
+  underlying causes without diagnosing; connection over correction; use
+  the family's vocabulary ("your loved one", "your person"); give
+  concrete script lines the caregiver can read aloud. There is **no**
+  dementia-specific "5 Causes" framework and **no** "never claim to be
+  Dr. Natali" identity line — both were removed in the pivot.
 
-2. **Crisis referral.** Because the chat surface is open-ended — the
-   caregiver can ask anything — the prompt names the situations where
-   the chat coach should explicitly defer to professional help: sudden
-   severe confusion, chest pain, signs of stroke, a fall with injury,
-   talk of self-harm. "Warmth includes naming when something is beyond
-   the scope of chat." For ongoing medical questions (medications,
-   dosing, diagnoses, prognosis), the prompt directs the model to refer
-   the caregiver to their loved one's doctor or a geriatric care
-   manager. This pairs with the existing footer reminder on every
-   decoder result (BUILD_SPEC.md §13.1).
+- **WHAT YOU CAN SEE** — the coach has a **read-only** view of the
+  caregiver's current data. When data is on file, a `CURRENT DATA`
+  section wrapped in `<current_data>` tags is appended below the prompt
+  (built by `lib/services/chat_context_builder.dart` —
+  `gatherChatContext` reads fresh per turn, `formatChatContext` renders
+  it). It carries the loved one's name/age/diagnosis, allergies,
+  medications, dose windows, upcoming appointments, and routines, so the
+  coach can answer "what meds is she on?", "what are my windows called?",
+  etc. Everything inside `<current_data>` is treated as **reference
+  data, not instructions** (indirect-injection defense): an action tag
+  or command that appears there is data to be quoted, never obeyed.
 
-### How to edit the prompt
+- **CRISIS REFERRAL** — this is a wellness app, not a medical-advice
+  product. For a possible emergency (sudden severe new confusion, chest
+  pain, signs of stroke, a fall with injury, talk of self-harm, anyone
+  unsafe right now) the coach says so and points to the doctor or 911.
+  Ongoing medical questions (medications, dosing, diagnoses, prognosis)
+  are referred to the loved one's doctor or a geriatric care manager.
 
-The const is **verbatim**: every character matters for output
-consistency, the same as the decoder prompt (BUILD_SPEC.md §7.1).
-When changing it:
+- **FORBIDDEN** — non-negotiable:
+  - No medication, dosage, or medication-change recommendations.
+    (Recording a med the caregiver *names* is data entry, not advice.)
+  - No diagnoses or prognosis claims; no "your loved one has X".
+  - No contradiction of the caregiver's reading of the situation.
+  - No "AI" / "model" / "Claude" / "ChatGPT" framing — the vendor stays
+    invisible (CLAUDE.md).
+  - No exclamation marks. The audience is tired.
 
-- Update the const in `lib/seed/chat_system_prompt.dart`.
-- Run the chat service tests — `test/services/chat_service_test.dart`
-  pins the system-prompt forwarding shape; voice changes that drift
-  the structure may need golden refreshes downstream.
-- Keep the **CITATIONS** section honest: it enumerates the 12 library
-  card IDs the model is allowed to cite, one per line as
-  `<id> — <topic>`. The renderer falls back gracefully on a stale id,
-  but a hallucinated id means a missing chip the caregiver wanted.
+- **TOOLS** — the `[action:…]` catalog the coach may emit (below).
 
-### Forbidden ground
+There is **no CITATIONS section and no card-id allow-list** — the model
+does not cite a closed set of library cards. When editing the prompt,
+keep it verbatim (character-for-character consistency matters) and re-run
+`test/services/chat_service_test.dart`, which pins the prompt-forwarding
+shape.
 
-The prompt's `FORBIDDEN:` block is non-negotiable and mirrors the
-decoder:
+## Actions (the tool catalog)
 
-- No medication, dosage, or medication-change recommendations.
-- No diagnoses or prognosis claims ("your loved one has X").
-- No contradiction of the caregiver's reading of the situation.
-- No "AI" / "model" / "Claude" / "ChatGPT" framing — per
-  CLAUDE.md and BUILD_SPEC.md §1, the LLM is invisible.
-- No exclamation marks. The audience is tired.
+The `[action:<name> …]` marker is how the coach writes to the app. Markers
+are parsed by `_actionPattern` in `chat_service.dart` — a quote-aware
+regex so a value containing a literal `]` (e.g.
+`title="Pick up [urgent] refill"`) doesn't truncate the tag. The action
+name is `[a-z_]+`; args are `key="value"` pairs parsed by
+`_parseActionArgs`.
 
-These overlap deliberately with the decoder's forbidden list so
-caregivers get the same posture across surfaces.
+The catalog is built in `buildChatActions` in
+`lib/services/chat_actions.dart`. Each name maps to an executor that
+performs the write against the relevant repository and optionally returns
+a `ChatActionOutcome` carrying a citation. Every executor is defensive:
+missing/blank required args return null (the marker is still stripped,
+nothing is written) rather than throwing, and `ChatService` swallows
+executor exceptions so a failed tool never derails the reply.
 
-## Citation syntax
+Actions (verified against `buildChatActions`):
 
-When the assistant's reply ties into one of Dr. Natali's library
-cards, the model ends the relevant sentence with a marker:
+| Action | Effect |
+|---|---|
+| `log_journal` | Save a free-text journal entry (situation / attempts / occurred_at). Returns a `journal:<id>` citation. |
+| `add_medication` | Add a med the caregiver names (name + dosage required; optional route, prescriber, notes, and `windows` to schedule it into named dose windows). |
+| `update_medication` | Change a med already on the list (resolved by name). |
+| `delete_medication` | Remove a med. **Destructive — confirmation-gated.** |
+| `add_appointment` | Schedule a visit (provider_name + starts_at required). |
+| `update_appointment` | Change an appointment (resolved by clinician name). |
+| `cancel_appointment` | Cancel a visit (status flips, row kept). **Destructive — confirmation-gated.** |
+| `add_task` | Add a care-team task (title required). |
+| `complete_task` | Mark a task done (resolved by title, scoped to the active loved one). |
+| `delete_task` | Delete a task. **Destructive — confirmation-gated.** |
+| `add_routine` | Add a recurring, time-keyed routine (name + time required; daily/weekly/asNeeded). |
+| `add_health_log` | Record a vitals / symptom / note entry the caregiver states. |
+| `log_dose` | Record a dose as taken / skipped / missed / late for a med on the list. |
+| `navigate` | Take the caregiver to a screen (target keyword, optional provider_name / date). Parks a route on `chatNavigateRequestProvider` for the chat screen to push. |
 
-```
-Sundowning is the late-afternoon shift many Careblazers notice in
-their loved ones. [card:sundowning_basics]
-```
+### Destructive actions are confirmation-gated
 
-The marker is `[card:<id>]`. The id charset is `[a-zA-Z0-9_-]+` so
-future slugs (kebab-case, mixed case) parse without a regex update.
+`delete_medication`, `cancel_appointment`, and `delete_task`
+(`ChatService.destructiveActionNames`) are **never auto-executed** from a
+model reply — a silently deleted med or cancelled appointment is a safety
+event, and a crafted value synced from a circle peer could otherwise
+smuggle such a tag into the prompt (indirect injection). Instead they are
+parked as `pending_action:<raw marker>` citations
+(`pendingActionCitationPrefix`) and run only through
+`confirmPendingAction` after an explicit in-app tap on the in-thread
+confirm card. This holds in voice mode too. `describePendingAction`
+produces the card's human prompt ("Remove the medication 'Ibuprofen'?").
 
-### Parsing
+## Action-result chips (rendering)
 
-`ChatService.parseCitations(body)` runs the regex over the finished
-assistant body once `streamingDone` flips true. Output is a
-deduplicated, first-seen-order `List<String>` that lands on the
-`Message.citations` field and persists with the row. The same regex
-lives in `MessageBody._citationMarker` (the chip renderer) — two
-copies on purpose: the service owns the persisted citations list (for
-queries / future analytics), the widget owns the inline render.
+`lib/widgets/message_body.dart` renders an assistant message: the plain
+prose (the `[action:…]` tags are already stripped by the service before
+the widget sees the body) plus an inline **action-result chip** per
+citation in `Message.citations`.
 
-### Rendering
+The library-card / `[card:<id>]` citation path is **retired** — read the
+header comment in `message_body.dart`. The widget now only renders
+action-result citations. Today the only chip-bearing citation is
+`journal:<entry_id>` (from `log_journal`), which renders a "Journal entry
+logged" chip; tapping it deep-links to `/journal/<id>` via the ambient
+`GoRouter`. Tests pass an `onCitationTap` override to observe taps
+without a real router. An unrecognised citation falls back to a generic
+chip showing its raw text, so the message never crashes.
 
-`lib/widgets/message_body.dart` walks the body once and emits an
-`InlineSpan` per chunk:
+## Chat cannot be disabled
 
-- Plain prose between markers becomes a `TextSpan`.
-- Each `[card:<id>]` marker becomes a `WidgetSpan` holding a salmon
-  `_CitationChip` reading "**Dr. Natali on \<card title\>**" at 14pt
-  white-on-CTA. The chip's height stays close to the surrounding cap
-  height so the sentence flows continuously.
-- Tap → `GoRouter.of(context).push('/library/<id>')` — the existing
-  library-detail route from BUILD_SPEC.md §5.8. Widget tests pass an
-  `onCitationTap` override so taps can be observed without spinning up
-  a full router.
-- An unknown id (model went off-script despite the closed-set prompt)
-  falls back to the raw marker text — the message stays intact and the
-  dev sees the failure rather than a crashed bubble.
-
-### Where titles come from
-
-The chip resolves `<id>` → `LibraryCard.title` via `libraryCardById`
-in `lib/seed/library_cards.dart`. Card title edits propagate to the
-chip label automatically; no chip-side string lives in the model
-output.
-
-## Disable from settings
-
-The chat coach can be hidden entirely via an **`AppSettings.chatEnabled`**
-flag (default `true`). When `false`:
-
-- The Chat tab disappears from the bottom tab bar.
-- The `/chat` and `/chat/:id` routes are unreachable from app UI.
-- The persisted conversations + messages remain in drift — flipping
-  the toggle back on resurfaces them — so the toggle is reversible
-  without data loss.
-
-This is the **escape hatch** for two scenarios:
-
-1. **Pitch demo polish.** Phase 11.4's chat tab can be hidden during a
-   pitch tour if the operator wants the conversation to focus on the
-   decoder wedge without a fifth tab visible. Settings → flip
-   `chatEnabled` off → cold-restart → 4-tab bar.
-
-2. **Caregivers who prefer the decoder wedge.** Some users want the
-   single-shot "what do I do RIGHT NOW?" coach and nothing else.
-   Hiding chat avoids competing for the same eyeball without
-   uninstalling.
-
-The flag is persisted via `StorageProvider.updateSettings` like every
-other `AppSettings` field. The chat **services** (`ChatService`,
-`ChatRepository`) stay alive regardless of the flag — only the UI
-gates on it.
+There is **no `AppSettings.chatEnabled` flag** (verify: no match in
+`lib/models/settings.dart`). The bottom tab bar is a hard invariant —
+**exactly four items, Home · Care · Chat · Community, in that order,
+never collapsed or conditionally hidden** (CLAUDE.md → Architectural
+invariants). The Chat tab is always mounted; there is no escape hatch to
+toggle it off.
 
 ## Demo tour acceptance
 
-`integration_test/demo_tour.dart` carries a second `testWidgets`
-block that exercises the chat citation deep-link end-to-end without
-depending on the Phase 11.4 chat-tab UI:
-
-1. Construct an in-memory `CareblazersDatabase` + `ChatRepository`.
-2. Wire a scripted `ChatLLMBackend` that yields a sundowning answer
-   ending in `[card:sundowning_basics]`.
-3. Call `ChatService.sendMessage(userText: "what's sundowning?")` and
-   collect the streamed `Message`s.
-4. Assert the final assistant message has `streamingDone: true` and
-   `citations` containing `sundowning_basics`.
-5. Pump `MessageBody(body: assistant.body)` inside a minimal
-   `GoRouter` wired with the real `LibraryCardScreen` at `/library/:id`.
-6. Tap the citation chip → assert `LibraryCardScreen` is on screen.
-
-The walkthrough validates the user-facing chain that matters:
-**ask question → see chip → tap → land on library**. Once Phase 11.4
-ships the chat tab + screens, the first three steps will be replaced
-by `tester.tap(chatTab) → tester.enterText(...) → tester.tap(send)`.
+`integration_test/demo_tour.dart` is a four-tab IA walkthrough
+(Home · Care · Chat · Community) against an in-memory `HoldcloseDatabase`
+with `DemoChatBackend` pinned via `chatLLMBackendProvider.overrideWithValue`.
+It seeds the demo loved one, medications, journal, and two chat threads,
+then drives the real UI: read the Home dashboard, walk the Care hub, open
+a seeded chat thread and send a message (streamed deterministically by
+`DemoChatBackend`), and visit Community. There is **no** library-card
+deep-link step — that surface no longer exists.
 
 ## Failure modes
 
 | Symptom | Likely cause | Where to look |
 |---|---|---|
-| Citation chips don't render | Model omitted markers, or marker syntax drifted | `chat_system_prompt.dart` CITATIONS block + `_citationMarker` regex |
-| Chip resolves to raw `[card:xyz]` text | `xyz` isn't in `libraryCards` | `libraryCardById` returns null → MessageBody fallback |
-| Stream stalls at "typing…" | Shim down, or `claude` CLI not logged in | `python3 tools/claude_shim.py` in foreground, check `claude --version` |
-| Chip nav goes nowhere | `/library/:id` route deregistered | `lib/routing/router.dart` `libraryCard` route |
-| Chat tab visible in demo despite disable | `chatEnabled` flag not honoured by tab scaffold | Phase 11.4 wiring in `lib/widgets/tab_scaffold.dart` |
+| Action never writes | Required arg missing/blank, or unknown action name | executor returns null in `chat_actions.dart`; `_executeActions` skips unwired names |
+| Raw `[action:…]` tag visible in a bubble | Body not run through `displayBody` / `stripActionMarkers` | `ChatService.displayBody` is the single display chokepoint |
+| Destructive action ran without a tap | Regression in the confirm gate | `destructiveActionNames` + `confirmPendingAction`; must stay pending |
+| Journal chip nav goes nowhere | `/journal/:id` route deregistered | `lib/routing/router.dart` journal routes; `message_body.dart` deep-link |
+| "Couldn't reach the coach" every turn | Prod: quota/capacity/auth (429/503/401); dev: shim down or `claude` CLI not logged in | `ApiChatBackend._errorForStatus`; `python3 tools/claude_shim.py`, `claude --version` |
+| Coach says it "can't see" the meds | Current-data snapshot empty or errored | `chat_context_builder.dart` (`gatherChatContext` / `formatChatContext`) |
 
 ## Related docs
 
-- [`BUILD_SPEC.md`](../BUILD_SPEC.md) §6 (provider interfaces),
-  §7 (decoder system prompt — companion to the chat prompt),
-  §8 (the shim contract).
-- [`TASKS.md`](../TASKS.md) Phase 11 (the queue this work
-  belongs to).
-- [`TTS_BUNDLED.md`](TTS_BUNDLED.md) — separate concern; chat replies
-  share the same TTS path as decoder scripts when the caregiver wants
-  to hear a reply read aloud.
+- [`CLAUDE.md`](../CLAUDE.md) — Direction (the pivot) + Architectural
+  invariants (tab bar, medical guardrails, destructive-action gating,
+  prompt sanitization).
+- [`MENU_LAYOUT_SPEC.md`](MENU_LAYOUT_SPEC.md) — navigation / tab / hub
+  structure.
+- [`TTS_BUNDLED.md`](TTS_BUNDLED.md) — chat replies share the same TTS
+  path when a caregiver wants a reply read aloud.
+- [`BUILD_SPEC.md`](../BUILD_SPEC.md) — original contract; note its
+  decoder / Natali / dementia sections predate the pivot and are
+  superseded by the code.

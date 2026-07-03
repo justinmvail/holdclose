@@ -26,7 +26,14 @@ parents, a disabled family member, recovery, dementia — not one diagnosis.
   "3+ falls this week" / similar alerts.
 - **Care (hub tab)** — health log, care plan routines, medications + dose
   windows + dose log, appointments, Emergency Card (the paramedic/ER
-  handoff sheet), and Cards & Docs scans.
+  handoff sheet), and Cards & Docs scans. Plus a set of medical-
+  coordination helpers: **AI scan-to-import** for prescriptions,
+  appointments, and insurance cards (always human-approved before it
+  writes anything), **AI doctor-visit-prep** questions, **AI insurance-
+  appeal** letter drafts, **NPI provider search** (Find a provider), a
+  shareable **care-summary PDF**, **refill-runway alerts** (heads-up when
+  a med is about to run out), and **tap-to-call** for providers, pharmacy,
+  and insurance.
 - **Care Circle** — share caregiving across devices: server-backed sync
   (Cloudflare Worker, `backend/`), single-use invite links/QR with an
   explicit join confirmation, shared calendar/tasks/shifts/expenses/
@@ -57,7 +64,45 @@ parents, a disabled family member, recovery, dementia — not one diagnosis.
 ```bash
 flutter pub get
 cd ios && pod install && cd ..
-flutter run -d <ios-simulator-id>
+```
+
+### Run on a device — `tools/run_device.sh` (primary path)
+
+One env-configured script that builds + installs Holdclose to a device.
+Read its header for the full option list; the essentials:
+
+```bash
+tools/run_device.sh                       # AUTH=demo (default)
+AUTH=google tools/run_device.sh           # real Google sign-in + backend
+AUTH=google SEED=1 tools/run_device.sh    # ...plus a fresh seeded dataset
+```
+
+- **`AUTH=demo`** (default) — fake auth via `DEMO_MODE`, talks to the LAN
+  shim; no backend or Google sign-in needed. Quick dogfooding.
+- **`AUTH=google`** — real Google sign-in (`ALPHA_AUTH`) verified by the
+  backend; auto-sources `tools/dev_defines.sh` for the Google client ids +
+  `FORUM_API_URL` + shim token.
+- **`SEED=1`** (optional) — wipe the on-device DB and reseed the
+  comprehensive demo dataset on next launch (typically paired with
+  `AUTH=google`).
+- **`DEVICE=<id>`** / **`SHIM_URL=<url>`** (optional) — override the target
+  device or the LLM shim URL.
+
+Every dev build turns on the in-app feedback report button (`FEEDBACK`),
+and **every compile gets a distinct build number** (epoch) shown in
+Settings → About (via `lib/config/build_info.dart`) so you can confirm
+which binary is on the phone. Wireless installs need the phone unlocked +
+awake during the whole compile.
+
+For a release IPA whose `CFBundleVersion` also carries that distinct build
+number, use **`tools/build_ipa.sh`** (output: `build/ios/ipa/*.ipa`).
+
+Raw commands still work for a simulator fallback or quick checks:
+
+```bash
+flutter run -d <device>    # or an <ios-simulator-id>
+flutter test
+flutter analyze
 ```
 
 ## Dev mode (real LLM, local Claude Max subscription)
@@ -66,7 +111,7 @@ flutter run -d <ios-simulator-id>
 # In one terminal:
 python3 tools/claude_shim.py     # listens on localhost:8765
 
-# In another:
+# In another (or just use tools/run_device.sh):
 flutter run -d <simulator-id>
 ```
 

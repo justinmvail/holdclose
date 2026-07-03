@@ -27,7 +27,10 @@ This focus is personal: the founder's own grandfather lived with dementia, and
 Holdclose's earliest design was shaped by that experience and by dementia-
 caregiver feedback.
 
-**Secondary consideration (interoperability focus areas #3–#4):** Holdclose's
-roadmap includes interoperability with health records/EMRs and assistive/home
-devices, described honestly as *planned* work in Sections 2–3 — noted here only
-as a directional fit, not a current claim.
+**Secondary consideration (interoperability focus areas #3–#4):** Holdclose
+already ships one concrete provider-interoperability artifact — the
+one-tap, provider-shareable **care-summary PDF** (crisis info + medications +
+appointments) a caregiver can hand to a new doctor or ER. Deeper
+interoperability with health records/EMRs and assistive/home devices is
+described honestly as *planned* work in Sections 2–3 — a directional fit, not
+a current claim.
