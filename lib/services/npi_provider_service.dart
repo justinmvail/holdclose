@@ -14,6 +14,9 @@ abstract class NpiProviderService {
     String? city,
     String? state,
     String? postalCode,
+
+    /// 'NPI-1' (individuals), 'NPI-2' (organizations), or null (both).
+    String? enumerationType,
   });
 }
 
@@ -32,6 +35,7 @@ class RealNpiProviderService implements NpiProviderService {
     String? city,
     String? state,
     String? postalCode,
+    String? enumerationType,
   }) async {
     final Dio d = dio ??
         Dio(BaseOptions(
@@ -47,6 +51,8 @@ class RealNpiProviderService implements NpiProviderService {
       if ((city ?? '').trim().isNotEmpty) 'city': city!.trim(),
       if ((state ?? '').trim().isNotEmpty) 'state': state!.trim(),
       if ((postalCode ?? '').trim().isNotEmpty) 'postal_code': postalCode!.trim(),
+      if ((enumerationType ?? '').trim().isNotEmpty)
+        'enumeration_type': enumerationType!.trim(),
     };
     try {
       final Response<dynamic> resp =
@@ -69,6 +75,7 @@ class FakeNpiProviderService implements NpiProviderService {
     String? city,
     String? state,
     String? postalCode,
+    String? enumerationType,
   }) async {
     return const <ProviderSearchResult>[
       ProviderSearchResult(

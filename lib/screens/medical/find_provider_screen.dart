@@ -29,6 +29,7 @@ class FindProviderScreen extends ConsumerStatefulWidget {
   static const Key specialtyKey = Key('find-provider-specialty');
   static const Key cityKey = Key('find-provider-city');
   static const Key stateKey = Key('find-provider-state');
+  static const Key typeToggleKey = Key('find-provider-type');
   static const Key searchButtonKey = Key('find-provider-search');
   static Key saveKey(String id) => Key('find-provider-save-$id');
 
@@ -45,6 +46,10 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
   TextEditingController? _specialty;
   TextEditingController? _city;
   TextEditingController? _state;
+
+  // Provider-type filter: 'NPI-1' (people, default), 'NPI-2' (organizations),
+  // or 'ALL' (both) — maps to the NPI `enumeration_type` param.
+  String _providerType = 'NPI-1';
 
   bool _searching = false;
   bool _searched = false;
@@ -83,6 +88,7 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
         specialty: _specialtyText,
         city: _cityText,
         state: stateCode,
+        enumerationType: _providerType == 'ALL' ? null : _providerType,
       );
     } catch (_) {
       results = null;
@@ -221,6 +227,28 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                 children: <Widget>[
+                  LabelledField(
+                    label: 'Show',
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: SegmentedButton<String>(
+                        key: FindProviderScreen.typeToggleKey,
+                        segments: const <ButtonSegment<String>>[
+                          ButtonSegment<String>(
+                              value: 'NPI-1', label: Text('People')),
+                          ButtonSegment<String>(
+                              value: 'NPI-2', label: Text('Orgs')),
+                          ButtonSegment<String>(
+                              value: 'ALL', label: Text('All')),
+                        ],
+                        selected: <String>{_providerType},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (Set<String> s) =>
+                            setState(() => _providerType = s.first),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   LabelledField(
                     label: 'Last name',
                     child: TextField(

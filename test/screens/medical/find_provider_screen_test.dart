@@ -19,6 +19,7 @@ class _RecordingNpiService implements NpiProviderService {
   String? lastSpecialty;
   String? lastCity;
   String? lastState;
+  String? lastEnumerationType;
 
   @override
   Future<List<ProviderSearchResult>?> search({
@@ -27,11 +28,13 @@ class _RecordingNpiService implements NpiProviderService {
     String? city,
     String? state,
     String? postalCode,
+    String? enumerationType,
   }) async {
     lastName = name;
     lastSpecialty = specialty;
     lastCity = city;
     lastState = state;
+    lastEnumerationType = enumerationType;
     return const <ProviderSearchResult>[
       ProviderSearchResult(
         name: 'John Berger',
@@ -143,5 +146,34 @@ void main() {
 
     expect(service.lastCity, 'Charleston');
     expect(service.lastState, 'SC');
+    // Default provider-type filter is People (NPI-1).
+    expect(service.lastEnumerationType, 'NPI-1');
+  });
+
+  testWidgets('provider-type toggle sets the NPI enumeration_type filter',
+      (WidgetTester tester) async {
+    final HoldcloseDatabase db = HoldcloseDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final ProviderRepository repo = ProviderRepository(db);
+    final _RecordingNpiService service = _RecordingNpiService();
+
+    await _pump(tester, repo: repo, service: service);
+
+    // Switch to Organizations → enumeration_type NPI-2.
+    await tester.tap(find.text('Orgs'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(FindProviderScreen.cityKey), 'Charleston');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(FindProviderScreen.searchButtonKey));
+    await tester.pumpAndSettle();
+    expect(service.lastEnumerationType, 'NPI-2');
+
+    // Switch to All → no enumeration_type filter (null).
+    await tester.tap(find.text('All'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(FindProviderScreen.searchButtonKey));
+    await tester.pumpAndSettle();
+    expect(service.lastEnumerationType, isNull);
   });
 }
