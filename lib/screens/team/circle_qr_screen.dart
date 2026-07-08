@@ -6,7 +6,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/forum.dart';
 import '../../providers/my_forum_profile_provider.dart';
+import '../../providers/share_provider.dart';
 import '../../providers/sync_state_provider.dart';
+import '../../services/circle_invite_link.dart';
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
@@ -24,14 +26,17 @@ String circleQrPayload(String token) => '$circleQrScheme$token';
 ///
 /// Ensures the caller owns a circle (creates "<displayName>'s circle" if
 /// they have none), mints an invite via `POST /circles/:id/invites`, and
-/// renders the token as a scannable QR with a "valid for 7 days" caption
-/// and the caller's @username.
+/// renders the token as a scannable QR with a "valid for 2 days" caption
+/// and the caller's @username. A secondary "Share link" action under the
+/// QR shares the Worker's public `/join/<token>` landing URL for the
+/// no-camera / not-in-the-room case (tester fb_1780873144169986).
 class CircleQrScreen extends ConsumerStatefulWidget {
   const CircleQrScreen({super.key});
 
   static const Key qrKey = Key('circle-qr-image');
   static const Key errorKey = Key('circle-qr-error');
   static const Key retryKey = Key('circle-qr-retry');
+  static const Key shareLinkKey = Key('circle-qr-share-link');
 
   @override
   ConsumerState<CircleQrScreen> createState() => _CircleQrScreenState();
@@ -73,6 +78,50 @@ class _CircleQrScreenState extends ConsumerState<CircleQrScreen> {
   }
 
   void _retry() => setState(() => _invite = _ensureInvite());
+
+  /// Share the HTTPS `/join/<token>` landing URL (it opens in a plain
+  /// browser for someone WITHOUT the app — the page bounces into the
+  /// `holdclose://join` deep link, and the join itself still requires the
+  /// in-app confirmation). Invites are SINGLE-USE, so this mints a FRESH
+  /// token per tap rather than reusing [displayed] — otherwise whichever
+  /// channel got redeemed first would burn the code still on screen
+  /// (same per-tap semantics as the roster's "Invite by link").
+  Future<void> _shareLink(CircleInviteDto displayed) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ForumApiClient client = ref.read(forumApiClientProvider);
+    // No real backend origin = no shareable URL. Degrade calmly rather
+    // than sharing a dead, relative link (local-only / demo builds).
+    if (client.baseUrl.trim().isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Connect to share an invite link. Have them scan your QR '
+            'instead.',
+          ),
+        ),
+      );
+      return;
+    }
+    try {
+      final CircleInviteDto invite =
+          await client.createInvite(displayed.circleId);
+      final String link = circleInviteLink(
+        origin: client.baseUrl,
+        token: invite.token,
+      );
+      await ref
+          .read(sharerProvider)
+          .share('Join my care circle on Holdclose: $link');
+    } on ForumApiException catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            "We couldn't create your invite link. Please try again.",
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -120,9 +169,11 @@ class _CircleQrScreenState extends ConsumerState<CircleQrScreen> {
                 if (snapshot.hasError || !snapshot.hasData) {
                   return _ErrorBlock(onRetry: _retry);
                 }
+                final CircleInviteDto invite = snapshot.data!;
                 return _QrBlock(
-                  invite: snapshot.data!,
+                  invite: invite,
                   username: username,
+                  onShareLink: () => _shareLink(invite),
                 );
               },
             ),
@@ -134,10 +185,15 @@ class _CircleQrScreenState extends ConsumerState<CircleQrScreen> {
 }
 
 class _QrBlock extends StatelessWidget {
-  const _QrBlock({required this.invite, required this.username});
+  const _QrBlock({
+    required this.invite,
+    required this.username,
+    required this.onShareLink,
+  });
 
   final CircleInviteDto invite;
   final String? username;
+  final VoidCallback onShareLink;
 
   @override
   Widget build(BuildContext context) {
@@ -177,7 +233,22 @@ class _QrBlock extends StatelessWidget {
           ),
         const SizedBox(height: 8),
         Text(
-          'This code is valid for 7 days.',
+          'This code is valid for 2 days.',
+          style: textTheme.bodyMedium?.copyWith(
+            color: context.hc.primarySoft,
+          ),
+        ),
+        const SizedBox(height: 20),
+        OutlinedButton.icon(
+          key: CircleQrScreen.shareLinkKey,
+          onPressed: onShareLink,
+          icon: const Icon(Icons.ios_share, size: 18),
+          label: const Text('Share link'),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          "Can't scan? Send a link they can tap to join instead.",
+          textAlign: TextAlign.center,
           style: textTheme.bodyMedium?.copyWith(
             color: context.hc.primarySoft,
           ),

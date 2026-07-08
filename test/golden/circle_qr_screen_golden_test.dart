@@ -63,7 +63,7 @@ void main() {
 
   group('CircleQrScreen golden', () {
     goldenTest(
-      'minted invite — scannable QR + 7-day caption',
+      'minted invite — scannable QR + 2-day caption + share link',
       fileName: 'circle_qr_screen',
       builder: () => GoldenTestGroup(
         columns: 1,
