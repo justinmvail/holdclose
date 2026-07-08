@@ -7,6 +7,7 @@ import { circlesRouter } from './routes/circles';
 import { commentsRouter } from './routes/comments';
 import { documentsRouter } from './routes/documents';
 import { joinRouter } from './routes/join';
+import { privacyRouter, termsRouter } from './routes/legal';
 import { postsRouter } from './routes/posts';
 import { profilesRouter } from './routes/profiles';
 import { reportsRouter } from './routes/reports';
@@ -55,6 +56,13 @@ app.get('/health', (c) => c.json({ status: 'ok' }));
 // like /auth/google's pre-auth handshake. It just renders the token from
 // the path + offers a `holdclose://join/<token>` deep link into the app.
 app.route('/join', joinRouter());
+
+// Public legal pages, same worker-root/no-auth posture as /join. The
+// sign-in screen's Terms / Privacy links point at
+// https://holdclose.care/terms + /privacy, which route here once the
+// domain is attached to the Worker at deploy.
+app.route('/terms', termsRouter());
+app.route('/privacy', privacyRouter());
 
 const api = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 

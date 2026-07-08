@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:holdclose/l10n/app_localizations.dart';
 import 'package:holdclose/providers/auth_provider.dart';
+import 'package:holdclose/providers/link_launcher_provider.dart';
 import 'package:holdclose/providers/loved_one_lookup_provider.dart';
 import 'package:holdclose/providers/settings_provider.dart';
 import 'package:holdclose/screens/onboarding/sign_in_screen.dart';
@@ -94,6 +95,7 @@ Future<({_SpyAuthProvider spy, GoRouter router})> _pumpSignIn(
   _SpyAuthProvider? spy,
   bool alphaMode = false,
   bool showGoogleInAlpha = false,
+  RecordingLinkLauncher? linkLauncher,
 }) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   await tester.binding.setSurfaceSize(const Size(400, 900));
@@ -128,6 +130,10 @@ Future<({_SpyAuthProvider spy, GoRouter router})> _pumpSignIn(
         // The screen's post-sign-in loved-one lookup reaches into the sync
         // engine; stub it out so these UI/routing tests stay hermetic.
         lovedOneLookupProvider.overrideWith(_NoopLovedOneLookup.new),
+        // The Terms / Privacy inline links hand off to the OS browser;
+        // record instead so the url_launcher plugin never fires.
+        linkLauncherProvider
+            .overrideWithValue(linkLauncher ?? RecordingLinkLauncher()),
       ],
       child: MaterialApp.router(
         theme: ThemeData(platform: platform),
@@ -197,6 +203,53 @@ void main() {
           findsOneWidget);
       expect(find.byKey(SignInScreen.termsLinkKey), findsOneWidget);
       expect(find.byKey(SignInScreen.privacyLinkKey), findsOneWidget);
+    });
+  });
+
+  group('SignInScreen — Terms / Privacy links (store-review requirement)', () {
+    testWidgets('tapping Terms launches https://holdclose.care/terms',
+        (WidgetTester tester) async {
+      final RecordingLinkLauncher launcher = RecordingLinkLauncher();
+      await _pumpSignIn(tester, linkLauncher: launcher);
+
+      await tester.tap(find.byKey(SignInScreen.termsLinkKey));
+      await tester.pumpAndSettle();
+
+      expect(launcher.launched, <Uri>[
+        Uri.parse('https://holdclose.care/terms'),
+      ]);
+    });
+
+    testWidgets('tapping Privacy Policy launches https://holdclose.care/privacy',
+        (WidgetTester tester) async {
+      final RecordingLinkLauncher launcher = RecordingLinkLauncher();
+      await _pumpSignIn(tester, linkLauncher: launcher);
+
+      await tester.tap(find.byKey(SignInScreen.privacyLinkKey));
+      await tester.pumpAndSettle();
+
+      expect(launcher.launched, <Uri>[
+        Uri.parse('https://holdclose.care/privacy'),
+      ]);
+    });
+
+    testWidgets('links launch in alpha mode too', (WidgetTester tester) async {
+      final RecordingLinkLauncher launcher = RecordingLinkLauncher();
+      await _pumpSignIn(
+        tester,
+        alphaMode: true,
+        showGoogleInAlpha: true,
+        linkLauncher: launcher,
+      );
+
+      await tester.tap(find.byKey(SignInScreen.termsLinkKey));
+      await tester.tap(find.byKey(SignInScreen.privacyLinkKey));
+      await tester.pumpAndSettle();
+
+      expect(launcher.launched, <Uri>[
+        Uri.parse('https://holdclose.care/terms'),
+        Uri.parse('https://holdclose.care/privacy'),
+      ]);
     });
   });
 

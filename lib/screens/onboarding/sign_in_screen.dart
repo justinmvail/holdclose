@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/link_launcher_provider.dart';
 import '../../providers/loved_one_lookup_provider.dart';
 import '../../providers/settings_provider.dart' show demoModeEnabled;
 import '../../theme.dart';
@@ -428,17 +429,19 @@ class _DemoSkipButton extends StatelessWidget {
   }
 }
 
-class _TermsLine extends StatelessWidget {
+class _TermsLine extends ConsumerWidget {
   const _TermsLine({required this.textTheme});
 
   final TextTheme textTheme;
 
+  // Both pages are served by the Cloudflare Worker at /terms + /privacy
+  // (backend/src/routes/legal.ts); holdclose.care routing to the Worker
+  // goes live with deploy.
+  static final Uri _termsUrl = Uri.parse('https://holdclose.care/terms');
+  static final Uri _privacyUrl = Uri.parse('https://holdclose.care/privacy');
+
   @override
-  Widget build(BuildContext context) {
-    // TODO(decision): Terms / Privacy Policy land on a TBD screen once
-    // §13.2 picks a host. Until then the inline links render as
-    // tappable text that no-ops — visible commitment to the policy
-    // without scaffolding a dead route.
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final TextStyle? base = textTheme.bodyMedium?.copyWith(
       color: context.hc.text.withValues(alpha: 0.7),
@@ -458,7 +461,7 @@ class _TermsLine extends StatelessWidget {
             baseline: TextBaseline.alphabetic,
             child: InkWell(
               key: SignInScreen.termsLinkKey,
-              onTap: () {},
+              onTap: () => ref.read(linkLauncherProvider).launch(_termsUrl),
               child: Text(l10n.signInTermsLink, style: link),
             ),
           ),
@@ -468,7 +471,7 @@ class _TermsLine extends StatelessWidget {
             baseline: TextBaseline.alphabetic,
             child: InkWell(
               key: SignInScreen.privacyLinkKey,
-              onTap: () {},
+              onTap: () => ref.read(linkLauncherProvider).launch(_privacyUrl),
               child: Text(l10n.signInPrivacyLink, style: link),
             ),
           ),
