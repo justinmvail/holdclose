@@ -161,45 +161,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lovedOneSetupOnePerLine => 'One per line.';
 
   @override
-  String get lovedOneSetupCalmsLabel => 'What calms them (optional)';
-
-  @override
-  String get lovedOneSetupCalmsHintList =>
-      'One per line — phrases, people, or things that help.';
-
-  @override
-  String get lovedOneSetupCalmsHint => 'e.g. A photo of their late husband';
-
-  @override
-  String get lovedOneSetupEscalatesLabel => 'What escalates them (optional)';
-
-  @override
-  String get lovedOneSetupEscalatesHintList =>
-      'One per line — triggers to avoid.';
-
-  @override
-  String get lovedOneSetupEscalatesHint => 'e.g. Loud beeping, being rushed';
-
-  @override
-  String get lovedOneSetupCaregiverHeading => 'Primary caregiver';
-
-  @override
-  String get lovedOneSetupCaregiverHint =>
-      'Shown on the Emergency Card for first responders.';
-
-  @override
-  String get lovedOneSetupCaregiverNameLabel => 'Name (optional)';
-
-  @override
-  String get lovedOneSetupCaregiverNameHint => 'Your name';
-
-  @override
-  String get lovedOneSetupCaregiverPhoneLabel => 'Phone (optional)';
-
-  @override
-  String get lovedOneSetupCaregiverPhoneHint => '(555) 123-4567';
-
-  @override
   String get lovedOneSetupSave => 'Save and continue';
 
   @override

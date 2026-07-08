@@ -203,54 +203,6 @@
   "@lovedOneSetupOnePerLine": {
     "description": "Hint reminding the caregiver to enter one item per line in the allergies field."
   },
-  "lovedOneSetupCalmsLabel": "What calms them (optional)",
-  "@lovedOneSetupCalmsLabel": {
-    "description": "Field label for the optional 'what calms them' input."
-  },
-  "lovedOneSetupCalmsHintList": "One per line — phrases, people, or things that help.",
-  "@lovedOneSetupCalmsHintList": {
-    "description": "Hint describing the 'what calms them' multiline field."
-  },
-  "lovedOneSetupCalmsHint": "e.g. A photo of their late husband",
-  "@lovedOneSetupCalmsHint": {
-    "description": "Placeholder hint for the 'what calms them' field."
-  },
-  "lovedOneSetupEscalatesLabel": "What escalates them (optional)",
-  "@lovedOneSetupEscalatesLabel": {
-    "description": "Field label for the optional 'what escalates them' input."
-  },
-  "lovedOneSetupEscalatesHintList": "One per line — triggers to avoid.",
-  "@lovedOneSetupEscalatesHintList": {
-    "description": "Hint describing the 'what escalates them' multiline field."
-  },
-  "lovedOneSetupEscalatesHint": "e.g. Loud beeping, being rushed",
-  "@lovedOneSetupEscalatesHint": {
-    "description": "Placeholder hint for the 'what escalates them' field."
-  },
-  "lovedOneSetupCaregiverHeading": "Primary caregiver",
-  "@lovedOneSetupCaregiverHeading": {
-    "description": "Section heading for the primary-caregiver contact fields."
-  },
-  "lovedOneSetupCaregiverHint": "Shown on the Emergency Card for first responders.",
-  "@lovedOneSetupCaregiverHint": {
-    "description": "Hint explaining where the primary-caregiver contact appears."
-  },
-  "lovedOneSetupCaregiverNameLabel": "Name (optional)",
-  "@lovedOneSetupCaregiverNameLabel": {
-    "description": "Field label for the primary-caregiver name input."
-  },
-  "lovedOneSetupCaregiverNameHint": "Your name",
-  "@lovedOneSetupCaregiverNameHint": {
-    "description": "Placeholder hint for the primary-caregiver name field."
-  },
-  "lovedOneSetupCaregiverPhoneLabel": "Phone (optional)",
-  "@lovedOneSetupCaregiverPhoneLabel": {
-    "description": "Field label for the primary-caregiver phone input."
-  },
-  "lovedOneSetupCaregiverPhoneHint": "(555) 123-4567",
-  "@lovedOneSetupCaregiverPhoneHint": {
-    "description": "Placeholder hint for the primary-caregiver phone field."
-  },
   "lovedOneSetupSave": "Save and continue",
   "@lovedOneSetupSave": {
     "description": "Primary submit button label on the loved-one setup wizard."
