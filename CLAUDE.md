@@ -72,7 +72,8 @@ pushed** (commit `0a27b13`; all suites green):
    scheme, the `holdclose/tts` method channel, and the backend
    (worker/D1/R2 names, invite HTML). Deliberate keeps (see top banner).
 
-**Operator follow-ups before store/deploy** (breaking, intentional): new
+**Operator follow-ups before store/deploy** (breaking, intentional —
+step-by-step runbook: `docs/OPERATOR_SETUP.md`): new
 Google OAuth clients for the new bundle id (sign-in breaks otherwise — see
 [[google-signin-config]] in memory); testers must reinstall (new bundle id =
 fresh app; old `careblazers://` invite links won't open it); create the
