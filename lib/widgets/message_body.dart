@@ -91,7 +91,7 @@ class _CitationChip extends StatelessWidget {
     final (String label, IconData icon) = _resolveDisplay(citation);
     return Material(
       key: MessageBody.citationChipKey(citation),
-      color: context.cb.cta,
+      color: context.hc.cta,
       borderRadius: radius,
       child: InkWell(
         borderRadius: radius,

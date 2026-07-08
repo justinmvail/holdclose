@@ -102,7 +102,7 @@ class _InsuranceAppealScreenState
     final ThemeData theme = Theme.of(context);
     final TextTheme tt = theme.textTheme;
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,14 +127,14 @@ class _InsuranceAppealScreenState
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: context.cb.surfaceWarm,
+                      color: context.hc.surfaceWarm,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       'This drafts an appeal letter for you to review, edit, '
                       'and send. It is a starting point — not legal or medical '
                       'advice. Check every detail before you send it.',
-                      style: tt.bodyMedium?.copyWith(color: context.cb.text),
+                      style: tt.bodyMedium?.copyWith(color: context.hc.text),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -172,7 +172,7 @@ class _InsuranceAppealScreenState
                     icon: const Icon(Icons.auto_awesome_outlined),
                     label: Text(_drafting ? 'Drafting…' : 'Draft appeal letter'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: context.cb.cta,
+                      backgroundColor: context.hc.cta,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(52),
                     ),
@@ -182,7 +182,7 @@ class _InsuranceAppealScreenState
                     Text(
                       'Your draft',
                       style: tt.titleMedium?.copyWith(
-                        color: context.cb.primary,
+                        color: context.hc.primary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -203,7 +203,7 @@ class _InsuranceAppealScreenState
                       icon: const Icon(Icons.copy_outlined),
                       label: const Text('Copy draft'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: context.cb.primary,
+                        foregroundColor: context.hc.primary,
                         minimumSize: const Size.fromHeight(48),
                       ),
                     ),

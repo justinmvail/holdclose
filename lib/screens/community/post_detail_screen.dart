@@ -160,7 +160,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
         .join(' · ');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: context.cb.accentDeep,
+        backgroundColor: context.hc.accentDeep,
         duration: const Duration(seconds: 8),
         content: Text(
           'You are not alone. $hotlines',
@@ -176,7 +176,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   }) async {
     final String? reason = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       builder: (BuildContext sheetContext) {
         final TextTheme textTheme = Theme.of(sheetContext).textTheme;
         return SafeArea(
@@ -191,14 +191,14 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                       ? 'Report this post'
                       : 'Report this comment',
                   style: textTheme.titleLarge?.copyWith(
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   "We'll take a look. Reports are private.",
                   style: textTheme.bodyMedium?.copyWith(
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -208,7 +208,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                     title: Text(
                       opt.label,
                       style: textTheme.bodyLarge?.copyWith(
-                        color: context.cb.primary,
+                        color: context.hc.primary,
                       ),
                     ),
                     onTap: () => Navigator.of(sheetContext).pop(opt.reason),
@@ -217,7 +217,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                   key: const Key('report-cancel'),
                   onPressed: () => Navigator.of(sheetContext).pop(),
                   style: TextButton.styleFrom(
-                    foregroundColor: context.cb.primarySoft,
+                    foregroundColor: context.hc.primarySoft,
                   ),
                   child: const Text('Cancel'),
                 ),
@@ -269,18 +269,18 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        backgroundColor: context.cb.background,
+        backgroundColor: context.hc.background,
         title: Text(
           'Delete this post?',
           style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
               ),
         ),
         content: Text(
           "This removes your post and its replies for everyone. This can't "
           'be undone.',
           style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
-                color: context.cb.text,
+                color: context.hc.text,
               ),
         ),
         actions: <Widget>[
@@ -288,7 +288,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
             key: PostDetailScreen.postDeleteCancelKey,
             onPressed: () => Navigator.of(dialogContext).pop(false),
             style: TextButton.styleFrom(
-              foregroundColor: context.cb.primarySoft,
+              foregroundColor: context.hc.primarySoft,
             ),
             child: const Text('Keep it'),
           ),
@@ -296,7 +296,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
             key: PostDetailScreen.postDeleteConfirmKey,
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: TextButton.styleFrom(
-              foregroundColor: context.cb.error,
+              foregroundColor: context.hc.error,
             ),
             child: const Text('Delete'),
           ),
@@ -330,7 +330,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   Future<void> _showOwnCommentSheet(ForumComment comment) async {
     final bool? deleteRequested = await showModalBottomSheet<bool>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       builder: (BuildContext sheetContext) {
         final TextTheme textTheme = Theme.of(sheetContext).textTheme;
         return SafeArea(
@@ -343,14 +343,14 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                 Text(
                   'Your reply',
                   style: textTheme.titleLarge?.copyWith(
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   "Deleting removes it for everyone. This can't be undone.",
                   style: textTheme.bodyMedium?.copyWith(
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -358,12 +358,12 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                   key: CommentThread.deleteKey(comment.id),
                   leading: Icon(
                     Icons.delete_outline,
-                    color: context.cb.error,
+                    color: context.hc.error,
                   ),
                   title: Text(
                     'Delete reply',
                     style: textTheme.bodyLarge?.copyWith(
-                      color: context.cb.error,
+                      color: context.hc.error,
                     ),
                   ),
                   onTap: () => Navigator.of(sheetContext).pop(true),
@@ -372,7 +372,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                   key: CommentThread.deleteCancelKey(comment.id),
                   onPressed: () => Navigator.of(sheetContext).pop(false),
                   style: TextButton.styleFrom(
-                    foregroundColor: context.cb.primarySoft,
+                    foregroundColor: context.hc.primarySoft,
                   ),
                   child: const Text('Cancel'),
                 ),
@@ -439,7 +439,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     );
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -556,7 +556,7 @@ class _Body extends StatelessWidget {
           width: 32,
           child: CircularProgressIndicator(
             strokeWidth: 2.5,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
       );
@@ -581,7 +581,7 @@ class _Body extends StatelessWidget {
 
     return RefreshIndicator(
       onRefresh: onRefresh,
-      color: context.cb.cta,
+      color: context.hc.cta,
       child: ListView(
         key: PostDetailScreen.bodyKey,
         physics: const AlwaysScrollableScrollPhysics(),
@@ -675,7 +675,7 @@ class _PostHeader extends StatelessWidget {
     final String time = relativeTime(post.createdAt, now);
     return Container(
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -685,7 +685,7 @@ class _PostHeader extends StatelessWidget {
           Text(
             '$displayName · $time',
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -693,7 +693,7 @@ class _PostHeader extends StatelessWidget {
           Text(
             post.title,
             style: textTheme.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
           if (post.body.trim().isNotEmpty) ...<Widget>[
@@ -701,7 +701,7 @@ class _PostHeader extends StatelessWidget {
             Text(
               post.body,
               style: textTheme.bodyLarge?.copyWith(
-                color: context.cb.text,
+                color: context.hc.text,
               ),
             ),
           ],
@@ -714,14 +714,14 @@ class _PostHeader extends StatelessWidget {
                 icon: const Icon(Icons.arrow_upward),
                 iconSize: 22,
                 color: pendingVote == 1
-                    ? context.cb.cta
-                    : context.cb.primarySoft,
+                    ? context.hc.cta
+                    : context.hc.primarySoft,
                 tooltip: 'Upvote',
               ),
               Text(
                 '${post.voteCount}',
                 style: textTheme.bodyMedium?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -731,8 +731,8 @@ class _PostHeader extends StatelessWidget {
                 icon: const Icon(Icons.arrow_downward),
                 iconSize: 22,
                 color: pendingVote == -1
-                    ? context.cb.primary
-                    : context.cb.primarySoft,
+                    ? context.hc.primary
+                    : context.hc.primarySoft,
                 tooltip: 'Downvote',
               ),
               const SizedBox(width: 8),
@@ -743,20 +743,20 @@ class _PostHeader extends StatelessWidget {
                   icon: const Icon(Icons.reply, size: 18),
                   label: const Text('Reply'),
                   style: TextButton.styleFrom(
-                    foregroundColor: context.cb.primarySoft,
+                    foregroundColor: context.hc.primarySoft,
                   ),
                 ),
               const Spacer(),
               Icon(
                 Icons.mode_comment_outlined,
                 size: 18,
-                color: context.cb.primarySoft,
+                color: context.hc.primarySoft,
               ),
               const SizedBox(width: 4),
               Text(
                 '${post.commentCount}',
                 style: textTheme.bodyMedium?.copyWith(
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -771,7 +771,7 @@ class _PostHeader extends StatelessWidget {
                   icon: Icon(
                     Icons.more_vert,
                     size: 20,
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                   ),
                   onSelected: (_PostOwnerAction action) {
                     switch (action) {
@@ -802,7 +802,7 @@ class _PostHeader extends StatelessWidget {
                   icon: const Icon(Icons.flag_outlined),
                   iconSize: 18,
                   tooltip: 'Report post',
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
             ],
           ),
@@ -832,13 +832,13 @@ class _EmptyComments extends StatelessWidget {
           Icon(
             Icons.mode_comment_outlined,
             size: 40,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 8),
           Text(
             'Be the first to reply.',
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -846,7 +846,7 @@ class _EmptyComments extends StatelessWidget {
           Text(
             'A few warm words go a long way.',
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
             ),
             textAlign: TextAlign.center,
           ),
@@ -854,7 +854,7 @@ class _EmptyComments extends StatelessWidget {
           TextButton(
             onPressed: onReply,
             style: TextButton.styleFrom(
-              foregroundColor: context.cb.cta,
+              foregroundColor: context.hc.cta,
             ),
             child: const Text('Reply'),
           ),

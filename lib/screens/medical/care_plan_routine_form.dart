@@ -272,12 +272,12 @@ class _CarePlanRoutineFormState extends ConsumerState<CarePlanRoutineForm> {
     final MaterialLocalizations loc = MaterialLocalizations.of(context);
     final TextTheme tt = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       appBar: AppBar(
         // The title + Back live in the body PathHeader; this bar only hosts
         // the (edit-only) Delete action and suppresses the auto back-arrow.
         automaticallyImplyLeading: false,
-        backgroundColor: context.cb.background,
+        backgroundColor: context.hc.background,
         elevation: 0,
         actions: <Widget>[
           if (widget.isEdit)
@@ -285,7 +285,7 @@ class _CarePlanRoutineFormState extends ConsumerState<CarePlanRoutineForm> {
               key: CarePlanRoutineForm.deleteButtonKey,
               icon: const Icon(Icons.delete_outline),
               tooltip: 'Delete routine',
-              color: context.cb.primary,
+              color: context.hc.primary,
               onPressed: _delete,
             ),
         ],
@@ -397,7 +397,7 @@ class _CarePlanRoutineFormState extends ConsumerState<CarePlanRoutineForm> {
                 key: CarePlanRoutineForm.submitButtonKey,
                 onPressed: _submitting ? null : _submit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.cb.cta,
+                  backgroundColor: context.hc.cta,
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(56),
                 ),
@@ -439,14 +439,14 @@ class _SubtaskEditor extends StatelessWidget {
       children: <Widget>[
         Text(
           'Tasks (optional)',
-          style: tt.bodyMedium?.copyWith(color: context.cb.primary),
+          style: tt.bodyMedium?.copyWith(color: context.hc.primary),
         ),
         const SizedBox(height: 4),
         Text(
           'Break the routine into tasks — e.g. brush teeth, '
           'wash face, get dressed.',
           style: tt.bodySmall?.copyWith(
-            color: context.cb.primary.withValues(alpha: 0.7),
+            color: context.hc.primary.withValues(alpha: 0.7),
           ),
         ),
         for (int i = 0; i < taskTitles.length; i++)
@@ -457,7 +457,7 @@ class _SubtaskEditor extends StatelessWidget {
                 Icon(
                   Icons.check_box_outline_blank,
                   size: 20,
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
                 const SizedBox(width: 8),
                 Expanded(child: Text(taskTitles[i], style: tt.bodyLarge)),

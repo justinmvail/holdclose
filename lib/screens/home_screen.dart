@@ -32,7 +32,7 @@ class HomeScreen extends ConsumerWidget {
     final AuthProvider auth = ref.watch(authProvider);
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

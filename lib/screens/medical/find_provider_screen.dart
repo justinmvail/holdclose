@@ -205,7 +205,7 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
   Widget build(BuildContext context) {
     final TextTheme tt = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,7 +292,7 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
                     icon: const Icon(Icons.search),
                     label: Text(_searching ? 'Searching…' : 'Search'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: context.cb.cta,
+                      backgroundColor: context.hc.cta,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(52),
                     ),
@@ -302,7 +302,7 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
                     'Results come from the public NPI Registry of U.S. '
                     'clinicians. Tap Save to add one to your providers.',
                     style: tt.bodySmall
-                        ?.copyWith(color: context.cb.primarySoft),
+                        ?.copyWith(color: context.hc.primarySoft),
                   ),
                   if (_searched && _results.isEmpty && !_searching)
                     Padding(
@@ -352,13 +352,13 @@ class _ResultCard extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 3),
       child: Text.rich(TextSpan(
-        style: tt.bodyMedium?.copyWith(color: context.cb.primarySoft),
+        style: tt.bodyMedium?.copyWith(color: context.hc.primarySoft),
         children: <InlineSpan>[
           if (label.isNotEmpty)
             TextSpan(
                 text: '$label  ',
                 style: TextStyle(
-                    color: context.cb.text, fontWeight: FontWeight.w600)),
+                    color: context.hc.text, fontWeight: FontWeight.w600)),
           TextSpan(text: v),
         ],
       )),
@@ -384,7 +384,7 @@ class _ResultCard extends ConsumerWidget {
     final List<Widget> lines = <Widget?>[
       Text(result.displayName,
           style: tt.titleMedium
-              ?.copyWith(color: context.cb.primary, fontWeight: FontWeight.w700)),
+              ?.copyWith(color: context.hc.primary, fontWeight: FontWeight.w700)),
       _line(context, tt, 'Type', result.providerType),
       _line(context, tt, 'Specialty', specialties),
       _line(context, tt, 'License', result.license),
@@ -398,13 +398,13 @@ class _ResultCard extends ConsumerWidget {
             onTap: () => ref.read(linkLauncherProvider).launch(_telUri(phone)),
             child: Row(
               children: <Widget>[
-                Icon(Icons.call, size: 16, color: context.cb.cta),
+                Icon(Icons.call, size: 16, color: context.hc.cta),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text('Call  $phone',
                       overflow: TextOverflow.ellipsis,
                       style: tt.bodyMedium?.copyWith(
-                          color: context.cb.cta, fontWeight: FontWeight.w600)),
+                          color: context.hc.cta, fontWeight: FontWeight.w600)),
                 ),
               ],
             ),
@@ -418,7 +418,7 @@ class _ResultCard extends ConsumerWidget {
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -434,12 +434,12 @@ class _ResultCard extends ConsumerWidget {
           saved
               ? Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Icon(Icons.check_circle, color: context.cb.success),
+                  child: Icon(Icons.check_circle, color: context.hc.success),
                 )
               : TextButton(
                   key: FindProviderScreen.saveKey(result.npi ?? result.name),
                   onPressed: onSave,
-                  style: TextButton.styleFrom(foregroundColor: context.cb.cta),
+                  style: TextButton.styleFrom(foregroundColor: context.hc.cta),
                   child: const Text('Save'),
                 ),
         ],

@@ -193,7 +193,7 @@ class AppointmentListScreen extends ConsumerWidget {
     final DateTime now = ref.watch(appointmentListClockProvider)();
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -218,7 +218,7 @@ class AppointmentListScreen extends ConsumerWidget {
                   constraints:
                       const BoxConstraints.tightFor(width: 24, height: 24),
                   visualDensity: VisualDensity.compact,
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   icon: const Icon(Icons.document_scanner_outlined),
                   onPressed: () => _scanAppointment(context, ref),
                 ),
@@ -267,13 +267,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.event_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'No appointments yet.',
             style: textTheme.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -282,7 +282,7 @@ class _EmptyState extends StatelessWidget {
             'Add the next visit so you can prep the agenda ahead of time '
             'and check items off in the waiting room.',
             style: textTheme.bodyLarge?.copyWith(
-              color: context.cb.text,
+              color: context.hc.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -303,7 +303,7 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -394,7 +394,7 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         label,
         style: textTheme.titleLarge?.copyWith(
-          color: context.cb.primary,
+          color: context.hc.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -422,7 +422,7 @@ class _AppointmentCard extends StatelessWidget {
         label: '$providerName, $when. ${_statusLabel(appt.status)}. '
             '${_agendaCountLabel(agendaCount)}. Double-tap to open.',
         child: Material(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: AppointmentListScreen.cardKey(appt.id),
@@ -440,7 +440,7 @@ class _AppointmentCard extends StatelessWidget {
                         child: Text(
                           when,
                           style: textTheme.titleLarge?.copyWith(
-                            color: context.cb.primary,
+                            color: context.hc.primary,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -453,7 +453,7 @@ class _AppointmentCard extends StatelessWidget {
                   Text(
                     providerName,
                     style: textTheme.bodyLarge?.copyWith(
-                      color: context.cb.text,
+                      color: context.hc.text,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -462,7 +462,7 @@ class _AppointmentCard extends StatelessWidget {
                     Text(
                       appt.location,
                       style: textTheme.bodyMedium?.copyWith(
-                        color: context.cb.primarySoft,
+                        color: context.hc.primarySoft,
                       ),
                     ),
                   ],
@@ -473,7 +473,7 @@ class _AppointmentCard extends StatelessWidget {
                     child: Text(
                       _agendaCountLabel(agendaCount),
                       style: textTheme.bodyMedium?.copyWith(
-                        color: context.cb.primarySoft,
+                        color: context.hc.primarySoft,
                       ),
                     ),
                   ),
@@ -527,7 +527,7 @@ class _AddAppointmentFab extends StatelessWidget {
         key: AppointmentListScreen.fabKey,
         heroTag: 'appointments-add-fab',
         onPressed: onPressed,
-        backgroundColor: context.cb.cta,
+        backgroundColor: context.hc.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -581,10 +581,10 @@ String _statusLabel(AppointmentStatus status) {
 Color _statusColor(BuildContext context, AppointmentStatus status) {
   switch (status) {
     case AppointmentStatus.upcoming:
-      return context.cb.cta;
+      return context.hc.cta;
     case AppointmentStatus.completed:
-      return context.cb.success;
+      return context.hc.success;
     case AppointmentStatus.canceled:
-      return context.cb.primarySoft;
+      return context.hc.primarySoft;
   }
 }

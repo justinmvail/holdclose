@@ -97,7 +97,7 @@ class LovedOnesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<LovedOnesView> async = ref.watch(lovedOnesViewProvider);
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,7 +174,7 @@ class _PatientRow extends ConsumerWidget {
         label: '${patient.name}.'
             '${isActive ? ' Currently active.' : ' Tap to make active.'}',
         child: Material(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: LovedOnesScreen.rowKey(patient.id),
@@ -189,11 +189,11 @@ class _PatientRow extends ConsumerWidget {
                   CircleAvatar(
                     radius: 24,
                     backgroundColor:
-                        context.cb.primarySoft.withValues(alpha: 0.14),
+                        context.hc.primarySoft.withValues(alpha: 0.14),
                     child: Text(
                       _initials(patient.name),
                       style: textTheme.titleLarge?.copyWith(
-                        color: context.cb.primary,
+                        color: context.hc.primary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -206,7 +206,7 @@ class _PatientRow extends ConsumerWidget {
                         Text(
                           patient.name,
                           style: textTheme.bodyLarge?.copyWith(
-                            color: context.cb.primary,
+                            color: context.hc.primary,
                             fontWeight: FontWeight.w700,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -216,7 +216,7 @@ class _PatientRow extends ConsumerWidget {
                           Text(
                             subtitle,
                             style: textTheme.bodyMedium?.copyWith(
-                              color: context.cb.primarySoft,
+                              color: context.hc.primarySoft,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -229,7 +229,7 @@ class _PatientRow extends ConsumerWidget {
                   else
                     Icon(
                       Icons.radio_button_unchecked,
-                      color: context.cb.primarySoft,
+                      color: context.hc.primarySoft,
                     ),
                 ],
               ),
@@ -263,14 +263,14 @@ class _ActiveBadge extends StatelessWidget {
       key: LovedOnesScreen.activeBadgeKey(patientId),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: context.cb.cta.withValues(alpha: 0.12),
+        color: context.hc.cta.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: context.cb.cta),
+        border: Border.all(color: context.hc.cta),
       ),
       child: Text(
         'Active',
         style: textTheme.bodyMedium?.copyWith(
-          color: context.cb.cta,
+          color: context.hc.cta,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -296,7 +296,7 @@ class _AddButton extends StatelessWidget {
           style: textTheme.labelLarge?.copyWith(color: Colors.white),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: context.cb.cta,
+          backgroundColor: context.hc.cta,
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(56),
         ),
@@ -317,7 +317,7 @@ class _EmptyState extends StatelessWidget {
       child: Text(
         "No loved ones on file yet. Add the person you're caring for to "
         'get started.',
-        style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+        style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
       ),
     );
   }

@@ -54,7 +54,7 @@ class LearnScreen extends StatelessWidget {
           Text(
             'Short primers on caregiving.',
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
             ),
           ),
           const SizedBox(height: 12),
@@ -69,7 +69,7 @@ class LearnScreen extends StatelessWidget {
         Text(
           'Step-by-step guides for the moments that keep coming up.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
         const SizedBox(height: 12),
@@ -107,7 +107,7 @@ class _SectionHeader extends StatelessWidget {
     return Text(
       label,
       style: textTheme.titleLarge?.copyWith(
-        color: context.cb.primary,
+        color: context.hc.primary,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -128,7 +128,7 @@ class _TopicHeader extends StatelessWidget {
       child: Text(
         topic.label,
         style: textTheme.titleLarge?.copyWith(
-          color: context.cb.primarySoft,
+          color: context.hc.primarySoft,
         ),
       ),
     );
@@ -151,7 +151,7 @@ class _VideoCard extends ConsumerWidget {
         button: true,
         label: 'Play ${video.title} on YouTube',
         child: Material(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: LearnScreen.videoCardKey(video.id),
@@ -167,14 +167,14 @@ class _VideoCard extends ConsumerWidget {
                   Text(
                     video.title,
                     style: textTheme.titleLarge?.copyWith(
-                      color: context.cb.primary,
+                      color: context.hc.primary,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     video.blurb,
                     style: textTheme.bodyMedium?.copyWith(
-                      color: context.cb.text,
+                      color: context.hc.text,
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
@@ -186,13 +186,13 @@ class _VideoCard extends ConsumerWidget {
                         Icon(
                           Icons.schedule,
                           size: 18,
-                          color: context.cb.primarySoft,
+                          color: context.hc.primarySoft,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           video.durationLabel!,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: context.cb.primarySoft,
+                            color: context.hc.primarySoft,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -251,7 +251,7 @@ class _Thumbnail extends StatelessWidget {
               child: Icon(
                 Icons.play_circle_outline,
                 size: 48,
-                color: context.cb.background,
+                color: context.hc.background,
                 shadows: const <Shadow>[
                   Shadow(blurRadius: 8, color: Colors.black54),
                 ],
@@ -271,7 +271,7 @@ class _ThumbnailPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(color: context.cb.primary);
+    return ColoredBox(color: context.hc.primary);
   }
 }
 
@@ -288,7 +288,7 @@ class _PlaybookRow extends StatelessWidget {
       label: '${playbook.title}. ${playbook.steps.length} steps. '
           'Double-tap to open.',
       child: Material(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           key: LearnScreen.playbookRowKey(playbook.id),
@@ -308,7 +308,7 @@ class _PlaybookRow extends StatelessWidget {
                       Text(
                         playbook.title,
                         style: textTheme.bodyLarge?.copyWith(
-                          color: context.cb.primary,
+                          color: context.hc.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -316,7 +316,7 @@ class _PlaybookRow extends StatelessWidget {
                       Text(
                         playbook.summary,
                         style: textTheme.bodyMedium?.copyWith(
-                          color: context.cb.text,
+                          color: context.hc.text,
                         ),
                       ),
                     ],
@@ -325,7 +325,7 @@ class _PlaybookRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Icon(
                   Icons.chevron_right,
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
               ],
             ),

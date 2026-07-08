@@ -62,16 +62,16 @@ class HubTile extends StatelessWidget {
         (textTheme.titleLarge ?? const TextStyle()).copyWith(
       fontSize: 15.5,
       fontWeight: FontWeight.w700,
-      color: context.cb.primary,
+      color: context.hc.primary,
     );
     final TextStyle subLabelStyle =
         (textTheme.bodyMedium ?? const TextStyle()).copyWith(
       fontSize: 11,
-      color: context.cb.text,
+      color: context.hc.text,
     );
 
     return Material(
-      color: context.cb.surfaceWarm,
+      color: context.hc.surfaceWarm,
       borderRadius: BorderRadius.circular(_cardRadius),
       child: InkWell(
         onTap: onTap,
@@ -82,7 +82,7 @@ class HubTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(_cardRadius),
             border: Border.all(
-              color: context.cb.primary,
+              color: context.hc.primary,
               width: _borderWidth,
             ),
           ),
@@ -99,7 +99,7 @@ class HubTile extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: _iconSize,
-                  color: iconColor ?? context.cb.background,
+                  color: iconColor ?? context.hc.background,
                 ),
               ),
               const SizedBox(height: 10),

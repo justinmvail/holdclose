@@ -30,7 +30,7 @@ class WelcomeCarousel extends ConsumerStatefulWidget {
   /// §5.11. Exposed so screen tests compare against the same source.
   static const List<WelcomeCarouselPage> pages = <WelcomeCarouselPage>[
     WelcomeCarouselPage(
-      glyph: 'C',
+      glyph: 'H',
       title: 'Holdclose',
       body: 'We make caring for someone you love a little easier.',
     ),
@@ -96,9 +96,9 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       appBar: AppBar(
-        backgroundColor: context.cb.background,
+        backgroundColor: context.hc.background,
         elevation: 0,
         automaticallyImplyLeading: false,
         actions: <Widget>[
@@ -113,7 +113,7 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
                 child: Text(
                   l10n.commonSkip,
                   style: textTheme.labelLarge?.copyWith(
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                   ),
                 ),
               ),
@@ -149,7 +149,7 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
                   key: WelcomeCarousel.primaryCtaKey,
                   onPressed: _onCtaPressed,
                   style: FilledButton.styleFrom(
-                    backgroundColor: context.cb.cta,
+                    backgroundColor: context.hc.cta,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
@@ -188,23 +188,24 @@ class _PageBody extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
-          // Page 1 ('C' glyph) renders the brand "Cb" split mark —
-          // navy left / white "C", white right / navy "b" — matching
-          // the holdclose.com logo + the AppIcon + LaunchImage on
-          // iOS. Pages 2 & 3 keep their emoji glyphs in a plain navy
-          // block since they're feature illustrations, not brand
-          // marks. Centralizing the mark here means future icon
-          // updates only need a Flutter-side change here PLUS the
-          // PNG regen for AppIcon / LaunchImage.
-          if (page.glyph == 'C')
-            const _CbBrandMark()
+          // Page 1 ('H' glyph) renders the brand "Hc" split mark —
+          // navy left / white "H", white right / navy "c" — matching
+          // the AppIcon + LaunchImage. Pages 2 & 3 keep their emoji
+          // glyphs in a plain navy block since they're feature
+          // illustrations, not brand marks. Centralizing the mark here
+          // means future icon updates only need a Flutter-side change
+          // here PLUS the PNG regen for AppIcon / LaunchImage
+          // (tools: scratchpad gen_brand_assets.py recipe — Montserrat
+          // 700 at 0.6× the canvas, letters layout-centered per half).
+          if (page.glyph == 'H')
+            const _HcBrandMark()
           else
             Container(
               width: 120,
               height: 120,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 borderRadius: BorderRadius.circular(28),
               ),
               child: Text(
@@ -259,8 +260,8 @@ class _DotIndicator extends StatelessWidget {
               // reserved for the CTA button below — using it here
               // doubled the orange surface area on the carousel.
               color: i == active
-                  ? context.cb.primary
-                  : context.cb.primarySoft.withValues(alpha: 0.3),
+                  ? context.hc.primary
+                  : context.hc.primarySoft.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -286,16 +287,16 @@ class WelcomeCarouselPage {
   final String body;
 }
 
-/// The brand "Cb" split mark: navy left / white capital C, white
-/// right / navy lowercase b. Same design as the iOS AppIcon and
+/// The brand "Hc" split mark: navy left / white capital H, white
+/// right / navy lowercase c. Same design as the iOS AppIcon and
 /// LaunchImage so onboarding page 1 matches the icon the user tapped
 /// to launch the app. Sized at 120×120 to drop into the carousel's
 /// logo slot.
 ///
 /// Letter glyphs use the same Montserrat 700 the type ramp + the
 /// LaunchImage master use (BUILD_SPEC.md §3.2 + §3.4).
-class _CbBrandMark extends StatelessWidget {
-  const _CbBrandMark();
+class _HcBrandMark extends StatelessWidget {
+  const _HcBrandMark();
 
   @override
   Widget build(BuildContext context) {
@@ -313,10 +314,10 @@ class _CbBrandMark extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: ColoredBox(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 child: Center(
                   child: Text(
-                    'C',
+                    'H',
                     style: letter.copyWith(color: Colors.white),
                   ),
                 ),
@@ -324,11 +325,11 @@ class _CbBrandMark extends StatelessWidget {
             ),
             Expanded(
               child: ColoredBox(
-                color: context.cb.background,
+                color: context.hc.background,
                 child: Center(
                   child: Text(
-                    'b',
-                    style: letter.copyWith(color: context.cb.primary),
+                    'c',
+                    style: letter.copyWith(color: context.hc.primary),
                   ),
                 ),
               ),

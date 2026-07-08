@@ -45,7 +45,7 @@ class CommunityGuidelinesScreen extends StatelessWidget {
     // canonical breadcrumb parent is the Community tab even though the
     // immediate pusher is the compose screen.
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: const SafeArea(child: _GuidelinesContent(showHeader: true)),
     );
   }
@@ -96,7 +96,7 @@ class _GuidelinesContent extends StatelessWidget {
           Text(
             l10n.communityGuidelinesSubtitle,
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.text.withValues(alpha: 0.7),
+              color: context.hc.text.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 20),
@@ -125,7 +125,7 @@ class _GuidelineSectionCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),

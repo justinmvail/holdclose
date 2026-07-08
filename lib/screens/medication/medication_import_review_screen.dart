@@ -199,7 +199,7 @@ class _MedicationImportReviewScreenState
     final ThemeData theme = Theme.of(context);
     final TextTheme tt = theme.textTheme;
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,7 +239,7 @@ class _MedicationImportReviewScreenState
                                 ? 'Reading…'
                                 : 'Scan another side of the label'),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: context.cb.primary,
+                              foregroundColor: context.hc.primary,
                               minimumSize: const Size.fromHeight(48),
                             ),
                           ),
@@ -321,7 +321,7 @@ class _MedicationImportReviewScreenState
                           const SizedBox(height: 8),
                           _SectionLabel(
                             'Prescription details (optional)',
-                            color: context.cb.primary,
+                            color: context.hc.primary,
                           ),
                           _textField(
                             label: 'Rx number',
@@ -398,7 +398,7 @@ class _MedicationImportReviewScreenState
                               onPressed: _submitting ? null : _save,
                               style: ElevatedButton.styleFrom(
                                 minimumSize: const Size.fromHeight(56),
-                                backgroundColor: context.cb.cta,
+                                backgroundColor: context.hc.cta,
                                 foregroundColor: Colors.white,
                               ),
                               child: Text(
@@ -422,7 +422,7 @@ class _MedicationImportReviewScreenState
                                   },
                             style: TextButton.styleFrom(
                               foregroundColor:
-                                  context.cb.text.withValues(alpha: 0.65),
+                                  context.hc.text.withValues(alpha: 0.65),
                               minimumSize: const Size.fromHeight(44),
                             ),
                             child: const Text('Discard'),
@@ -508,15 +508,15 @@ class _ReviewBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.cb.cta.withValues(alpha: 0.4)),
+        border: Border.all(color: context.hc.cta.withValues(alpha: 0.4)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Icon(Icons.document_scanner_outlined,
-              size: 20, color: context.cb.primary),
+              size: 20, color: context.hc.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -524,7 +524,7 @@ class _ReviewBanner extends StatelessWidget {
               'saving — nothing is added to your medications until you '
               'tap Save. A label wraps around the bottle, so use “Scan '
               'another side” to fill in anything missing.',
-              style: tt.bodyMedium?.copyWith(color: context.cb.text),
+              style: tt.bodyMedium?.copyWith(color: context.hc.text),
             ),
           ),
         ],

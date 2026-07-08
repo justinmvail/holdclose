@@ -147,7 +147,7 @@ class _UsernameScreenState extends ConsumerState<UsernameScreen> {
     );
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -167,7 +167,7 @@ class _UsernameScreenState extends ConsumerState<UsernameScreen> {
             Text(
               'Pick a username so other caregivers can find and connect with '
               'you. Letters, numbers, and underscores; 3 to 20 characters.',
-              style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+              style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             ),
             const SizedBox(height: 20),
             if (current != null) ...<Widget>[
@@ -175,19 +175,19 @@ class _UsernameScreenState extends ConsumerState<UsernameScreen> {
                 key: UsernameScreen.currentKey,
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
-                  color: context.cb.surfaceWarm,
+                  color: context.hc.surfaceWarm,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: <Widget>[
                     Icon(Icons.check_circle_outline,
-                        color: context.cb.link),
+                        color: context.hc.link),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Your username is @$current',
                         style: textTheme.bodyLarge?.copyWith(
-                          color: context.cb.primary,
+                          color: context.hc.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -220,7 +220,7 @@ class _UsernameScreenState extends ConsumerState<UsernameScreen> {
               const SizedBox(height: 8),
               Text(
                 _error!,
-                style: textTheme.bodyMedium?.copyWith(color: context.cb.cta),
+                style: textTheme.bodyMedium?.copyWith(color: context.hc.cta),
               ),
             ],
             const SizedBox(height: 28),
@@ -234,7 +234,7 @@ class _UsernameScreenState extends ConsumerState<UsernameScreen> {
                     : _save,
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(56),
-                  backgroundColor: context.cb.cta,
+                  backgroundColor: context.hc.cta,
                   foregroundColor: Colors.white,
                 ),
                 child: Text(
@@ -259,25 +259,25 @@ class _StatusLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final (IconData icon, Color color, String label) spec = switch (availability) {
-      _Availability.idle => (Icons.info_outline, context.cb.primarySoft, ''),
+      _Availability.idle => (Icons.info_outline, context.hc.primarySoft, ''),
       _Availability.checking => (
           Icons.hourglass_empty,
-          context.cb.primarySoft,
+          context.hc.primarySoft,
           'Checking…'
         ),
       _Availability.available => (
           Icons.check_circle,
-          context.cb.link,
+          context.hc.link,
           'Available'
         ),
       _Availability.taken => (
           Icons.cancel_outlined,
-          context.cb.cta,
+          context.hc.cta,
           'Taken'
         ),
       _Availability.invalid => (
           Icons.error_outline,
-          context.cb.cta,
+          context.hc.cta,
           'Not a valid username'
         ),
     };

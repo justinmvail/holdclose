@@ -155,7 +155,7 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
     final TextTheme textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -175,7 +175,7 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
             Text(
               "Point your camera at another caregiver's QR code to join "
               'their care circle.',
-              style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+              style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             ),
             const SizedBox(height: 20),
             AspectRatio(
@@ -197,12 +197,12 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
     if (!widget.enableCamera) {
       return ColoredBox(
         key: CircleScanScreen.placeholderKey,
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         child: Center(
           child: Icon(
             Icons.qr_code_scanner,
             size: 64,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
       );
@@ -217,7 +217,7 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
     final bool ok = _phase == _ScanPhase.joined;
     final bool busy = _phase == _ScanPhase.joining;
     return ColoredBox(
-      color: context.cb.surfaceWarm,
+      color: context.hc.surfaceWarm,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -230,7 +230,7 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
                 Icon(
                   ok ? Icons.check_circle : Icons.error_outline,
                   size: 56,
-                  color: ok ? context.cb.link : context.cb.cta,
+                  color: ok ? context.hc.link : context.hc.cta,
                 ),
               const SizedBox(height: 16),
               Text(
@@ -238,7 +238,7 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
                 key: CircleScanScreen.statusKey,
                 textAlign: TextAlign.center,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),

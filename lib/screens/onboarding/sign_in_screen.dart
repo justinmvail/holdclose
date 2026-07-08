@@ -159,9 +159,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         Theme.of(context).platform == TargetPlatform.iOS;
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       appBar: AppBar(
-        backgroundColor: context.cb.background,
+        backgroundColor: context.hc.background,
         elevation: 0,
         automaticallyImplyLeading: false,
       ),
@@ -175,7 +175,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               Text(
                 l10n.signInTitle,
                 style: textTheme.displayLarge?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -183,7 +183,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               Text(
                 l10n.signInTagline,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.text,
+                  color: context.hc.text,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -215,7 +215,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     key: SignInScreen.alphaUnavailableKey,
                     "Sign-in isn't available in this build.",
                     style: textTheme.bodyLarge?.copyWith(
-                      color: context.cb.text.withValues(alpha: 0.7),
+                      color: context.hc.text.withValues(alpha: 0.7),
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -328,10 +328,10 @@ class _GoogleButton extends StatelessWidget {
           key: buttonKey,
           onPressed: onPressed,
           style: OutlinedButton.styleFrom(
-            backgroundColor: context.cb.background,
-            foregroundColor: context.cb.primary,
+            backgroundColor: context.hc.background,
+            foregroundColor: context.hc.primary,
             side: BorderSide(
-              color: context.cb.primary.withValues(alpha: 0.2),
+              color: context.hc.primary.withValues(alpha: 0.2),
             ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -344,14 +344,14 @@ class _GoogleButton extends StatelessWidget {
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
                     valueColor:
-                        AlwaysStoppedAnimation<Color>(context.cb.primary),
+                        AlwaysStoppedAnimation<Color>(context.hc.primary),
                   ),
                 )
               : const _GoogleGlyph(),
           label: Text(
             l10n.signInContinueWithGoogle,
             style: textTheme.labelLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
         ),
@@ -374,16 +374,16 @@ class _GoogleGlyph extends StatelessWidget {
       height: 22,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         shape: BoxShape.circle,
         border: Border.all(
-          color: context.cb.primary.withValues(alpha: 0.2),
+          color: context.hc.primary.withValues(alpha: 0.2),
         ),
       ),
       child: Text(
         'G',
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
               fontSize: 14,
               fontWeight: FontWeight.w700,
             ),
@@ -414,12 +414,12 @@ class _DemoSkipButton extends StatelessWidget {
           key: buttonKey,
           onPressed: onPressed,
           style: TextButton.styleFrom(
-            foregroundColor: context.cb.primarySoft,
+            foregroundColor: context.hc.primarySoft,
           ),
           child: Text(
             l10n.signInDemoSkip,
             style: textTheme.labelLarge?.copyWith(
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
             ),
           ),
         ),
@@ -441,11 +441,11 @@ class _TermsLine extends StatelessWidget {
     // without scaffolding a dead route.
     final AppLocalizations l10n = AppLocalizations.of(context);
     final TextStyle? base = textTheme.bodyMedium?.copyWith(
-      color: context.cb.text.withValues(alpha: 0.7),
+      color: context.hc.text.withValues(alpha: 0.7),
       fontSize: 13,
     );
     final TextStyle? link = base?.copyWith(
-      color: context.cb.link,
+      color: context.hc.link,
       decoration: TextDecoration.underline,
     );
     return Text.rich(
@@ -490,17 +490,17 @@ class _ErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: context.cb.error.withValues(alpha: 0.08),
+        color: context.hc.error.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: context.cb.error.withValues(alpha: 0.4),
+          color: context.hc.error.withValues(alpha: 0.4),
         ),
       ),
       child: Text(
         message,
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: context.cb.error,
+              color: context.hc.error,
             ),
       ),
     );

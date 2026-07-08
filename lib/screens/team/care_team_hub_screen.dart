@@ -49,35 +49,35 @@ class CareTeamHubScreen extends ConsumerWidget {
           label: 'Tasks',
           subLabel: 'to-dos & assignments',
           route: '/team/tasks',
-          chipColor: context.cb.accentDeep,
+          chipColor: context.hc.accentDeep,
         ),
         _TeamTileSpec(
           icon: Icons.access_time_outlined,
           label: 'Shifts',
           subLabel: "who's on when",
           route: '/team/shifts',
-          chipColor: context.cb.link,
+          chipColor: context.hc.link,
         ),
         _TeamTileSpec(
           icon: Icons.diversity_3_outlined,
           label: 'People',
           subLabel: 'who is helping',
           route: '/team/circle',
-          chipColor: context.cb.success,
+          chipColor: context.hc.success,
         ),
         _TeamTileSpec(
           icon: Icons.timeline_outlined,
           label: 'Activity',
           subLabel: 'recent updates',
           route: '/team/activity',
-          chipColor: context.cb.primarySoft,
+          chipColor: context.hc.primarySoft,
         ),
         _TeamTileSpec(
           icon: Icons.account_balance_wallet_outlined,
           label: 'Expenses',
           subLabel: 'costs & receipts',
           route: '/team/expenses',
-          chipColor: context.cb.primary,
+          chipColor: context.hc.primary,
         ),
       ];
 
@@ -86,7 +86,7 @@ class CareTeamHubScreen extends ConsumerWidget {
     final bool enabled =
         ref.watch(settingsProvider).teamCoordinationEnabled;
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,7 +153,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             'Caring with others?',
             style: tt.headlineSmall?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
           const SizedBox(height: 8),
@@ -162,7 +162,7 @@ class _EmptyState extends StatelessWidget {
             "tonight, and split the receipts — without bouncing between "
             "five apps. You can turn this back off in Settings any time.",
             style: tt.bodyLarge?.copyWith(
-              color: context.cb.text,
+              color: context.hc.text,
             ),
           ),
           const SizedBox(height: 24),
@@ -172,7 +172,7 @@ class _EmptyState extends StatelessWidget {
             icon: const Icon(Icons.groups_outlined),
             label: const Text('Coordinate care'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: context.cb.cta,
+              backgroundColor: context.hc.cta,
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(56),
             ),
@@ -181,7 +181,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             "Or keep it just you — the rest of the app works the same.",
             style: tt.bodyMedium?.copyWith(
-              color: context.cb.text.withValues(alpha: 0.7),
+              color: context.hc.text.withValues(alpha: 0.7),
             ),
           ),
         ],

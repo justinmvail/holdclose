@@ -127,7 +127,7 @@ class EmergencyCardScreen extends ConsumerWidget {
         ref.watch(emergencyCardViewProvider);
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       // No AppBar: the Edit action lives in the PathHeader's trailing slot
       // so an empty bar doesn't push the whole card down. The PathHeader
       // sits OUTSIDE the `.when()` so the breadcrumb back affordance is
@@ -157,7 +157,7 @@ class EmergencyCardScreen extends ConsumerWidget {
                     key: EmergencyCardScreen.editActionKey,
                     icon: const Icon(Icons.edit_outlined),
                     tooltip: 'Edit emergency card',
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                     onPressed: () =>
                         context.push(EmergencyCardScreen.editRoute),
                   ),
@@ -257,7 +257,7 @@ class _Body extends ConsumerWidget {
               Text(
                 'Updated ${formatMonthDayYear(card.updatedAt)}',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: context.cb.primarySoft,
+                      color: context.hc.primarySoft,
                     ),
               ),
             ],
@@ -280,7 +280,7 @@ class _IceHeadline extends StatelessWidget {
       'ICE CARD — Show to First Responders',
       key: EmergencyCardScreen.headlineKey,
       style: textTheme.headlineMedium?.copyWith(
-        color: context.cb.cta,
+        color: context.hc.cta,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -306,13 +306,13 @@ class _EmptyPlaceholder extends StatelessWidget {
           Icon(
             Icons.emergency_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             "Add your loved one's profile to build the emergency card.",
             style: textTheme.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -320,7 +320,7 @@ class _EmptyPlaceholder extends StatelessWidget {
           Text(
             'Tap edit to record the conditions, allergies, contacts, and '
             'insurance a first responder needs.',
-            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -351,10 +351,10 @@ class _SectionCard extends StatelessWidget {
       key: sectionKey,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: context.cb.primary.withValues(alpha: 0.12),
+          color: context.hc.primary.withValues(alpha: 0.12),
           width: 1.5,
         ),
       ),
@@ -365,7 +365,7 @@ class _SectionCard extends StatelessWidget {
           Text(
             label,
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -405,7 +405,7 @@ class _PatientBlock extends StatelessWidget {
               Text(
                 patient.name,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -413,7 +413,7 @@ class _PatientBlock extends StatelessWidget {
               Text(
                 'Age ${patient.age}',
                 style: textTheme.bodyMedium?.copyWith(
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
               ),
             ],
@@ -449,13 +449,13 @@ class _InitialsAvatar extends StatelessWidget {
       height: 52,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: context.cb.primary.withValues(alpha: 0.10),
+        color: context.hc.primary.withValues(alpha: 0.10),
         shape: BoxShape.circle,
       ),
       child: Text(
         _initials,
         style: textTheme.titleLarge?.copyWith(
-          color: context.cb.primary,
+          color: context.hc.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -497,13 +497,13 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: context.cb.primary.withValues(alpha: 0.08),
+        color: context.hc.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
         style: textTheme.bodyMedium?.copyWith(
-          color: context.cb.primary,
+          color: context.hc.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -536,14 +536,14 @@ class _MedicationMirror extends StatelessWidget {
                   TextSpan(
                     text: item.name,
                     style: textTheme.bodyLarge?.copyWith(
-                      color: context.cb.primary,
+                      color: context.hc.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   TextSpan(
                     text: '  ${item.dosage}',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: context.cb.text,
+                      color: context.hc.text,
                     ),
                   ),
                 ],
@@ -584,7 +584,7 @@ class _ContactList extends ConsumerWidget {
                       Text(
                         '${contacts[i].name} — ${contacts[i].relation}',
                         style: textTheme.bodyLarge?.copyWith(
-                          color: context.cb.primary,
+                          color: context.hc.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -592,7 +592,7 @@ class _ContactList extends ConsumerWidget {
                       Text(
                         contacts[i].phone,
                         style: textTheme.bodyMedium?.copyWith(
-                          color: context.cb.text,
+                          color: context.hc.text,
                         ),
                       ),
                     ],
@@ -604,7 +604,7 @@ class _ContactList extends ConsumerWidget {
                   child: IconButton(
                     key: EmergencyCardScreen.callButtonKey(i),
                     icon: const Icon(Icons.call),
-                    color: context.cb.cta,
+                    color: context.hc.cta,
                     tooltip: 'Call ${contacts[i].name}',
                     onPressed: () => ref
                         .read(linkLauncherProvider)
@@ -659,7 +659,7 @@ class _InsuranceBlock extends ConsumerWidget {
               icon: const Icon(Icons.call, size: 18),
               label: const Text('Call insurer'),
               style: TextButton.styleFrom(
-                foregroundColor: context.cb.cta,
+                foregroundColor: context.hc.cta,
                 visualDensity: VisualDensity.compact,
               ),
             ),
@@ -674,7 +674,7 @@ class _InsuranceBlock extends ConsumerWidget {
             icon: const Icon(Icons.description_outlined, size: 18),
             label: const Text('Draft an appeal letter'),
             style: TextButton.styleFrom(
-              foregroundColor: context.cb.primary,
+              foregroundColor: context.hc.primary,
               visualDensity: VisualDensity.compact,
             ),
           ),
@@ -703,7 +703,7 @@ class _LabeledValue extends StatelessWidget {
             child: Text(
               label,
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
+                color: context.hc.primarySoft,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -713,7 +713,7 @@ class _LabeledValue extends StatelessWidget {
             child: Text(
               value.isEmpty ? '—' : value,
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.text,
+                color: context.hc.text,
               ),
             ),
           ),
@@ -738,7 +738,7 @@ class _DonorBlock extends StatelessWidget {
     return Text(
       _donorLabel(status),
       style: textTheme.bodyLarge?.copyWith(
-        color: context.cb.text,
+        color: context.hc.text,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -771,7 +771,7 @@ class _EmptyLine extends StatelessWidget {
     return Text(
       label,
       style: textTheme.bodyMedium?.copyWith(
-        color: context.cb.primarySoft,
+        color: context.hc.primarySoft,
         fontStyle: FontStyle.italic,
       ),
     );

@@ -227,7 +227,7 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       // ADD mode is a pushed modal task off the Loved ones manager — it MUST
       // have a way out. (fb 2026-06-14: a tester hit "add a loved one" by
       // accident and got trapped — no back button, no top bar.) The first-run
@@ -235,8 +235,8 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
       // caregiver has to create their first person before reaching the app.
       appBar: widget.isAdd
           ? AppBar(
-              backgroundColor: context.cb.background,
-              foregroundColor: context.cb.primary,
+              backgroundColor: context.hc.background,
+              foregroundColor: context.hc.primary,
               elevation: 0,
               leading: IconButton(
                 key: LovedOneSetupScreen.cancelButtonKey,
@@ -256,7 +256,7 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
               Text(
                 l10n.lovedOneSetupTitle,
                 style: textTheme.headlineMedium?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -264,7 +264,7 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
               Text(
                 l10n.lovedOneSetupIntro,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.text,
+                  color: context.hc.text,
                 ),
               ),
               const SizedBox(height: 28),
@@ -338,7 +338,7 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
                   onPressed: _submitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
-                    backgroundColor: context.cb.cta,
+                    backgroundColor: context.hc.cta,
                     foregroundColor: Colors.white,
                   ),
                   child: Text(
@@ -368,7 +368,7 @@ class _FieldLabel extends StatelessWidget {
     return Text(
       label,
       style: textTheme.bodyLarge?.copyWith(
-        color: context.cb.primary,
+        color: context.hc.primary,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -386,7 +386,7 @@ class _Hint extends StatelessWidget {
     return Text(
       text,
       style: textTheme.bodyMedium?.copyWith(
-        color: context.cb.primarySoft,
+        color: context.hc.primarySoft,
       ),
     );
   }

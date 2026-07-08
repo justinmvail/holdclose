@@ -51,7 +51,7 @@ class _CareSummaryScreenState extends ConsumerState<CareSummaryScreen> {
   Widget build(BuildContext context) {
     final TextTheme tt = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -76,14 +76,14 @@ class _CareSummaryScreenState extends ConsumerState<CareSummaryScreen> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: context.cb.surfaceWarm,
+                      color: context.hc.surfaceWarm,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       "Share a one-page summary of your loved one's current "
                       'conditions, allergies, medications, and upcoming '
                       'appointments — the same picture for every clinician.',
-                      style: tt.bodyMedium?.copyWith(color: context.cb.text),
+                      style: tt.bodyMedium?.copyWith(color: context.hc.text),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -94,7 +94,7 @@ class _CareSummaryScreenState extends ConsumerState<CareSummaryScreen> {
                     label: Text(
                         _sharing ? 'Preparing…' : 'Share care summary'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: context.cb.cta,
+                      backgroundColor: context.hc.cta,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(52),
                     ),

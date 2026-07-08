@@ -21,7 +21,7 @@ Future<void> showFeedbackSheet(
 }) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: context.cb.background,
+    backgroundColor: context.hc.background,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (BuildContext sheetContext) =>
@@ -226,14 +226,14 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
             Text(
               'Report a bug or idea',
               style: textTheme.titleLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               'On screen: ${widget.route}',
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.text.withValues(alpha: 0.7),
+                color: context.hc.text.withValues(alpha: 0.7),
                 fontSize: 13,
               ),
             ),
@@ -246,11 +246,11 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
                     key: FeedbackSheet.categoryKey(c),
                     label: Text(c.label),
                     selected: _category == c,
-                    selectedColor: context.cb.primary,
+                    selectedColor: context.hc.primary,
                     labelStyle: TextStyle(
                       color: _category == c
                           ? Colors.white
-                          : context.cb.text,
+                          : context.hc.text,
                       fontWeight: FontWeight.w600,
                     ),
                     onSelected: (_) => setState(() => _category = c),
@@ -301,7 +301,7 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Icon(Icons.mic, color: context.cb.cta),
+                        : Icon(Icons.mic, color: context.hc.cta),
                   ),
                 ),
               ),
@@ -341,7 +341,7 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
             Row(
               children: <Widget>[
                 Icon(Icons.receipt_long_outlined,
-                    size: 20, color: context.cb.primarySoft),
+                    size: 20, color: context.hc.primarySoft),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -362,7 +362,7 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
               child: FilledButton(
                 key: FeedbackSheet.sendButtonKey,
                 style: FilledButton.styleFrom(
-                  backgroundColor: context.cb.cta,
+                  backgroundColor: context.hc.cta,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),

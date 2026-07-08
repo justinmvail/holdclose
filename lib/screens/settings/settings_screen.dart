@@ -101,7 +101,7 @@ class SettingsScreen extends ConsumerWidget {
         router.go('/');
       },
       child: Scaffold(
-        backgroundColor: context.cb.background,
+        backgroundColor: context.hc.background,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -163,7 +163,7 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
       ),
     );
@@ -179,7 +179,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -212,7 +212,7 @@ class _LovedOnesSection extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             leading: Icon(
               Icons.people_alt_outlined,
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             title: const Text('Loved ones'),
             subtitle: const Text(
@@ -352,8 +352,8 @@ class _QuietHoursWindowRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextStyle labelStyle = TextStyle(
       color: enabled
-          ? context.cb.text
-          : context.cb.text.withValues(alpha: 0.4),
+          ? context.hc.text
+          : context.hc.text.withValues(alpha: 0.4),
     );
     return Padding(
       padding: const EdgeInsets.only(top: 4, bottom: 8),
@@ -645,7 +645,7 @@ class _AppearanceSection extends StatelessWidget {
                 child: Text(
                   _subtitle(),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: context.cb.text.withValues(alpha: 0.6),
+                        color: context.hc.text.withValues(alpha: 0.6),
                       ),
                 ),
               ),
@@ -1036,7 +1036,7 @@ class _AccountSection extends ConsumerWidget {
                   child: OutlinedButton(
                     key: SettingsScreen.signOutButtonKey,
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: context.cb.error,
+                      foregroundColor: context.hc.error,
                     ),
                     onPressed: () => auth.signOut(),
                     child: const Text('Sign out'),
@@ -1050,8 +1050,8 @@ class _AccountSection extends ConsumerWidget {
                   child: OutlinedButton(
                     key: SettingsScreen.deleteAccountButtonKey,
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: context.cb.error,
-                      side: BorderSide(color: context.cb.error),
+                      foregroundColor: context.hc.error,
+                      side: BorderSide(color: context.hc.error),
                     ),
                     onPressed: () => _confirmDelete(context, auth),
                     child: const Text('Delete account'),
@@ -1083,7 +1083,7 @@ class _AccountSection extends ConsumerWidget {
           TextButton(
             key: SettingsScreen.deleteAccountConfirmKey,
             style: TextButton.styleFrom(
-              foregroundColor: context.cb.error,
+              foregroundColor: context.hc.error,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Delete'),

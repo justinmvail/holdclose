@@ -284,7 +284,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final String terminalLabel = _isQuickNote ? 'Quick note' : 'Log a moment';
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -327,7 +327,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
         Text(
           'Write it however feels natural. You can add structure later.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.text.withValues(alpha: 0.7),
+            color: context.hc.text.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 20),
@@ -361,7 +361,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
         ElevatedButton(
           key: JournalWizardScreen.submitButtonKey,
           style: ElevatedButton.styleFrom(
-            backgroundColor: context.cb.cta,
+            backgroundColor: context.hc.cta,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             minimumSize: const Size.fromHeight(56),
@@ -402,15 +402,15 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
                 onPressed: _onBack,
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  foregroundColor: context.cb.primary,
+                  foregroundColor: context.hc.primary,
                   side: BorderSide(
-                    color: context.cb.primary.withValues(alpha: 0.4),
+                    color: context.hc.primary.withValues(alpha: 0.4),
                   ),
                 ),
                 child: Text(
                   '‹ Back',
                   style: textTheme.labelLarge
-                      ?.copyWith(color: context.cb.primary),
+                      ?.copyWith(color: context.hc.primary),
                 ),
               ),
             ),
@@ -421,7 +421,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
                 child: ElevatedButton(
                   key: JournalWizardScreen.submitButtonKey,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: context.cb.cta,
+                    backgroundColor: context.hc.cta,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
@@ -438,7 +438,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
                 child: ElevatedButton(
                   key: JournalWizardScreen.nextButtonKey,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: context.cb.cta,
+                    backgroundColor: context.hc.cta,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
@@ -474,7 +474,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
         Text(
           'A close-enough answer is fine — the journal is for you.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.text.withValues(alpha: 0.7),
+            color: context.hc.text.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 20),
@@ -520,7 +520,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           const SizedBox(height: 12),
           Text(
             _whenError!,
-            style: textTheme.bodyMedium?.copyWith(color: context.cb.error),
+            style: textTheme.bodyMedium?.copyWith(color: context.hc.error),
           ),
         ],
       ],
@@ -538,7 +538,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           'A few sentences in your own words. The voice you would use '
           'telling a friend about it.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.text.withValues(alpha: 0.7),
+            color: context.hc.text.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 20),
@@ -575,7 +575,7 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
           'Whatever you reached for — words, redirects, walking away to '
           'breathe. "Nothing yet" is a real answer too.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.text.withValues(alpha: 0.7),
+            color: context.hc.text.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 20),
@@ -628,8 +628,8 @@ class _ProgressDots extends StatelessWidget {
             height: 5,
             decoration: BoxDecoration(
               color: active
-                  ? context.cb.cta
-                  : context.cb.text.withValues(alpha: 0.18),
+                  ? context.hc.cta
+                  : context.hc.text.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(3),
             ),
           ),
@@ -658,8 +658,8 @@ class _PresetTile extends StatelessWidget {
     return Material(
       key: tileKey,
       color: selected
-          ? context.cb.primary
-          : context.cb.surfaceWarm,
+          ? context.hc.primary
+          : context.hc.surfaceWarm,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -674,7 +674,7 @@ class _PresetTile extends StatelessWidget {
                     : Icons.radio_button_unchecked,
                 color: selected
                     ? Colors.white
-                    : context.cb.text.withValues(alpha: 0.45),
+                    : context.hc.text.withValues(alpha: 0.45),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -683,7 +683,7 @@ class _PresetTile extends StatelessWidget {
                   style: textTheme.bodyLarge?.copyWith(
                     color: selected
                         ? Colors.white
-                        : context.cb.text,
+                        : context.hc.text,
                   ),
                 ),
               ),

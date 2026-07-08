@@ -35,7 +35,7 @@ class EmergencyCardEditScreen extends ConsumerWidget {
     final AsyncValue<EmergencyCardView> async =
         ref.watch(emergencyCardViewProvider);
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       // The PathHeader sits OUTSIDE the `.when()` so the breadcrumb back
       // affordance is present on EVERY branch — including the loading and
       // error states (alpha bug fb_1780932762335231: those branches were
@@ -210,7 +210,7 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
           if (!hasPatient)
             Text(
               'Add a loved one before filling out the emergency card.',
-              style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+              style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             )
           else ...<Widget>[
             _MultilineField(
@@ -254,7 +254,7 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
                 icon: const Icon(Icons.add),
                 label: const Text('Add contact'),
                 style: TextButton.styleFrom(
-                  foregroundColor: context.cb.link,
+                  foregroundColor: context.hc.link,
                 ),
               ),
             ),
@@ -284,7 +284,7 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
               key: EmergencyCardEditScreen.saveButtonKey,
               onPressed: _saving ? null : _save,
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -343,7 +343,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => Text(
         text,
         style: textTheme.titleMedium?.copyWith(
-          color: context.cb.primary,
+          color: context.hc.primary,
           fontWeight: FontWeight.w700,
         ),
       );
@@ -410,7 +410,7 @@ class _ContactRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: context.cb.surfaceWarm,
+      color: context.hc.surfaceWarm,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 4, 12),
@@ -427,7 +427,7 @@ class _ContactRow extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.close),
                   tooltip: 'Remove contact',
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                   onPressed: onRemove,
                 ),
               ],

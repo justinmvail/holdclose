@@ -243,7 +243,7 @@ Future<({GoRouter router, InMemoryStorageProvider storage})> _pump(
         // Android platform so the sign-in screen shows the Google button
         // (and hides the iOS-only Apple button) deterministically. The
         // brand theme is intentionally omitted — its google_fonts futures
-        // fail in a unit test; `context.cb` falls back without it.
+        // fail in a unit test; `context.hc` falls back without it.
         theme: ThemeData(platform: TargetPlatform.android),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,

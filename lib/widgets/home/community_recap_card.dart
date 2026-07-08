@@ -90,7 +90,7 @@ class _CommunityRecapCardState extends ConsumerState<CommunityRecapCard> {
         GoRouter.of(context).goNamed(HoldcloseRoutes.community);
 
     return Material(
-      color: context.cb.surfaceWarm,
+      color: context.hc.surfaceWarm,
       borderRadius: BorderRadius.circular(CommunityRecapCard._radius),
       child: Padding(
         key: CommunityRecapCard.cardKey,
@@ -127,14 +127,14 @@ class _Header extends StatelessWidget {
         Expanded(
           child: Text(
             'From the Community',
-            style: tt.titleLarge?.copyWith(color: context.cb.primary),
+            style: tt.titleLarge?.copyWith(color: context.hc.primary),
           ),
         ),
         TextButton(
           key: CommunityRecapCard.viewCommunityKey,
           onPressed: onTapCommunity,
           style: TextButton.styleFrom(
-            foregroundColor: context.cb.link,
+            foregroundColor: context.hc.link,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             minimumSize: const Size(0, 32),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -166,7 +166,7 @@ class _EmptyRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Text(
           'No posts yet — tap to start a conversation.',
-          style: tt.bodyMedium?.copyWith(color: context.cb.primarySoft),
+          style: tt.bodyMedium?.copyWith(color: context.hc.primarySoft),
         ),
       ),
     );
@@ -202,7 +202,7 @@ class _PostRow extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: tt.bodyLarge?.copyWith(
-                color: context.cb.text,
+                color: context.hc.text,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -217,7 +217,7 @@ class _PostRow extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: tt.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
+                color: context.hc.primarySoft,
               ),
             ),
           ],

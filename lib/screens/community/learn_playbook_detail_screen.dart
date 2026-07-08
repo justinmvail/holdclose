@@ -28,7 +28,7 @@ class LearnPlaybookDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final LearnPlaybook? playbook = learnPlaybookById(playbookId);
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: playbook == null
             ? const _MissingView()
@@ -68,7 +68,7 @@ class _DetailBody extends StatelessWidget {
           Text(
             playbook.summary,
             style: textTheme.bodyLarge?.copyWith(
-              color: context.cb.text,
+              color: context.hc.text,
             ),
           ),
           const SizedBox(height: 24),
@@ -93,13 +93,13 @@ class _TopicChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: context.cb.link.withValues(alpha: 0.10),
+        color: context.hc.link.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         topic.label,
         style: textTheme.bodyMedium?.copyWith(
-          color: context.cb.link,
+          color: context.hc.link,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -120,7 +120,7 @@ class _StepCard extends StatelessWidget {
       key: LearnPlaybookDetailScreen.stepCardKey(index),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -135,14 +135,14 @@ class _StepCard extends StatelessWidget {
                 Text(
                   step.title,
                   style: textTheme.titleLarge?.copyWith(
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   step.body,
                   style: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.text,
+                    color: context.hc.text,
                   ),
                 ),
               ],
@@ -169,13 +169,13 @@ class _StepBadge extends StatelessWidget {
         height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: context.cb.primary,
+          color: context.hc.primary,
           shape: BoxShape.circle,
         ),
         child: Text(
           '$number',
           style: textTheme.titleLarge?.copyWith(
-            color: context.cb.background,
+            color: context.hc.background,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -214,7 +214,7 @@ class _MissingView extends StatelessWidget {
               child: Text(
                 'This playbook is no longer available.',
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.text,
+                  color: context.hc.text,
                 ),
                 textAlign: TextAlign.center,
               ),

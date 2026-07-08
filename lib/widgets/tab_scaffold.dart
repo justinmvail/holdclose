@@ -143,7 +143,7 @@ class TabScaffoldBar extends StatelessWidget {
     // The mic sits between the two left and two right tabs so the four-tab
     // order Home·Care·Chat·Community is preserved visually.
     return Material(
-      color: context.cb.background,
+      color: context.hc.background,
       elevation: 8,
       child: SafeArea(
         top: false,
@@ -203,7 +203,7 @@ class _TabItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = selected ? context.cb.primary : context.cb.primarySoft;
+    final Color color = selected ? context.hc.primary : context.hc.primarySoft;
     return Expanded(
       // Announce each tab as a button with its word label + selection
       // state so VoiceOver/TalkBack read "Home, button, selected" rather
@@ -412,7 +412,7 @@ class _CenterVoiceButtonState extends ConsumerState<_CenterVoiceButton> {
           : 'Speak to the coach. Tap and say what you need.',
       child: Material(
         key: TabScaffold.centerVoiceButtonKey,
-        color: context.cb.cta,
+        color: context.hc.cta,
         shape: const CircleBorder(),
         elevation: 3,
         child: InkWell(
@@ -464,7 +464,7 @@ class _MicOverlayCard extends StatelessWidget {
             return Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               decoration: BoxDecoration(
-                color: context.cb.background,
+                color: context.hc.background,
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: <BoxShadow>[
                   BoxShadow(
@@ -487,13 +487,13 @@ class _MicOverlayCard extends StatelessWidget {
       case _MicPhase.listening:
         return Row(
           children: <Widget>[
-            Icon(Icons.mic, size: 22, color: context.cb.cta),
+            Icon(Icons.mic, size: 22, color: context.hc.cta),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 d.text.isEmpty ? 'Listening…' : d.text,
                 style: TextStyle(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   fontSize: 16,
                   fontStyle:
                       d.text.isEmpty ? FontStyle.italic : FontStyle.normal,
@@ -509,7 +509,7 @@ class _MicOverlayCard extends StatelessWidget {
                 child: Text(
                   'Cancel',
                   style: TextStyle(
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
@@ -526,7 +526,7 @@ class _MicOverlayCard extends StatelessWidget {
               height: 18,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(context.cb.cta),
+                valueColor: AlwaysStoppedAnimation<Color>(context.hc.cta),
               ),
             ),
             const SizedBox(width: 12),
@@ -535,7 +535,7 @@ class _MicOverlayCard extends StatelessWidget {
                 d.text,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: context.cb.primary, fontSize: 16),
+                style: TextStyle(color: context.hc.primary, fontSize: 16),
               ),
             ),
           ],
@@ -543,12 +543,12 @@ class _MicOverlayCard extends StatelessWidget {
       case _MicPhase.done:
         return Row(
           children: <Widget>[
-            Icon(Icons.check_circle, size: 22, color: context.cb.primary),
+            Icon(Icons.check_circle, size: 22, color: context.hc.primary),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 d.text,
-                style: TextStyle(color: context.cb.primary, fontSize: 16),
+                style: TextStyle(color: context.hc.primary, fontSize: 16),
               ),
             ),
           ],

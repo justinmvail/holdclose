@@ -78,7 +78,7 @@ void showScanCouldNotReadHint(BuildContext context) {
         "Couldn't read that photo. Try again in better light, or enter the "
         'details by hand.',
       ),
-      backgroundColor: context.cb.primary,
+      backgroundColor: context.hc.primary,
     ),
   );
 }

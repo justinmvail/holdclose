@@ -197,7 +197,7 @@ class _HoldcloseAppState extends ConsumerState<HoldcloseApp> {
       // Driven by the user's dark-mode preference via
       // `nightThemeModeProvider`: follow the phone (system) by default,
       // or always-on / always-off / scheduled per the Appearance
-      // setting. Brand colors are theme-aware (`context.cb` reads the
+      // setting. Brand colors are theme-aware (`context.hc` reads the
       // active HoldcloseColors extension), so both palettes render the
       // same screens correctly.
       themeMode: ref.watch(nightThemeModeProvider),

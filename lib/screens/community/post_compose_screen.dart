@@ -217,7 +217,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -231,7 +231,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
         .join(' · ');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: context.cb.accentDeep,
+        backgroundColor: context.hc.accentDeep,
         duration: const Duration(seconds: 8),
         content: Text(
           'You are not alone. $hotlines',
@@ -272,19 +272,19 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
         _submitting ? submitBusy : submitIdle,
         style: textTheme.labelLarge?.copyWith(
           color: _submitting
-              ? context.cb.text.withValues(alpha: 0.3)
-              : context.cb.cta,
+              ? context.hc.text.withValues(alpha: 0.3)
+              : context.hc.cta,
         ),
       ),
     );
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       // The title + Back live in the body PathHeader; this minimal bar only
       // suppresses the auto back-arrow (the PathHeader owns the labeled Back
       // control, and its trailing slot carries the Post action).
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: context.cb.background,
+        backgroundColor: context.hc.background,
         elevation: 0,
         actions: const <Widget>[],
       ),
@@ -342,7 +342,7 @@ class _PostComposeScreenState extends ConsumerState<PostComposeScreen> {
                       "The title stays as posted — edit the body below.",
                       style: textTheme.bodyMedium?.copyWith(
                         fontSize: 13,
-                        color: context.cb.text.withValues(alpha: 0.55),
+                        color: context.hc.text.withValues(alpha: 0.55),
                       ),
                     ),
                   )
@@ -421,7 +421,7 @@ class _LabeledField extends StatelessWidget {
         Text(
           label,
           style: textTheme.labelLarge?.copyWith(
-            color: context.cb.primary,
+            color: context.hc.primary,
           ),
         ),
         const SizedBox(height: 8),
@@ -458,8 +458,8 @@ class _CounterRow extends StatelessWidget {
             style: textTheme.bodyMedium?.copyWith(
               fontSize: 13,
               color: warn
-                  ? context.cb.accentDeep
-                  : context.cb.text.withValues(alpha: 0.55),
+                  ? context.hc.accentDeep
+                  : context.hc.text.withValues(alpha: 0.55),
             ),
           ),
         ],
@@ -485,13 +485,13 @@ class _GuidelinesLink extends StatelessWidget {
         child: Row(
           children: <Widget>[
             Icon(Icons.menu_book_outlined,
-                size: 20, color: context.cb.link),
+                size: 20, color: context.hc.link),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
                 'Read community guidelines',
                 style: textTheme.bodyMedium?.copyWith(
-                  color: context.cb.link,
+                  color: context.hc.link,
                   decoration: TextDecoration.underline,
                 ),
               ),
@@ -515,21 +515,21 @@ class _ErrorBanner extends StatelessWidget {
       key: PostComposeScreen.errorBannerKey,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: context.cb.error.withValues(alpha: 0.08),
+        color: context.hc.error.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.cb.error.withValues(alpha: 0.3)),
+        border: Border.all(color: context.hc.error.withValues(alpha: 0.3)),
       ),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(Icons.error_outline, color: context.cb.error, size: 20),
+          Icon(Icons.error_outline, color: context.hc.error, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.error,
+                color: context.hc.error,
               ),
             ),
           ),
@@ -561,7 +561,7 @@ class _FirstPostAckSheet extends StatelessWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: context.cb.text.withValues(alpha: 0.18),
+                color: context.hc.text.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -597,7 +597,7 @@ class _FirstPostAckSheet extends StatelessWidget {
                 child: ElevatedButton(
                   key: PostComposeScreen.ackAcceptKey,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: context.cb.cta,
+                    backgroundColor: context.hc.cta,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () => Navigator.of(context).pop(true),

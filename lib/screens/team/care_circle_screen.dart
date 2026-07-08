@@ -104,7 +104,7 @@ class CareCircleScreen extends ConsumerWidget {
     final String? myProfileId = ref.watch(myForumProfileIdProvider);
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: ListView(
           key: CareCircleScreen.listKey,
@@ -251,7 +251,7 @@ class _ConnectActions extends ConsumerWidget {
   Future<void> _openAddByUsername(BuildContext context, WidgetRef ref) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -285,19 +285,19 @@ class _ConnectChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: context.cb.surfaceWarm,
+            color: context.hc.surfaceWarm,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: context.cb.primarySoft),
+            border: Border.all(color: context.hc.primarySoft),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(icon, size: 18, color: context.cb.cta),
+              Icon(icon, size: 18, color: context.hc.cta),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: textTheme.bodyMedium?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -407,7 +407,7 @@ class _AddByUsernameSheetState extends ConsumerState<_AddByUsernameSheet> {
           Text(
             'Add by @username',
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
           const SizedBox(height: 16),
@@ -427,7 +427,7 @@ class _AddByUsernameSheetState extends ConsumerState<_AddByUsernameSheet> {
             const SizedBox(height: 12),
             Text(
               _error!,
-              style: textTheme.bodyMedium?.copyWith(color: context.cb.cta),
+              style: textTheme.bodyMedium?.copyWith(color: context.hc.cta),
             ),
           ],
           const SizedBox(height: 24),
@@ -436,7 +436,7 @@ class _AddByUsernameSheetState extends ConsumerState<_AddByUsernameSheet> {
             onPressed: _busy ? null : _submit,
             style: ElevatedButton.styleFrom(
               minimumSize: const Size.fromHeight(56),
-              backgroundColor: context.cb.cta,
+              backgroundColor: context.hc.cta,
               foregroundColor: Colors.white,
             ),
             child: Text(
@@ -473,7 +473,7 @@ class _MemberRow extends StatelessWidget {
             '${isOwner ? ', circle owner' : ''}'
             '${isSelf ? ', you' : ''}.',
         child: Material(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -489,7 +489,7 @@ class _MemberRow extends StatelessWidget {
                       Text(
                         handle,
                         style: textTheme.bodyLarge?.copyWith(
-                          color: context.cb.primary,
+                          color: context.hc.primary,
                           fontWeight: FontWeight.w700,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -528,11 +528,11 @@ class _Avatar extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return CircleAvatar(
       radius: 24,
-      backgroundColor: context.cb.primarySoft.withValues(alpha: 0.14),
+      backgroundColor: context.hc.primarySoft.withValues(alpha: 0.14),
       child: Text(
         _initial(seed),
         style: textTheme.titleLarge?.copyWith(
-          color: context.cb.primary,
+          color: context.hc.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -551,13 +551,13 @@ class _Tag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: context.cb.primarySoft.withValues(alpha: 0.10),
+        color: context.hc.primarySoft.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
         style: textTheme.bodyMedium?.copyWith(
-          color: context.cb.primarySoft,
+          color: context.hc.primarySoft,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -580,13 +580,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.diversity_3_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'No one else in your circle yet. Set your @username, then share '
             'your QR or add a caregiver by their handle to share the load.',
-            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
         ],

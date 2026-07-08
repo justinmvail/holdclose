@@ -294,10 +294,10 @@ class _CommentRow extends StatelessWidget {
       child: Container(
         key: CommentThread.rowKey(comment.id),
         decoration: BoxDecoration(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: context.cb.primary.withValues(alpha: 0.08),
+            color: context.hc.primary.withValues(alpha: 0.08),
           ),
         ),
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -308,8 +308,8 @@ class _CommentRow extends StatelessWidget {
               body,
               style: textTheme.bodyMedium?.copyWith(
                 color: hidden
-                    ? context.cb.primarySoft
-                    : context.cb.text,
+                    ? context.hc.primarySoft
+                    : context.hc.text,
                 fontStyle: hidden ? FontStyle.italic : FontStyle.normal,
               ),
             ),
@@ -378,8 +378,8 @@ class _ActionBar extends StatelessWidget {
           // warm "yes, agree" colour. Brand spec §3 calls out the
           // salmon-orange as the primary affordance hue.
           color: pendingVote == 1
-              ? context.cb.cta
-              : context.cb.primarySoft,
+              ? context.hc.cta
+              : context.hc.primarySoft,
           icon: const Icon(Icons.arrow_upward),
           iconSize: 20,
           tooltip: 'Upvote',
@@ -389,7 +389,7 @@ class _ActionBar extends StatelessWidget {
         Text(
           '${comment.voteCount}',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primary,
+            color: context.hc.primary,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -399,8 +399,8 @@ class _ActionBar extends StatelessWidget {
           // Navy (primary) for the downvote so the cooler colour reads
           // as the de-emphasized direction.
           color: pendingVote == -1
-              ? context.cb.primary
-              : context.cb.primarySoft,
+              ? context.hc.primary
+              : context.hc.primarySoft,
           icon: const Icon(Icons.arrow_downward),
           iconSize: 20,
           tooltip: 'Downvote',
@@ -415,7 +415,7 @@ class _ActionBar extends StatelessWidget {
             icon: const Icon(Icons.reply, size: 18),
             label: const Text('Reply'),
             style: TextButton.styleFrom(
-              foregroundColor: context.cb.primarySoft,
+              foregroundColor: context.hc.primarySoft,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               minimumSize: const Size(0, 32),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -429,7 +429,7 @@ class _ActionBar extends StatelessWidget {
             icon: const Icon(Icons.more_horiz),
             iconSize: 18,
             tooltip: 'Reply options',
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
             padding: const EdgeInsets.all(4),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           )
@@ -440,7 +440,7 @@ class _ActionBar extends StatelessWidget {
             icon: const Icon(Icons.flag_outlined),
             iconSize: 18,
             tooltip: 'Report',
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
             padding: const EdgeInsets.all(4),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
@@ -509,10 +509,10 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
     return Container(
       key: composerKey,
       decoration: BoxDecoration(
-        color: context.cb.background,
+        color: context.hc.background,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: context.cb.primarySoft.withValues(alpha: 0.4),
+          color: context.hc.primarySoft.withValues(alpha: 0.4),
         ),
       ),
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
@@ -535,11 +535,11 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
               border: InputBorder.none,
               isDense: true,
               hintStyle: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
+                color: context.hc.primarySoft,
               ),
             ),
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.text,
+              color: context.hc.text,
             ),
           ),
           Row(
@@ -551,7 +551,7 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
                     : CommentThread.replyCancelKey(parent.id),
                 onPressed: widget.isSending ? null : widget.onCancel,
                 style: TextButton.styleFrom(
-                  foregroundColor: context.cb.primarySoft,
+                  foregroundColor: context.hc.primarySoft,
                 ),
                 child: const Text('Cancel'),
               ),
@@ -562,7 +562,7 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
                     : CommentThread.replySendKey(parent.id),
                 onPressed: widget.isSending ? null : _handleSubmit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.cb.cta,
+                  backgroundColor: context.hc.cta,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,

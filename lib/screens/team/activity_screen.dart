@@ -118,7 +118,7 @@ class ActivityDoseEntry {
 }
 
 /// The category-dot hue (Phase 14.32). Every category resolves through
-/// the §3.1 brand tokens via `context.cb`, matching the shared calendar's
+/// the §3.1 brand tokens via `context.hc`, matching the shared calendar's
 /// `_kindColor` mapping for the same event kinds (dose → `link`, note →
 /// `accentDeep`, appointment → `cta`, task → `link`, shift → `success`),
 /// with expense on brand navy. Exposed so tests assert the mapping
@@ -127,17 +127,17 @@ class ActivityDoseEntry {
 Color activityCategoryColor(BuildContext context, ActivityCategory category) {
   switch (category) {
     case ActivityCategory.dose:
-      return context.cb.link;
+      return context.hc.link;
     case ActivityCategory.note:
-      return context.cb.accentDeep;
+      return context.hc.accentDeep;
     case ActivityCategory.appointment:
-      return context.cb.cta;
+      return context.hc.cta;
     case ActivityCategory.task:
-      return context.cb.link; // cool blue
+      return context.hc.link; // cool blue
     case ActivityCategory.shift:
-      return context.cb.success; // green
+      return context.hc.success; // green
     case ActivityCategory.expense:
-      return context.cb.primary; // navy
+      return context.hc.primary; // navy
   }
 }
 
@@ -511,7 +511,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     final DateTime now = ref.watch(activityClockProvider)();
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -553,7 +553,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                       filterActivity(all, _selected);
                   return RefreshIndicator(
                     onRefresh: _refresh,
-                    color: context.cb.cta,
+                    color: context.hc.cta,
                     child: _Feed(
                       items: filtered,
                       now: now,
@@ -631,11 +631,11 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? context.cb.cta : context.cb.primarySoft;
+        selected ? context.hc.cta : context.hc.primarySoft;
     final Color fill = selected
-        ? context.cb.cta.withValues(alpha: 0.12)
+        ? context.hc.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? context.cb.cta : context.cb.text;
+    final Color fg = selected ? context.hc.cta : context.hc.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -745,7 +745,7 @@ class _ActivityRow extends StatelessWidget {
       label: semanticLabel,
       child: ExcludeSemantics(
         child: Material(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: ActivityScreen.rowKey(item.id),
@@ -770,7 +770,7 @@ class _ActivityRow extends StatelessWidget {
                         ? Text(
                             item.summary,
                             style: textTheme.bodyLarge?.copyWith(
-                              color: context.cb.primary,
+                              color: context.hc.primary,
                               fontWeight: FontWeight.w700,
                             ),
                             maxLines: 2,
@@ -782,7 +782,7 @@ class _ActivityRow extends StatelessWidget {
                   Text(
                     relative,
                     style: textTheme.bodyMedium?.copyWith(
-                      color: context.cb.primarySoft,
+                      color: context.hc.primarySoft,
                     ),
                   ),
                 ],
@@ -830,7 +830,7 @@ class _DoseWindowBody extends StatelessWidget {
         Text(
           '${window.windowLabel} Medication',
           style: textTheme.bodyLarge?.copyWith(
-            color: context.cb.primary,
+            color: context.hc.primary,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -848,7 +848,7 @@ class _DoseWindowBody extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.bodyMedium?.copyWith(
-                      color: context.cb.text,
+                      color: context.hc.text,
                       // A given dose reads as "done" (struck through), the
                       // same as the Calendar; a skip / miss stays upright
                       // because it's the notable exception.
@@ -856,7 +856,7 @@ class _DoseWindowBody extends StatelessWidget {
                               m.status == DoseStatus.late)
                           ? TextDecoration.lineThrough
                           : null,
-                      decorationColor: context.cb.text,
+                      decorationColor: context.hc.text,
                     ),
                   ),
                 ),
@@ -878,15 +878,15 @@ class _DoseStatusIcon extends StatelessWidget {
     final (IconData icon, Color color) = switch (status) {
       DoseStatus.taken || DoseStatus.late => (
           Icons.check_circle,
-          context.cb.success,
+          context.hc.success,
         ),
       DoseStatus.skipped => (
           Icons.do_not_disturb_on_outlined,
-          context.cb.primarySoft,
+          context.hc.primarySoft,
         ),
       DoseStatus.missed => (
           Icons.error_outline,
-          context.cb.error,
+          context.hc.error,
         ),
     };
     return Icon(icon, size: 18, color: color);
@@ -928,13 +928,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.timeline_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'Nothing here yet.',
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -942,7 +942,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             'As your care circle logs doses, notes, visits, and tasks, '
             'every moment shows up here.',
-            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -962,7 +962,7 @@ class _ErrorView extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return RefreshIndicator(
       onRefresh: onRetry,
-      color: context.cb.cta,
+      color: context.hc.cta,
       child: ListView(
         key: ActivityScreen.errorKey,
         physics: const AlwaysScrollableScrollPhysics(),
@@ -971,7 +971,7 @@ class _ErrorView extends StatelessWidget {
           Text(
             "We couldn't load your care team's activity.\nPull down to try "
             'again.',
-            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
         ],

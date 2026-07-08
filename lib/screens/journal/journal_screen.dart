@@ -71,7 +71,7 @@ class JournalScreen extends ConsumerWidget {
     final DateTime now = ref.watch(journalScreenClockProvider)();
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       floatingActionButton: FloatingActionButton.extended(
         key: addEntryFabKey,
         // Each shell branch keeps its FAB mounted (IndexedStack), and a
@@ -80,7 +80,7 @@ class JournalScreen extends ConsumerWidget {
         // collide ("multiple heroes share the same tag"). A per-screen tag
         // keeps every FAB's Hero unique.
         heroTag: 'journal-add-fab',
-        backgroundColor: context.cb.cta,
+        backgroundColor: context.hc.cta,
         foregroundColor: Colors.white,
         onPressed: () => showJournalAddSheet(context),
         icon: const Icon(Icons.add),
@@ -139,7 +139,7 @@ class JournalScreen extends ConsumerWidget {
 void showJournalAddSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
-    backgroundColor: context.cb.background,
+    backgroundColor: context.hc.background,
     showDragHandle: true,
     builder: (BuildContext sheetContext) {
       return SafeArea(
@@ -197,13 +197,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.eco_outlined,
             size: 64,
-            color: context.cb.success,
+            color: context.hc.success,
           ),
           const SizedBox(height: 16),
           Text(
             'Your journal, in your words.',
             style: textTheme.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -212,7 +212,7 @@ class _EmptyState extends StatelessWidget {
             'Jot down the moments that matter — what happened, what you '
             'tried, what helped. Add your first one whenever you’re ready.',
             style: textTheme.bodyLarge?.copyWith(
-              color: context.cb.text,
+              color: context.hc.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -223,7 +223,7 @@ class _EmptyState extends StatelessWidget {
             child: ElevatedButton(
               key: JournalScreen.emptyCtaKey,
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -350,7 +350,7 @@ class _WeekSummaryCard extends StatelessWidget {
     return Container(
       key: JournalScreen.weekSummaryKey,
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
@@ -360,21 +360,21 @@ class _WeekSummaryCard extends StatelessWidget {
           Text(
             'This week',
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '📊  ${stats.thisWeek} entries logged',
             style: textTheme.bodyLarge?.copyWith(
-              color: context.cb.text,
+              color: context.hc.text,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             stats.trendSubline,
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
             ),
           ),
         ],
@@ -398,10 +398,10 @@ class _PatternAlertCard extends StatelessWidget {
     return Container(
       key: JournalScreen.patternAlertKey,
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: context.cb.accentDeep.withValues(alpha: 0.6),
+          color: context.hc.accentDeep.withValues(alpha: 0.6),
           width: 1.5,
         ),
       ),
@@ -412,7 +412,7 @@ class _PatternAlertCard extends StatelessWidget {
           Text(
             '⚠  Heads up',
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.accentDeep,
+              color: context.hc.accentDeep,
             ),
           ),
           const SizedBox(height: 8),
@@ -422,7 +422,7 @@ class _PatternAlertCard extends StatelessWidget {
               child: Text(
                 alerts[i].text,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.text,
+                  color: context.hc.text,
                 ),
               ),
             ),
@@ -450,7 +450,7 @@ class _GroupHeader extends StatelessWidget {
       child: Text(
         label,
         style: textTheme.titleLarge?.copyWith(
-          color: context.cb.primarySoft,
+          color: context.hc.primarySoft,
         ),
       ),
     );
@@ -474,7 +474,7 @@ class _EntryTile extends StatelessWidget {
       button: true,
       label: '$title at $time. Double-tap to open this entry.',
       child: Material(
-        color: context.cb.background,
+        color: context.hc.background,
         child: InkWell(
           key: JournalScreen.entryTileKey(entry.id),
           onTap: () => context.push('/journal/${entry.id}'),
@@ -486,7 +486,7 @@ class _EntryTile extends StatelessWidget {
                 Icon(
                   Icons.edit_note_outlined,
                   size: 26,
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -496,7 +496,7 @@ class _EntryTile extends StatelessWidget {
                       Text(
                         '$time   $title',
                         style: textTheme.bodyLarge?.copyWith(
-                          color: context.cb.primary,
+                          color: context.hc.primary,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -506,7 +506,7 @@ class _EntryTile extends StatelessWidget {
                         Text(
                           sub,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: context.cb.primarySoft,
+                            color: context.hc.primarySoft,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -517,7 +517,7 @@ class _EntryTile extends StatelessWidget {
                 ),
                 Icon(
                   Icons.chevron_right,
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
               ],
             ),

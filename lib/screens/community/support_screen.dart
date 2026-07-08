@@ -165,7 +165,7 @@ class _CollapsibleCardState extends State<_CollapsibleCard> {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Material(
-      color: context.cb.surfaceWarm,
+      color: context.hc.surfaceWarm,
       borderRadius: BorderRadius.circular(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -183,7 +183,7 @@ class _CollapsibleCardState extends State<_CollapsibleCard> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
                 child: Row(
                   children: <Widget>[
-                    Icon(widget.icon, color: context.cb.primarySoft),
+                    Icon(widget.icon, color: context.hc.primarySoft),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -192,14 +192,14 @@ class _CollapsibleCardState extends State<_CollapsibleCard> {
                           Text(
                             widget.title,
                             style: textTheme.titleLarge?.copyWith(
-                              color: context.cb.primary,
+                              color: context.hc.primary,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             widget.subtitle,
                             style: textTheme.bodyMedium?.copyWith(
-                              color: context.cb.primarySoft,
+                              color: context.hc.primarySoft,
                             ),
                           ),
                         ],
@@ -208,7 +208,7 @@ class _CollapsibleCardState extends State<_CollapsibleCard> {
                     const SizedBox(width: 8),
                     Icon(
                       _expanded ? Icons.expand_less : Icons.expand_more,
-                      color: context.cb.primarySoft,
+                      color: context.hc.primarySoft,
                     ),
                   ],
                 ),
@@ -259,7 +259,7 @@ class _SelfCheckBody extends StatelessWidget {
         Text(
           'Rate each statement from 1 (${burnoutScaleLabels.first}) to '
           '5 (${burnoutScaleLabels.last}). Your answers stay on this phone.',
-          style: textTheme.bodyMedium?.copyWith(color: context.cb.text),
+          style: textTheme.bodyMedium?.copyWith(color: context.hc.text),
         ),
         const SizedBox(height: 16),
         for (int i = 0; i < burnoutQuestions.length; i++) ...<Widget>[
@@ -281,10 +281,10 @@ class _SelfCheckBody extends StatelessWidget {
             key: SupportScreen.submitKey,
             onPressed: canSubmit ? onSubmit : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: context.cb.cta,
+              backgroundColor: context.hc.cta,
               foregroundColor: Colors.white,
               disabledBackgroundColor:
-                  context.cb.cta.withValues(alpha: 0.4),
+                  context.hc.cta.withValues(alpha: 0.4),
               disabledForegroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
@@ -321,7 +321,7 @@ class _LikertQuestion extends StatelessWidget {
       children: <Widget>[
         Text(
           '${index + 1}. $prompt',
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
         ),
         const SizedBox(height: 8),
         Row(
@@ -366,13 +366,13 @@ class _LikertDot extends StatelessWidget {
       selected: selected,
       label: '$value, $label.',
       child: Material(
-        color: selected ? context.cb.primary : context.cb.background,
+        color: selected ? context.hc.primary : context.hc.background,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(
             color: selected
-                ? context.cb.primary
-                : context.cb.primarySoft.withValues(alpha: 0.4),
+                ? context.hc.primary
+                : context.hc.primarySoft.withValues(alpha: 0.4),
           ),
         ),
         child: InkWell(
@@ -386,8 +386,8 @@ class _LikertDot extends StatelessWidget {
                 '$value',
                 style: textTheme.labelLarge?.copyWith(
                   color: selected
-                      ? context.cb.background
-                      : context.cb.primarySoft,
+                      ? context.hc.background
+                      : context.hc.primarySoft,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -416,13 +416,13 @@ class _SelfCheckResult extends StatelessWidget {
         Text(
           result.headline,
           style: textTheme.headlineMedium?.copyWith(
-            color: context.cb.primary,
+            color: context.hc.primary,
           ),
         ),
         const SizedBox(height: 12),
         Text(
           result.message,
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
         ),
         const SizedBox(height: 16),
         Semantics(
@@ -431,15 +431,15 @@ class _SelfCheckResult extends StatelessWidget {
           child: OutlinedButton.icon(
             key: SupportScreen.retakeKey,
             onPressed: onRetake,
-            icon: Icon(Icons.refresh, color: context.cb.primary),
+            icon: Icon(Icons.refresh, color: context.hc.primary),
             label: Text(
               'Retake',
               style: textTheme.labelLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
               ),
             ),
             style: OutlinedButton.styleFrom(
-              side: BorderSide(color: context.cb.primarySoft),
+              side: BorderSide(color: context.hc.primarySoft),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
@@ -472,15 +472,15 @@ class _RespiteBody extends StatelessWidget {
           child: OutlinedButton.icon(
             key: SupportScreen.respiteSearchKey,
             onPressed: () => onLaunch(respiteSearchUrl()),
-            icon: Icon(Icons.search, color: context.cb.link),
+            icon: Icon(Icons.search, color: context.hc.link),
             label: Text(
               'Search local respite',
               style: textTheme.labelLarge?.copyWith(
-                color: context.cb.link,
+                color: context.hc.link,
               ),
             ),
             style: OutlinedButton.styleFrom(
-              side: BorderSide(color: context.cb.link),
+              side: BorderSide(color: context.hc.link),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
@@ -512,7 +512,7 @@ class _ResourceRow extends StatelessWidget {
       button: target != null,
       label: '${resource.name}. ${resource.description} $action',
       child: Material(
-        color: context.cb.background,
+        color: context.hc.background,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           key: SupportScreen.respiteResourceKey(resource.id),
@@ -526,7 +526,7 @@ class _ResourceRow extends StatelessWidget {
                 Text(
                   resource.name,
                   style: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -534,7 +534,7 @@ class _ResourceRow extends StatelessWidget {
                 Text(
                   resource.description,
                   style: textTheme.bodyMedium?.copyWith(
-                    color: context.cb.text,
+                    color: context.hc.text,
                   ),
                 ),
                 if (resource.phone != null) ...<Widget>[
@@ -544,13 +544,13 @@ class _ResourceRow extends StatelessWidget {
                       Icon(
                         Icons.call,
                         size: 18,
-                        color: context.cb.link,
+                        color: context.hc.link,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         resource.phone!,
                         style: textTheme.bodyMedium?.copyWith(
-                          color: context.cb.link,
+                          color: context.hc.link,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -586,7 +586,7 @@ class _QandaBody extends StatelessWidget {
                 Text(
                   entry.question,
                   style: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -594,14 +594,14 @@ class _QandaBody extends StatelessWidget {
                 Text(
                   entry.answer,
                   style: textTheme.bodyMedium?.copyWith(
-                    color: context.cb.text,
+                    color: context.hc.text,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   '— ${entry.attribution}',
                   style: textTheme.bodyMedium?.copyWith(
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                     fontStyle: FontStyle.italic,
                   ),
                 ),

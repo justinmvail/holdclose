@@ -138,9 +138,9 @@ class PathHeader extends StatelessWidget {
 
   Widget _buildBreadcrumbs(BuildContext context, TextTheme textTheme) {
     final TextStyle crumbStyle = (textTheme.bodyMedium ?? const TextStyle())
-        .copyWith(color: context.cb.primary);
+        .copyWith(color: context.hc.primary);
     final TextStyle separatorStyle = crumbStyle.copyWith(
-      color: context.cb.primarySoft,
+      color: context.hc.primarySoft,
     );
 
     final List<PathHeaderCrumb> trail = _trail;
@@ -183,7 +183,7 @@ class PathHeader extends StatelessWidget {
   Widget _buildTitleRow(BuildContext context, TextTheme textTheme) {
     final TextStyle titleStyle =
         (textTheme.headlineMedium ?? const TextStyle()).copyWith(
-      color: context.cb.primary,
+      color: context.hc.primary,
     );
     final String? backRoute = _backRoute;
     return Row(
@@ -204,7 +204,7 @@ class PathHeader extends StatelessWidget {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-            color: context.cb.primary,
+            color: context.hc.primary,
             tooltip: 'Back',
             // Prefer a true stack pop so Back returns wherever the user came
             // FROM — essential for screens reachable from many places (e.g.
@@ -224,7 +224,7 @@ class PathHeader extends StatelessWidget {
           const SizedBox(width: 4),
         ],
         if (leadingIcon != null) ...<Widget>[
-          Icon(leadingIcon, size: 24, color: context.cb.primary),
+          Icon(leadingIcon, size: 24, color: context.hc.primary),
           const SizedBox(width: 8),
         ],
         Expanded(child: Text(title, style: titleStyle)),
@@ -270,7 +270,7 @@ class _HeaderActions extends StatelessWidget {
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
           constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-          color: context.cb.primary,
+          color: context.hc.primary,
           tooltip: 'Profile & settings',
           onPressed: () => context.push('/settings'),
         ),
@@ -299,7 +299,7 @@ class _ReportButton extends ConsumerWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
       constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-      color: context.cb.cta,
+      color: context.hc.cta,
       tooltip: 'Report a problem',
       onPressed: () => ref.read(feedbackTriggerProvider.notifier).fire(),
     );

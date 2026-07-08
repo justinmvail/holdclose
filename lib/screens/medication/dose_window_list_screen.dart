@@ -80,10 +80,10 @@ class DoseWindowListScreen extends ConsumerWidget {
     final AsyncValue<List<DoseWindow>> async =
         ref.watch(doseWindowListProvider);
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       floatingActionButton: FloatingActionButton.extended(
         key: fabKey,
-        backgroundColor: context.cb.cta,
+        backgroundColor: context.hc.cta,
         foregroundColor: Colors.white,
         onPressed: () => context.push('/medications/windows/new'),
         icon: const Icon(Icons.add),
@@ -142,7 +142,7 @@ class _WindowRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Material(
-      color: context.cb.surfaceWarm,
+      color: context.hc.surfaceWarm,
       borderRadius: BorderRadius.circular(12),
       child: ListTile(
         key: DoseWindowListScreen.tileKey(window.id),
@@ -166,7 +166,7 @@ class _WindowRow extends ConsumerWidget {
             IconButton(
               tooltip: 'Delete time window',
               icon: const Icon(Icons.delete_outline),
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
               onPressed: () =>
                   confirmAndDeleteWindow(context, ref, window.id),
             ),
@@ -192,7 +192,7 @@ class _Empty extends StatelessWidget {
           Text(
             'No time windows yet.',
             style: tt.titleMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
           const SizedBox(height: 8),
@@ -201,7 +201,7 @@ class _Empty extends StatelessWidget {
             "Morning, Bedtime, etc. Tap +Add time window to create your "
             "first.",
             style: tt.bodyMedium?.copyWith(
-              color: context.cb.text.withValues(alpha: 0.7),
+              color: context.hc.text.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -457,7 +457,7 @@ class _DoseWindowFormScreenState
     final MaterialLocalizations loc = MaterialLocalizations.of(context);
     final TextTheme tt = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       appBar: AppBar(
         title: Text(
             widget.isEdit ? 'Edit time window' : 'Add time window'),
@@ -529,7 +529,7 @@ class _DoseWindowFormScreenState
                 key: DoseWindowFormScreen.submitButtonKey,
                 onPressed: _submitting ? null : _submit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.cb.cta,
+                  backgroundColor: context.hc.cta,
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(56),
                 ),

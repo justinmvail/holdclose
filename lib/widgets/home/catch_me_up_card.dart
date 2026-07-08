@@ -319,7 +319,7 @@ class CatchMeUpCard extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Material(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(_radius),
         child: Padding(
           key: cardKey,
@@ -358,7 +358,7 @@ class _Header extends StatelessWidget {
           child: Text(
             'Catch me up',
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
         ),
@@ -366,7 +366,7 @@ class _Header extends StatelessWidget {
           key: CatchMeUpCard.refreshKey,
           icon: const Icon(Icons.refresh),
           iconSize: 22,
-          color: context.cb.primary,
+          color: context.hc.primary,
           tooltip: 'Refresh recap',
           onPressed: onRefresh,
         ),
@@ -387,7 +387,7 @@ class _SummaryBody extends StatelessWidget {
       summary,
       key: CatchMeUpCard.summaryKey,
       style: textTheme.bodyLarge?.copyWith(
-        color: context.cb.text,
+        color: context.hc.text,
         height: 1.4,
       ),
     );
@@ -407,7 +407,7 @@ class _MessageBody extends StatelessWidget {
       padding: const EdgeInsets.only(top: 4, bottom: 4),
       child: Text(
         message,
-        style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+        style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
       ),
     );
   }
@@ -449,7 +449,7 @@ class _SkeletonBlock extends StatelessWidget {
         decoration: BoxDecoration(
           // A faint tint of the brand navy reads as a placeholder against
           // the warm-white card without introducing an off-palette grey.
-          color: context.cb.primary.withValues(alpha: 0.08),
+          color: context.hc.primary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(6),
         ),
       ),

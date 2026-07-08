@@ -47,10 +47,10 @@ class DocumentScanThumbnail extends StatelessWidget {
       height: height,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: context.cb.primary.withValues(alpha: 0.12),
+          color: context.hc.primary.withValues(alpha: 0.12),
           width: 1.5,
         ),
       ),
@@ -86,7 +86,7 @@ class DocumentScanThumbnail extends StatelessWidget {
         Text(
           label,
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -106,7 +106,7 @@ class _ScanPlaceholder extends StatelessWidget {
       child: Icon(
         Icons.image_outlined,
         size: 28,
-        color: context.cb.primarySoft.withValues(alpha: 0.6),
+        color: context.hc.primarySoft.withValues(alpha: 0.6),
       ),
     );
   }

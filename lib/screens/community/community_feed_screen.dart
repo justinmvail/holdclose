@@ -163,7 +163,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
 
     final bool onFeed = _segment == CommunitySegment.feed;
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       // The compose surface posts to the feed, so it only belongs on the
       // Feed segment.
       floatingActionButton: onFeed
@@ -174,7 +174,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
               // with another tab landing's default-tagged FAB (the Chat
               // conversation list) mid-transition.
               heroTag: 'community-compose-fab',
-              backgroundColor: context.cb.cta,
+              backgroundColor: context.hc.cta,
               foregroundColor: Colors.white,
               onPressed: () =>
                   context.pushNamed(HoldcloseRoutes.communityCompose),
@@ -203,7 +203,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
                         key: CommunityFeedScreen.adminActionKey,
                         tooltip: 'Moderation queue',
                         icon: const Icon(Icons.shield_outlined),
-                        color: context.cb.primary,
+                        color: context.hc.primary,
                         onPressed: () => context.pushNamed(
                           HoldcloseRoutes.communityAdminReports,
                         ),
@@ -336,8 +336,8 @@ class _SortChip extends StatelessWidget {
           '${selected ? 'reload this view' : 'switch the feed to $label'}.',
       child: Material(
         color: selected
-            ? context.cb.primary
-            : context.cb.surfaceWarm,
+            ? context.hc.primary
+            : context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           key: chipKey,
@@ -349,8 +349,8 @@ class _SortChip extends StatelessWidget {
               label,
               style: textTheme.labelLarge?.copyWith(
                 color: selected
-                    ? context.cb.background
-                    : context.cb.primarySoft,
+                    ? context.hc.background
+                    : context.hc.primarySoft,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -400,7 +400,7 @@ class _Body extends StatelessWidget {
     if (feed.posts.isEmpty) {
       return RefreshIndicator(
         onRefresh: onRefresh,
-        color: context.cb.cta,
+        color: context.hc.cta,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: const <Widget>[
@@ -412,7 +412,7 @@ class _Body extends StatelessWidget {
     }
     return RefreshIndicator(
       onRefresh: onRefresh,
-      color: context.cb.cta,
+      color: context.hc.cta,
       child: ListView.separated(
         key: CommunityFeedScreen.listKey,
         controller: scrollController,
@@ -444,7 +444,7 @@ class _LoadingPlaceholder extends StatelessWidget {
         width: 32,
         child: CircularProgressIndicator(
           strokeWidth: 2.5,
-          color: context.cb.primarySoft,
+          color: context.hc.primarySoft,
         ),
       ),
     );
@@ -467,13 +467,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.forum_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'Be the first to post.',
             style: textTheme.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -482,7 +482,7 @@ class _EmptyState extends StatelessWidget {
             "When you're stuck on something, chances are another caregiver "
             'has been there too. Share a moment and the community shows up.',
             style: textTheme.bodyLarge?.copyWith(
-              color: context.cb.text,
+              color: context.hc.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -509,7 +509,7 @@ class _Footer extends StatelessWidget {
             width: 22,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
             ),
           ),
         ),
@@ -522,7 +522,7 @@ class _Footer extends StatelessWidget {
         child: Text(
           "Couldn't load more right now. Pull to refresh.",
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.accentDeep,
+            color: context.hc.accentDeep,
           ),
           textAlign: TextAlign.center,
         ),
@@ -554,7 +554,7 @@ class _PostCard extends StatelessWidget {
           '${post.voteCount} votes, ${post.commentCount} comments. '
           'Double-tap to open.',
       child: Material(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           key: CommunityFeedScreen.postTileKey(post.id),
@@ -580,7 +580,7 @@ class _PostCard extends StatelessWidget {
                 Text(
                   post.title,
                   style: textTheme.titleLarge?.copyWith(
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -590,7 +590,7 @@ class _PostCard extends StatelessWidget {
                   Text(
                     post.body,
                     style: textTheme.bodyMedium?.copyWith(
-                      color: context.cb.text,
+                      color: context.hc.text,
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
@@ -630,7 +630,7 @@ class _AuthorRow extends StatelessWidget {
               Text(
                 displayName,
                 style: textTheme.bodyMedium?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   fontWeight: FontWeight.w700,
                 ),
                 maxLines: 1,
@@ -640,7 +640,7 @@ class _AuthorRow extends StatelessWidget {
               Text(
                 time,
                 style: textTheme.bodyMedium?.copyWith(
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                   fontSize: 14,
                 ),
               ),
@@ -667,13 +667,13 @@ class _Avatar extends StatelessWidget {
       height: 36,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: context.cb.primary,
+        color: context.hc.primary,
         shape: BoxShape.circle,
       ),
       child: Text(
         initial,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: context.cb.background,
+              color: context.hc.background,
               fontWeight: FontWeight.w700,
             ),
       ),
@@ -695,13 +695,13 @@ class _CountsRow extends StatelessWidget {
         Icon(
           Icons.arrow_upward,
           size: 18,
-          color: context.cb.primarySoft,
+          color: context.hc.primarySoft,
         ),
         const SizedBox(width: 4),
         Text(
           '$voteCount',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -709,13 +709,13 @@ class _CountsRow extends StatelessWidget {
         Icon(
           Icons.mode_comment_outlined,
           size: 18,
-          color: context.cb.primarySoft,
+          color: context.hc.primarySoft,
         ),
         const SizedBox(width: 4),
         Text(
           '$commentCount',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
             fontWeight: FontWeight.w700,
           ),
         ),

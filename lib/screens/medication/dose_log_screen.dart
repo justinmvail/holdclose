@@ -162,7 +162,7 @@ class _DoseLogScreenState extends ConsumerState<DoseLogScreen> {
         ref.watch(dosesTodayProvider);
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -231,7 +231,7 @@ class _VoiceNoteField extends StatelessWidget {
           Text(
             'Note for this dose',
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -266,13 +266,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.check_circle_outline,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'Nothing scheduled today.',
             style: textTheme.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -280,7 +280,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             "When a medication's schedule lands on today, doses will "
             'appear here as a checklist.',
-            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -354,14 +354,14 @@ class _DoseWindowHeader extends StatelessWidget {
             TextSpan(
               text: window.label,
               style: textTheme.titleMedium?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
             TextSpan(
               text: '   ·   ${windowClockLabel(window)}',
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
+                color: context.hc.primarySoft,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -440,14 +440,14 @@ class _BulkMorningButton extends StatelessWidget {
           label: Text(
             label,
             style: textTheme.labelLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size.fromHeight(52),
-            foregroundColor: context.cb.primary,
+            foregroundColor: context.hc.primary,
             side: BorderSide(
-              color: context.cb.primary.withValues(alpha: 0.4),
+              color: context.hc.primary.withValues(alpha: 0.4),
             ),
           ),
         ),
@@ -476,7 +476,7 @@ class _DoseRow extends ConsumerWidget {
       child: Semantics(
         label: _rowSemanticsLabel(dose),
         child: Material(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: DoseLogScreen.rowKey(med.id, dose.scheduledFor),
@@ -504,7 +504,7 @@ class _DoseRow extends ConsumerWidget {
                             Text(
                               formatClock12h(dose.scheduledFor),
                               style: textTheme.bodyMedium?.copyWith(
-                                color: context.cb.primarySoft,
+                                color: context.hc.primarySoft,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -519,7 +519,7 @@ class _DoseRow extends ConsumerWidget {
                         Text(
                           med.name,
                           style: textTheme.titleLarge?.copyWith(
-                            color: context.cb.primary,
+                            color: context.hc.primary,
                             fontWeight: FontWeight.w700,
                           ),
                           maxLines: 1,
@@ -529,7 +529,7 @@ class _DoseRow extends ConsumerWidget {
                         Text(
                           med.dosage,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: context.cb.text,
+                            color: context.hc.text,
                           ),
                         ),
                       ],
@@ -627,7 +627,7 @@ Future<void> _openStatusSheet(
   final DoseStatus? next = await showModalBottomSheet<DoseStatus>(
     context: context,
     builder: (BuildContext sheetContext) => _StatusSheet(dose: dose),
-    backgroundColor: context.cb.background,
+    backgroundColor: context.hc.background,
   );
   if (next == null) return;
   await _setStatus(ref, dose, next, note: note);
@@ -653,7 +653,7 @@ class _StatusSheet extends StatelessWidget {
               child: Text(
                 'Update ${dose.medication.name}',
                 style: textTheme.titleLarge?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                 ),
               ),
             ),
@@ -693,10 +693,10 @@ class _StatusOptionTile extends StatelessWidget {
       ),
       title: Text(
         _labelFor(status),
-        style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+        style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
       ),
       trailing: selected
-          ? Icon(Icons.check, color: context.cb.success)
+          ? Icon(Icons.check, color: context.hc.success)
           : null,
     );
   }
@@ -713,7 +713,7 @@ class _LeadingIndicator extends StatelessWidget {
     if (log == null) {
       return Icon(
         Icons.check_box_outline_blank,
-        color: context.cb.primarySoft,
+        color: context.hc.primarySoft,
         size: 28,
       );
     }
@@ -758,7 +758,7 @@ class _MarkTakenButton extends StatelessWidget {
         key: buttonKey,
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: context.cb.cta,
+          backgroundColor: context.hc.cta,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           minimumSize: const Size(0, 44),
@@ -781,13 +781,13 @@ class _LateBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: context.cb.accentDeep.withValues(alpha: 0.14),
+        color: context.hc.accentDeep.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         'Late',
         style: textTheme.bodyMedium?.copyWith(
-          color: context.cb.accentDeep,
+          color: context.hc.accentDeep,
           fontWeight: FontWeight.w700,
           fontSize: 12,
         ),
@@ -828,13 +828,13 @@ IconData _iconFor(DoseStatus status) {
 Color _colorFor(BuildContext context, DoseStatus status) {
   switch (status) {
     case DoseStatus.taken:
-      return context.cb.success;
+      return context.hc.success;
     case DoseStatus.late:
-      return context.cb.accentDeep;
+      return context.hc.accentDeep;
     case DoseStatus.skipped:
-      return context.cb.primarySoft;
+      return context.hc.primarySoft;
     case DoseStatus.missed:
-      return context.cb.error;
+      return context.hc.error;
   }
 }
 

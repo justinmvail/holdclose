@@ -97,7 +97,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     final String me = ref.watch(currentCaregiverIdProvider);
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       floatingActionButton: _AddTaskFab(onPressed: () => _openCreateSheet()),
       body: SafeArea(
         child: Column(
@@ -153,7 +153,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   Future<void> _openCreateSheet({CareTask? existing}) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -179,7 +179,7 @@ class _AddTaskFab extends StatelessWidget {
         key: TasksScreen.fabKey,
         heroTag: 'tasks-add-fab',
         onPressed: onPressed,
-        backgroundColor: context.cb.cta,
+        backgroundColor: context.hc.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -234,11 +234,11 @@ class _SegmentPill extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final String label = _segmentLabel(status);
     final Color border =
-        selected ? context.cb.cta : context.cb.primarySoft;
+        selected ? context.hc.cta : context.hc.primarySoft;
     final Color fill = selected
-        ? context.cb.cta.withValues(alpha: 0.12)
+        ? context.hc.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? context.cb.cta : context.cb.text;
+    final Color fg = selected ? context.hc.cta : context.hc.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -310,7 +310,7 @@ class _TaskCard extends ConsumerWidget {
             key: TasksScreen.cardKey(task.id),
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
             decoration: BoxDecoration(
-              color: context.cb.surfaceWarm,
+              color: context.hc.surfaceWarm,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
@@ -319,7 +319,7 @@ class _TaskCard extends ConsumerWidget {
                 Text(
                   task.title,
                   style: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                     fontWeight: FontWeight.w700,
                     decoration:
                         task.isDone ? TextDecoration.lineThrough : null,
@@ -330,7 +330,7 @@ class _TaskCard extends ConsumerWidget {
                   Text(
                     task.body!.trim(),
                     style: textTheme.bodyMedium
-                        ?.copyWith(color: context.cb.text),
+                        ?.copyWith(color: context.hc.text),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -366,7 +366,7 @@ class _TaskCard extends ConsumerWidget {
   Future<void> _openCardMenu(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -404,7 +404,7 @@ class _TaskCardMenu extends ConsumerWidget {
           Text(
             task.title,
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -416,11 +416,11 @@ class _TaskCardMenu extends ConsumerWidget {
             child: ListTile(
               key: TasksScreen.cardMenuEditKey,
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.edit_outlined, color: context.cb.link),
+              leading: Icon(Icons.edit_outlined, color: context.hc.link),
               title: Text(
                 'Edit task',
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -438,12 +438,12 @@ class _TaskCardMenu extends ConsumerWidget {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 Icons.delete_outline,
-                color: context.cb.accentDeep,
+                color: context.hc.accentDeep,
               ),
               title: Text(
                 'Delete task',
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.accentDeep,
+                  color: context.hc.accentDeep,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -460,7 +460,7 @@ class _TaskCardMenu extends ConsumerWidget {
   Future<void> _openEditSheet(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -492,7 +492,7 @@ class _TaskCardMenu extends ConsumerWidget {
                 onPressed: () => Navigator.of(dialogContext).pop(true),
                 child: Text(
                   'Delete',
-                  style: TextStyle(color: context.cb.accentDeep),
+                  style: TextStyle(color: context.hc.accentDeep),
                 ),
               ),
             ],
@@ -610,7 +610,7 @@ class _PrimaryAction extends StatelessWidget {
           style: textTheme.labelLarge?.copyWith(color: Colors.white),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: context.cb.cta,
+          backgroundColor: context.hc.cta,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         ),
@@ -638,12 +638,12 @@ class _SecondaryAction extends StatelessWidget {
       child: TextButton(
         onPressed: onPressed,
         style: TextButton.styleFrom(
-          foregroundColor: context.cb.link,
+          foregroundColor: context.hc.link,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         ),
         child: Text(
           label,
-          style: textTheme.labelLarge?.copyWith(color: context.cb.link),
+          style: textTheme.labelLarge?.copyWith(color: context.hc.link),
         ),
       ),
     );
@@ -661,12 +661,12 @@ class _DueChip extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Icon(Icons.schedule, size: 16, color: context.cb.primarySoft),
+        Icon(Icons.schedule, size: 16, color: context.hc.primarySoft),
         const SizedBox(width: 4),
         Text(
           formatDue(due),
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -693,7 +693,7 @@ class _AssigneeChip extends StatelessWidget {
         Text(
           name,
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primary,
+            color: context.hc.primary,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -715,14 +715,14 @@ class _MiniAvatar extends StatelessWidget {
     final bool hasPhoto = path != null && File(path).existsSync();
     return CircleAvatar(
       radius: 13,
-      backgroundColor: context.cb.primarySoft.withValues(alpha: 0.14),
+      backgroundColor: context.hc.primarySoft.withValues(alpha: 0.14),
       backgroundImage: hasPhoto ? FileImage(File(path)) : null,
       child: hasPhoto
           ? null
           : Text(
               _initials(name),
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 fontWeight: FontWeight.w700,
                 fontSize: 11,
               ),
@@ -749,12 +749,12 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.task_alt_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             _emptyMessage(segment),
-            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -912,7 +912,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
             Text(
               _isEditing ? 'Edit task' : 'New task',
               style: textTheme.titleLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
               ),
             ),
             const SizedBox(height: 20),
@@ -934,7 +934,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
                 child: Text(
                   _titleError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: context.cb.error),
+                      ?.copyWith(color: context.hc.error),
                 ),
               ),
             const SizedBox(height: 16),
@@ -958,7 +958,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
             Text(
               'Assign to (optional)',
               style: textTheme.bodyLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -992,7 +992,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
               onPressed: _submitting ? null : _save,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
               ),
               child: Text(
@@ -1034,14 +1034,14 @@ class _DuePickerRow extends StatelessWidget {
             child: OutlinedButton.icon(
               key: TasksScreen.dueButtonKey,
               onPressed: onPick,
-              icon: Icon(Icons.event_outlined, color: context.cb.link),
+              icon: Icon(Icons.event_outlined, color: context.hc.link),
               label: Text(
                 due == null ? 'Set due time' : formatDue(due!),
                 style:
-                    textTheme.labelLarge?.copyWith(color: context.cb.link),
+                    textTheme.labelLarge?.copyWith(color: context.hc.link),
               ),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: context.cb.primarySoft),
+                side: BorderSide(color: context.hc.primarySoft),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
@@ -1054,7 +1054,7 @@ class _DuePickerRow extends StatelessWidget {
             child: IconButton(
               key: TasksScreen.dueClearKey,
               icon: const Icon(Icons.close),
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
               tooltip: 'Clear due time',
               onPressed: onClear,
             ),
@@ -1080,11 +1080,11 @@ class _AssigneeChoice extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? context.cb.cta : context.cb.primarySoft;
+        selected ? context.hc.cta : context.hc.primarySoft;
     final Color fill = selected
-        ? context.cb.cta.withValues(alpha: 0.12)
+        ? context.hc.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? context.cb.cta : context.cb.text;
+    final Color fg = selected ? context.hc.cta : context.hc.text;
     return Semantics(
       button: true,
       selected: selected,

@@ -306,7 +306,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
     final TextTheme textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         // The PathHeader sits OUTSIDE the hydration `.when()` so the
         // breadcrumb back affordance is present on EVERY branch —
@@ -385,7 +385,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
                       _formError!,
                       key: HealthLogEntryForm.formErrorKey,
                       style: textTheme.bodyMedium?.copyWith(
-                        color: context.cb.cta,
+                        color: context.hc.cta,
                       ),
                     ),
                   ],
@@ -400,7 +400,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
                       onPressed: _submitting ? null : _submit,
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size.fromHeight(56),
-                        backgroundColor: context.cb.cta,
+                        backgroundColor: context.hc.cta,
                         foregroundColor: Colors.white,
                       ),
                       child: Text(
@@ -422,17 +422,17 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
                         onPressed: _submitting ? null : _delete,
                         icon: Icon(
                           Icons.delete_outline,
-                          color: context.cb.accentDeep,
+                          color: context.hc.accentDeep,
                         ),
                         label: Text(
                           'Delete entry',
                           style: textTheme.labelLarge?.copyWith(
-                            color: context.cb.accentDeep,
+                            color: context.hc.accentDeep,
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(52),
-                          side: BorderSide(color: context.cb.accentDeep),
+                          side: BorderSide(color: context.hc.accentDeep),
                         ),
                       ),
                     ),
@@ -483,7 +483,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
               child: Text(
                 '/',
                 style: textTheme.headlineSmall?.copyWith(
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
               ),
             ),
@@ -573,7 +573,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
         Text(
           '1 is mild, 5 is severe. Tap again to clear.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
         const SizedBox(height: 8),
@@ -658,12 +658,12 @@ class _KindChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? context.cb.cta : context.cb.primarySoft;
+        selected ? context.hc.cta : context.hc.primarySoft;
     final Color fill = selected
-        ? context.cb.cta.withValues(alpha: 0.12)
+        ? context.hc.cta.withValues(alpha: 0.12)
         : Colors.transparent;
     final Color fg =
-        selected ? context.cb.cta : context.cb.text;
+        selected ? context.hc.cta : context.hc.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -714,10 +714,10 @@ class _SeverityChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? context.cb.cta : context.cb.primarySoft;
+        selected ? context.hc.cta : context.hc.primarySoft;
     final Color fill =
-        selected ? context.cb.cta : Colors.transparent;
-    final Color fg = selected ? Colors.white : context.cb.text;
+        selected ? context.hc.cta : Colors.transparent;
+    final Color fg = selected ? Colors.white : context.hc.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -759,7 +759,7 @@ class _FieldLabel extends StatelessWidget {
     return Text(
       label,
       style: textTheme.bodyLarge?.copyWith(
-        color: context.cb.primary,
+        color: context.hc.primary,
         fontWeight: FontWeight.w700,
       ),
     );

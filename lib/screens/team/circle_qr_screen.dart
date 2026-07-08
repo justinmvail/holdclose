@@ -85,7 +85,7 @@ class _CircleQrScreenState extends ConsumerState<CircleQrScreen> {
     );
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -104,7 +104,7 @@ class _CircleQrScreenState extends ConsumerState<CircleQrScreen> {
             const SizedBox(height: 8),
             Text(
               'Have another caregiver scan this to join your care circle.',
-              style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+              style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             ),
             const SizedBox(height: 28),
             FutureBuilder<CircleInviteDto>(
@@ -149,7 +149,7 @@ class _QrBlock extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: context.cb.surfaceWarm, width: 2),
+            border: Border.all(color: context.hc.surfaceWarm, width: 2),
           ),
           child: QrImageView(
             key: CircleQrScreen.qrKey,
@@ -158,11 +158,11 @@ class _QrBlock extends StatelessWidget {
             backgroundColor: Colors.white,
             eyeStyle: QrEyeStyle(
               eyeShape: QrEyeShape.square,
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             dataModuleStyle: QrDataModuleStyle(
               dataModuleShape: QrDataModuleShape.square,
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
         ),
@@ -171,7 +171,7 @@ class _QrBlock extends StatelessWidget {
           Text(
             '@$username',
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -179,7 +179,7 @@ class _QrBlock extends StatelessWidget {
         Text(
           'This code is valid for 7 days.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
       ],
@@ -199,12 +199,12 @@ class _ErrorBlock extends StatelessWidget {
       key: CircleQrScreen.errorKey,
       children: <Widget>[
         const SizedBox(height: 24),
-        Icon(Icons.wifi_off, size: 48, color: context.cb.primarySoft),
+        Icon(Icons.wifi_off, size: 48, color: context.hc.primarySoft),
         const SizedBox(height: 16),
         Text(
           "We couldn't create your QR code. Check your connection and try "
           'again.',
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 20),

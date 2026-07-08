@@ -131,7 +131,7 @@ const HoldcloseColors holdcloseColorsDark = HoldcloseColors(
 /// (keeps tests + stray contexts safe — never crashes, never returns
 /// null).
 extension HoldcloseColorsContext on BuildContext {
-  HoldcloseColors get cb =>
+  HoldcloseColors get hc =>
       Theme.of(this).extension<HoldcloseColors>() ?? holdcloseColors;
 }
 

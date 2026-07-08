@@ -604,7 +604,7 @@ class _AppointmentFormScreenState
     final TextTheme textTheme = theme.textTheme;
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         // The PathHeader sits OUTSIDE the hydration `.when()` so the
         // breadcrumb back affordance is present on EVERY branch —
@@ -659,7 +659,7 @@ class _AppointmentFormScreenState
                       error: (Object e, StackTrace _) => Text(
                         "We couldn't load your providers.",
                         style: textTheme.bodyMedium?.copyWith(
-                          color: context.cb.text,
+                          color: context.hc.text,
                         ),
                       ),
                       data: (List<Provider> providers) {
@@ -764,7 +764,7 @@ class _AppointmentFormScreenState
                   Text(
                     'Agenda',
                     style: textTheme.titleLarge?.copyWith(
-                      color: context.cb.primary,
+                      color: context.hc.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -773,7 +773,7 @@ class _AppointmentFormScreenState
                     "Add bullets you want to cover. You'll check them off "
                     'in the waiting room.',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: context.cb.primarySoft,
+                      color: context.hc.primarySoft,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -790,7 +790,7 @@ class _AppointmentFormScreenState
                           icon: const Icon(Icons.add),
                           label: const Text('Add agenda item'),
                           style: TextButton.styleFrom(
-                            foregroundColor: context.cb.primary,
+                            foregroundColor: context.hc.primary,
                           ),
                         ),
                         // AI doctor-visit prep: suggest questions grounded in
@@ -803,7 +803,7 @@ class _AppointmentFormScreenState
                           label: Text(
                               _suggesting ? 'Thinking…' : 'Suggest questions'),
                           style: TextButton.styleFrom(
-                            foregroundColor: context.cb.cta,
+                            foregroundColor: context.hc.cta,
                           ),
                         ),
                       ],
@@ -835,7 +835,7 @@ class _AppointmentFormScreenState
                       onPressed: _submitting ? null : _submit,
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size.fromHeight(56),
-                        backgroundColor: context.cb.cta,
+                        backgroundColor: context.hc.cta,
                         foregroundColor: Colors.white,
                       ),
                       child: Text(
@@ -868,7 +868,7 @@ class _AppointmentFormScreenState
         child: Text(
           'No agenda items yet.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
       );
@@ -894,7 +894,7 @@ class _AppointmentFormScreenState
                 IconButton(
                   key: AppointmentFormScreen.agendaItemRemoveKey(i),
                   icon: const Icon(Icons.close),
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                   tooltip: 'Remove item',
                   onPressed: () => _removeAgendaItem(i),
                 ),
@@ -909,7 +909,7 @@ class _AppointmentFormScreenState
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -918,7 +918,7 @@ class _AppointmentFormScreenState
           Text(
             'New provider',
             style: textTheme.titleMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1005,7 +1005,7 @@ class _AppointmentFormScreenState
             Text(
               _newProviderError!,
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.cta,
+                color: context.hc.cta,
               ),
             ),
           ],
@@ -1017,7 +1017,7 @@ class _AppointmentFormScreenState
                   key: AppointmentFormScreen.newProviderCancelButtonKey,
                   onPressed: _cancelInlineProvider,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: context.cb.primary,
+                    foregroundColor: context.hc.primary,
                     minimumSize: const Size.fromHeight(48),
                   ),
                   child: const Text('Cancel'),
@@ -1029,7 +1029,7 @@ class _AppointmentFormScreenState
                   key: AppointmentFormScreen.newProviderSaveButtonKey,
                   onPressed: _saveInlineProvider,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: context.cb.cta,
+                    backgroundColor: context.hc.cta,
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(48),
                   ),
@@ -1069,7 +1069,7 @@ class _ProviderPicker extends StatelessWidget {
             child: Text(
               'No providers on file yet. Add the first one below.',
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
+                color: context.hc.primarySoft,
               ),
             ),
           ),
@@ -1081,7 +1081,7 @@ class _ProviderPicker extends StatelessWidget {
               icon: const Icon(Icons.person_add_alt_1),
               label: const Text('Add a provider'),
               style: TextButton.styleFrom(
-                foregroundColor: context.cb.primary,
+                foregroundColor: context.hc.primary,
               ),
             ),
           ),
@@ -1118,7 +1118,7 @@ class _ProviderPicker extends StatelessWidget {
             icon: const Icon(Icons.person_add_alt_1),
             label: const Text('Add a new provider'),
             style: TextButton.styleFrom(
-              foregroundColor: context.cb.primary,
+              foregroundColor: context.hc.primary,
             ),
           ),
         ),
@@ -1150,18 +1150,18 @@ class _PickerField extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
-          border: Border.all(color: context.cb.primarySoft),
+          border: Border.all(color: context.hc.primarySoft),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: <Widget>[
-            Icon(icon, color: context.cb.primarySoft, size: 18),
+            Icon(icon, color: context.hc.primarySoft, size: 18),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 label,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.text,
+                  color: context.hc.text,
                 ),
               ),
             ),
@@ -1202,7 +1202,7 @@ class _QuestionPickerSheetState extends State<_QuestionPickerSheet> {
               child: Text(
                 'Questions to ask',
                 style: tt.titleLarge?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1210,7 +1210,7 @@ class _QuestionPickerSheetState extends State<_QuestionPickerSheet> {
             Text(
               "Suggested from your loved one's recent care. Pick the ones to "
               'add to the agenda — you can edit them after.',
-              style: tt.bodyMedium?.copyWith(color: context.cb.primarySoft),
+              style: tt.bodyMedium?.copyWith(color: context.hc.primarySoft),
             ),
             const SizedBox(height: 8),
             Flexible(
@@ -1226,7 +1226,7 @@ class _QuestionPickerSheetState extends State<_QuestionPickerSheet> {
                         title: Text(widget.questions[i]),
                         contentPadding: EdgeInsets.zero,
                         controlAffinity: ListTileControlAffinity.leading,
-                        activeColor: context.cb.cta,
+                        activeColor: context.hc.cta,
                       ),
                   ],
                 ),
@@ -1242,7 +1242,7 @@ class _QuestionPickerSheetState extends State<_QuestionPickerSheet> {
                 Navigator.of(context).pop(selected);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(48),
               ),

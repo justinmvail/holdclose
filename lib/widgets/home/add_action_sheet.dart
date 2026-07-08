@@ -87,9 +87,9 @@ class AddActionFab extends StatelessWidget {
         key: fabKey,
         // The calm, affirmative "add something" accent — the `link` brand
         // token (the same token the shared calendar gives dose events),
-        // resolved through `context.cb` so it follows the active theme.
-        backgroundColor: context.cb.link,
-        foregroundColor: context.cb.background,
+        // resolved through `context.hc` so it follows the active theme.
+        backgroundColor: context.hc.link,
+        foregroundColor: context.hc.background,
         shape: const CircleBorder(),
         tooltip: 'Add',
         elevation: 3,
@@ -105,7 +105,7 @@ class AddActionFab extends StatelessWidget {
 Future<void> showAddActionSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: context.cb.background,
+    backgroundColor: context.hc.background,
     showDragHandle: true,
     builder: (BuildContext sheetContext) => const AddActionSheet(),
   );
@@ -145,7 +145,7 @@ class AddActionSheet extends StatelessWidget {
     final TextStyle labelStyle =
         (textTheme.titleLarge ?? const TextStyle()).copyWith(
       fontSize: 18,
-      color: context.cb.primary,
+      color: context.hc.primary,
     );
 
     return SafeArea(
@@ -157,7 +157,7 @@ class AddActionSheet extends StatelessWidget {
           for (final _AddRowSpec spec in _rowSpecs)
             ListTile(
               key: Key('add-row-${spec.id}'),
-              leading: Icon(spec.icon, color: context.cb.primarySoft),
+              leading: Icon(spec.icon, color: context.hc.primarySoft),
               title: Text(spec.label, style: labelStyle),
               trailing: VoiceButton(
                 key: Key('add-row-voice-${spec.id}'),

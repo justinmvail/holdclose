@@ -63,13 +63,13 @@ class NetworkErrorView extends StatelessWidget {
             Icon(
               Icons.cloud_off_outlined,
               size: 48,
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
             ),
             const SizedBox(height: 12),
             Text(
               headline,
               style: textTheme.bodyLarge?.copyWith(
-                color: context.cb.text,
+                color: context.hc.text,
               ),
               textAlign: TextAlign.center,
             ),
@@ -77,7 +77,7 @@ class NetworkErrorView extends StatelessWidget {
             Text(
               detail,
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
+                color: context.hc.primarySoft,
               ),
               textAlign: TextAlign.center,
             ),
@@ -88,7 +88,7 @@ class NetworkErrorView extends StatelessWidget {
               child: ElevatedButton(
                 key: retryButtonKey,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.cb.cta,
+                  backgroundColor: context.hc.cta,
                   foregroundColor: Colors.white,
                 ),
                 onPressed: onRetry,

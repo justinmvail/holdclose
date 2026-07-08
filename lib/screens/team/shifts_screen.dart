@@ -30,14 +30,14 @@ ShiftIdFactory shiftIdFactory(Ref ref) => _defaultShiftIdFactory;
 /// Assigned by the caregiver's index in the week's roster so a caregiver
 /// keeps one color across all seven days. Drawn from the brand tokens
 /// (BUILD_SPEC.md §3.1) — the most visually distinct ones first — and
-/// resolved through `context.cb` so the bands follow the active theme.
+/// resolved through `context.hc` so the bands follow the active theme.
 List<Color> _bandPalette(BuildContext context) => <Color>[
-      context.cb.link,
-      context.cb.success,
-      context.cb.cta,
-      context.cb.accentDeep,
-      context.cb.primary,
-      context.cb.primarySoft,
+      context.hc.link,
+      context.hc.success,
+      context.hc.cta,
+      context.hc.accentDeep,
+      context.hc.primary,
+      context.hc.primarySoft,
     ];
 
 /// Care Circle → Shifts at `/team/shifts` (TASKS.md Phase 14.31, BUILD_SPEC.md
@@ -91,7 +91,7 @@ class ShiftsScreen extends ConsumerWidget {
     final Map<String, Caregiver> caregivers = _caregiversById(ref);
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       floatingActionButton:
           _AddShiftFab(onPressed: () => _openScheduleSheet(context)),
       body: SafeArea(
@@ -159,7 +159,7 @@ class ShiftsScreen extends ConsumerWidget {
   Future<void> _openScheduleSheet(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -184,7 +184,7 @@ class _AddShiftFab extends StatelessWidget {
         key: ShiftsScreen.fabKey,
         heroTag: 'shifts-add-fab',
         onPressed: onPressed,
-        backgroundColor: context.cb.cta,
+        backgroundColor: context.hc.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -250,7 +250,7 @@ class _DayRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color labelColor =
-        isToday ? context.cb.cta : context.cb.primary;
+        isToday ? context.hc.cta : context.hc.primary;
     return Padding(
       key: ShiftsScreen.dayRowKey(dayIndex),
       padding: const EdgeInsets.only(bottom: 18),
@@ -281,8 +281,8 @@ class _DayRow extends StatelessWidget {
             key: ShiftsScreen.captionKey(dayIndex),
             style: textTheme.bodyMedium?.copyWith(
               color: coverage.isFullyCovered || coverage.shifts.isEmpty
-                  ? context.cb.text
-                  : context.cb.accentDeep,
+                  ? context.hc.text
+                  : context.hc.accentDeep,
             ),
           ),
         ],
@@ -326,7 +326,7 @@ class _CoverageBar extends StatelessWidget {
               Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: context.cb.surfaceWarm,
+                    color: context.hc.surfaceWarm,
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
@@ -341,7 +341,7 @@ class _CoverageBar extends StatelessWidget {
                     label: 'No coverage '
                         '${_clockLabel(gap.start)} to ${_clockLabel(gap.end)}',
                     child: CustomPaint(
-                      painter: _GapStripePainter(errorColor: context.cb.error),
+                      painter: _GapStripePainter(errorColor: context.hc.error),
                     ),
                   ),
                 ),
@@ -354,7 +354,7 @@ class _CoverageBar extends StatelessWidget {
                   child: _Band(
                     bandKey: ShiftsScreen.bandKey(shift.id),
                     color: bandColors[shift.caregiverId] ??
-                        context.cb.primarySoft,
+                        context.hc.primarySoft,
                     label: _bandSemantics(shift),
                     onTap: () => _editShift(context, shift),
                   ),
@@ -379,7 +379,7 @@ class _CoverageBar extends StatelessWidget {
   Future<void> _editShift(BuildContext context, CareShift shift) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -479,13 +479,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.access_time_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             "No shifts scheduled yet. Tap Schedule shift to say who's "
             'covering and when.',
-            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -664,7 +664,7 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
                 onPressed: () => Navigator.of(dialogContext).pop(true),
                 child: Text(
                   'Remove',
-                  style: TextStyle(color: context.cb.accentDeep),
+                  style: TextStyle(color: context.hc.accentDeep),
                 ),
               ),
             ],
@@ -702,14 +702,14 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
             Text(
               _isEditing ? 'Edit shift' : 'Schedule a shift',
               style: textTheme.titleLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
               ),
             ),
             const SizedBox(height: 20),
             Text(
               "Who's covering",
               style: textTheme.bodyLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -721,7 +721,7 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
                   ? Text(
                       'Add caregivers to your Care Circle first.',
                       style: textTheme.bodyMedium
-                          ?.copyWith(color: context.cb.text),
+                          ?.copyWith(color: context.hc.text),
                     )
                   : Wrap(
                       spacing: 8,
@@ -744,7 +744,7 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
                 child: Text(
                   _caregiverError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: context.cb.error),
+                      ?.copyWith(color: context.hc.error),
                 ),
               ),
             const SizedBox(height: 20),
@@ -768,7 +768,7 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
                 child: Text(
                   _timeError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: context.cb.error),
+                      ?.copyWith(color: context.hc.error),
                 ),
               ),
             const SizedBox(height: 20),
@@ -788,7 +788,7 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
               onPressed: _submitting ? null : _save,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
               ),
               child: Text(
@@ -809,12 +809,12 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
                     onPressed: _submitting ? null : _remove,
                     icon: Icon(
                       Icons.delete_outline,
-                      color: context.cb.accentDeep,
+                      color: context.hc.accentDeep,
                     ),
                     label: Text(
                       'Remove shift',
                       style: textTheme.labelLarge
-                          ?.copyWith(color: context.cb.accentDeep),
+                          ?.copyWith(color: context.hc.accentDeep),
                     ),
                   ),
                 ),
@@ -852,7 +852,7 @@ class _TimeRow extends StatelessWidget {
           child: Text(
             label,
             style: textTheme.bodyLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -864,14 +864,14 @@ class _TimeRow extends StatelessWidget {
             child: OutlinedButton.icon(
               key: buttonKey,
               onPressed: onPick,
-              icon: Icon(Icons.event_outlined, color: context.cb.link),
+              icon: Icon(Icons.event_outlined, color: context.hc.link),
               label: Text(
                 _momentLabel(value),
                 style:
-                    textTheme.labelLarge?.copyWith(color: context.cb.link),
+                    textTheme.labelLarge?.copyWith(color: context.hc.link),
               ),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: context.cb.primarySoft),
+                side: BorderSide(color: context.hc.primarySoft),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
@@ -898,11 +898,11 @@ class _CaregiverChoice extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? context.cb.cta : context.cb.primarySoft;
+        selected ? context.hc.cta : context.hc.primarySoft;
     final Color fill = selected
-        ? context.cb.cta.withValues(alpha: 0.12)
+        ? context.hc.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? context.cb.cta : context.cb.text;
+    final Color fg = selected ? context.hc.cta : context.hc.text;
     return Semantics(
       button: true,
       selected: selected,

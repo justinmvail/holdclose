@@ -186,7 +186,7 @@ class ConversationListScreen extends ConsumerWidget {
         ref.watch(chatConversationListProvider);
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,13 +270,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.chat_bubble_outline,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'Ask the coach.',
             style: textTheme.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -286,7 +286,7 @@ class _EmptyState extends StatelessWidget {
             'before, a phrase that keeps coming up — start a chat and '
             'a coach who knows your loved one will meet you there.',
             style: textTheme.bodyLarge?.copyWith(
-              color: context.cb.text,
+              color: context.hc.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -306,7 +306,7 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -350,7 +350,7 @@ class _ConversationTile extends ConsumerWidget {
       button: true,
       label: '${item.displayTitle}. Double-tap to open this chat.',
       child: Material(
-        color: context.cb.background,
+        color: context.hc.background,
         child: InkWell(
           key: ConversationListScreen.tileKey(item.conversation.id),
           onTap: () => context.push('/chat/${item.conversation.id}'),
@@ -370,7 +370,7 @@ class _ConversationTile extends ConsumerWidget {
                       Text(
                         item.displayTitle,
                         style: textTheme.bodyLarge?.copyWith(
-                          color: context.cb.primary,
+                          color: context.hc.primary,
                           fontWeight: FontWeight.w700,
                         ),
                         maxLines: 1,
@@ -381,7 +381,7 @@ class _ConversationTile extends ConsumerWidget {
                         Text(
                           sub,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: context.cb.primarySoft,
+                            color: context.hc.primarySoft,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -404,7 +404,7 @@ class _ConversationTile extends ConsumerWidget {
                     ),
                     tooltip: 'Rename chat',
                     icon: const Icon(Icons.edit_outlined),
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                     onPressed: () => _rename(context, ref),
                   ),
                 ),
@@ -421,7 +421,7 @@ class _ConversationTile extends ConsumerWidget {
                     ),
                     tooltip: 'Delete chat',
                     icon: const Icon(Icons.delete_outline),
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                     onPressed: () => _confirmAndDelete(context, ref),
                   ),
                 ),
@@ -558,7 +558,7 @@ class _QuickChatFab extends StatelessWidget {
         key: ConversationListScreen.fabQuickChatKey,
         heroTag: 'conversations-quick-chat-fab',
         onPressed: onPressed,
-        backgroundColor: context.cb.cta,
+        backgroundColor: context.hc.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(

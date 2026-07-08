@@ -47,7 +47,7 @@ class HealthLogScreen extends ConsumerWidget {
     final DateTime now = ref.watch(healthLogClockProvider)();
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,13 +111,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.monitor_heart_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'No entries yet.',
             style: textTheme.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -127,7 +127,7 @@ class _EmptyState extends StatelessWidget {
             "loved one's day. It's an easy way to bring the real picture to "
             'the next doctor visit.',
             style: textTheme.bodyLarge?.copyWith(
-              color: context.cb.text,
+              color: context.hc.text,
             ),
             textAlign: TextAlign.center,
           ),
@@ -147,7 +147,7 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -224,7 +224,7 @@ class _DayHeader extends StatelessWidget {
       child: Text(
         label,
         style: textTheme.titleLarge?.copyWith(
-          color: context.cb.primary,
+          color: context.hc.primary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -251,7 +251,7 @@ class _EntryRow extends StatelessWidget {
         label: '${_kindLabel(entry.kind)}. $summary. $when. '
             'Double-tap to edit.',
         child: Material(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             key: HealthLogScreen.rowKey(entry.id),
@@ -284,7 +284,7 @@ class _EntryRow extends StatelessWidget {
                         Text(
                           summary,
                           style: textTheme.bodyLarge?.copyWith(
-                            color: context.cb.text,
+                            color: context.hc.text,
                             fontWeight: FontWeight.w700,
                           ),
                           maxLines: 2,
@@ -294,7 +294,7 @@ class _EntryRow extends StatelessWidget {
                         Text(
                           when,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: context.cb.primarySoft,
+                            color: context.hc.primarySoft,
                           ),
                         ),
                       ],
@@ -324,7 +324,7 @@ class _AddEntryFab extends StatelessWidget {
         key: HealthLogScreen.fabKey,
         heroTag: 'health-log-add-fab',
         onPressed: onPressed,
-        backgroundColor: context.cb.cta,
+        backgroundColor: context.hc.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -486,10 +486,10 @@ IconData _kindGlyph(HealthLogKind kind) {
 Color _kindColor(BuildContext context, HealthLogKind kind) {
   switch (kind) {
     case HealthLogKind.vitals:
-      return context.cb.accentDeep;
+      return context.hc.accentDeep;
     case HealthLogKind.symptom:
-      return context.cb.cta;
+      return context.hc.cta;
     case HealthLogKind.note:
-      return context.cb.link;
+      return context.hc.link;
   }
 }

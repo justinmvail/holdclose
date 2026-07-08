@@ -23,7 +23,7 @@ class FormErrorView extends StatelessWidget {
       child: Center(
         child: Text(
           message,
-          style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+          style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
           textAlign: TextAlign.center,
         ),
       ),

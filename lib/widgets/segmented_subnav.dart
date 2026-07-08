@@ -105,11 +105,11 @@ class _SegmentPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color fill =
-        active ? context.cb.primary : context.cb.surfaceWarm;
+        active ? context.hc.primary : context.hc.surfaceWarm;
     final Color labelColor =
-        active ? context.cb.background : context.cb.text;
+        active ? context.hc.background : context.hc.text;
     final Color borderColor =
-        active ? context.cb.primary : SegmentedSubnav._brandLine;
+        active ? context.hc.primary : SegmentedSubnav._brandLine;
     final TextStyle labelStyle =
         (textTheme.titleLarge ?? const TextStyle()).copyWith(
       fontSize: SegmentedSubnav._labelSize,

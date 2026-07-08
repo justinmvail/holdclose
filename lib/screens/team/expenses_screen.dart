@@ -86,7 +86,7 @@ class ExpensesScreen extends ConsumerWidget {
     final String currentMonthKey = monthKeyOf(now);
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       floatingActionButton:
           _AddExpenseFab(onPressed: () => _openCreateSheet(context)),
       body: SafeArea(
@@ -144,7 +144,7 @@ class ExpensesScreen extends ConsumerWidget {
   Future<void> _openCreateSheet(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -169,7 +169,7 @@ class _AddExpenseFab extends StatelessWidget {
         key: ExpensesScreen.fabKey,
         heroTag: 'expenses-add-fab',
         onPressed: onPressed,
-        backgroundColor: context.cb.cta,
+        backgroundColor: context.hc.cta,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -202,7 +202,7 @@ class _MonthlyTotalCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
       decoration: BoxDecoration(
-        color: context.cb.primary,
+        color: context.hc.primary,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -269,13 +269,13 @@ class _MonthSection extends StatelessWidget {
                 child: Text(
                   monthLabel(group.monthKey),
                   style: textTheme.titleLarge
-                      ?.copyWith(color: context.cb.primary),
+                      ?.copyWith(color: context.hc.primary),
                 ),
               ),
               Text(
                 formatMoney(group.totalCents, currency),
                 style: textTheme.titleLarge?.copyWith(
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -317,7 +317,7 @@ class _ExpenseTile extends ConsumerWidget {
             key: ExpensesScreen.rowKey(expense.id),
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             decoration: BoxDecoration(
-              color: context.cb.surfaceWarm,
+              color: context.hc.surfaceWarm,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -330,7 +330,7 @@ class _ExpenseTile extends ConsumerWidget {
                       Text(
                         expense.description,
                         style: textTheme.bodyLarge?.copyWith(
-                          color: context.cb.primary,
+                          color: context.hc.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -357,7 +357,7 @@ class _ExpenseTile extends ConsumerWidget {
                 Text(
                   formatMoney(expense.amountCents, expense.currency),
                   style: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -374,7 +374,7 @@ class _ExpenseTile extends ConsumerWidget {
   Future<void> _openEditSheet(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -410,7 +410,7 @@ class _ExpenseTile extends ConsumerWidget {
                 onPressed: () => Navigator.of(dialogContext).pop(true),
                 child: Text(
                   'Delete',
-                  style: TextStyle(color: context.cb.accentDeep),
+                  style: TextStyle(color: context.hc.accentDeep),
                 ),
               ),
             ],
@@ -434,18 +434,18 @@ class _KindChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: context.cb.primarySoft.withValues(alpha: 0.10),
+        color: context.hc.primarySoft.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(kindIcon(kind), size: 15, color: context.cb.primarySoft),
+          Icon(kindIcon(kind), size: 15, color: context.hc.primarySoft),
           const SizedBox(width: 5),
           Text(
             kindLabel(kind),
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -472,7 +472,7 @@ class _PayerChip extends StatelessWidget {
         Text(
           name,
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.text,
+            color: context.hc.text,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -489,12 +489,12 @@ class _ReceiptChip extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         Icon(Icons.receipt_long_outlined,
-            size: 15, color: context.cb.link),
+            size: 15, color: context.hc.link),
         const SizedBox(width: 4),
         Text(
           'Receipt',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.link,
+            color: context.hc.link,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -543,14 +543,14 @@ class _MiniAvatarState extends State<_MiniAvatar> {
     final bool hasPhoto = _hasPhoto;
     return CircleAvatar(
       radius: 12,
-      backgroundColor: context.cb.primarySoft.withValues(alpha: 0.14),
+      backgroundColor: context.hc.primarySoft.withValues(alpha: 0.14),
       backgroundImage: hasPhoto ? FileImage(File(path!)) : null,
       child: hasPhoto
           ? null
           : Text(
               initials(widget.name),
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 fontWeight: FontWeight.w700,
                 fontSize: 10,
               ),
@@ -575,13 +575,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.account_balance_wallet_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'No expenses logged yet. Tap Add expense to start tracking '
             'what the care circle spends.',
-            style: textTheme.bodyLarge?.copyWith(color: context.cb.text),
+            style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
         ],
@@ -755,7 +755,7 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
             Text(
               _isEditing ? 'Edit expense' : 'New expense',
               style: textTheme.titleLarge
-                  ?.copyWith(color: context.cb.primary),
+                  ?.copyWith(color: context.hc.primary),
             ),
             const SizedBox(height: 20),
             TextField(
@@ -780,7 +780,7 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
                 child: Text(
                   _amountError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: context.cb.error),
+                      ?.copyWith(color: context.hc.error),
                 ),
               ),
             const SizedBox(height: 16),
@@ -801,14 +801,14 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
                 child: Text(
                   _descriptionError!,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: context.cb.error),
+                      ?.copyWith(color: context.hc.error),
                 ),
               ),
             const SizedBox(height: 20),
             Text(
               'Kind',
               style: textTheme.bodyLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -835,7 +835,7 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
             Text(
               'Paid by',
               style: textTheme.bodyLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -868,7 +868,7 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
             Text(
               'Receipt (optional)',
               style: textTheme.bodyLarge?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -880,7 +880,7 @@ class _CreateExpenseSheetState extends ConsumerState<_CreateExpenseSheet> {
               onPressed: _submitting ? null : _save,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
               ),
               child: Text(
@@ -921,17 +921,17 @@ class _PaidDateRow extends StatelessWidget {
       child: OutlinedButton.icon(
         key: ExpensesScreen.paidDateButtonKey,
         onPressed: onPick,
-        icon: Icon(Icons.event_outlined, color: context.cb.link),
+        icon: Icon(Icons.event_outlined, color: context.hc.link),
         label: Align(
           alignment: Alignment.centerLeft,
           child: Text(
             'Paid ${formatMonthDayYear(paidAt)}',
-            style: textTheme.labelLarge?.copyWith(color: context.cb.link),
+            style: textTheme.labelLarge?.copyWith(color: context.hc.link),
           ),
         ),
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(52),
-          side: BorderSide(color: context.cb.primarySoft),
+          side: BorderSide(color: context.hc.primarySoft),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         ),
       ),
@@ -989,14 +989,14 @@ class _ReceiptRowState extends State<_ReceiptRow> {
           onPressed: widget.onPick,
           icon: Icon(
             Icons.photo_camera_outlined,
-            color: context.cb.primary,
+            color: context.hc.primary,
           ),
           label: Text(
             path == null ? 'Attach receipt' : 'Replace receipt',
-            style: textTheme.labelLarge?.copyWith(color: context.cb.primary),
+            style: textTheme.labelLarge?.copyWith(color: context.hc.primary),
           ),
           style: OutlinedButton.styleFrom(
-            side: BorderSide(color: context.cb.primary),
+            side: BorderSide(color: context.hc.primary),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
         ),
@@ -1008,17 +1008,17 @@ class _ReceiptRowState extends State<_ReceiptRow> {
             height: 56,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: context.cb.surfaceWarm,
+              color: context.hc.surfaceWarm,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: context.cb.primarySoft.withValues(alpha: 0.3),
+                color: context.hc.primarySoft.withValues(alpha: 0.3),
               ),
             ),
             child: hasPhoto
                 ? Image.file(File(path), fit: BoxFit.cover)
                 : Icon(
                     Icons.receipt_long_outlined,
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                   ),
           ),
         ],
@@ -1043,11 +1043,11 @@ class _ChoicePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color border =
-        selected ? context.cb.cta : context.cb.primarySoft;
+        selected ? context.hc.cta : context.hc.primarySoft;
     final Color fill = selected
-        ? context.cb.cta.withValues(alpha: 0.12)
+        ? context.hc.cta.withValues(alpha: 0.12)
         : Colors.transparent;
-    final Color fg = selected ? context.cb.cta : context.cb.text;
+    final Color fg = selected ? context.hc.cta : context.hc.text;
     return Semantics(
       button: true,
       selected: selected,

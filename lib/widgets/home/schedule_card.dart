@@ -146,7 +146,7 @@ class ScheduleCard extends ConsumerWidget {
     );
 
     return Material(
-      color: context.cb.surfaceWarm,
+      color: context.hc.surfaceWarm,
       borderRadius: BorderRadius.circular(_radius),
       child: Padding(
         key: cardKey,
@@ -181,14 +181,14 @@ class _Header extends StatelessWidget {
         Expanded(
           child: Text(
             'Schedule',
-            style: tt.titleLarge?.copyWith(color: context.cb.primary),
+            style: tt.titleLarge?.copyWith(color: context.hc.primary),
           ),
         ),
         TextButton(
           key: ScheduleCard.viewCalendarKey,
           onPressed: onTapCalendar,
           style: TextButton.styleFrom(
-            foregroundColor: context.cb.link,
+            foregroundColor: context.hc.link,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             minimumSize: const Size(0, 32),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -249,13 +249,13 @@ class _Section extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: context.cb.primary.withValues(alpha: 0.14),
+            color: context.hc.primary.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             label,
             style: tt.titleMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -296,7 +296,7 @@ class _MoreRow extends StatelessWidget {
         child: Text(
           '+$count more in Calendar',
           style: tt.bodyMedium?.copyWith(
-            color: context.cb.link,
+            color: context.hc.link,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -317,14 +317,14 @@ class _GroupedRow extends StatelessWidget {
     final bool past = model.start.isBefore(now);
     final String time = formatClock12h(model.start);
     final Color baseText = past
-        ? context.cb.text.withValues(alpha: 0.55)
-        : context.cb.text;
+        ? context.hc.text.withValues(alpha: 0.55)
+        : context.hc.text;
     final Color labelColor = past
-        ? context.cb.primary.withValues(alpha: 0.55)
-        : context.cb.primary;
+        ? context.hc.primary.withValues(alpha: 0.55)
+        : context.hc.primary;
     final Color timeColor = past
-        ? context.cb.primarySoft.withValues(alpha: 0.55)
-        : context.cb.primarySoft;
+        ? context.hc.primarySoft.withValues(alpha: 0.55)
+        : context.hc.primarySoft;
     final String? label = model.windowLabel;
     // Only today's group taps through — the dose log shows TODAY's doses,
     // so a Tomorrow group has no matching destination and stays static
@@ -399,7 +399,7 @@ class _GroupedRow extends StatelessWidget {
                 Icon(
                   Icons.chevron_right,
                   size: 18,
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
             ],
           ),
@@ -451,8 +451,8 @@ class _DoseStatusMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color takenColor = context.cb.success;
-    final Color pendingColor = context.cb.primarySoft;
+    final Color takenColor = context.hc.success;
+    final Color pendingColor = context.hc.primarySoft;
     if (taken) {
       return Icon(
         Icons.check_circle,
@@ -500,11 +500,11 @@ class _Row extends StatelessWidget {
     // every schedule entry reads identically (fb_1781045816196914 /
     // fb_1781099457246946).
     final Color labelColor = past
-        ? context.cb.primary.withValues(alpha: 0.55)
-        : context.cb.primary;
+        ? context.hc.primary.withValues(alpha: 0.55)
+        : context.hc.primary;
     final Color timeColor = past
-        ? context.cb.primarySoft.withValues(alpha: 0.55)
-        : context.cb.primarySoft;
+        ? context.hc.primarySoft.withValues(alpha: 0.55)
+        : context.hc.primarySoft;
 
     // Only items with a real "done" state are checkable — appointments here
     // (doses live in their own grouped rows). The check-off control rides on
@@ -563,7 +563,7 @@ class _Row extends StatelessWidget {
                 Icon(
                   Icons.chevron_right,
                   size: 18,
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
             ],
           ),
@@ -589,7 +589,7 @@ class _DoneCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color c = done ? context.cb.success : context.cb.primarySoft;
+    final Color c = done ? context.hc.success : context.hc.primarySoft;
     return InkResponse(
       onTap: onTap,
       radius: 20,
@@ -651,7 +651,7 @@ class _Block extends StatelessWidget {
       width: width == 0 ? null : width,
       height: height,
       decoration: BoxDecoration(
-        color: context.cb.primary.withValues(alpha: 0.08),
+        color: context.hc.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(radius),
       ),
     );
@@ -670,7 +670,7 @@ class _Message extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Text(
         text,
-        style: tt.bodyLarge?.copyWith(color: context.cb.text),
+        style: tt.bodyLarge?.copyWith(color: context.hc.text),
       ),
     );
   }

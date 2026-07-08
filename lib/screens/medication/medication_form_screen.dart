@@ -446,7 +446,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
           item.medication.name.trim().toLowerCase(),
     };
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         // The PathHeader sits OUTSIDE the hydration `.when()` so the
         // breadcrumb back affordance is present on EVERY branch —
@@ -662,7 +662,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                   Text(
                     'Prescription details (optional)',
                     style: textTheme.titleSmall?.copyWith(
-                      color: context.cb.primary,
+                      color: context.hc.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -817,7 +817,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                             onPressed: _submitting ? null : _submit,
                             style: ElevatedButton.styleFrom(
                               minimumSize: const Size.fromHeight(56),
-                              backgroundColor: context.cb.cta,
+                              backgroundColor: context.hc.cta,
                               foregroundColor: Colors.white,
                             ),
                             child: Text(
@@ -841,7 +841,7 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                             icon: const Icon(Icons.delete_outline),
                             label: const Text('Delete medication'),
                             style: TextButton.styleFrom(
-                              foregroundColor: context.cb.text
+                              foregroundColor: context.hc.text
                                   .withValues(alpha: 0.65),
                               minimumSize: const Size.fromHeight(44),
                             ),
@@ -1080,7 +1080,7 @@ class _AddWindowSheetState extends State<_AddWindowSheet> {
               Text(
                 'Add a time',
                 style: tt.titleLarge?.copyWith(
-                  color: context.cb.primary,
+                  color: context.hc.primary,
                 ),
               ),
               const SizedBox(height: 8),
@@ -1088,14 +1088,14 @@ class _AddWindowSheetState extends State<_AddWindowSheet> {
                 Text(
                   'No other time windows on file. Create a new one below.',
                   style: tt.bodyMedium?.copyWith(
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                   ),
                 )
               else ...<Widget>[
                 Text(
                   'Pick an existing time',
                   style: tt.titleSmall?.copyWith(
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -1122,7 +1122,7 @@ class _AddWindowSheetState extends State<_AddWindowSheet> {
               Text(
                 'Or create a new time window',
                 style: tt.titleSmall?.copyWith(
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
               ),
               const SizedBox(height: 8),
@@ -1155,7 +1155,7 @@ class _AddWindowSheetState extends State<_AddWindowSheet> {
                 icon: const Icon(Icons.add),
                 label: const Text('Pick a time for this time window'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.cb.cta,
+                  backgroundColor: context.hc.cta,
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(48),
                 ),

@@ -25,7 +25,7 @@ class ScanDocumentScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,7 +53,7 @@ class ScanDocumentScreen extends ConsumerWidget {
                       'Take a photo — the AI reads it and you review before '
                       'anything is saved.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: context.cb.primarySoft,
+                            color: context.hc.primarySoft,
                           ),
                     ),
                   ),
@@ -145,7 +145,7 @@ class _ScanOption extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           key: ScanDocumentScreen.optionKey(id),
@@ -155,7 +155,7 @@ class _ScanOption extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             child: Row(
               children: <Widget>[
-                Icon(icon, color: context.cb.primary),
+                Icon(icon, color: context.hc.primary),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -164,7 +164,7 @@ class _ScanOption extends StatelessWidget {
                       Text(
                         title,
                         style: tt.titleMedium?.copyWith(
-                          color: context.cb.primary,
+                          color: context.hc.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -172,13 +172,13 @@ class _ScanOption extends StatelessWidget {
                       Text(
                         subtitle,
                         style: tt.bodyMedium?.copyWith(
-                          color: context.cb.primarySoft,
+                          color: context.hc.primarySoft,
                         ),
                       ),
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right, color: context.cb.primarySoft),
+                Icon(Icons.chevron_right, color: context.hc.primarySoft),
               ],
             ),
           ),

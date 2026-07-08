@@ -30,9 +30,9 @@ class HoldcloseSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final HoldcloseColors cb = context.cb;
+    final HoldcloseColors hc = context.hc;
     final bool enabled = onChanged != null;
-    final Color track = value ? cb.success : cb.error;
+    final Color track = value ? hc.success : hc.error;
 
     return Semantics(
       container: true,

@@ -134,7 +134,7 @@ class MedicationListScreen extends ConsumerWidget {
         ref.watch(medicationListProvider);
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,7 +167,7 @@ class MedicationListScreen extends ConsumerWidget {
                         height: 24,
                       ),
                       visualDensity: VisualDensity.compact,
-                      color: context.cb.primary,
+                      color: context.hc.primary,
                       icon: const Icon(Icons.document_scanner_outlined),
                       onPressed: () => _scanPrescription(context, ref),
                     ),
@@ -181,7 +181,7 @@ class MedicationListScreen extends ConsumerWidget {
                         height: 24,
                       ),
                       visualDensity: VisualDensity.compact,
-                      color: context.cb.primary,
+                      color: context.hc.primary,
                       icon: const Icon(Icons.schedule_outlined),
                       onPressed: () => context.push('/medications/windows'),
                     ),
@@ -209,7 +209,7 @@ class MedicationListScreen extends ConsumerWidget {
           return FloatingActionButton.extended(
             key: MedicationListScreen.fabKey,
             heroTag: 'medications-add-fab',
-            backgroundColor: context.cb.cta,
+            backgroundColor: context.hc.cta,
             foregroundColor: Colors.white,
             onPressed: () => context.push('/medications/new'),
             icon: const Icon(Icons.add),
@@ -281,7 +281,7 @@ class _MedicationCard extends ConsumerWidget {
         child: Container(
           key: MedicationListScreen.tileKey(med.id),
           decoration: BoxDecoration(
-            color: context.cb.surfaceWarm,
+            color: context.hc.surfaceWarm,
             borderRadius: BorderRadius.circular(16),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 8, 16),
@@ -300,7 +300,7 @@ class _MedicationCard extends ConsumerWidget {
                       child: Text(
                         med.name,
                         style: tt.titleLarge?.copyWith(
-                          color: context.cb.primary,
+                          color: context.hc.primary,
                           fontWeight: FontWeight.w700,
                         ),
                         maxLines: 2,
@@ -313,7 +313,7 @@ class _MedicationCard extends ConsumerWidget {
                     key: MedicationListScreen.deleteIconKey(med.id),
                     tooltip: 'Delete medication',
                     icon: const Icon(Icons.delete_outline),
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                     onPressed: () => _confirmAndDelete(context, ref, med),
                   ),
                 ],
@@ -324,7 +324,7 @@ class _MedicationCard extends ConsumerWidget {
                   child: Text(
                     med.dosage,
                     style: tt.bodyLarge?.copyWith(
-                      color: context.cb.text,
+                      color: context.hc.text,
                     ),
                   ),
                 ),
@@ -337,7 +337,7 @@ class _MedicationCard extends ConsumerWidget {
                       ? 'No time window yet — tap to add one.'
                       : windowsLabel,
                   style: tt.bodyMedium?.copyWith(
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                   ),
                 ),
               ),
@@ -365,7 +365,7 @@ class _MedicationCard extends ConsumerWidget {
                           icon: const Icon(Icons.call, size: 18),
                           label: const Text('Call'),
                           style: TextButton.styleFrom(
-                            foregroundColor: context.cb.cta,
+                            foregroundColor: context.hc.cta,
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
@@ -461,7 +461,7 @@ class _SupplyLine extends StatelessWidget {
       if (parts.isEmpty) return const SizedBox.shrink();
       return Text(
         parts.join(' · '),
-        style: tt.bodyMedium?.copyWith(color: context.cb.primarySoft),
+        style: tt.bodyMedium?.copyWith(color: context.hc.primarySoft),
       );
     }
 
@@ -479,13 +479,13 @@ class _SupplyLine extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: context.cb.cta.withValues(alpha: 0.14),
+            color: context.hc.cta.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
             chipText,
             style: tt.labelMedium?.copyWith(
-              color: context.cb.cta,
+              color: context.hc.cta,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -494,7 +494,7 @@ class _SupplyLine extends StatelessWidget {
         Expanded(
           child: Text(
             reason,
-            style: tt.bodyMedium?.copyWith(color: context.cb.text),
+            style: tt.bodyMedium?.copyWith(color: context.hc.text),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -518,13 +518,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.medication_outlined,
             size: 56,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 16),
           Text(
             'No medications yet.',
             style: tt.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -532,7 +532,7 @@ class _EmptyState extends StatelessWidget {
           Text(
             "Add what your loved one takes — name, dosage, and the time "
             "windows it's given in.",
-            style: tt.bodyLarge?.copyWith(color: context.cb.text),
+            style: tt.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
@@ -551,7 +551,7 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),

@@ -31,11 +31,11 @@ class CarePlanRoutinesScreen extends ConsumerWidget {
     final Map<String, int> taskCounts =
         ref.watch(routineTaskCountsProvider).value ?? const <String, int>{};
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       floatingActionButton: FloatingActionButton.extended(
         key: addFabKey,
         heroTag: 'care-plan-routines-add-fab',
-        backgroundColor: context.cb.cta,
+        backgroundColor: context.hc.cta,
         foregroundColor: Colors.white,
         onPressed: () => context.push('/medical/routines/new'),
         icon: const Icon(Icons.add),
@@ -76,7 +76,7 @@ class CarePlanRoutinesScreen extends ConsumerWidget {
                       final MaterialLocalizations loc =
                           MaterialLocalizations.of(context);
                       return Material(
-                        color: context.cb.surfaceWarm,
+                        color: context.hc.surfaceWarm,
                         borderRadius: BorderRadius.circular(12),
                         child: ListTile(
                           key: rowKey(r.id),
@@ -150,7 +150,7 @@ class _EmptyState extends StatelessWidget {
             'evening wind-down, "ask about water at 3 PM". Each one '
             'shows up on the schedule with your other day.',
             style: tt.bodyMedium?.copyWith(
-              color: context.cb.text.withValues(alpha: 0.7),
+              color: context.hc.text.withValues(alpha: 0.7),
             ),
           ),
         ],

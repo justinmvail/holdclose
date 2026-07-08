@@ -205,7 +205,7 @@ class _AppointmentDetailScreenState
 
     return Scaffold(
       key: AppointmentDetailScreen.scaffoldKey,
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,14 +297,14 @@ class _DetailBody extends StatelessWidget {
         Text(
           _formatFullDate(appt.startsAt),
           style: textTheme.headlineLarge?.copyWith(
-            color: context.cb.primary,
+            color: context.hc.primary,
           ),
         ),
         const SizedBox(height: 4),
         Text(
           formatClock12h(appt.startsAt),
           style: textTheme.titleLarge?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
         const SizedBox(height: 16),
@@ -340,7 +340,7 @@ class _DetailBody extends StatelessWidget {
         Text(
           'Agenda',
           style: textTheme.titleLarge?.copyWith(
-            color: context.cb.primary,
+            color: context.hc.primary,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -348,7 +348,7 @@ class _DetailBody extends StatelessWidget {
         Text(
           'Check items off as you cover them.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
         const SizedBox(height: 8),
@@ -361,7 +361,7 @@ class _DetailBody extends StatelessWidget {
         Text(
           'Post-visit notes',
           style: textTheme.titleLarge?.copyWith(
-            color: context.cb.primary,
+            color: context.hc.primary,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -369,7 +369,7 @@ class _DetailBody extends StatelessWidget {
         Text(
           'What did the provider say? Anything to follow up on?',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
         const SizedBox(height: 8),
@@ -392,7 +392,7 @@ class _DetailBody extends StatelessWidget {
               key: AppointmentDetailScreen.saveNotesButtonKey,
               onPressed: onSaveNotes,
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(140, 48),
               ),
@@ -416,7 +416,7 @@ class _DetailBody extends StatelessWidget {
             icon: const Icon(Icons.delete_outline),
             label: const Text('Delete appointment'),
             style: TextButton.styleFrom(
-              foregroundColor: context.cb.text.withValues(alpha: 0.65),
+              foregroundColor: context.hc.text.withValues(alpha: 0.65),
               minimumSize: const Size.fromHeight(44),
             ),
           ),
@@ -445,7 +445,7 @@ class _ProviderCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -457,7 +457,7 @@ class _ProviderCard extends StatelessWidget {
                 child: Text(
                   providerName,
                   style: textTheme.titleLarge?.copyWith(
-                    color: context.cb.primary,
+                    color: context.hc.primary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -470,7 +470,7 @@ class _ProviderCard extends StatelessWidget {
             Text(
               provider!.phone,
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.text,
+                color: context.hc.text,
               ),
             ),
           ],
@@ -479,7 +479,7 @@ class _ProviderCard extends StatelessWidget {
             Text(
               location,
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.primarySoft,
+                color: context.hc.primarySoft,
               ),
             ),
           ],
@@ -510,7 +510,7 @@ class _AgendaList extends StatelessWidget {
         child: Text(
           'No agenda items yet. Add things to ask while you wait.',
           style: textTheme.bodyMedium?.copyWith(
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
         ),
       );
@@ -569,8 +569,8 @@ class _AgendaTile extends StatelessWidget {
                         ? Icons.check_box
                         : Icons.check_box_outline_blank,
                     color: checked
-                        ? context.cb.success
-                        : context.cb.primarySoft,
+                        ? context.hc.success
+                        : context.hc.primarySoft,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -578,11 +578,11 @@ class _AgendaTile extends StatelessWidget {
                   child: Text(
                     label,
                     style: textTheme.bodyLarge?.copyWith(
-                      color: context.cb.text,
+                      color: context.hc.text,
                       decoration: checked
                           ? TextDecoration.lineThrough
                           : TextDecoration.none,
-                      decorationColor: context.cb.primarySoft,
+                      decorationColor: context.hc.primarySoft,
                     ),
                   ),
                 ),
@@ -647,15 +647,15 @@ class _OutlineActionButton extends StatelessWidget {
         label: Text(
           label,
           style: textTheme.labelLarge?.copyWith(
-            color: context.cb.primary,
+            color: context.hc.primary,
           ),
           overflow: TextOverflow.ellipsis,
         ),
         style: OutlinedButton.styleFrom(
-          foregroundColor: context.cb.primary,
+          foregroundColor: context.hc.primary,
           minimumSize: const Size.fromHeight(52),
           side: BorderSide(
-            color: context.cb.primary.withValues(alpha: 0.4),
+            color: context.hc.primary.withValues(alpha: 0.4),
           ),
         ),
       ),
@@ -679,13 +679,13 @@ class _NotFoundView extends StatelessWidget {
             Icon(
               Icons.event_busy,
               size: 48,
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
             ),
             const SizedBox(height: 16),
             Text(
               'This appointment is no longer on file.',
               style: textTheme.headlineMedium?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
               ),
               textAlign: TextAlign.center,
             ),
@@ -727,11 +727,11 @@ String _statusLabel(AppointmentStatus status) {
 Color _statusColor(BuildContext context, AppointmentStatus status) {
   switch (status) {
     case AppointmentStatus.upcoming:
-      return context.cb.cta;
+      return context.hc.cta;
     case AppointmentStatus.completed:
-      return context.cb.success;
+      return context.hc.success;
     case AppointmentStatus.canceled:
-      return context.cb.primarySoft;
+      return context.hc.primarySoft;
   }
 }
 

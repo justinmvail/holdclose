@@ -42,70 +42,70 @@ class MedicalHubScreen extends ConsumerWidget {
           label: 'Scan a document',
           subLabel: 'Rx, appointment, insurance card',
           route: '/scan',
-          chipColor: context.cb.primary,
+          chipColor: context.hc.primary,
         ),
         _MedicalTileSpec(
           icon: Icons.person_search_outlined,
           label: 'Find a provider',
           subLabel: 'search clinicians (NPI)',
           route: '/find-provider',
-          chipColor: context.cb.link,
+          chipColor: context.hc.link,
         ),
         _MedicalTileSpec(
           icon: Icons.summarize_outlined,
           label: 'Care summary',
           subLabel: 'share with a clinician',
           route: '/care-summary',
-          chipColor: context.cb.accentDeep,
+          chipColor: context.hc.accentDeep,
         ),
         _MedicalTileSpec(
           icon: Icons.medication_outlined,
           label: 'Medications',
           subLabel: 'doses & reminders',
           route: '/medications',
-          chipColor: context.cb.primary,
+          chipColor: context.hc.primary,
         ),
         _MedicalTileSpec(
           icon: Icons.schedule_outlined,
           label: 'Schedule',
           subLabel: 'today, tomorrow, this week',
           route: '/team/calendar?from=medical',
-          chipColor: context.cb.cta,
+          chipColor: context.hc.cta,
         ),
         _MedicalTileSpec(
           icon: Icons.event_outlined,
           label: 'Appointments',
           subLabel: 'calendar & visits',
           route: '/appointments',
-          chipColor: context.cb.accentDeep,
+          chipColor: context.hc.accentDeep,
         ),
         _MedicalTileSpec(
           icon: Icons.monitor_heart_outlined,
           label: 'Health Log',
           subLabel: 'symptoms & vitals',
           route: '/medical/health-log',
-          chipColor: context.cb.link,
+          chipColor: context.hc.link,
         ),
         _MedicalTileSpec(
           icon: Icons.assignment_outlined,
           label: 'Routines',
           subLabel: 'scheduled care tasks',
           route: '/medical/routines',
-          chipColor: context.cb.success,
+          chipColor: context.hc.success,
         ),
         _MedicalTileSpec(
           icon: Icons.shield_outlined,
           label: 'Emergency Card',
           subLabel: 'info for first responders',
           route: '/medical/cards/emergency',
-          chipColor: context.cb.cta,
+          chipColor: context.hc.cta,
         ),
         _MedicalTileSpec(
           icon: Icons.book_outlined,
           label: 'Journal',
           subLabel: 'care notes',
           route: '/journal',
-          chipColor: context.cb.text,
+          chipColor: context.hc.text,
         ),
         if (includeCareCircle)
           _MedicalTileSpec(
@@ -113,7 +113,7 @@ class MedicalHubScreen extends ConsumerWidget {
             label: 'Care Circle',
             subLabel: 'helpers, shifts & tasks',
             route: '/team',
-            chipColor: context.cb.accentDeep,
+            chipColor: context.hc.accentDeep,
           ),
       ];
 
@@ -125,7 +125,7 @@ class MedicalHubScreen extends ConsumerWidget {
     final List<_MedicalTileSpec> tiles =
         _tilesFor(context, includeCareCircle: teamOn);
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

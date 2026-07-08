@@ -445,7 +445,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       // The Home tab passes its own [appBarOverride]; the `/chat/:id`
       // thread leaves it null and renders a [PathHeader] inside the body
       // instead (Phase 14.34) — `Chat › <conversation name>`, back to the
@@ -536,7 +536,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 key: ChatScreen.disclaimerKey,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: context.cb.primarySoft,
+                      color: context.hc.primarySoft,
                     ),
               ),
             ),
@@ -610,13 +610,13 @@ class _EmptyHint extends StatelessWidget {
           Icon(
             Icons.chat_bubble_outline,
             size: 48,
-            color: context.cb.primarySoft,
+            color: context.hc.primarySoft,
           ),
           const SizedBox(height: 12),
           Text(
             'Ask anything.',
             style: textTheme.headlineMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -625,7 +625,7 @@ class _EmptyHint extends StatelessWidget {
             "What is sundowning? Why is she accusing me? What can I "
             "say when he asks for his mom?",
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
             ),
             textAlign: TextAlign.center,
           ),
@@ -651,7 +651,7 @@ class _TypingIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextStyle? style = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: context.cb.primarySoft,
+          color: context.hc.primarySoft,
           fontStyle: FontStyle.italic,
         );
     return Semantics(
@@ -666,7 +666,7 @@ class _TypingIndicator extends StatelessWidget {
             child: CircularProgressIndicator(
               strokeWidth: 2,
               valueColor: AlwaysStoppedAnimation<Color>(
-                context.cb.primary,
+                context.hc.primary,
               ),
             ),
           ),
@@ -722,7 +722,7 @@ class _MessageRow extends StatelessWidget {
         onRetry: onRetry,
         onPendingDecision: onPendingDecision,
         textStyle: textTheme.bodyLarge?.copyWith(
-          color: context.cb.primary,
+          color: context.hc.primary,
           height: 1.4,
         ),
       );
@@ -788,7 +788,7 @@ class _UserBubble extends StatelessWidget {
         decoration: BoxDecoration(
           // Subtle navy per spec: full-primary at 92% opacity reads as
           // "navy bubble" without going stark on the warm background.
-          color: context.cb.primary.withValues(alpha: 0.92),
+          color: context.hc.primary.withValues(alpha: 0.92),
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(18),
             topRight: Radius.circular(18),
@@ -871,7 +871,7 @@ class _AssistantBubble extends StatelessWidget {
       child: Container(
         key: ChatScreen.messageBubbleKey(message.id),
         decoration: BoxDecoration(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(18),
             topRight: Radius.circular(18),
@@ -909,7 +909,7 @@ class _AssistantBubble extends StatelessWidget {
                     key: ChatScreen.retryKey,
                     onPressed: onRetry,
                     style: TextButton.styleFrom(
-                      foregroundColor: context.cb.cta,
+                      foregroundColor: context.hc.cta,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 4,
@@ -951,9 +951,9 @@ class _PendingActionCard extends StatelessWidget {
     return Container(
       key: ChatScreen.pendingActionCardKey(citation),
       decoration: BoxDecoration(
-        color: context.cb.background,
+        color: context.hc.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.cb.cta, width: 1.2),
+        border: Border.all(color: context.hc.cta, width: 1.2),
       ),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       child: Column(
@@ -963,13 +963,13 @@ class _PendingActionCard extends StatelessWidget {
           Row(
             children: <Widget>[
               Icon(Icons.warning_amber_rounded,
-                  size: 18, color: context.cb.cta),
+                  size: 18, color: context.hc.cta),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   question,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: context.cb.primary,
+                        color: context.hc.primary,
                         fontWeight: FontWeight.w600,
                       ),
                 ),
@@ -991,7 +991,7 @@ class _PendingActionCard extends StatelessWidget {
               FilledButton(
                 key: ChatScreen.pendingActionConfirmKey(citation),
                 style: FilledButton.styleFrom(
-                  backgroundColor: context.cb.cta,
+                  backgroundColor: context.hc.cta,
                   foregroundColor: Colors.white,
                 ),
                 onPressed: onDecision == null
@@ -1111,10 +1111,10 @@ class _ComposerState extends ConsumerState<_Composer> {
     final bool sending = widget.sending;
     return Container(
       decoration: BoxDecoration(
-        color: context.cb.background,
+        color: context.hc.background,
         border: Border(
           top: BorderSide(
-            color: context.cb.surfaceWarm,
+            color: context.hc.surfaceWarm,
             width: 1,
           ),
         ),
@@ -1126,7 +1126,7 @@ class _ComposerState extends ConsumerState<_Composer> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: context.cb.surfaceWarm,
+                color: context.hc.surfaceWarm,
                 borderRadius: BorderRadius.circular(20),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1137,12 +1137,12 @@ class _ComposerState extends ConsumerState<_Composer> {
                 maxLines: 5,
                 textInputAction: TextInputAction.newline,
                 style: textTheme.bodyLarge?.copyWith(
-                  color: context.cb.text,
+                  color: context.hc.text,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Ask the coach...',
                   hintStyle: textTheme.bodyLarge?.copyWith(
-                    color: context.cb.primarySoft,
+                    color: context.hc.primarySoft,
                   ),
                   border: InputBorder.none,
                   isDense: true,
@@ -1168,7 +1168,7 @@ class _ComposerState extends ConsumerState<_Composer> {
                 ? 'Listening. Speak your message.'
                 : 'Speak your message.',
             child: Material(
-              color: _listening ? context.cb.cta : context.cb.surfaceWarm,
+              color: _listening ? context.hc.cta : context.hc.surfaceWarm,
               shape: const CircleBorder(),
               child: InkWell(
                 key: ChatScreen.composerMicKey,
@@ -1186,7 +1186,7 @@ class _ComposerState extends ConsumerState<_Composer> {
                                 AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      : Icon(Icons.mic, color: context.cb.cta, size: 24),
+                      : Icon(Icons.mic, color: context.hc.cta, size: 24),
                 ),
               ),
             ),
@@ -1198,8 +1198,8 @@ class _ComposerState extends ConsumerState<_Composer> {
             label: 'Send message to the coach.',
             child: Material(
               color: sending
-                  ? context.cb.cta.withValues(alpha: 0.5)
-                  : context.cb.cta,
+                  ? context.hc.cta.withValues(alpha: 0.5)
+                  : context.hc.cta,
               shape: const CircleBorder(),
               child: InkWell(
                 key: ChatScreen.sendButtonKey,

@@ -201,7 +201,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final bool showsDayStrip = _view == CalendarView.day;
 
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       floatingActionButton: _AddAppointmentFab(
         onPressed: () => _openAddForm(context, selected, today),
       ),
@@ -420,13 +420,13 @@ class _ViewSwitcher extends StatelessWidget {
             (Set<WidgetState> states) =>
                 states.contains(WidgetState.selected)
                     ? Colors.white
-                    : context.cb.primary,
+                    : context.hc.primary,
           ),
           backgroundColor: WidgetStateProperty.resolveWith<Color>(
             (Set<WidgetState> states) =>
                 states.contains(WidgetState.selected)
-                    ? context.cb.cta
-                    : context.cb.surfaceWarm,
+                    ? context.hc.cta
+                    : context.hc.surfaceWarm,
           ),
         ),
       ),
@@ -449,7 +449,7 @@ class _AddAppointmentFab extends StatelessWidget {
       key: CalendarScreen.addFabKey,
       heroTag: 'calendar-add-fab',
       onPressed: onPressed,
-      backgroundColor: context.cb.cta,
+      backgroundColor: context.hc.cta,
       foregroundColor: Colors.white,
       icon: const Icon(Icons.add),
       label: const Text('Add appointment'),
@@ -481,7 +481,7 @@ class _WeekNav extends StatelessWidget {
           child: IconButton(
             key: CalendarScreen.prevWeekKey,
             icon: const Icon(Icons.chevron_left),
-            color: context.cb.link,
+            color: context.hc.link,
             onPressed: onPrev,
             tooltip: 'Previous week',
           ),
@@ -492,7 +492,7 @@ class _WeekNav extends StatelessWidget {
             key: CalendarScreen.weekLabelKey,
             textAlign: TextAlign.center,
             style: textTheme.titleLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -503,7 +503,7 @@ class _WeekNav extends StatelessWidget {
           child: IconButton(
             key: CalendarScreen.nextWeekKey,
             icon: const Icon(Icons.chevron_right),
-            color: context.cb.link,
+            color: context.hc.link,
             onPressed: onNext,
             tooltip: 'Next week',
           ),
@@ -568,13 +568,13 @@ class _DayChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final Color fill = isSelected
-        ? context.cb.cta
-        : context.cb.surfaceWarm;
+        ? context.hc.cta
+        : context.hc.surfaceWarm;
     final Color fg = isSelected
         ? Colors.white
-        : (isToday ? context.cb.cta : context.cb.primary);
+        : (isToday ? context.hc.cta : context.hc.primary);
     final BoxBorder? border = (!isSelected && isToday)
-        ? Border.all(color: context.cb.cta, width: 1.5)
+        ? Border.all(color: context.hc.cta, width: 1.5)
         : null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -704,14 +704,14 @@ class _GroupedAgenda extends StatelessWidget {
             Text(
               emptyTitle,
               style: textTheme.titleMedium?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               emptySubtitle,
               style: textTheme.bodyMedium?.copyWith(
-                color: context.cb.text.withValues(alpha: 0.7),
+                color: context.hc.text.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -752,7 +752,7 @@ class _GroupedAgenda extends StatelessWidget {
             child: Text(
               _formatUpcomingHeader(item.day, today),
               style: textTheme.titleMedium?.copyWith(
-                color: context.cb.primary,
+                color: context.hc.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -813,7 +813,7 @@ class _AgendaRow extends StatelessWidget {
       label: semanticLabel,
       child: ExcludeSemantics(
         child: Material(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -838,7 +838,7 @@ class _AgendaRow extends StatelessWidget {
                           Text(
                             startClock,
                             style: textTheme.bodyMedium?.copyWith(
-                              color: context.cb.text,
+                              color: context.hc.text,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -847,7 +847,7 @@ class _AgendaRow extends StatelessWidget {
                             Text(
                               endClock,
                               style: textTheme.bodySmall?.copyWith(
-                                color: context.cb.primarySoft,
+                                color: context.hc.primarySoft,
                               ),
                             ),
                           ],
@@ -868,7 +868,7 @@ class _AgendaRow extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: textTheme.bodyLarge?.copyWith(
-                              color: context.cb.primary,
+                              color: context.hc.primary,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -889,7 +889,7 @@ class _AgendaRow extends StatelessWidget {
                       padding: const EdgeInsets.only(right: 12),
                       child: Icon(
                         Icons.chevron_right,
-                        color: context.cb.primarySoft,
+                        color: context.hc.primarySoft,
                       ),
                     ),
                 ],
@@ -938,7 +938,7 @@ class _DoseWindowRow extends StatelessWidget {
       label: semanticLabel,
       child: ExcludeSemantics(
         child: Material(
-          color: context.cb.surfaceWarm,
+          color: context.hc.surfaceWarm,
           borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -959,7 +959,7 @@ class _DoseWindowRow extends StatelessWidget {
                       child: Text(
                         time,
                         style: textTheme.bodyMedium?.copyWith(
-                          color: context.cb.text,
+                          color: context.hc.text,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -976,7 +976,7 @@ class _DoseWindowRow extends StatelessWidget {
                           Text(
                             header,
                             style: textTheme.bodyLarge?.copyWith(
-                              color: context.cb.primary,
+                              color: context.hc.primary,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -995,12 +995,12 @@ class _DoseWindowRow extends StatelessWidget {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: textTheme.bodyMedium?.copyWith(
-                                        color: context.cb.text,
+                                        color: context.hc.text,
                                         decoration: m.taken
                                             ? TextDecoration.lineThrough
                                             : null,
                                         decorationColor:
-                                            context.cb.text,
+                                            context.hc.text,
                                       ),
                                     ),
                                   ),
@@ -1016,7 +1016,7 @@ class _DoseWindowRow extends StatelessWidget {
                       padding: const EdgeInsets.only(right: 12),
                       child: Icon(
                         Icons.chevron_right,
-                        color: context.cb.primarySoft,
+                        color: context.hc.primarySoft,
                       ),
                     ),
                 ],
@@ -1039,7 +1039,7 @@ class _DoseMark extends StatelessWidget {
     return Icon(
       taken ? Icons.check_circle : Icons.radio_button_unchecked,
       size: 18,
-      color: taken ? context.cb.success : context.cb.primarySoft,
+      color: taken ? context.hc.success : context.hc.primarySoft,
     );
   }
 }
@@ -1061,14 +1061,14 @@ class _EmptyDay extends StatelessWidget {
           Text(
             'Nothing scheduled.',
             style: textTheme.titleMedium?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             _formatLongDate(selected),
             style: textTheme.bodyMedium?.copyWith(
-              color: context.cb.text.withValues(alpha: 0.7),
+              color: context.hc.text.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -1092,22 +1092,22 @@ class _EmptyDay extends StatelessWidget {
 Color _kindColor(BuildContext context, CareEventKind kind) {
   switch (kind) {
     case CareEventKind.appointment:
-      return context.cb.cta;
+      return context.hc.cta;
     case CareEventKind.task:
-      return context.cb.link;
+      return context.hc.link;
     case CareEventKind.shift:
-      return context.cb.success;
+      return context.hc.success;
     case CareEventKind.note:
-      return context.cb.accentDeep;
+      return context.hc.accentDeep;
     case CareEventKind.doseScheduled:
     case CareEventKind.doseLogged:
-      return context.cb.link;
+      return context.hc.link;
     case CareEventKind.healthLogEntry:
-      return context.cb.primary;
+      return context.hc.primary;
     case CareEventKind.journalEntry:
-      return context.cb.accentDeep;
+      return context.hc.accentDeep;
     case CareEventKind.carePlanItem:
-      return context.cb.success;
+      return context.hc.success;
   }
 }
 
@@ -1270,10 +1270,10 @@ class _OwnerFilter extends ConsumerWidget {
       key: chipKey(id),
       label: Text(label),
       selected: selected,
-      selectedColor: context.cb.primary,
-      backgroundColor: context.cb.surfaceWarm,
+      selectedColor: context.hc.primary,
+      backgroundColor: context.hc.surfaceWarm,
       labelStyle: TextStyle(
-        color: selected ? Colors.white : context.cb.text,
+        color: selected ? Colors.white : context.hc.text,
         fontWeight: FontWeight.w600,
       ),
       onSelected: (_) => onChanged(id),

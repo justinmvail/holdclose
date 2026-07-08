@@ -5,7 +5,7 @@ import '../models/journal_entry.dart';
 /// Severity rung for a [PatternAlert] (BUILD_SPEC.md §5.5 + §7.6).
 ///
 /// Drives the alert card's color treatment: [info] uses the brand's soft
-/// navy; [warning] uses `context.cb.accentDeep` so the "3+ falls this
+/// navy; [warning] uses `context.hc.accentDeep` so the "3+ falls this
 /// week" rule lands with the visual weight the spec calls for.
 enum PatternSeverity { info, warning }
 

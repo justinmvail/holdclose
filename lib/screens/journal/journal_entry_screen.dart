@@ -131,7 +131,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
           TextButton(
             key: JournalEntryScreen.deleteConfirmKey,
             style: TextButton.styleFrom(
-              foregroundColor: context.cb.error,
+              foregroundColor: context.hc.error,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Delete'),
@@ -157,7 +157,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
 
     return entryAsync.when(
       loading: () => Scaffold(
-        backgroundColor: context.cb.background,
+        backgroundColor: context.hc.background,
         body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -168,7 +168,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
         ),
       ),
       error: (Object error, StackTrace _) => Scaffold(
-        backgroundColor: context.cb.background,
+        backgroundColor: context.hc.background,
         body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -189,7 +189,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
       data: (JournalEntry? entry) {
         if (entry == null) {
           return Scaffold(
-            backgroundColor: context.cb.background,
+            backgroundColor: context.hc.background,
             body: SafeArea(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -218,13 +218,13 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
   Widget _buildContent(BuildContext context, JournalEntry entry) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: context.cb.background,
+      backgroundColor: context.hc.background,
       appBar: AppBar(
         // The title + labeled Back control live in the body PathHeader;
         // this bar only hosts the kebab action (and suppresses the auto
         // back-arrow).
         automaticallyImplyLeading: false,
-        backgroundColor: context.cb.background,
+        backgroundColor: context.hc.background,
         elevation: 0,
         actions: <Widget>[
           PopupMenuButton<String>(
@@ -242,12 +242,12 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
                   children: <Widget>[
                     Icon(
                       Icons.delete_outline,
-                      color: context.cb.error,
+                      color: context.hc.error,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'Delete',
-                      style: TextStyle(color: context.cb.error),
+                      style: TextStyle(color: context.hc.error),
                     ),
                   ],
                 ),
@@ -289,12 +289,12 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
               minLines: 3,
               maxLines: 6,
               style: textTheme.bodyLarge?.copyWith(
-                color: context.cb.text,
+                color: context.hc.text,
               ),
               decoration: InputDecoration(
                 hintText: 'What happened? What helped?',
                 filled: true,
-                fillColor: context.cb.surfaceWarm,
+                fillColor: context.hc.surfaceWarm,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -319,7 +319,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
             ElevatedButton(
               key: JournalEntryScreen.saveButtonKey,
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.cb.cta,
+                backgroundColor: context.hc.cta,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -377,7 +377,7 @@ class _SectionHeader extends StatelessWidget {
     return Text(
       label,
       style: textTheme.titleLarge?.copyWith(
-        color: context.cb.primary,
+        color: context.hc.primary,
       ),
     );
   }
@@ -398,14 +398,14 @@ class _ReadOnlyBlock extends StatelessWidget {
       key: blockKey,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: context.cb.surfaceWarm,
+        color: context.hc.surfaceWarm,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.all(16),
       child: Text(
         text,
         style: textTheme.bodyLarge?.copyWith(
-          color: context.cb.text,
+          color: context.hc.text,
         ),
       ),
     );
@@ -436,22 +436,22 @@ class _VoiceNoteRow extends StatelessWidget {
           icon: Icon(
             recording ? Icons.stop_circle_outlined : Icons.mic_none,
             color: recording
-                ? context.cb.accentDeep
-                : context.cb.primary,
+                ? context.hc.accentDeep
+                : context.hc.primary,
           ),
           label: Text(
             recording ? 'Stop recording' : 'Record voice note',
             style: textTheme.labelLarge?.copyWith(
               color: recording
-                  ? context.cb.accentDeep
-                  : context.cb.primary,
+                  ? context.hc.accentDeep
+                  : context.hc.primary,
             ),
           ),
           style: OutlinedButton.styleFrom(
             side: BorderSide(
               color: recording
-                  ? context.cb.accentDeep
-                  : context.cb.primary,
+                  ? context.hc.accentDeep
+                  : context.hc.primary,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
@@ -460,7 +460,7 @@ class _VoiceNoteRow extends StatelessWidget {
           const SizedBox(width: 12),
           IconButton(
             key: JournalEntryScreen.playVoiceButtonKey,
-            icon: Icon(Icons.play_arrow, color: context.cb.cta),
+            icon: Icon(Icons.play_arrow, color: context.hc.cta),
             tooltip: 'Play voice note',
             onPressed: onPlay,
           ),
@@ -471,7 +471,7 @@ class _VoiceNoteRow extends StatelessWidget {
               child: Text(
                 '🔊 attached',
                 style: textTheme.bodyMedium?.copyWith(
-                  color: context.cb.primarySoft,
+                  color: context.hc.primarySoft,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -500,16 +500,16 @@ class _PhotoRow extends StatelessWidget {
           onPressed: onPick,
           icon: Icon(
             Icons.photo_camera_outlined,
-            color: context.cb.primary,
+            color: context.hc.primary,
           ),
           label: Text(
             path == null ? 'Attach photo' : 'Replace photo',
             style: textTheme.labelLarge?.copyWith(
-              color: context.cb.primary,
+              color: context.hc.primary,
             ),
           ),
           style: OutlinedButton.styleFrom(
-            side: BorderSide(color: context.cb.primary),
+            side: BorderSide(color: context.hc.primary),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
         ),
@@ -520,15 +520,15 @@ class _PhotoRow extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: context.cb.surfaceWarm,
+              color: context.hc.surfaceWarm,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: context.cb.primarySoft.withValues(alpha: 0.3),
+                color: context.hc.primarySoft.withValues(alpha: 0.3),
               ),
             ),
             child: Icon(
               Icons.image_outlined,
-              color: context.cb.primarySoft,
+              color: context.hc.primarySoft,
             ),
           ),
         ],
