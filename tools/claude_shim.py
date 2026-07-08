@@ -2,12 +2,12 @@
 """Local HTTP shim that wraps `claude --print` for the Careblazers
 dev-mode LLM provider.
 
-Listens on http://localhost:8765/generate. Accepts POST JSON of shape:
-  {"system": "...", "user": "..."}
-Returns Server-Sent Events (SSE) streaming the model's response.
+Listens on http://127.0.0.1:8765 (SHIM_HOST/SHIM_PORT to change).
+Routes: /generate (POST {"system","user"} -> SSE stream), /extract
+(image+text scan), /feedback (tester bug reports), /phonemize (TTS).
 
 Usage:
-  python3 tools/claude_shim.py
+  python3 tools/claude_shim.py        # see tools/README.md for env vars
 """
 
 import base64
@@ -570,10 +570,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    print(f"[shim] Careblazers LLM shim listening on http://{HOST}:{PORT}")
-    print(f"[shim] Uses local `{CLAUDE_CMD}` binary (your Claude Max subscription).")
+    # flush=True: under output redirection (log files) these otherwise sit
+    # in the block buffer forever and the log never confirms startup.
+    print(f"[shim] Careblazers LLM shim listening on http://{HOST}:{PORT}", flush=True)
+    print(f"[shim] Uses local `{CLAUDE_CMD}` binary (your Claude Max subscription).", flush=True)
     if SHIM_TOKENS:
-        print(f"[shim] Accepting {len(SHIM_TOKENS)} bearer token(s).")
+        print(f"[shim] Accepting {len(SHIM_TOKENS)} bearer token(s).", flush=True)
     if not SHIM_TOKENS:
         # Unconditional — a Tailscale Funnel forwards PUBLIC traffic to
         # 127.0.0.1, so "bound locally" is NOT "reachable locally only".
