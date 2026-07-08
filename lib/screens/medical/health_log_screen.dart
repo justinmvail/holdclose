@@ -418,8 +418,8 @@ String _relativeTime(DateTime at, DateTime now) {
 
 /// One-line summary the row shows for [entry], keyed off its kind
 /// (TASKS.md Phase 14.17):
-///   - vitals  → "BP 130/82 · HR 76 · 98.6°F · 110 mg/dL" (only the
-///     fields present)
+///   - vitals  → "BP 130/82 · HR 76 · 98.6°F · 110 mg/dL · 152 lb"
+///     (only the fields present)
 ///   - symptom → "Headache · 3/5" (note text + severity when set)
 ///   - note    → the first 60 characters of the note text
 String _summaryFor(HealthLogEntry entry) {
@@ -431,10 +431,13 @@ String _summaryFor(HealthLogEntry entry) {
       }
       if (entry.heartRate != null) parts.add('HR ${entry.heartRate}');
       if (entry.temperatureF != null) {
-        parts.add('${_formatTemp(entry.temperatureF!)}°F');
+        parts.add('${_formatReading(entry.temperatureF!)}°F');
       }
       if (entry.glucoseMgDl != null) {
         parts.add('${entry.glucoseMgDl} mg/dL');
+      }
+      if (entry.weightLbs != null) {
+        parts.add('${_formatReading(entry.weightLbs!)} lb');
       }
       if (parts.isNotEmpty) return parts.join(' · ');
       final String notes = entry.notes?.trim() ?? '';
@@ -451,9 +454,9 @@ String _summaryFor(HealthLogEntry entry) {
   }
 }
 
-/// Drop a trailing `.0` so a whole-degree temperature reads "99°F" not
-/// "99.0°F", but keep "98.6°F" intact.
-String _formatTemp(double t) {
+/// Drop a trailing `.0` so a whole-number reading reads "99°F" / "152 lb"
+/// not "99.0°F" / "152.0 lb", but keep "98.6°F" / "152.5 lb" intact.
+String _formatReading(double t) {
   if (t == t.roundToDouble()) return t.toStringAsFixed(0);
   return t.toStringAsFixed(1);
 }

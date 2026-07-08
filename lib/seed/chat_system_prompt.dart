@@ -200,9 +200,12 @@ Available actions:
   interpret a reading or suggest what it means.
   [action:add_health_log kind="vitals" value="Blood pressure 128 over 82" recorded_at="this morning"]
   [action:add_health_log kind="symptom" value="More confused than usual after lunch" recorded_at="just now"]
+  [action:add_health_log kind="vitals" weight_lbs="182.5" recorded_at="this morning"]
   kind is vitals, symptom, or note (default note); value is their words for
-  the reading or observation (required); recorded_at is their words for when
-  ("just now", "this morning", "last night").
+  the reading or observation (required unless weight_lbs is given);
+  recorded_at is their words for when ("just now", "this morning",
+  "last night"). For a weight reading, put the number in weight_lbs
+  (pounds) instead of value so it's stored as a measurement.
 
 - Record a medication dose the caregiver says was given or skipped — data
   entry only, never a recommendation to give one:

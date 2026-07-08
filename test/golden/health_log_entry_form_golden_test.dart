@@ -26,6 +26,7 @@ Future<HealthLogRepository> _repoWithEdit() async {
     diastolic: 80,
     heartRate: 72,
     temperatureF: 98.4,
+    weightLbs: 152.5,
     notes: 'Resting, before breakfast.',
   ));
   return repo;

@@ -23,6 +23,7 @@ HealthLogEntry _entry({
   int? heartRate,
   double? temperatureF,
   int? glucoseMgDl,
+  double? weightLbs,
   String? notes,
 }) =>
     HealthLogEntry(
@@ -36,6 +37,7 @@ HealthLogEntry _entry({
       heartRate: heartRate,
       temperatureF: temperatureF,
       glucoseMgDl: glucoseMgDl,
+      weightLbs: weightLbs,
       notes: notes,
     );
 
@@ -188,6 +190,22 @@ void main() {
     await _pumpScreen(tester, repo: repo);
 
     expect(find.text('HR 72 · 110 mg/dL'), findsOneWidget);
+  });
+
+  testWidgets('a vitals row summary includes the weight reading',
+      (WidgetTester tester) async {
+    await repo.upsert(_entry(
+      id: 'w1',
+      kind: HealthLogKind.vitals,
+      recordedAt: DateTime(2026, 6, 1, 8),
+      heartRate: 72,
+      weightLbs: 152,
+    ));
+
+    await _pumpScreen(tester, repo: repo);
+
+    // A whole-number weight renders without the trailing ".0".
+    expect(find.text('HR 72 · 152 lb'), findsOneWidget);
   });
 
   testWidgets('tapping a row opens the edit form for that entry',

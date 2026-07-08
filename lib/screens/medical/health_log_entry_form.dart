@@ -111,6 +111,7 @@ class HealthLogEntryForm extends ConsumerStatefulWidget {
   static const Key heartRateFieldKey = Key('health-log-form-heart-rate');
   static const Key temperatureFieldKey = Key('health-log-form-temperature');
   static const Key glucoseFieldKey = Key('health-log-form-glucose');
+  static const Key weightFieldKey = Key('health-log-form-weight');
   static const Key notesFieldKey = Key('health-log-form-notes');
   static const Key saveButtonKey = Key('health-log-form-save');
   static const Key deleteButtonKey = Key('health-log-form-delete');
@@ -136,6 +137,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
   final TextEditingController _heartRate = TextEditingController();
   final TextEditingController _temperature = TextEditingController();
   final TextEditingController _glucose = TextEditingController();
+  final TextEditingController _weight = TextEditingController();
   final TextEditingController _notes = TextEditingController();
 
   HealthLogKind _kind = HealthLogKind.vitals;
@@ -162,6 +164,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
     _heartRate.dispose();
     _temperature.dispose();
     _glucose.dispose();
+    _weight.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -182,6 +185,9 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
         ? ''
         : _trimDouble(entry.temperatureF!);
     _glucose.text = entry.glucoseMgDl?.toString() ?? '';
+    _weight.text = entry.weightLbs == null
+        ? ''
+        : _trimDouble(entry.weightLbs!);
     _notes.text = entry.notes ?? '';
   }
 
@@ -243,6 +249,7 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
       heartRate: isVitals ? _parsedInt(_heartRate) : null,
       temperatureF: isVitals ? _parsedDouble(_temperature) : null,
       glucoseMgDl: isVitals ? _parsedInt(_glucose) : null,
+      weightLbs: isVitals ? _parsedDouble(_weight) : null,
       notes: notes.isEmpty ? null : notes,
     );
 
@@ -268,16 +275,20 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
     final int? hr = _parsedInt(_heartRate);
     final double? temp = _parsedDouble(_temperature);
     final int? glucose = _parsedInt(_glucose);
+    final double? weight = _parsedDouble(_weight);
     final bool hasBpOne = sys != null || dia != null;
     final bool hasBpBoth = sys != null && dia != null;
     if (hasBpOne && !hasBpBoth) {
       return 'Enter both the top and bottom blood-pressure numbers.';
     }
-    final bool hasAnyReading =
-        hasBpBoth || hr != null || temp != null || glucose != null;
+    final bool hasAnyReading = hasBpBoth ||
+        hr != null ||
+        temp != null ||
+        glucose != null ||
+        weight != null;
     if (!hasAnyReading) {
       return 'Add at least one reading — blood pressure, heart rate, '
-          'temperature, or blood glucose.';
+          'temperature, blood glucose, or weight.';
     }
     return null;
   }
@@ -558,6 +569,28 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
           decoration: const InputDecoration(hintText: 'e.g. 110'),
           validator: (String? v) =>
               _intRangeValidator(v, min: 20, max: 600, noun: 'blood glucose'),
+        ),
+        const SizedBox(height: 16),
+        const _FieldLabel(label: 'Weight (lb)'),
+        const SizedBox(height: 8),
+        TextFormField(
+          key: HealthLogEntryForm.weightFieldKey,
+          controller: _weight,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: <TextInputFormatter>[
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+          ],
+          decoration: const InputDecoration(hintText: 'e.g. 152'),
+          validator: (String? v) {
+            final String t = (v ?? '').trim();
+            if (t.isEmpty) return null;
+            final double? parsed = double.tryParse(t);
+            if (parsed == null) return 'Enter a number like 152.5.';
+            if (parsed < 20 || parsed > 700) {
+              return 'Enter a weight between 20 and 700 lb.';
+            }
+            return null;
+          },
         ),
       ],
     );

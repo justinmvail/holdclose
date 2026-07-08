@@ -16,6 +16,7 @@ HealthLogEntry _entry({
   int? diastolic,
   int? heartRate,
   double? temperatureF,
+  double? weightLbs,
   String? notes,
 }) =>
     HealthLogEntry(
@@ -28,6 +29,7 @@ HealthLogEntry _entry({
       diastolic: diastolic,
       heartRate: heartRate,
       temperatureF: temperatureF,
+      weightLbs: weightLbs,
       notes: notes,
     );
 
@@ -58,11 +60,16 @@ void main() {
         diastolic: 82,
         heartRate: 74,
         temperatureF: 98.6,
+        weightLbs: 152.5,
         notes: 'Resting',
       );
       await repo.upsert(e);
 
-      expect(await repo.getById('hl-1'), equals(e));
+      final HealthLogEntry? restored = await repo.getById('hl-1');
+      expect(restored, equals(e));
+      // The structured weight survives the payload round-trip
+      // (fb_1781115352788931).
+      expect(restored!.weightLbs, 152.5);
     });
 
     test('getById returns null for an unknown id', () async {

@@ -320,9 +320,10 @@ String formatChatContext(ChatContextData data) {
 }
 
 /// One health-log entry rendered for the snapshot — its date, kind, every
-/// structured reading present (BP / HR / temp / glucose / severity), and any
-/// note. So "vitals: Weight…" style rows the UI shows are no longer dropped
-/// just because they had no free-text note (fb_1781115653912208).
+/// structured reading present (BP / HR / temp / glucose / weight /
+/// severity), and any note. So "vitals: Weight…" style rows the UI shows
+/// are no longer dropped just because they had no free-text note
+/// (fb_1781115653912208).
 String _describeHealthEntry(HealthLogEntry e) {
   final List<String> parts = <String>[];
   if (e.systolic != null && e.diastolic != null) {
@@ -331,6 +332,7 @@ String _describeHealthEntry(HealthLogEntry e) {
   if (e.heartRate != null) parts.add('HR ${e.heartRate}');
   if (e.temperatureF != null) parts.add('temp ${e.temperatureF}°F');
   if (e.glucoseMgDl != null) parts.add('glucose ${e.glucoseMgDl} mg/dL');
+  if (e.weightLbs != null) parts.add('weight ${e.weightLbs} lb');
   if (e.severity != null) parts.add('severity ${e.severity}/5');
   final String note = (e.notes ?? '').trim();
   if (note.isNotEmpty) parts.add(note);

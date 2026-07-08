@@ -472,6 +472,40 @@ void main() {
       await actions['add_health_log']!(<String, String>{'kind': 'symptom'});
       expect(await healthLogRepo.listAll(), isEmpty);
     });
+
+    test('stores a weight_lbs reading as a structured vitals field',
+        () async {
+      await actions['add_health_log']!(<String, String>{
+        'kind': 'vitals',
+        'weight_lbs': '182.5',
+        'recorded_at': 'this morning',
+      });
+      final HealthLogEntry e = (await healthLogRepo.listAll()).single;
+      expect(e.kind, HealthLogKind.vitals);
+      expect(e.weightLbs, 182.5);
+      // The reading is structured, not a notes dump (fb_1781115352788931).
+      expect(e.notes, isNull);
+    });
+
+    test('keeps both the weight and the free-text value when given both',
+        () async {
+      await actions['add_health_log']!(<String, String>{
+        'kind': 'vitals',
+        'weight_lbs': '182.5',
+        'value': 'Weighed after breakfast',
+      });
+      final HealthLogEntry e = (await healthLogRepo.listAll()).single;
+      expect(e.weightLbs, 182.5);
+      expect(e.notes, 'Weighed after breakfast');
+    });
+
+    test('is a no-op for a garbage weight_lbs with no value', () async {
+      await actions['add_health_log']!(<String, String>{
+        'kind': 'vitals',
+        'weight_lbs': 'a lot',
+      });
+      expect(await healthLogRepo.listAll(), isEmpty);
+    });
   });
 
   group('log_dose', () {

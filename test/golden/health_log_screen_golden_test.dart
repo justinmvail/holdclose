@@ -28,6 +28,7 @@ Future<HealthLogRepository> _populatedRepo() async {
     int? diastolic,
     int? heartRate,
     double? temperatureF,
+    double? weightLbs,
     String? notes,
   }) =>
       HealthLogEntry(
@@ -40,6 +41,7 @@ Future<HealthLogRepository> _populatedRepo() async {
         diastolic: diastolic,
         heartRate: heartRate,
         temperatureF: temperatureF,
+        weightLbs: weightLbs,
         notes: notes,
       );
 
@@ -51,6 +53,7 @@ Future<HealthLogRepository> _populatedRepo() async {
     diastolic: 82,
     heartRate: 76,
     temperatureF: 98.6,
+    weightLbs: 152,
   ));
   await repo.upsert(e(
     id: 's1',

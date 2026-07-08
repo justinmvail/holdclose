@@ -31,7 +31,7 @@ enum HealthLogKind {
 ///
 /// Every measurement field is nullable so each [kind] only fills what it
 /// needs: a [HealthLogKind.vitals] row carries [systolic] / [diastolic]
-/// / [heartRate] / [temperatureF] / [glucoseMgDl]; a
+/// / [heartRate] / [temperatureF] / [glucoseMgDl] / [weightLbs]; a
 /// [HealthLogKind.symptom] row carries
 /// [severity] (1–5) + [notes]; a [HealthLogKind.note] row carries just
 /// [notes]. The model does not enforce which fields go with which kind —
@@ -67,6 +67,9 @@ abstract class HealthLogEntry with _$HealthLogEntry {
 
     /// Blood glucose (mg/dL). Null when not measured.
     int? glucoseMgDl,
+
+    /// Body weight in pounds. Null when not measured.
+    double? weightLbs,
 
     /// Free-text observation. The whole payload for a [HealthLogKind.note]
     /// row; an optional annotation on vitals + symptom rows.

@@ -526,6 +526,7 @@ class DemoDatasetSeeder {
           temperatureF:
               n % 6 == 0 ? 97.4 + _rng.nextInt(22) / 10.0 : null,
           glucoseMgDl: n % 9 == 0 ? _between(92, 134) : null,
+          weightLbs: n % 6 == 3 ? 140.0 + _rng.nextInt(8) : null,
           notes: n % 6 == 0 ? 'Took readings after breakfast.' : null,
         ));
       } else if (kindRoll == 1) {

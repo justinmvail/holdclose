@@ -677,7 +677,13 @@ Future<ChatActionOutcome?> _addHealthLog(
   // The caregiver's words for the reading / observation. Accept either
   // `value` or `note` so the coach can phrase it naturally.
   final String? text = _clean(args['value']) ?? _clean(args['note']);
-  if (text == null) return null;
+  // A weight reading is structured (fb_1781115352788931) — parse it to a
+  // number so it doesn't get dumped into the notes; garbage / non-positive
+  // values fall back to null rather than persisting nonsense.
+  final double? parsedWeight = double.tryParse(_clean(args['weight_lbs']) ?? '');
+  final double? weightLbs =
+      (parsedWeight != null && parsedWeight > 0) ? parsedWeight : null;
+  if (text == null && weightLbs == null) return null;
   final String? patientId = await _patientId(ref);
   if (patientId == null) return null;
   // recorded_at reuses the journal's tolerant relative-time parsing so the
@@ -688,7 +694,12 @@ Future<ChatActionOutcome?> _addHealthLog(
     id: _mintId('health', clock),
     patientId: patientId,
     recordedAt: recordedAt,
-    kind: _parseHealthLogKind(args['kind']),
+    // A structured weight is a vitals measurement whatever the coach called
+    // the entry; otherwise honour the stated kind.
+    kind: weightLbs != null
+        ? HealthLogKind.vitals
+        : _parseHealthLogKind(args['kind']),
+    weightLbs: weightLbs,
     notes: text,
   );
   await ref.read(healthLogProvider.notifier).add(entry);

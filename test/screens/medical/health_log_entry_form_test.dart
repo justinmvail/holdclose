@@ -29,6 +29,7 @@ HealthLogEntry _entry({
   int? heartRate,
   double? temperatureF,
   int? glucoseMgDl,
+  double? weightLbs,
   String? notes,
 }) =>
     HealthLogEntry(
@@ -42,6 +43,7 @@ HealthLogEntry _entry({
       heartRate: heartRate,
       temperatureF: temperatureF,
       glucoseMgDl: glucoseMgDl,
+      weightLbs: weightLbs,
       notes: notes,
     );
 
@@ -132,6 +134,7 @@ void main() {
       expect(
           find.byKey(HealthLogEntryForm.temperatureFieldKey), findsOneWidget);
       expect(find.byKey(HealthLogEntryForm.glucoseFieldKey), findsOneWidget);
+      expect(find.byKey(HealthLogEntryForm.weightFieldKey), findsOneWidget);
       expect(find.byKey(HealthLogEntryForm.severitySectionKey), findsNothing);
       // Notes is always present.
       expect(find.byKey(HealthLogEntryForm.notesFieldKey), findsOneWidget);
@@ -295,6 +298,51 @@ void main() {
       await _pumpForm(tester, repo: repo, editEntryId: 'hl-g');
 
       expect(find.text('145'), findsOneWidget);
+    });
+
+    testWidgets('a weight-only vitals entry persists the reading',
+        (WidgetTester tester) async {
+      await _pumpForm(tester, repo: repo, idFactory: _counterFactory());
+
+      await tester.enterText(
+          find.byKey(HealthLogEntryForm.weightFieldKey), '152.5');
+      await tester.tap(find.byKey(HealthLogEntryForm.saveButtonKey));
+      await tester.pumpAndSettle();
+
+      final HealthLogEntry saved = (await repo.listAll()).single;
+      expect(saved.kind, HealthLogKind.vitals);
+      expect(saved.weightLbs, 152.5);
+      // No other reading was entered.
+      expect(saved.systolic, isNull);
+      expect(saved.glucoseMgDl, isNull);
+      expect(find.text('list-stub'), findsOneWidget);
+    });
+
+    testWidgets('an out-of-range weight value is rejected inline',
+        (WidgetTester tester) async {
+      await _pumpForm(tester, repo: repo);
+
+      await tester.enterText(
+          find.byKey(HealthLogEntryForm.weightFieldKey), '999');
+      await tester.tap(find.byKey(HealthLogEntryForm.saveButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Enter a weight between 20 and 700 lb.'),
+          findsOneWidget);
+      expect(await repo.listAll(), isEmpty);
+    });
+
+    testWidgets('edit path hydrates a stored weight reading',
+        (WidgetTester tester) async {
+      await repo.upsert(_entry(
+        id: 'hl-w',
+        kind: HealthLogKind.vitals,
+        weightLbs: 152.5,
+      ));
+
+      await _pumpForm(tester, repo: repo, editEntryId: 'hl-w');
+
+      expect(find.text('152.5'), findsOneWidget);
     });
 
     testWidgets('saving a symptom entry stores severity + notes',
