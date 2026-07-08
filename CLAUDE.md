@@ -1,4 +1,4 @@
-# Claude Project Context — Holdclose (repo still named `careblazers`)
+# Claude Project Context — Holdclose
 
 This file is loaded by Claude into context at the start of every session
 in this repo.
@@ -9,14 +9,17 @@ in this repo.
 > specific framing is stripped, and `Careblazers*` identifiers + the
 > `careblazers://` scheme + the `pubspec name:` are renamed to Holdclose
 > (`HoldcloseColors`, `context.hc`, `HoldcloseDatabase`, `holdclose://`,
-> `package:holdclose/…`, bundle id `com.holdclose.holdclose`). The on-disk
-> **repo directory is still `careblazers`** (not renamed). A few internal
-> identifiers are **deliberately kept** as `careblazers` and must NOT be
-> "fixed": the `careblazers_user_id` D1 column / JSON wire key, the Android
+> `package:holdclose/…`, bundle id `com.holdclose.holdclose`). The repo
+> directory and GitHub repo were renamed too (2026-07-08): the repo is
+> **`/Users/jvail/IdeaProjects/holdclose`**, remote
+> **`github.com/justinmvail/holdclose`**. A few internal identifiers are
+> **deliberately kept** as `careblazers` and must NOT be "fixed": the
+> `careblazers_user_id` D1 column / JSON wire key, the Android
 > `namespace` + `com.careblazers.careblazers` Kotlin/JNI package + native
-> espeak lib, and dev tooling under `tools/`. **BUILD_SPEC.md and TASKS.md
-> are stale** on the old framing — when they disagree with the code, the
-> code wins.
+> espeak lib, the `com.careblazers.*` LaunchAgent labels + log filenames
+> on the dev Mac, and dev tooling under `tools/`. **BUILD_SPEC.md and
+> TASKS.md are stale** on the old framing — when they disagree with the
+> code, the code wins.
 
 ## What this is
 
@@ -115,7 +118,7 @@ submission.
 inventory rather than trusting an inline tree.)
 
 ```
-careblazers/                # repo DIRECTORY name (pubspec name: is holdclose)
+holdclose/                  # repo root (matches pubspec name:)
   BUILD_SPEC.md             # original contract — superseded in parts by the pivot; see its top banner
   TASKS.md                  # historical autoloop task queue (do not edit)
   CLAUDE.md / README.md
