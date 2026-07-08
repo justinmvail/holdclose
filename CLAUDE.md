@@ -281,9 +281,20 @@ retired). Plus `USE_FAKE_LLM`, `USE_REAL_CAPTURE`, `SHIM_URL`/`SHIM_TOKEN`,
 ### Running the local LLM shim (dev mode)
 
 ```bash
-# Bind to the LAN so a phone can reach it:
-SHIM_HOST=0.0.0.0 SHIM_PORT=8765 python3 tools/claude_shim.py
+# Purely-local dev (binds 127.0.0.1; endpoints open when no token is set):
+python3 tools/claude_shim.py
+# Direct-LAN phone access — always set a token when leaving 127.0.0.1:
+SHIM_HOST=0.0.0.0 SHIM_TOKEN=<secret> python3 tools/claude_shim.py
 ```
+
+Prereqs: the `claude` CLI installed **and logged in** (`claude --version`),
+Python 3.11+; `pip3 install Pillow` for reliable `/extract` (without it
+oversized scan images are silently dropped), `piper-phonemize` only for
+`/phonemize`. Run it from the repo root — `/feedback` reports land in
+`feedback/` relative to the CWD. Full env-var reference:
+`tools/README.md`. ⚠ On the dev Mac the **live tester shim already holds
+:8765** (LaunchAgent `com.careblazers.shim`, Funnel-exposed) — scratch
+instances need `SHIM_PORT=<other>`, and never send test traffic to 8765.
 
 The shim shells out to your local `claude` CLI (zero per-call cost); routes:
 `/generate`, `/extract` (image+text scan), `/feedback`, `/phonemize`. The app
@@ -305,6 +316,11 @@ flutter test integration_test/demo_tour.dart --dart-define=DEMO_MODE=true
 cd backend
 npm test              # vitest suite (D1 via wrangler test harness)
 npx tsc --noEmit      # type-check
+npm run db:migrate:local   # first run + after new migrations (local D1 schema)
+npm run dev           # wrangler dev on 127.0.0.1:8787 (miniflare D1/R2);
+                      # needs .dev.vars — see backend/README.md "Local dev".
+                      # ⚠ Dev Mac: 8787 is the LIVE tester worker — scratch
+                      # runs need --port/--inspector-port/--persist-to.
 npx drizzle-kit generate --name=<change>   # after editing src/db/schema.ts
 # Deploys (operator-run): wrangler deploy + wrangler d1 migrations apply
 ```

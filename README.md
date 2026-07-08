@@ -5,11 +5,11 @@ A Flutter mobile app — iOS + Android — that gives family caregivers an
 full caregiving suite. It works for **any** care situation — aging
 parents, a disabled family member, recovery, dementia — not one diagnosis.
 
-> **Repo note:** the package is still named `careblazers` and the code
-> still carries `Careblazers` / `Dr. Natali` / Behavior-Decoder naming.
-> The app is mid-rebrand to **Holdclose** and is being repositioned — see
-> [`CLAUDE.md`](CLAUDE.md) → **Direction** for the pivot and migration
-> phases. Published under **Juno Code Studio** at **holdclose.care**.
+> **Repo note:** the product began as "Careblazers" and was rebranded to
+> **Holdclose** (pivot completed 2026-06-23; folder + GitHub repo renamed
+> 2026-07-08). A few internal `careblazers` identifiers are deliberately
+> kept — see the top banner of [`CLAUDE.md`](CLAUDE.md) before "fixing"
+> any. Published under **Juno Code Studio** at **holdclose.care**.
 
 ## Features
 
@@ -42,9 +42,9 @@ parents, a disabled family member, recovery, dementia — not one diagnosis.
   crisis-keyword watchdog) plus Learn primers and Support resources as
   in-page segments.
 
-> The original **Behavior Decoder** (a dementia-behavior triage flow) is
-> being removed — alpha users preferred just using the chat. See
-> [`CLAUDE.md`](CLAUDE.md).
+> The original **Behavior Decoder** (a dementia-behavior triage flow) was
+> removed in the 2026-06 pivot — alpha users preferred just using the
+> chat. See [`CLAUDE.md`](CLAUDE.md).
 
 ## What's in this repo
 
@@ -156,9 +156,9 @@ cd backend && npm test                # Worker vitest suite
 
 ## Status
 
-De-branding from "Careblazers" to **Holdclose** and being prepped as a
-standalone product (the original Dr. Natali partnership pitch went
-unanswered). Roadmap: remove the Decoder → re-voice the coach for general
-caregiving → rename to Holdclose → paywall + affiliate attribution →
-Apple/Google **organization** enrollment → store submission. See
-[`CLAUDE.md`](CLAUDE.md) → **Direction**.
+Rebranded from "Careblazers" to **Holdclose** and shipped as a standalone
+product (the original Dr. Natali partnership pitch went unanswered). The
+pivot is complete: decoder removed, coach re-voiced for general
+caregiving, everything renamed. Remaining roadmap: paywall + affiliate
+attribution → Apple/Google **organization** enrollment → store
+submission. See [`CLAUDE.md`](CLAUDE.md) → **Direction**.

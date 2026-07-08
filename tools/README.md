@@ -32,7 +32,7 @@ builds.
 |---|---|
 | **`run_device.sh`** | Build + `flutter run --release` to a device. Env-configured (below). The daily driver. |
 | **`build_ipa.sh`** | Release IPA for the store. Unlike `flutter run`, `flutter build` honours `--build-number`, so this bakes the epoch build number into the artifact's real CFBundleVersion / versionCode. |
-| **`claude_shim.py`** | Local LLM shim — shells out to your `claude` CLI so dev AI calls cost nothing. Run bound to the LAN so a phone can reach it: `SHIM_HOST=0.0.0.0 SHIM_PORT=8765 python3 tools/claude_shim.py`. Routes: `/generate`, `/extract` (image+text scan), `/feedback`, `/phonemize`. |
+| **`claude_shim.py`** | Local LLM shim — shells out to your `claude` CLI so dev AI calls cost nothing. Routes: `/generate`, `/extract` (image+text scan), `/feedback`, `/phonemize`. See **The dev LLM shim** below for prereqs + env vars. |
 | **`seed_demo.sh`** | *(removed)* — now `AUTH=... SEED=1 tools/run_device.sh`. |
 | `regen_tts_samples.sh` | Regenerate bundled-voice sample WAVs (see `docs/TTS_BUNDLED.md`). |
 | `refresh_funnel_cert.sh` | Refresh the Tailscale Funnel cert for the dev backend/shim. |
@@ -59,6 +59,56 @@ automatically — you never set those by hand.
 > and tap the icon). `flutter run` has **no** `--build-number` flag, so
 > `devicectl` always shows the pubspec build (24) on a dev run — the *fresh*
 > build's identity is the in-app **BUILD_STAMP**, not the iOS version label.
+
+---
+
+## The dev LLM shim (`claude_shim.py`)
+
+```bash
+# Purely-local dev (binds 127.0.0.1; endpoints open when no token is set):
+python3 tools/claude_shim.py
+# Direct-LAN phone access — always set a token when leaving 127.0.0.1:
+SHIM_HOST=0.0.0.0 SHIM_TOKEN=<secret> python3 tools/claude_shim.py
+```
+
+**Prereqs:** the `claude` CLI installed **and logged in** (verify:
+`claude --version`), Python 3.11+. Optional pip deps:
+`pip3 install Pillow` — keeps `/extract` scan images under the CLI's
+~200 KB attachment ceiling (without it oversized images are *silently
+dropped* and the model claims it sees no image); `pip3 install
+piper-phonemize` — powers `/phonemize` (returns 501 with an install hint
+when missing). Run the shim from the repo root, or `/feedback` reports
+land somewhere other than the documented `feedback/` queue.
+
+| Env var | Default | Effect |
+|---|---|---|
+| `SHIM_HOST` | `127.0.0.1` | Bind address. `0.0.0.0` for direct-LAN phones — token required then. |
+| `SHIM_PORT` | `8765` | Listen port. A second instance beside the live one needs a different port. |
+| `SHIM_TOKEN` | empty = **open** | Bearer token(s) every request must carry. Comma-separated list = rotation grace window (old + new both accepted while testers update). |
+| `SHIM_GENERATE_TIMEOUT` | `180` | Wall-clock watchdog (s) on each `claude` invocation. |
+| `FEEDBACK_DIR` | `feedback` | Where `/feedback` reports land — **CWD-relative**. |
+
+### Always-on dev backend (operator's Mac)
+
+On the operator's Mac the tester-facing backend runs permanently via three
+user LaunchAgents (`launchctl load -w` / `unload
+~/Library/LaunchAgents/<label>.plist`; `launchctl list | grep careblazers`
+to see them). The labels + log filenames keep the historical
+`careblazers` naming deliberately:
+
+| Label | What it runs | Port → Funnel | Log |
+|---|---|---|---|
+| `com.careblazers.shim` | `claude_shim.py` (`SHIM_TOKEN` lives in the plist) | 127.0.0.1:8765 → public **:443** | `~/Library/Logs/careblazers-shim.log` |
+| `com.careblazers.worker` | `npm run dev` in `backend/` (wrangler dev) | 127.0.0.1:8787 → public **:8443** | `~/Library/Logs/careblazers-worker.log` |
+| `com.careblazers.funnelcert` | `refresh_funnel_cert.sh` every 5 min (funnel cert + self-heal) | — | `~/Library/Logs/careblazers-funnel-cert.*.log` |
+
+Consequences: **never** point scratch/test traffic at 8765 or 8787 on this
+machine (those are live testers' backends — run scratch instances on other
+ports, and give a scratch worker its own `--persist-to` state dir), and
+don't hand-restart the shim/worker expecting them to stay down — launchd's
+`KeepAlive` respawns them. Public URL + failure modes:
+`https://jvails-macbook-pro-2.tailb7b67b.ts.net` (see
+`refresh_funnel_cert.sh` for the cert-lapse DNS failure mode).
 
 ---
 

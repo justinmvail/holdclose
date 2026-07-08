@@ -98,10 +98,15 @@ watchdog on the cron trigger (see below).
 
 ## Local dev
 
+Requires Node ≥ 20. `wrangler` is a local devDependency — `npm install`
+provides it; no global install or `wrangler login` needed to iterate.
+
 ```bash
 cd backend
 npm install
-npm run dev          # wrangler dev — serves on http://127.0.0.1:8787
+cp .dev.vars.example .dev.vars   # local vars — see below
+npm run db:migrate:local         # first run + after pulling new migrations
+npm run dev                      # wrangler dev — serves on http://127.0.0.1:8787
 ```
 
 `wrangler dev` runs the Worker against miniflare's in-process D1/R2
@@ -109,9 +114,25 @@ emulators by default, so no remote Cloudflare resources are required
 to iterate locally. Smoke-check:
 
 ```bash
-curl http://127.0.0.1:8787/health
-# → {"status":"ok"}
+curl http://127.0.0.1:8787/health         # → {"status":"ok"}
+curl http://127.0.0.1:8787/api/v1/posts   # → {"posts":[]} — a 500 here means
+                                          #   you skipped db:migrate:local
 ```
+
+**`.dev.vars`** (gitignored; auto-loaded by `wrangler dev`) supplies the
+local secrets. Without `FORUM_JWT_SECRET`, every JWT-gated route returns
+`500 {"error":"server_misconfigured"}` while `/health` and pre-auth reads
+keep working — which looks alive but isn't. `CEREBRAS_API_KEY` is needed
+only to exercise `POST /api/v1/chat`.
+
+> **Dev-Mac note:** on the operator's Mac the worker already runs on 8787
+> as the `com.careblazers.worker` LaunchAgent (LIVE tester backend,
+> Funnel-exposed on :8443 — see `tools/README.md` → "Always-on dev
+> backend"). Run scratch instances with
+> `npx wrangler dev --port <other> --inspector-port <other> --persist-to <scratch-dir>`
+> (and pass the same `--persist-to` to migrations) so you never bind the
+> live ports or open the live instance's `.wrangler/state` D1. The
+> watchdog dry-run below has the same caveat.
 
 ## Tests
 
@@ -153,6 +174,7 @@ wrangler d1 create holdclose-forum
 wrangler r2 bucket create holdclose-forum-media   # FORUM_MEDIA — avatars + post images
 wrangler r2 bucket create holdclose-doc-blobs     # DOC_BLOBS — caregiver document scans
 wrangler secret put FORUM_JWT_SECRET   # Phase 13.3 — auth middleware
+wrangler secret put CEREBRAS_API_KEY   # /api/v1/chat inference key (chat 500s without it)
 
 # Non-secret vars live in wrangler.toml [vars]; override per environment
 # at deploy time:

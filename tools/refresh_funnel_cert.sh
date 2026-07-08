@@ -8,8 +8,9 @@
 # while the laptop keeps working over the tailnet so nothing looks wrong
 # locally. (See the careblazers memory "test-server-tailscale-funnel".)
 #
-# Run daily by ~/Library/LaunchAgents/com.careblazers.funnelcert.plist.
-# Idempotent: a no-op when the cert is current and the funnel is already on.
+# Run every 5 minutes by ~/Library/LaunchAgents/com.careblazers.funnelcert.plist
+# (StartInterval 300; was daily). Idempotent: a no-op when the cert is
+# current and the funnel is already on.
 
 TS=/Applications/Tailscale.app/Contents/MacOS/Tailscale
 HOST=jvails-macbook-pro-2.tailb7b67b.ts.net
