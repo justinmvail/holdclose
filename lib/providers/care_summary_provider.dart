@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
 import '../models/medication.dart';
 import '../screens/medical/emergency_card_screen.dart'
@@ -12,9 +13,19 @@ import '../services/pdf_exporter.dart';
 /// Gathers the loved one's current picture — conditions/allergies (from the
 /// emergency card), active medications with their schedules, and upcoming
 /// appointments with providers — and renders the shareable care-summary PDF.
-/// Null on any failure. autoDispose so it re-gathers each time it's opened.
+/// Null when no loved one is on file; errors propagate to the caller.
+/// autoDispose so it re-gathers each time it's opened.
 final careSummaryPdfProvider =
     FutureProvider.autoDispose<Uint8List?>((ref) async {
+  // The screen reads this exactly once via `ref.read(...future)` with no
+  // live listener, so autoDispose tears the provider down on the next
+  // event-loop task. On a device the drift queries cross a background DB
+  // isolate (real event-loop turns), and the chain — including
+  // emergencyCardViewProvider's Ref — was being disposed mid-gather
+  // ("Cannot use the Ref ... after it has been disposed"). Hold a
+  // keepAlive link for the duration of the body, then release it so the
+  // one-shot read still re-gathers on the next open.
+  final KeepAliveLink link = ref.keepAlive();
   try {
     final EmergencyCardView view =
         await ref.watch(emergencyCardViewProvider.future);
@@ -60,7 +71,7 @@ final careSummaryPdfProvider =
       appointments: apptsWithProvider,
       caregiverName: patient.primaryCaregiver.name,
     );
-  } catch (_) {
-    return null;
+  } finally {
+    link.close();
   }
 });

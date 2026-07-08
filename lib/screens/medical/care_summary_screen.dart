@@ -31,7 +31,10 @@ class _CareSummaryScreenState extends ConsumerState<CareSummaryScreen> {
     Uint8List? bytes;
     try {
       bytes = await ref.read(careSummaryPdfProvider.future);
-    } catch (_) {
+    } on Object catch (e, st) {
+      // Surface the real failure in the log — a silent catch here hid a
+      // provider-disposed-mid-gather bug behind the generic snackbar.
+      debugPrint('care summary build failed: $e\n$st');
       bytes = null;
     }
     if (!mounted) return;
