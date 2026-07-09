@@ -1,5 +1,7 @@
 # Careblazers — Build Tasks
 
+> **SUPERSEDED — see [`CLAUDE.md`](CLAUDE.md) + [`ROADMAP_TO_PRODUCTION.md`](ROADMAP_TO_PRODUCTION.md).** Historical autoloop queue; kept for reference only. When it disagrees with the code, the code wins.
+
 Argus autoloop reads this file top-to-bottom, one `- [ ]` item per
 iter. Each task is a self-contained PR. Read
 [BUILD_SPEC.md](BUILD_SPEC.md) for the contract — sections referenced

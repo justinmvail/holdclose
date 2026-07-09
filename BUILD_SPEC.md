@@ -1,5 +1,7 @@
 # Careblazers — Build Spec
 
+> **SUPERSEDED — see [`CLAUDE.md`](CLAUDE.md) + [`ROADMAP_TO_PRODUCTION.md`](ROADMAP_TO_PRODUCTION.md).** Historical; kept for reference only. When it disagrees with the code, the code wins.
+
 > ## ⚠️ SUPERSEDED IN PART — read this first (pivot DONE 2026-06-23)
 >
 > This spec describes the **original** product: "Careblazers," a

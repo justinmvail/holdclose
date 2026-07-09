@@ -154,19 +154,19 @@ class _ConnectActions extends ConsumerWidget {
         _ConnectChip(
           key: CareCircleScreen.usernameActionKey,
           icon: Icons.alternate_email,
-          label: 'Set your @username',
+          label: 'Set your username',
           onTap: () => context.push(CareCircleScreen._usernameRoute),
         ),
         _ConnectChip(
           key: CareCircleScreen.showQrActionKey,
           icon: Icons.qr_code_2,
-          label: 'Show my QR',
+          label: 'Show my invite code',
           onTap: () => context.push(CareCircleScreen._qrRoute),
         ),
         _ConnectChip(
           key: CareCircleScreen.scanActionKey,
           icon: Icons.qr_code_scanner,
-          label: 'Scan to add',
+          label: 'Scan a code to add',
           onTap: () => context.push(CareCircleScreen._scanRoute),
         ),
         // Invite by LINK (2026-06-08): mints an invite + shares the
@@ -183,7 +183,7 @@ class _ConnectActions extends ConsumerWidget {
         _ConnectChip(
           key: CareCircleScreen.addByUsernameActionKey,
           icon: Icons.person_search_outlined,
-          label: 'Add by @username',
+          label: 'Add by username',
           onTap: () => _openAddByUsername(context, ref),
         ),
       ],

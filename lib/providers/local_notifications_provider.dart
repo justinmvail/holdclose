@@ -240,8 +240,12 @@ class LocalNotificationsProvider implements NotificationsProvider {
             deepLink: r.payload ?? '',
           ),
       ]);
-    } catch (e) {
-      debugPrint('notifications: pending failed: $e');
+    } catch (e, stack) {
+      // Route through [_reportFailure] like the schedule/cancel paths so a
+      // swallowed read failure is observable on [scheduleFailures] instead
+      // of vanishing into a bare debugPrint. Still returns an empty list —
+      // pending() must never rethrow into the caller's flow.
+      _reportFailure('pending failed', e, stack);
       return const <ScheduledNotification>[];
     }
   }

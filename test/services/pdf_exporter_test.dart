@@ -196,29 +196,6 @@ void main() {
     });
   });
 
-  group('crisisCard', () {
-    test('produces a valid PDF (no throw)', () async {
-      final Uint8List bytes = await exporter().crisisCard(maryHenderson());
-      expect(isPdf(bytes), isTrue);
-    });
-
-    test('a date of birth changes the identity line (byte-length delta)',
-        () async {
-      // Mary's seed carries dateOfBirth 1948-03-04; stripping it falls the
-      // header back to the age-only line, so the rendered bytes differ.
-      final Patient withDob = maryHenderson();
-      final Patient withoutDob = withDob.copyWith(dateOfBirth: null);
-      expect(withDob.dateOfBirth, isNotNull);
-
-      final Uint8List a = await exporter().crisisCard(withDob);
-      final Uint8List b = await exporter().crisisCard(withoutDob);
-      expect(isPdf(a), isTrue);
-      expect(isPdf(b), isTrue);
-      expect(a.length, isNot(b.length),
-          reason: 'DOB + derived age render instead of the age-only line');
-    });
-  });
-
   group('careSummary — cover identity row', () {
     test('a date of birth changes the cover (byte-length delta)', () async {
       final Patient withDob = maryHenderson();

@@ -16,6 +16,7 @@ import 'package:timezone/timezone.dart' as tz;
 class _FakePlugin implements FlutterLocalNotificationsPlugin {
   bool throwOnSchedule = false;
   bool throwOnCancel = false;
+  bool throwOnPending = false;
   final List<int> scheduled = <int>[];
   final List<int> cancelled = <int>[];
   bool cancelAllCalled = false;
@@ -64,6 +65,14 @@ class _FakePlugin implements FlutterLocalNotificationsPlugin {
       throw PlatformException(code: 'error', message: 'boom');
     }
     cancelAllCalled = true;
+  }
+
+  @override
+  Future<List<PendingNotificationRequest>> pendingNotificationRequests() async {
+    if (throwOnPending) {
+      throw PlatformException(code: 'error', message: 'boom');
+    }
+    return <PendingNotificationRequest>[];
   }
 
   @override
@@ -135,6 +144,24 @@ void main() {
 
     final NotificationScheduleFailure failure = await firstFailure;
     expect(failure.message, contains('cancelMany failed'));
+    expect(failure.notificationId, isNull);
+  });
+
+  test('a pending() read failure is surfaced, not swallowed', () async {
+    final _FakePlugin plugin = _FakePlugin()..throwOnPending = true;
+    final LocalNotificationsProvider provider = build(plugin);
+    addTearDown(provider.dispose);
+
+    final Future<NotificationScheduleFailure> firstFailure =
+        provider.scheduleFailures().first;
+
+    // pending() returns an empty list rather than rethrowing, but the
+    // failure is now observable on scheduleFailures like the other paths.
+    final List<ScheduledNotification> rows = await provider.pending();
+    expect(rows, isEmpty);
+
+    final NotificationScheduleFailure failure = await firstFailure;
+    expect(failure.message, contains('pending failed'));
     expect(failure.notificationId, isNull);
   });
 

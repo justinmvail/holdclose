@@ -50,14 +50,13 @@ class DateRange {
 /// * [exportRange] — the multi-page "doctor visit packet" the caregiver
 ///   shares from the journal screen: cover page, behavior summary table,
 ///   chronological entry log, footer disclaimer.
-/// * [crisisCard] — the single-page hospital handoff sheet from the
-///   crisis card screen: every [Patient] field from BUILD_SPEC.md §9.1
-///   on one page with the "Updated" timestamp + medical-advice footer.
+/// * [careSummary] — a concise provider-coordination packet: conditions,
+///   allergies, active medications, and upcoming appointments.
 ///
 /// Both methods return a [Uint8List] so callers can decide what to do
 /// with it (share, save, preview). [sharePdf] is the convenience wrapper
-/// the journal + crisis screens use to drop straight into the OS share
-/// sheet via `printing`.
+/// the journal + care-summary screens use to drop straight into the OS
+/// share sheet via `printing`.
 ///
 /// [compress] is plumbed through to [pw.Document] so tests can build the
 /// PDF with stream compression disabled and assert that a specific
@@ -142,41 +141,6 @@ class PdfExporter {
       ),
     );
 
-    return doc.save();
-  }
-
-  /// Generate the one-page hospital handoff card (BUILD_SPEC.md §5.9 +
-  /// §9.1). The page carries every [Patient] field so paramedics can
-  /// orient from this sheet alone.
-  Future<Uint8List> crisisCard(Patient patient) async {
-    final pw.Document doc = pw.Document(compress: compress);
-    doc.addPage(
-      pw.Page(
-        margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 48),
-        build: (pw.Context ctx) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: <pw.Widget>[
-            _crisisHeader(patient),
-            pw.SizedBox(height: 16),
-            _crisisDiagnosis(patient),
-            pw.SizedBox(height: 14),
-            _crisisMedications(patient),
-            pw.SizedBox(height: 14),
-            _crisisAllergies(patient),
-            pw.SizedBox(height: 14),
-            _crisisBulletGroup('What calms her:', patient.calms),
-            pw.SizedBox(height: 14),
-            _crisisBulletGroup('What escalates her:', patient.escalates),
-            pw.SizedBox(height: 14),
-            _crisisContacts(patient),
-            pw.SizedBox(height: 14),
-            _crisisDirective(patient),
-            pw.Spacer(),
-            _crisisFooter(),
-          ],
-        ),
-      ),
-    );
     return doc.save();
   }
 
@@ -545,94 +509,7 @@ class PdfExporter {
     );
   }
 
-  // ──────────────────── crisis card ────────────────────
-
-  pw.Widget _crisisHeader(Patient patient) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: <pw.Widget>[
-        pw.Text(
-          'Hospital handoff card',
-          style: pw.TextStyle(
-            color: _navy,
-            fontSize: 22,
-            fontWeight: pw.FontWeight.bold,
-          ),
-        ),
-        pw.SizedBox(height: 6),
-        pw.Text(
-          patient.name,
-          style: pw.TextStyle(
-            color: _navy,
-            fontSize: 18,
-            fontWeight: pw.FontWeight.bold,
-          ),
-        ),
-        pw.Text(
-          // DOB, not age, is what an ER handoff needs — fall back to the
-          // stored age only for profiles without a date of birth on file.
-          patient.dateOfBirth == null
-              ? 'Age ${patient.age}'
-              : 'DOB ${_formatDate(patient.dateOfBirth!)} · '
-                  '${patient.ageOn(clock())}',
-          style: pw.TextStyle(color: _bodyText, fontSize: 12),
-        ),
-      ],
-    );
-  }
-
-  pw.Widget _crisisDiagnosis(Patient patient) {
-    return _crisisSection(
-      heading: 'Diagnosis',
-      body: <pw.Widget>[
-        pw.Text(
-          patient.diagnosis,
-          style: pw.TextStyle(color: _bodyText, fontSize: 12),
-        ),
-        pw.SizedBox(height: 2),
-        pw.Text(
-          'Diagnosed ${_formatDate(patient.diagnosedAt)}',
-          style: pw.TextStyle(color: _bodyText, fontSize: 11),
-        ),
-      ],
-    );
-  }
-
-  pw.Widget _crisisMedications(Patient patient) {
-    return _crisisSection(
-      heading: 'Medications',
-      body: <pw.Widget>[
-        if (patient.medications.isEmpty)
-          pw.Text(
-            'None on file.',
-            style: pw.TextStyle(color: _bodyText, fontSize: 11),
-          )
-        else
-          for (final CrisisMedication m in patient.medications)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 2),
-              child: pw.Text(
-                '${m.name} ${m.dose} - ${m.schedule}',
-                style: pw.TextStyle(color: _bodyText, fontSize: 11),
-              ),
-            ),
-      ],
-    );
-  }
-
-  pw.Widget _crisisAllergies(Patient patient) {
-    return _crisisSection(
-      heading: 'Allergies',
-      body: <pw.Widget>[
-        pw.Text(
-          patient.allergies.isEmpty
-              ? 'None on file.'
-              : patient.allergies.join(', '),
-          style: pw.TextStyle(color: _bodyText, fontSize: 11),
-        ),
-      ],
-    );
-  }
+  // ──────────────────── care-summary bullet groups ────────────────────
 
   pw.Widget _crisisBulletGroup(String heading, List<String> items) {
     return _crisisSection(
@@ -656,43 +533,6 @@ class PdfExporter {
     );
   }
 
-  pw.Widget _crisisContacts(Patient patient) {
-    return _crisisSection(
-      heading: 'Contacts',
-      body: <pw.Widget>[
-        pw.Text(
-          'Primary caregiver: ${patient.primaryCaregiver.name} '
-          '- ${patient.primaryCaregiver.phone}',
-          style: pw.TextStyle(color: _bodyText, fontSize: 11),
-        ),
-        pw.SizedBox(height: 2),
-        pw.Text(
-          'Healthcare POA: ${patient.healthcarePOA.name} '
-          '- ${patient.healthcarePOA.phone}',
-          style: pw.TextStyle(color: _bodyText, fontSize: 11),
-        ),
-      ],
-    );
-  }
-
-  pw.Widget _crisisDirective(Patient patient) {
-    final String dnr = patient.advanceDirective.dnr ? 'Yes' : 'No';
-    return _crisisSection(
-      heading: 'Advance directive',
-      body: <pw.Widget>[
-        pw.Text(
-          'On file at: ${patient.advanceDirective.onFileAt}',
-          style: pw.TextStyle(color: _bodyText, fontSize: 11),
-        ),
-        pw.SizedBox(height: 2),
-        pw.Text(
-          'DNR: $dnr',
-          style: pw.TextStyle(color: _bodyText, fontSize: 11),
-        ),
-      ],
-    );
-  }
-
   pw.Widget _crisisSection({
     required String heading,
     required List<pw.Widget> body,
@@ -710,25 +550,6 @@ class PdfExporter {
         ),
         pw.SizedBox(height: 4),
         ...body,
-      ],
-    );
-  }
-
-  pw.Widget _crisisFooter() {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: <pw.Widget>[
-        pw.Divider(color: _rule, height: 8),
-        pw.SizedBox(height: 4),
-        pw.Text(
-          'Updated ${_formatDate(clock())}',
-          style: pw.TextStyle(color: _bodyText, fontSize: 10),
-        ),
-        pw.SizedBox(height: 2),
-        pw.Text(
-          footerDisclaimer,
-          style: pw.TextStyle(color: _bodyText, fontSize: 9),
-        ),
       ],
     );
   }
