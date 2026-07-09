@@ -32,8 +32,10 @@ Future<({InMemoryStorageProvider storage, ProviderContainer container})>
 }) async {
   // Tall surface so the whole settings list builds in one pass (the
   // gating test finds bottom-of-list section keys without scrolling).
-  // Bumped from 2600 when the "Loved ones" section (Issue #6) was added.
-  await tester.binding.setSurfaceSize(const Size(420, 2800));
+  // Bumped from 2600 when the "Loved ones" section (Issue #6) was added,
+  // then again when the "Restore from backup" row (Issue #20) grew the
+  // Your-data section.
+  await tester.binding.setSurfaceSize(const Size(420, 3200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final InMemoryStorageProvider storage = InMemoryStorageProvider();
   if (seeded != null) {

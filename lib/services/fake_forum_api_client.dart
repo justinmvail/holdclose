@@ -527,6 +527,11 @@ class FakeForumApiClient extends ForumApiClient {
     _commentsByPost.remove(postId);
   }
 
+  /// No-op in demo: there's no server account to delete. Resolves success so
+  /// the delete-account flow proceeds to clear local state in demo builds.
+  @override
+  Future<void> deleteMyProfile() async {}
+
   // ---- Comments ----------------------------------------------------------
 
   @override

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart'
+    show MethodChannel, MissingPluginException, PlatformException;
 import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 // `share_plus` re-exports `XFile` (from `cross_file`) so the file-share
@@ -17,6 +19,7 @@ import '../models/care_plan_routine.dart';
 import '../models/care_shift.dart';
 import '../models/care_task.dart';
 import '../models/caregiver.dart';
+import '../models/chat.dart';
 import '../models/document.dart';
 import '../models/expense.dart';
 import '../models/health_log_entry.dart';
@@ -34,6 +37,7 @@ import '../providers/expenses_provider.dart';
 import '../providers/health_log_provider.dart';
 import '../providers/storage_provider.dart';
 import '../services/appointment_repository.dart';
+import '../services/chat_repository.dart';
 import '../services/medication_repository.dart';
 import '../services/provider_repository.dart';
 
@@ -46,7 +50,11 @@ part 'data_exporter.g.dart';
 /// section carry their own forward-compatible `fromJson` (unknown keys are
 /// ignored, new optional fields default), so adding a field to a model
 /// does NOT require a bump — only restructuring the envelope itself does.
-const int dataExportSchemaVersion = 1;
+///
+/// v2 adds the `chatConversations` + `chatMessages` sections. A v1 backup
+/// (no chat sections) still restores cleanly — [importInto] treats a missing
+/// section as empty — so the bump is forward-compatible, not a break.
+const int dataExportSchemaVersion = 2;
 
 /// Outbound file share-sheet handoff for the JSON backup (Issue #20).
 ///
@@ -96,6 +104,61 @@ class RealDataFileSharer implements DataFileSharer {
   }
 }
 
+/// Inbound file pick for "Restore from backup" (Issue #20). The mirror of
+/// [DataFileSharer]: that seam hands a file OUT to the OS; this one lets the
+/// caregiver pick the backup file back IN. Behind an interface so the
+/// Settings widget test overrides the riverpod provider with a canned
+/// [RecordingDataFilePicker] and never fires the platform document picker.
+abstract class DataFilePicker {
+  /// Open the OS document picker filtered to JSON and return the chosen
+  /// file's bytes, or null when the caregiver cancelled (or no picker is
+  /// available on the platform).
+  Future<Uint8List?> pickJsonFile();
+}
+
+/// Production [DataFilePicker] over a MethodChannel to the native document
+/// picker. iOS wires `UIDocumentPickerViewController` in
+/// `ios/Runner/DocumentPickerBridge.swift`; platforms without the channel
+/// (Android, tests) surface a `MissingPluginException`, which we translate
+/// to a null "no file picked" so the restore row degrades gracefully rather
+/// than throwing. Reuses no new package — a plain platform channel.
+class RealDataFilePicker implements DataFilePicker {
+  const RealDataFilePicker();
+
+  static const MethodChannel _channel =
+      MethodChannel('holdclose/document_import');
+
+  @override
+  Future<Uint8List?> pickJsonFile() async {
+    try {
+      return await _channel.invokeMethod<Uint8List>('pickJson');
+    } on MissingPluginException {
+      // No native picker on this platform (e.g. Android, or a test host) —
+      // treat as "nothing picked" so the caller shows a graceful message.
+      return null;
+    } on PlatformException {
+      // A native failure (permissions, read error) is also a no-pick — the
+      // caller tells the caregiver the file couldn't be opened.
+      return null;
+    }
+  }
+}
+
+/// Records the pick call + returns canned [bytes]. Used by the Settings
+/// widget test to drive the restore row without a platform picker.
+class RecordingDataFilePicker implements DataFilePicker {
+  RecordingDataFilePicker({this.bytes});
+
+  final Uint8List? bytes;
+  int calls = 0;
+
+  @override
+  Future<Uint8List?> pickJsonFile() async {
+    calls++;
+    return bytes;
+  }
+}
+
 /// Records every [shareFile] call without firing a platform call. Used by
 /// the Settings widget test to assert the backup row handed the exporter's
 /// bytes + filename to the share seam.
@@ -133,6 +196,7 @@ typedef ExportSources = ({
   CareTasksRepository careTasks,
   CareShiftsRepository careShifts,
   ExpensesRepository expenses,
+  ChatRepository chat,
 });
 
 /// Gathers ALL local data into one machine-readable JSON document and hands
@@ -234,6 +298,16 @@ class DataExporter {
       doseLogs.addAll(await sources.medications.logsFor(m.id));
     }
 
+    // Chat: the conversation list, then each thread's messages unioned. The
+    // grounded coach's history is part of the caregiver's record, so a
+    // backup that omits it isn't a full backup (Issue #20 follow-up).
+    final List<Conversation> conversations =
+        await sources.chat.listConversations();
+    final List<Message> chatMessages = <Message>[];
+    for (final Conversation c in conversations) {
+      chatMessages.addAll(await sources.chat.loadMessages(c.id));
+    }
+
     return <String, dynamic>{
       'schemaVersion': dataExportSchemaVersion,
       'exportedAt': exportedAt.toIso8601String(),
@@ -273,6 +347,10 @@ class DataExporter {
           await careShiftsFuture, (CareShift s) => s.toJson()),
       'expenses':
           _toJsonList<Expense>(await expensesFuture, (Expense e) => e.toJson()),
+      'chatConversations': _toJsonList<Conversation>(
+          conversations, (Conversation c) => c.toJson()),
+      'chatMessages':
+          _toJsonList<Message>(chatMessages, (Message m) => m.toJson()),
       'settings': (await settingsFuture).toJson(),
     };
   }
@@ -424,7 +502,36 @@ class DataExporter {
       written++;
     }
 
+    // ── chat: conversations (parents) → messages ───────────────────────
+    // applyConversation upserts by id preserving the row's own timestamps
+    // (createConversation would reset updatedAt→createdAt, clobbering the
+    // exported activity ordering). Messages FK to their conversation, so the
+    // parent loop MUST land first.
+    for (final Conversation c
+        in _decodeList(doc, 'chatConversations', Conversation.fromJson)) {
+      await sources.chat.applyConversation(c);
+      written++;
+    }
+    for (final Message m
+        in _decodeList(doc, 'chatMessages', Message.fromJson)) {
+      await sources.chat.appendMessage(m);
+      written++;
+    }
+
     return written;
+  }
+
+  /// Decode UTF-8 JSON [bytes] (a previously-exported backup) and restore
+  /// them via [importInto]. Throws [FormatException] when the bytes aren't a
+  /// JSON object — the Settings "Restore from backup" row catches that and
+  /// tells the caregiver the file wasn't a valid Holdclose backup. Returns
+  /// the number of records written across every section.
+  Future<int> importFromBytes(ExportSources sources, Uint8List bytes) async {
+    final Object? decoded = jsonDecode(utf8.decode(bytes));
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Backup file is not a Holdclose backup.');
+    }
+    return importInto(sources, decoded);
   }
 
   /// `holdclose-backup-YYYY-MM-DD.json` from [at]'s calendar date.
@@ -491,6 +598,13 @@ DataExporter dataExporter(Ref ref) => const DataExporter();
 @Riverpod(keepAlive: true)
 DataFileSharer dataFileSharer(Ref ref) => const RealDataFileSharer();
 
+/// Riverpod-wired file picker for "Restore from backup" (Issue #20).
+/// Production gets the native document-picker impl; the Settings widget test
+/// overrides it with [RecordingDataFilePicker] — same seam shape as
+/// [dataFileSharerProvider].
+@Riverpod(keepAlive: true)
+DataFilePicker dataFilePicker(Ref ref) => const RealDataFilePicker();
+
 /// Assemble the live [ExportSources] from the repository providers (Issue
 /// #20). Kept as a provider so the Settings row gathers through one watch;
 /// the unit test bypasses this and builds [ExportSources] against
@@ -509,4 +623,5 @@ ExportSources exportSources(Ref ref) => (
       careTasks: ref.watch(careTasksRepositoryProvider),
       careShifts: ref.watch(careShiftsRepositoryProvider),
       expenses: ref.watch(expensesRepositoryProvider),
+      chat: ref.watch(chatRepositoryProvider),
     );

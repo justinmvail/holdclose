@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -75,6 +77,7 @@ class SettingsScreen extends ConsumerWidget {
       Key('settings-team-coordination-toggle');
   static const Key dataSectionKey = Key('settings-data-section');
   static const Key backupDataButtonKey = Key('settings-backup-data');
+  static const Key restoreDataButtonKey = Key('settings-restore-data');
   static const Key lovedOnesSectionKey = Key('settings-loved-ones-section');
   static const Key lovedOnesRowKey = Key('settings-loved-ones-row');
 
@@ -901,6 +904,49 @@ class _DataSectionState extends ConsumerState<_DataSection> {
     }
   }
 
+  Future<void> _restore() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    try {
+      final DataFilePicker picker = ref.read(dataFilePickerProvider);
+      final Uint8List? bytes = await picker.pickJsonFile();
+      // Null = the caregiver cancelled the picker (or none is available) —
+      // stay silent, nothing changed.
+      if (bytes == null) return;
+      final DataExporter exporter = ref.read(dataExporterProvider);
+      final ExportSources sources = ref.read(exportSourcesProvider);
+      final int written = await exporter.importFromBytes(sources, bytes);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Restored $written ${written == 1 ? 'record' : 'records'} '
+            'from your backup.',
+          ),
+        ),
+      );
+    } on FormatException {
+      // The picked file wasn't a Holdclose backup (or was corrupt).
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("That file isn't a Holdclose backup."),
+        ),
+      );
+    } catch (error, stack) {
+      debugPrint('Restore failed: $error\n$stack');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't restore from that file. Please try again."),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -921,13 +967,32 @@ class _DataSectionState extends ConsumerState<_DataSection> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(bottom: 12, top: 4),
+                padding: const EdgeInsets.only(top: 4),
                 child: SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
                     key: SettingsScreen.backupDataButtonKey,
                     onPressed: _busy ? null : _backUp,
                     child: Text(_busy ? 'Preparing…' : 'Back up my data'),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 12, bottom: 2),
+                child: Text(
+                  'Already have a backup file? Restore it to bring those '
+                  'records onto this phone. Anything already here is kept — '
+                  'matching records are updated, not duplicated.',
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12, top: 4),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    key: SettingsScreen.restoreDataButtonKey,
+                    onPressed: _busy ? null : _restore,
+                    child: Text(_busy ? 'Working…' : 'Restore from backup'),
                   ),
                 ),
               ),
@@ -1072,8 +1137,11 @@ class _AccountSection extends ConsumerWidget {
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Delete account?'),
         content: const Text(
-          'This removes the account from this device. The journal entries '
-          'and crisis card stay local.',
+          'This permanently deletes your account and everything synced to '
+          'it from our servers — your Care Circle membership, shared '
+          'records, and community posts. This can’t be undone. Records kept '
+          'only on this phone (like the journal and the emergency card) stay '
+          'until you remove the app.',
         ),
         actions: <Widget>[
           TextButton(
@@ -1091,8 +1159,24 @@ class _AccountSection extends ConsumerWidget {
         ],
       ),
     );
-    if (ok == true) {
+    if (ok != true || !context.mounted) return;
+    // Resolve the messenger before the delete await — the widget may unmount
+    // once the account is gone (a redirect to sign-in).
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    try {
+      // Deletes server-side FIRST; only clears local on success. A failure
+      // (offline / server error) throws WITHOUT wiping local state, so the
+      // caregiver stays signed in and can retry.
       await auth.deleteAccount();
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't delete your account — you may be offline. Please try "
+            'again when you have a connection.',
+          ),
+        ),
+      );
     }
   }
 }

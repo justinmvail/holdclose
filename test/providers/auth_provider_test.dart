@@ -24,6 +24,38 @@ class _ScriptedFlow {
   }
 }
 
+/// Deterministic [AccountDeleter] that records its call count and can be
+/// scripted to throw — models the backend `DELETE /profiles/me` succeeding
+/// or failing (offline / 5xx).
+class _ScriptedDeleter {
+  _ScriptedDeleter({this.error});
+
+  final Object? error;
+  int calls = 0;
+
+  Future<void> call() async {
+    calls += 1;
+    if (error != null) throw error!;
+  }
+}
+
+/// In-memory [UserStore] for the alpha delete-account tests — avoids the
+/// shared_preferences platform channel the real store touches.
+class InMemoryUserStore extends UserStore {
+  InMemoryUserStore([this._user]);
+
+  User? _user;
+
+  @override
+  Future<User?> read() async => _user;
+
+  @override
+  Future<void> write(User user) async => _user = user;
+
+  @override
+  Future<void> clear() async => _user = null;
+}
+
 /// Helper that collects every [AuthState] a provider emits until the
 /// caller cancels — used to assert the watchAuthState stream contract.
 Future<List<AuthState>> _drain(
@@ -324,6 +356,7 @@ void main() {
       _ScriptedFlow? google,
       _ScriptedFlow? apple,
       TokenStorage? storage,
+      AccountDeleter? accountDeleter,
     }) {
       final _ScriptedFlow g = google ??
           _ScriptedFlow(const OAuthSignInResult(
@@ -339,6 +372,7 @@ void main() {
         googleFlow: g.call,
         appleFlow: a.call,
         tokenStorage: storage ?? InMemoryTokenStorage(),
+        accountDeleter: accountDeleter,
       );
     }
 
@@ -474,6 +508,44 @@ void main() {
       expect(await store.read(), isNull);
     });
 
+    test('deleteAccount hits the backend BEFORE clearing local state',
+        () async {
+      final InMemoryTokenStorage store = InMemoryTokenStorage();
+      final _ScriptedDeleter deleter = _ScriptedDeleter();
+      final RealAuthProvider real =
+          buildReal(storage: store, accountDeleter: deleter.call);
+      addTearDown(real.dispose);
+
+      await real.signInWithApple();
+      expect(await store.read(), 'apple-token');
+
+      await real.deleteAccount();
+
+      // The server delete ran, and only then was the token cleared.
+      expect(deleter.calls, 1);
+      expect(await store.read(), isNull);
+    });
+
+    test('deleteAccount does NOT wipe local state when the server delete '
+        'fails (offline)', () async {
+      final InMemoryTokenStorage store = InMemoryTokenStorage();
+      final _ScriptedDeleter deleter =
+          _ScriptedDeleter(error: StateError('offline'));
+      final RealAuthProvider real =
+          buildReal(storage: store, accountDeleter: deleter.call);
+      addTearDown(real.dispose);
+
+      await real.signInWithGoogle();
+      expect(await store.read(), 'google-token');
+
+      // The failure propagates so the UI can tell the caregiver to retry.
+      await expectLater(real.deleteAccount(), throwsA(isA<StateError>()));
+
+      // Critically: the local token SURVIVES — no half-deleted account.
+      expect(deleter.calls, 1);
+      expect(await store.read(), 'google-token');
+    });
+
     test('production factory builds a provider without touching plugins',
         () {
       // The factory's job at construction time is just to wire the
@@ -484,6 +556,76 @@ void main() {
       final RealAuthProvider real = RealAuthProvider.production();
       addTearDown(real.dispose);
       expect(real, isA<AuthProvider>());
+    });
+  });
+
+  group('AlphaAuthProvider deleteAccount', () {
+    const User signedInUser = User(
+      id: 'alpha-1',
+      email: 'a@x.com',
+      name: 'Alpha Caregiver',
+    );
+
+    AlphaAuthProvider buildAlpha({
+      required UserStore userStore,
+      AccountDeleter? accountDeleter,
+      Future<void> Function()? onSignedOut,
+    }) {
+      return AlphaAuthProvider(
+        initialUser: signedInUser,
+        googleFlow: () async => 'id-token',
+        verifier: (String _) async => const GoogleAuthResultLike(
+          userId: 'alpha-1',
+          email: 'a@x.com',
+          name: 'Alpha Caregiver',
+        ),
+        userStore: userStore,
+        accountDeleter: accountDeleter,
+        onSignedOut: onSignedOut,
+      );
+    }
+
+    test('deletes on the backend BEFORE clearing the persisted user',
+        () async {
+      final InMemoryUserStore store = InMemoryUserStore(signedInUser);
+      final _ScriptedDeleter deleter = _ScriptedDeleter();
+      bool sessionCleared = false;
+      final AlphaAuthProvider alpha = buildAlpha(
+        userStore: store,
+        accountDeleter: deleter.call,
+        onSignedOut: () async => sessionCleared = true,
+      );
+      addTearDown(alpha.dispose);
+
+      final Future<List<AuthState>> drained =
+          _drain(alpha.watchAuthState(), count: 2);
+      await alpha.deleteAccount();
+      final List<AuthState> received = await drained;
+
+      expect(deleter.calls, 1);
+      expect(await store.read(), isNull); // local user cleared
+      expect(sessionCleared, isTrue); // forum session shed
+      expect(received.last, const AuthState.signedOut());
+    });
+
+    test('a failed server delete leaves the persisted user intact', () async {
+      final InMemoryUserStore store = InMemoryUserStore(signedInUser);
+      final _ScriptedDeleter deleter =
+          _ScriptedDeleter(error: StateError('offline'));
+      bool sessionCleared = false;
+      final AlphaAuthProvider alpha = buildAlpha(
+        userStore: store,
+        accountDeleter: deleter.call,
+        onSignedOut: () async => sessionCleared = true,
+      );
+      addTearDown(alpha.dispose);
+
+      await expectLater(alpha.deleteAccount(), throwsA(isA<StateError>()));
+
+      // Local user + session survive so the caregiver can retry online.
+      expect(deleter.calls, 1);
+      expect(await store.read(), isNotNull);
+      expect(sessionCleared, isFalse);
     });
   });
 

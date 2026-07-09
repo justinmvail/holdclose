@@ -430,6 +430,17 @@ class ForumApiClient {
     return ForumPublicProfile.fromJson(_asJsonObject(r));
   }
 
+  /// Hard-delete the caller's account server-side (`DELETE /profiles/me`).
+  /// Bearer-authed; the Worker removes the account and everything tied to it
+  /// (forum rows, care-circle rows, synced docs, stored blobs). A non-2xx
+  /// raises [ForumApiException] so the caller can keep local state intact and
+  /// tell the caregiver to retry — the client must NOT wipe local data if the
+  /// server delete failed. Deleting an already-gone account (404) is treated
+  /// as success by the caller (idempotent).
+  Future<void> deleteMyProfile() async {
+    await _delete('$_apiBase/profiles/me');
+  }
+
   // -------- Username + circles (care-circle connect, 2026-06-06) ----------
 
   /// Check whether [handle] is a syntactically-valid + unclaimed

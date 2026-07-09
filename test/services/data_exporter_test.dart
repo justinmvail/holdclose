@@ -8,6 +8,7 @@ import 'package:holdclose/models/health_log_entry.dart';
 import 'package:holdclose/models/care_circle_membership.dart';
 import 'package:holdclose/models/care_event.dart';
 import 'package:holdclose/models/caregiver.dart';
+import 'package:holdclose/models/chat.dart';
 import 'package:holdclose/models/document.dart';
 import 'package:holdclose/models/expense.dart';
 import 'package:holdclose/models/journal_entry.dart';
@@ -23,6 +24,7 @@ import 'package:holdclose/providers/health_log_provider.dart';
 import 'package:holdclose/providers/storage_provider.dart';
 import 'package:holdclose/seed/mary_henderson.dart';
 import 'package:holdclose/services/appointment_repository.dart';
+import 'package:holdclose/services/chat_repository.dart';
 import 'package:holdclose/services/data_exporter.dart';
 import 'package:holdclose/services/medication_repository.dart';
 import 'package:holdclose/services/provider_repository.dart';
@@ -48,6 +50,7 @@ ExportSources _sourcesFor(HoldcloseDatabase db, StorageProvider storage) => (
       careTasks: CareTasksRepository(db),
       careShifts: CareShiftsRepository(db),
       expenses: ExpensesRepository(db),
+      chat: ChatRepository(db),
     );
 
 void main() {
@@ -219,6 +222,8 @@ void main() {
           'careTasks',
           'careShifts',
           'expenses',
+          'chatConversations',
+          'chatMessages',
         ];
         for (final String key in sectionKeys) {
           expect(doc[key], isA<List<dynamic>>(),
@@ -607,6 +612,65 @@ void main() {
         expect(await dst.expenses.listExpenses(), hasLength(1));
       },
     );
+
+    test('chat conversations + messages round-trip through export/import',
+        () async {
+      final HoldcloseDatabase srcDb =
+          HoldcloseDatabase(NativeDatabase.memory());
+      addTearDown(() async => srcDb.close());
+      final DriftStorageProvider srcStorage = DriftStorageProvider(srcDb);
+      final ExportSources src = _sourcesFor(srcDb, srcStorage);
+
+      final DateTime at = DateTime.utc(2026, 6, 1, 9);
+      await src.chat.createConversation(
+        id: 'conv-1',
+        title: 'Sleep',
+        createdAt: at,
+      );
+      await src.chat.appendMessage(Message(
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        role: MessageRole.user,
+        body: 'How do I help with sundowning?',
+        citations: const <String>[],
+        createdAt: at,
+        streamingDone: true,
+      ));
+      await src.chat.appendMessage(Message(
+        id: 'msg-2',
+        conversationId: 'conv-1',
+        role: MessageRole.assistant,
+        body: 'A calm evening routine can help.',
+        citations: const <String>['card-sundowning'],
+        createdAt: at.add(const Duration(seconds: 1)),
+        streamingDone: true,
+      ));
+
+      const DataExporter exporter = DataExporter(clock: _fixedNow);
+      final Uint8List bytes = await exporter.exportJson(src);
+      final Map<String, dynamic> doc =
+          jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+
+      // The envelope carries both chat sections.
+      expect(doc['schemaVersion'], 2);
+      expect((doc['chatConversations'] as List<dynamic>), hasLength(1));
+      expect((doc['chatMessages'] as List<dynamic>), hasLength(2));
+
+      // Restore into a fresh store and verify the thread + its messages land.
+      final HoldcloseDatabase dstDb =
+          HoldcloseDatabase(NativeDatabase.memory());
+      addTearDown(() async => dstDb.close());
+      final DriftStorageProvider dstStorage = DriftStorageProvider(dstDb);
+      final ExportSources dst = _sourcesFor(dstDb, dstStorage);
+
+      await exporter.importInto(dst, doc);
+
+      final List<Conversation> convos = await dst.chat.listConversations();
+      expect(convos.map((Conversation c) => c.id), contains('conv-1'));
+      final List<Message> msgs = await dst.chat.loadMessages('conv-1');
+      expect(msgs.map((Message m) => m.id), <String>['msg-1', 'msg-2']);
+      expect(msgs.last.citations, contains('card-sundowning'));
+    });
 
     test('import tolerates a doc missing optional sections', () async {
       final HoldcloseDatabase db =

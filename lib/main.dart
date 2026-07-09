@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,8 +57,18 @@ Future<void> main() async {
   // Tee on-device logs into a small ring buffer so a bug report can carry
   // recent context (what happened right before the report), not just a
   // screenshot. Console output is preserved — we wrap, never replace. The
-  // buffer is only ever READ when a report is sent.
+  // buffer is only ever READ when a report is sent. Uncaught errors are ALSO
+  // appended to an on-device crash log ([CrashLog]) so a crash that happened
+  // on a PREVIOUS launch survives the process restart and can ride along
+  // with the next "report a problem" — persisted, never auto-uploaded.
   _captureLogs();
+
+  // iOS: exclude the app's PHI directories (drift DB, document blobs,
+  // feedback outbox, captures) from iCloud/iTunes backups + raise their
+  // file-protection class — matching Android's `allowBackup="false"`. Runs
+  // once at startup; entirely best-effort (a plain platform-channel call
+  // through the native BackupExclusionBridge) so it never blocks launch.
+  unawaited(_excludeIosDataFromBackup());
 
   // Preload the persisted onboarding-complete flag BEFORE the first frame
   // so a returning caregiver's router decision is correct on frame zero —
@@ -145,6 +159,13 @@ Future<void> main() async {
 
 /// Tee `debugPrint`, framework errors, and uncaught async errors into
 /// [LogBuffer] (for bug reports) while preserving the normal handlers.
+///
+/// Uncaught errors are additionally appended to the on-device [CrashLog]
+/// file so a crash survives the process restart it may have caused: the
+/// LogBuffer is in-memory only, so without this a crash that killed the app
+/// would leave no trace for the next "report a problem". The crash log is
+/// on-device + user-initiated only — it is NEVER auto-uploaded; it just
+/// makes the report path able to carry a prior crash's stack trace.
 void _captureLogs() {
   final originalPrint = debugPrint;
   debugPrint = (String? message, {int? wrapWidth}) {
@@ -157,6 +178,13 @@ void _captureLogs() {
   final priorFlutterOnError = FlutterError.onError;
   FlutterError.onError = (FlutterErrorDetails details) {
     LogBuffer.instance.add('FlutterError: ${details.exceptionAsString()}');
+    // Persist framework errors with their stack so a crash-on-launch is
+    // still recoverable in the next report. Fire-and-forget; the console
+    // path below always runs regardless.
+    unawaited(CrashLog.instance.record(
+      'FlutterError: ${details.exceptionAsString()}',
+      details.stack,
+    ));
     (priorFlutterOnError ?? FlutterError.presentError)(details);
   };
 
@@ -165,8 +193,32 @@ void _captureLogs() {
   WidgetsBinding.instance.platformDispatcher.onError =
       (Object error, StackTrace stack) {
     LogBuffer.instance.add('Uncaught: $error');
+    unawaited(CrashLog.instance.record('Uncaught: $error', stack));
     return priorPlatformOnError?.call(error, stack) ?? false;
   };
+}
+
+/// MethodChannel to the iOS native backup-exclusion bridge
+/// (`ios/Runner/BackupExclusionBridge.swift`). Android already declares
+/// `allowBackup="false"` in its manifest, so this is a no-op there.
+const MethodChannel _backupExclusionChannel =
+    MethodChannel('holdclose/backup_exclusion');
+
+/// Ask the iOS native side to exclude the app's PHI directories from
+/// iCloud/iTunes backup + raise their file-protection class. Best-effort:
+/// swallows the `MissingPluginException` Android / the test harness raise
+/// (there's no such channel there) and any native failure, so it never
+/// blocks or crashes launch.
+Future<void> _excludeIosDataFromBackup() async {
+  if (!Platform.isIOS) return;
+  try {
+    await _backupExclusionChannel.invokeMethod<void>('excludeDataFromBackup');
+  } catch (e) {
+    // A backup-flag failure must never surface to the caregiver — the app
+    // still runs; the data just isn't excluded on this launch. Breadcrumb
+    // for a feedback report.
+    debugPrint('backup-exclusion: $e');
+  }
 }
 
 /// Resolve the active circle, then push+pull once and start the
@@ -379,5 +431,87 @@ Future<bool> maybeRestampCareCirclePatient(
     // unset so the next launch retries.
     debugPrint('migration: care-circle patient re-stamp failed: $e');
     return false;
+  }
+}
+
+/// On-device, user-initiated crash capture — NO vendor, NO auto-upload.
+///
+/// The [LogBuffer] is in-memory only, so a crash that kills the process
+/// leaves no breadcrumb for the next "report a problem". This persists each
+/// uncaught error (message + stack + timestamp) to a small append-only file
+/// in the app-support dir so it survives the restart the crash caused. The
+/// feedback sheet reads the snapshot ([read]) and offers to attach it; the
+/// caregiver stays in control — nothing leaves the device on its own.
+///
+/// Privacy posture: a plain local file, capped at [maxBytes] so it can't
+/// grow unbounded, and [clear]-able after a report is sent. It carries only
+/// error strings + Dart stack traces — never the loved one's care data.
+class CrashLog {
+  CrashLog._();
+
+  /// Process-wide singleton — the error handlers wired in [_captureLogs] are
+  /// global and the feedback sheet reads the same file.
+  static final CrashLog instance = CrashLog._();
+
+  /// File name under the app-support directory.
+  static const String fileName = 'holdclose_crash.log';
+
+  /// Hard cap — the newest [maxBytes] are retained so a crash loop can't
+  /// fill the disk and the tail (freshest context) always survives.
+  static const int maxBytes = 64 * 1024;
+
+  /// Test seam: override the directory the log file lands in so a unit test
+  /// can point it at a temp dir instead of the platform app-support path.
+  @visibleForTesting
+  Directory? overrideDir;
+
+  Future<Directory> _dir() async =>
+      overrideDir ?? await getApplicationSupportDirectory();
+
+  Future<File> _file() async => File(p.join((await _dir()).path, fileName));
+
+  /// Append one crash entry. Best-effort: any I/O failure is swallowed so
+  /// the crash handler itself can never throw (which would mask the real
+  /// error). Trims the file to [maxBytes] from the tail after each write.
+  Future<void> record(String message, StackTrace? stack) async {
+    try {
+      final File f = await _file();
+      final String entry = '=== ${DateTime.now().toIso8601String()} ===\n'
+          '$message\n'
+          '${stack ?? StackTrace.current}\n\n';
+      await f.writeAsString(entry, mode: FileMode.append, flush: true);
+      // Trim from the front if we blew past the cap, keeping the tail.
+      final int len = await f.length();
+      if (len > maxBytes) {
+        final String all = await f.readAsString();
+        await f.writeAsString(all.substring(all.length - maxBytes));
+      }
+    } catch (_) {
+      // The crash handler must be infallible — never rethrow from here.
+    }
+  }
+
+  /// The persisted crash text, or an empty string when none was captured
+  /// (or the file is unreadable). Read by the feedback sheet to offer the
+  /// prior crash as attachable context.
+  Future<String> read() async {
+    try {
+      final File f = await _file();
+      if (!await f.exists()) return '';
+      return await f.readAsString();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// Drop the crash file after a report carries it, so the same crash isn't
+  /// re-offered on every future report. Best-effort.
+  Future<void> clear() async {
+    try {
+      final File f = await _file();
+      if (await f.exists()) await f.delete();
+    } catch (_) {
+      // Nothing to do — a stale file just gets re-offered next time.
+    }
   }
 }

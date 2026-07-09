@@ -72,12 +72,21 @@ abstract class AuthProvider {
   /// Does not call any remote revoke endpoint in v1 (no backend yet).
   Future<void> signOut();
 
-  /// Same outward shape as [signOut] in v1 since there's no server-side
-  /// account to delete. Kept as a separate method so the Settings →
-  /// Account → "Delete account" button can wire to a different impl
-  /// once the backend lands.
+  /// Permanently delete the account server-side, THEN clear local state.
+  ///
+  /// The backend delete (`DELETE /api/v1/profiles/me`, bearer-authed) runs
+  /// FIRST; only on its success is local auth state cleared. If the server
+  /// delete fails (offline, transient 5xx), this throws and local state is
+  /// left intact so the caregiver can retry online — a half-deleted account
+  /// (gone locally, alive on the server) is the outcome we must avoid.
   Future<void> deleteAccount();
 }
+
+/// Deletes the account server-side. Production wires this to
+/// [ForumApiClient.deleteMyProfile]; tests inject a deterministic fake so the
+/// auth path never touches the network. Throws on failure (the provider lets
+/// it propagate so the confirm dialog can tell the caregiver to retry).
+typedef AccountDeleter = Future<void> Function();
 
 /// Carries the two facts the [AuthProvider] needs out of an OAuth flow:
 /// the [User] to expose via [AuthState.signedIn] and the bearer/identity
@@ -239,18 +248,21 @@ class RealAuthProvider implements AuthProvider {
     required OAuthFlow googleFlow,
     required OAuthFlow appleFlow,
     TokenStorage? tokenStorage,
+    AccountDeleter? accountDeleter,
   })  : _googleFlow = googleFlow,
         _appleFlow = appleFlow,
-        _tokenStorage = tokenStorage ?? SecureTokenStorage();
+        _tokenStorage = tokenStorage ?? SecureTokenStorage(),
+        _accountDeleter = accountDeleter;
 
   /// Wire the production OAuth closures. Constructing the `GoogleSignIn`
   /// client is cheap — it doesn't touch the platform channel until
   /// `signIn()` runs — so this factory is safe to call at riverpod
   /// provider init time.
-  factory RealAuthProvider.production() {
+  factory RealAuthProvider.production({AccountDeleter? accountDeleter}) {
     final GoogleSignIn google = buildProductionGoogleSignIn();
     return RealAuthProvider(
       tokenStorage: SecureTokenStorage(),
+      accountDeleter: accountDeleter,
       googleFlow: () async {
         final GoogleSignInAccount? account = await google.signIn();
         if (account == null) return null;
@@ -302,6 +314,11 @@ class RealAuthProvider implements AuthProvider {
   final OAuthFlow _appleFlow;
   final TokenStorage _tokenStorage;
 
+  /// Server-side account delete. Null when no backend is configured (an
+  /// un-configured/local build) — then [deleteAccount] just clears local
+  /// state, its v1 behaviour.
+  final AccountDeleter? _accountDeleter;
+
   AuthState _state = const AuthState.signedOut();
   final StreamController<AuthState> _changes =
       StreamController<AuthState>.broadcast();
@@ -350,6 +367,12 @@ class RealAuthProvider implements AuthProvider {
 
   @override
   Future<void> deleteAccount() async {
+    // Server delete FIRST — if it throws (offline / 5xx) the local token is
+    // left in place and the error propagates so the caregiver can retry.
+    // Only a successful (or absent-backend) delete clears local state.
+    if (_accountDeleter != null) {
+      await _accountDeleter();
+    }
     await _tokenStorage.delete();
     _emit(const AuthState.signedOut());
   }
@@ -439,10 +462,12 @@ class AlphaAuthProvider implements AuthProvider {
     User? initialUser,
     UserStore? userStore,
     Future<void> Function()? onSignedOut,
+    AccountDeleter? accountDeleter,
   })  : _googleFlow = googleFlow,
         _verifier = verifier,
         _userStore = userStore ?? const UserStore(),
         _onSignedOut = onSignedOut,
+        _accountDeleter = accountDeleter,
         _state = initialUser == null
             ? const AuthState.signedOut()
             : AuthState.signedIn(user: initialUser);
@@ -450,6 +475,11 @@ class AlphaAuthProvider implements AuthProvider {
   final GoogleIdTokenFlow _googleFlow;
   final GoogleIdTokenVerifier _verifier;
   final UserStore _userStore;
+
+  /// Server-side account delete (`DELETE /profiles/me`). Null when no backend
+  /// is configured. Run BEFORE any local clear in [deleteAccount] so a failed
+  /// server delete leaves the local session intact for a retry.
+  final AccountDeleter? _accountDeleter;
 
   /// Sign-out side effects beyond the persisted user spine — the
   /// production wiring clears the forum session token (and the legacy
@@ -524,8 +554,18 @@ class AlphaAuthProvider implements AuthProvider {
     _emit(const AuthState.signedOut());
   }
 
+  /// Delete the account SERVER-SIDE first (`DELETE /profiles/me`), then — and
+  /// only then — clear local state (the same teardown [signOut] does). If the
+  /// server delete throws (offline / transient failure) this rethrows WITHOUT
+  /// touching local state, so the caregiver stays signed in and can retry;
+  /// we never leave an account gone locally but alive on the server.
   @override
-  Future<void> deleteAccount() => signOut();
+  Future<void> deleteAccount() async {
+    if (_accountDeleter != null) {
+      await _accountDeleter();
+    }
+    await signOut();
+  }
 
   void _emit(AuthState next) {
     _state = next;
@@ -742,6 +782,10 @@ AuthProvider authBackend(Ref ref) {
       // Sign-out must shed the forum session (and the legacy on-device
       // secret) so a shared/returned device can't keep the identity.
       onSignedOut: () => ref.read(forumSessionManagerProvider).clear(),
+      // "Delete account" hits the backend FIRST (bearer-authed); local
+      // teardown only runs on its success (see [AlphaAuthProvider
+      // .deleteAccount]).
+      accountDeleter: () => _deleteAccountOnBackend(ref),
     );
     ref.onDispose(alpha.dispose);
     return alpha;
@@ -751,9 +795,29 @@ AuthProvider authBackend(Ref ref) {
     ref.onDispose(fake.dispose);
     return fake;
   }
-  final RealAuthProvider real = RealAuthProvider.production();
+  final RealAuthProvider real = RealAuthProvider.production(
+    // Server-side account delete runs before the local token is cleared.
+    accountDeleter: () => _deleteAccountOnBackend(ref),
+  );
   ref.onDispose(real.dispose);
   return real;
+}
+
+/// Delete the caller's account server-side, tolerating a 404 (the account is
+/// already gone → nothing to do). Any OTHER failure (offline, 5xx, 401)
+/// propagates so the auth provider leaves local state intact and the confirm
+/// dialog tells the caregiver to retry. No-op when no backend is configured
+/// (a local/demo build has no server account to delete).
+Future<void> _deleteAccountOnBackend(Ref ref) async {
+  if (!forumBackendConfigured) return;
+  try {
+    await ref.read(forumApiClientProvider).deleteMyProfile();
+  } on ForumApiException catch (e) {
+    // Already deleted server-side → treat as success (idempotent). Everything
+    // else (network, auth, server error) rethrows so local data survives.
+    if (e.statusCode == 404) return;
+    rethrow;
+  }
 }
 
 /// Natural-language alias for the generated provider. Consumers should

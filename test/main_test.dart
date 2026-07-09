@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:holdclose/db/database.dart';
 import 'package:holdclose/main.dart';
 import 'package:holdclose/models/care_event.dart';
@@ -15,6 +17,7 @@ import 'package:holdclose/providers/storage_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -328,6 +331,52 @@ void main() {
       // a patient exists.
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool(careCircleRestampPrefsKey), isNull);
+    });
+  });
+
+  group('CrashLog — on-device, user-initiated crash capture', () {
+    late Directory tmp;
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('crashlog_');
+      CrashLog.instance.overrideDir = tmp;
+    });
+
+    tearDown(() async {
+      CrashLog.instance.overrideDir = null;
+      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    });
+
+    test('record persists the message + stack; read returns it', () async {
+      expect(await CrashLog.instance.read(), isEmpty);
+
+      await CrashLog.instance.record('Uncaught: boom', StackTrace.current);
+
+      final String snapshot = await CrashLog.instance.read();
+      expect(snapshot, contains('Uncaught: boom'));
+      // The crash file lands under the overridden dir.
+      expect(File(p.join(tmp.path, CrashLog.fileName)).existsSync(), isTrue);
+    });
+
+    test('clear drops the crash file so it is not re-offered', () async {
+      await CrashLog.instance.record('Uncaught: once', StackTrace.current);
+      expect(await CrashLog.instance.read(), isNotEmpty);
+
+      await CrashLog.instance.clear();
+      expect(await CrashLog.instance.read(), isEmpty);
+    });
+
+    test('the file is capped so a crash loop can never grow it unbounded',
+        () async {
+      // Write well past the cap; the freshest tail must survive.
+      for (int i = 0; i < 2000; i++) {
+        await CrashLog.instance.record('Uncaught: crash #$i', StackTrace.current);
+      }
+      final int len =
+          await File(p.join(tmp.path, CrashLog.fileName)).length();
+      expect(len, lessThanOrEqualTo(CrashLog.maxBytes));
+      // The most recent entry is retained.
+      expect(await CrashLog.instance.read(), contains('crash #1999'));
     });
   });
 }
