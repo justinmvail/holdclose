@@ -9,6 +9,8 @@ void main() {
       expect(mary.id, 'demo-patient-mary');
       expect(mary.name, 'Mary Henderson');
       expect(mary.age, 78);
+      // DOB rides alongside the seeded age (78 as of mid-2026).
+      expect(mary.dateOfBirth, DateTime.utc(1948, 3, 4));
       expect(mary.diagnosis, 'Stroke recovery (ischemic, 2024); high blood pressure');
       expect(mary.diagnosedAt, DateTime.utc(2024, 2, 10));
     });

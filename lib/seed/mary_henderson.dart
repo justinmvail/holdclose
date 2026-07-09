@@ -16,6 +16,8 @@ Patient maryHenderson() => Patient(
       id: 'demo-patient-mary',
       name: 'Mary Henderson',
       age: 78,
+      // Kept consistent with the seeded age above — 78 as of mid-2026.
+      dateOfBirth: DateTime.utc(1948, 3, 4),
       diagnosis: 'Stroke recovery (ischemic, 2024); high blood pressure',
       diagnosedAt: DateTime.utc(2024, 2, 10),
       medications: const <CrisisMedication>[

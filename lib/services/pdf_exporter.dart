@@ -219,7 +219,7 @@ class PdfExporter {
                   color: _navy, fontSize: 28, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 18),
           _coverRow('Loved one', patient.name),
-          _coverRow('Age', patient.age.toString()),
+          _coverAgeRow(patient),
           _coverRow('Date', _formatDate(now)),
           if ((caregiverName ?? '').trim().isNotEmpty)
             _coverRow('Caregiver', caregiverName!.trim()),
@@ -286,11 +286,22 @@ class PdfExporter {
         ),
         pw.SizedBox(height: 18),
         _coverRow('Loved one', patient.name),
-        _coverRow('Age', patient.age.toString()),
+        _coverAgeRow(patient),
         _coverRow('Date range', _formatRange(range)),
         _coverRow('Caregiver', caregiverName),
         _coverRow('Entries in this packet', entryCount.toString()),
       ],
+    );
+  }
+
+  /// Cover-block identity row: DOB (what EMS/clinicians expect) plus the
+  /// derived age when a date of birth is on file, the stored age otherwise.
+  pw.Widget _coverAgeRow(Patient patient) {
+    final DateTime? dob = patient.dateOfBirth;
+    if (dob == null) return _coverRow('Age', patient.age.toString());
+    return _coverRow(
+      'Date of birth',
+      '${_formatDate(dob)} · ${patient.ageOn(clock())}',
     );
   }
 
@@ -558,7 +569,12 @@ class PdfExporter {
           ),
         ),
         pw.Text(
-          'Age ${patient.age}',
+          // DOB, not age, is what an ER handoff needs — fall back to the
+          // stored age only for profiles without a date of birth on file.
+          patient.dateOfBirth == null
+              ? 'Age ${patient.age}'
+              : 'DOB ${_formatDate(patient.dateOfBirth!)} · '
+                  '${patient.ageOn(clock())}',
           style: pw.TextStyle(color: _bodyText, fontSize: 12),
         ),
       ],

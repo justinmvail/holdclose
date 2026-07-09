@@ -183,6 +183,22 @@
   "@lovedOneSetupAgeError": {
     "description": "Validation message shown when the loved-one age is out of the accepted range."
   },
+  "lovedOneSetupDobLabel": "Date of birth (optional)",
+  "@lovedOneSetupDobLabel": {
+    "description": "Field label for the optional loved-one date-of-birth picker."
+  },
+  "lovedOneSetupDobNotSet": "Not set",
+  "@lovedOneSetupDobNotSet": {
+    "description": "Placeholder shown in the date-of-birth field before a date is picked."
+  },
+  "lovedOneSetupDobHint": "Fills in their age for you — and it's what doctors and EMS ask for.",
+  "@lovedOneSetupDobHint": {
+    "description": "Hint under the date-of-birth label explaining why it's worth setting."
+  },
+  "lovedOneSetupDobClear": "Clear date of birth",
+  "@lovedOneSetupDobClear": {
+    "description": "Tooltip on the affordance that clears a picked date of birth."
+  },
   "lovedOneSetupDiagnosisLabel": "Diagnosis (optional)",
   "@lovedOneSetupDiagnosisLabel": {
     "description": "Field label for the optional loved-one diagnosis input."

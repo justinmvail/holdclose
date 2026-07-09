@@ -88,6 +88,46 @@ void main() {
     });
   });
 
+  group('EmergencyCardScreen — identity line (DOB)', () {
+    testWidgets(
+        'shows DOB + derived age when a date of birth is on file '
+        '(what EMS/clinicians expect)', (WidgetTester tester) async {
+      // Mary's seed carries dateOfBirth 1948-03-04; pin the clock so the
+      // derived age is deterministic.
+      await _pump(
+        tester,
+        overrides: <Override>[
+          emergencyCardViewProvider.overrideWith((Ref ref) async => _view()),
+          emergencyCardClockProvider
+              .overrideWithValue(() => DateTime(2026, 7, 8)),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('DOB Mar 4, 1948 · 78'), findsOneWidget);
+      expect(find.text('Age 78'), findsNothing);
+    });
+
+    testWidgets('falls back to the age-only line without a date of birth',
+        (WidgetTester tester) async {
+      final EmergencyCardView view = EmergencyCardView(
+        patient: maryHenderson().copyWith(dateOfBirth: null),
+        card: null,
+        medications: const <Medication>[],
+      );
+      await _pump(
+        tester,
+        overrides: <Override>[
+          emergencyCardViewProvider.overrideWith((Ref ref) async => view),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Age 78'), findsOneWidget);
+      expect(find.textContaining('DOB'), findsNothing);
+    });
+  });
+
   group('EmergencyCardScreen — insurance call', () {
     testWidgets('shows the member-services phone + Call, and dials it',
         (WidgetTester tester) async {

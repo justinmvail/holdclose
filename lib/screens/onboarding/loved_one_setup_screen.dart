@@ -12,6 +12,7 @@ import '../../providers/patient_configured_provider.dart';
 import '../../providers/storage_provider.dart';
 import '../../services/sync_service.dart';
 import '../../theme.dart';
+import '../../widgets/form/format.dart';
 import '../../widgets/form/id_factory.dart';
 import '../../widgets/form_validation.dart';
 
@@ -63,6 +64,8 @@ class LovedOneSetupScreen extends ConsumerStatefulWidget {
   static const Key formKey = Key('loved-one-setup-form');
   static const Key nameFieldKey = Key('loved-one-setup-name');
   static const Key ageFieldKey = Key('loved-one-setup-age');
+  static const Key dobFieldKey = Key('loved-one-setup-dob');
+  static const Key dobClearKey = Key('loved-one-setup-dob-clear');
   static const Key diagnosisFieldKey = Key('loved-one-setup-diagnosis');
   static const Key allergiesFieldKey = Key('loved-one-setup-allergies');
   static const Key saveButtonKey = Key('loved-one-setup-save');
@@ -87,6 +90,10 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
   final TextEditingController _diagnosis = TextEditingController();
   final TextEditingController _allergies = TextEditingController();
 
+  /// Optional — when picked, the stored age is derived from it (DOB is
+  /// what EMS/clinicians expect; the age field stays for quick entry).
+  DateTime? _dateOfBirth;
+
   bool _submitting = false;
 
   @override
@@ -107,6 +114,30 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
       .where((String s) => s.isNotEmpty)
       .toList();
 
+  Future<void> _pickDateOfBirth() async {
+    final DateTime now = DateTime.now();
+    // Start the picker from the typed age when there is one — the caregiver
+    // often knows "78" before they recall the birth year.
+    final int? typedAge = int.tryParse(_age.text.trim());
+    final DateTime fallback =
+        (typedAge != null && typedAge > 0 && typedAge <= 130)
+            ? DateTime(now.year - typedAge, now.month, now.day)
+            : now;
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _dateOfBirth ?? fallback,
+      firstDate: DateTime(now.year - 130, now.month, now.day),
+      // A birth date is never in the future.
+      lastDate: now,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _dateOfBirth = DateTime(picked.year, picked.month, picked.day);
+      // Keep the visible age field consistent with the picked date.
+      _age.text = ageFromDateOfBirth(picked, now).toString();
+    });
+  }
+
   Future<void> _submit() async {
     if (_submitting) return;
     // Validate on press + scroll to the first invalid field.
@@ -125,10 +156,15 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
     final Patient patient = Patient(
       id: id,
       name: _name.text.trim(),
-      // Age is optional in the wizard; default to 0 ("not given") when
-      // the caregiver leaves it blank. The field validator already
-      // rejects non-numeric input, so a non-empty value parses here.
-      age: ageText == null ? 0 : (int.tryParse(ageText) ?? 0),
+      // A picked date of birth wins: the stored age is derived from it so
+      // the two can never disagree. Otherwise age is optional in the
+      // wizard; default to 0 ("not given") when the caregiver leaves it
+      // blank. The field validator already rejects non-numeric input, so
+      // a non-empty value parses here.
+      age: _dateOfBirth != null
+          ? ageFromDateOfBirth(_dateOfBirth!, DateTime.now())
+          : (ageText == null ? 0 : (int.tryParse(ageText) ?? 0)),
+      dateOfBirth: _dateOfBirth,
       diagnosis: _diagnosis.text.trim(),
       // Sensible defaults for the fields the wizard deliberately omits —
       // the caregiver can fill these in later from the Emergency Card.
@@ -302,6 +338,42 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
                   }
                   return null;
                 },
+              ),
+              const SizedBox(height: 20),
+              _FieldLabel(label: l10n.lovedOneSetupDobLabel),
+              const SizedBox(height: 4),
+              _Hint(text: l10n.lovedOneSetupDobHint),
+              const SizedBox(height: 8),
+              // Tap-to-pick date field (same idiom as the medication form's
+              // end-date picker): InkWell + InputDecorator with a trailing
+              // clear affordance, so a mistapped date is one tap to undo.
+              InkWell(
+                key: LovedOneSetupScreen.dobFieldKey,
+                onTap: _submitting ? null : _pickDateOfBirth,
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    suffixIcon: _dateOfBirth == null
+                        ? const Icon(Icons.event_outlined)
+                        : IconButton(
+                            key: LovedOneSetupScreen.dobClearKey,
+                            tooltip: l10n.lovedOneSetupDobClear,
+                            icon: const Icon(Icons.close),
+                            onPressed: _submitting
+                                ? null
+                                : () => setState(() => _dateOfBirth = null),
+                          ),
+                  ),
+                  child: Text(
+                    _dateOfBirth == null
+                        ? l10n.lovedOneSetupDobNotSet
+                        : formatMonthDayYear(_dateOfBirth!),
+                    style: textTheme.bodyLarge?.copyWith(
+                      color: _dateOfBirth == null
+                          ? context.hc.primarySoft
+                          : context.hc.text,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
               _FieldLabel(label: l10n.lovedOneSetupDiagnosisLabel),

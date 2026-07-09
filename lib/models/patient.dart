@@ -53,6 +53,13 @@ abstract class Patient with _$Patient {
     required String id,
     required String name,
     required int age,
+
+    /// Optional — EMS/clinicians expect a date of birth, but the setup
+    /// wizard only requires a name, so profiles saved with age alone (or
+    /// before this field existed — the patients table persists the model
+    /// as a JSON blob, so old rows deserialize with null here) carry only
+    /// the stored [age].
+    DateTime? dateOfBirth,
     required String diagnosis,
     required DateTime diagnosedAt,
     required List<CrisisMedication> medications,
@@ -66,4 +73,29 @@ abstract class Patient with _$Patient {
 
   factory Patient.fromJson(Map<String, dynamic> json) =>
       _$PatientFromJson(json);
+}
+
+/// Whole years between [dateOfBirth] and [asOf] — calendar-aware (the
+/// count is one lower until the birthday has passed in [asOf]'s year).
+/// Clamped at 0 so a future-dated birth date can't render a negative age.
+int ageFromDateOfBirth(DateTime dateOfBirth, DateTime asOf) {
+  int years = asOf.year - dateOfBirth.year;
+  final bool beforeBirthday = asOf.month < dateOfBirth.month ||
+      (asOf.month == dateOfBirth.month && asOf.day < dateOfBirth.day);
+  if (beforeBirthday) years--;
+  return years < 0 ? 0 : years;
+}
+
+/// Age helpers for [Patient], kept off the freezed factory so the
+/// generated model stays a pure data class.
+extension PatientX on Patient {
+  /// Age as of [asOf]: derived from [Patient.dateOfBirth] when it's on
+  /// file, otherwise the stored [Patient.age]. [asOf] is explicit (no
+  /// `DateTime.now()` default) so display code pins it via a clock
+  /// provider and goldens stay deterministic.
+  int ageOn(DateTime asOf) {
+    final DateTime? dob = dateOfBirth;
+    if (dob == null) return age;
+    return ageFromDateOfBirth(dob, asOf);
+  }
 }

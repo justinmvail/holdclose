@@ -145,6 +145,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lovedOneSetupAgeError => 'Enter an age between 0 and 130.';
 
   @override
+  String get lovedOneSetupDobLabel => 'Date of birth (optional)';
+
+  @override
+  String get lovedOneSetupDobNotSet => 'Not set';
+
+  @override
+  String get lovedOneSetupDobHint =>
+      'Fills in their age for you — and it\'s what doctors and EMS ask for.';
+
+  @override
+  String get lovedOneSetupDobClear => 'Clear date of birth';
+
+  @override
   String get lovedOneSetupDiagnosisLabel => 'Diagnosis (optional)';
 
   @override

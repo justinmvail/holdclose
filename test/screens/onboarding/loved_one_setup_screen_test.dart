@@ -269,6 +269,106 @@ void main() {
       },
     );
 
+    testWidgets('age without a date of birth leaves dateOfBirth null',
+        (WidgetTester tester) async {
+      final InMemoryStorageProvider storage = InMemoryStorageProvider();
+      addTearDown(storage.dispose);
+
+      await _pumpSetup(tester, storage: storage);
+
+      await tester.enterText(
+        find.byKey(LovedOneSetupScreen.nameFieldKey),
+        'Mary',
+      );
+      await tester.enterText(
+        find.byKey(LovedOneSetupScreen.ageFieldKey),
+        '78',
+      );
+      await _tapSave(tester);
+
+      final Patient? saved = await storage.getPatient();
+      expect(saved!.age, 78);
+      expect(saved.dateOfBirth, isNull);
+    });
+
+    testWidgets(
+      'picking a date of birth stores it, keeps the age field consistent, '
+      'and hydrates the picked date back into the field',
+      (WidgetTester tester) async {
+        final InMemoryStorageProvider storage = InMemoryStorageProvider();
+        addTearDown(storage.dispose);
+
+        await _pumpSetup(tester, storage: storage);
+
+        await tester.enterText(
+          find.byKey(LovedOneSetupScreen.nameFieldKey),
+          'Mary Henderson',
+        );
+
+        // Open the picker and type the date via the input mode so the
+        // picked value is deterministic (calendar-mode taps depend on the
+        // month the dialog opens on).
+        await tester.tap(find.byKey(LovedOneSetupScreen.dobFieldKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.edit_outlined));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).last, '03/04/1948');
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        // The field re-renders (hydrates) the picked date, and the age
+        // field auto-fills the derived age so the two can't disagree.
+        expect(find.text('Mar 4, 1948'), findsOneWidget);
+        final int expectedAge =
+            ageFromDateOfBirth(DateTime(1948, 3, 4), DateTime.now());
+        final TextField ageField = tester.widget<TextField>(
+          find.descendant(
+            of: find.byKey(LovedOneSetupScreen.ageFieldKey),
+            matching: find.byType(TextField),
+          ),
+        );
+        expect(ageField.controller!.text, expectedAge.toString());
+
+        await _tapSave(tester);
+
+        final Patient? saved = await storage.getPatient();
+        expect(saved!.dateOfBirth, DateTime(1948, 3, 4));
+        expect(saved.age, expectedAge,
+            reason: 'the stored age is derived from the DOB');
+      },
+    );
+
+    testWidgets('clearing a picked date of birth saves dateOfBirth null',
+        (WidgetTester tester) async {
+      final InMemoryStorageProvider storage = InMemoryStorageProvider();
+      addTearDown(storage.dispose);
+
+      await _pumpSetup(tester, storage: storage);
+
+      await tester.enterText(
+        find.byKey(LovedOneSetupScreen.nameFieldKey),
+        'Mary',
+      );
+      await tester.tap(find.byKey(LovedOneSetupScreen.dobFieldKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '03/04/1948');
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.text('Mar 4, 1948'), findsOneWidget);
+
+      // One tap undoes a mistapped date.
+      await tester.tap(find.byKey(LovedOneSetupScreen.dobClearKey));
+      await tester.pumpAndSettle();
+      expect(find.text('Mar 4, 1948'), findsNothing);
+
+      await _tapSave(tester);
+
+      final Patient? saved = await storage.getPatient();
+      expect(saved!.dateOfBirth, isNull);
+    });
+
     testWidgets('rejects a wildly out-of-range age',
         (WidgetTester tester) async {
       final InMemoryStorageProvider storage = InMemoryStorageProvider();

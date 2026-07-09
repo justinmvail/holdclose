@@ -47,6 +47,12 @@ class EmergencyCardView {
   final List<Medication> medications;
 }
 
+/// Clock for the identity block's derived age — overridable so widget +
+/// golden tests pin "today" and the DOB line renders deterministically
+/// (same idiom as `homeClock` / `journalScreenClock`).
+@riverpod
+DateTime Function() emergencyCardClock(Ref ref) => DateTime.now;
+
 /// Bundles the loved one, their emergency card, and the live medication
 /// mirror for [EmergencyCardScreen] (TASKS.md Phase 14.23).
 ///
@@ -381,18 +387,24 @@ class _SectionCard extends StatelessWidget {
 // Patient identity block
 // ---------------------------------------------------------------------------
 
-class _PatientBlock extends StatelessWidget {
+class _PatientBlock extends ConsumerWidget {
   const _PatientBlock({required this.patient});
 
   final Patient patient;
 
-  // TODO(decision): the Patient model (lib/models/patient.dart) carries
-  // `age` + `diagnosedAt` but no date-of-birth or photo path. We render the
-  // identity slot with an initials avatar (the "photo thumbnail") and the
-  // age line until the Patient model gains a `dateOfBirth` / `photoPath`.
+  // TODO(decision): the Patient model (lib/models/patient.dart) carries no
+  // photo path yet — the identity slot renders an initials avatar (the
+  // "photo thumbnail") until the model gains a `photoPath`.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final TextTheme textTheme = Theme.of(context).textTheme;
+    final DateTime? dob = patient.dateOfBirth;
+    // DOB, not age, is what EMS/clinicians expect — lead with it (plus the
+    // derived age) when it's on file; older profiles fall back to age-only.
+    final String identityLine = dob == null
+        ? 'Age ${patient.age}'
+        : 'DOB ${formatMonthDayYear(dob)} · '
+            '${patient.ageOn(ref.watch(emergencyCardClockProvider)())}';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
@@ -411,7 +423,7 @@ class _PatientBlock extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                'Age ${patient.age}',
+                identityLine,
                 style: textTheme.bodyMedium?.copyWith(
                   color: context.hc.primarySoft,
                 ),

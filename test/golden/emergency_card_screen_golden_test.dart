@@ -69,6 +69,9 @@ Widget _host(EmergencyCardView view, {double height = 1600}) {
   return ProviderScope(
     overrides: <Override>[
       emergencyCardViewProvider.overrideWith((Ref ref) async => view),
+      // Pin "today" so the DOB-derived age on the identity line renders
+      // the same PNG forever (Mary's seed carries dateOfBirth 1948-03-04).
+      emergencyCardClockProvider.overrideWithValue(() => DateTime(2026, 7, 8)),
     ],
     child: SizedBox(
       width: 420,

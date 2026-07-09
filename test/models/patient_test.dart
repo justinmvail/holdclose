@@ -87,5 +87,51 @@ void main() {
       final Patient mary = maryHenderson();
       expect(Patient.fromJson(mary.toJson()), equals(mary));
     });
+
+    test('round-trips with a date of birth on file', () {
+      final Patient mary = maryHenderson().copyWith(
+        dateOfBirth: DateTime.utc(1948, 3, 4),
+      );
+      final Patient back = Patient.fromJson(mary.toJson());
+      expect(back, equals(mary));
+      expect(back.dateOfBirth, DateTime.utc(1948, 3, 4));
+    });
+
+    test('round-trips with dateOfBirth null (pre-DOB profiles)', () {
+      // Rows persisted before the field existed deserialize with null —
+      // the patients table stores the whole model as a JSON blob.
+      final Patient mary = maryHenderson();
+      expect(mary.dateOfBirth, isNull);
+      final Patient back = Patient.fromJson(mary.toJson());
+      expect(back.dateOfBirth, isNull);
+      expect(back, equals(mary));
+    });
+  });
+
+  group('PatientX.ageOn', () {
+    test('derives the age from dateOfBirth when set', () {
+      final Patient p = maryHenderson().copyWith(
+        dateOfBirth: DateTime.utc(1948, 3, 4),
+      );
+      // Birthday already passed in the as-of year.
+      expect(p.ageOn(DateTime(2026, 7, 8)), 78);
+      // Birthday not yet reached in the as-of year.
+      expect(p.ageOn(DateTime(2026, 3, 3)), 77);
+      // On the birthday itself.
+      expect(p.ageOn(DateTime(2026, 3, 4)), 78);
+    });
+
+    test('falls back to the stored age without a dateOfBirth', () {
+      final Patient p = maryHenderson();
+      expect(p.dateOfBirth, isNull);
+      expect(p.ageOn(DateTime(2030, 1, 1)), p.age);
+    });
+
+    test('ageFromDateOfBirth clamps a future birth date at 0', () {
+      expect(
+        ageFromDateOfBirth(DateTime(2030, 1, 1), DateTime(2026, 1, 1)),
+        0,
+      );
+    });
   });
 }

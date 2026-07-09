@@ -358,6 +358,30 @@ abstract class AppLocalizations {
   /// **'Enter an age between 0 and 130.'**
   String get lovedOneSetupAgeError;
 
+  /// Field label for the optional loved-one date-of-birth picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Date of birth (optional)'**
+  String get lovedOneSetupDobLabel;
+
+  /// Placeholder shown in the date-of-birth field before a date is picked.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get lovedOneSetupDobNotSet;
+
+  /// Hint under the date-of-birth label explaining why it's worth setting.
+  ///
+  /// In en, this message translates to:
+  /// **'Fills in their age for you — and it\'s what doctors and EMS ask for.'**
+  String get lovedOneSetupDobHint;
+
+  /// Tooltip on the affordance that clears a picked date of birth.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear date of birth'**
+  String get lovedOneSetupDobClear;
+
   /// Field label for the optional loved-one diagnosis input.
   ///
   /// In en, this message translates to:
