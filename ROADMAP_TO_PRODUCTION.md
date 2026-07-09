@@ -24,6 +24,15 @@ steps) · 🤖 = Claude can do it in-repo · 🤝 = shared.
 
 ---
 
+## Milestone 0 — Consolidate everything under JCSV One LLC
+_Ownership hygiene: get the code, the AI subscription, and the auth all under the
+company identity before store enrollment + payout. Do these early — later steps
+(OAuth, payout, App/Play accounts) assume the LLC owns things._
+- [ ] 👤 **Create the JCSV GitHub org/account** and **migrate the `holdclose` repo** to it (GitHub repo → Settings → Transfer ownership; GitHub redirects the old `justinmvail/holdclose` URL). Then `git remote set-url origin` locally + update `CLAUDE.md`/memory. Move any CI/secrets with it.
+- [ ] 👤 **Move the Claude subscription to the JCSV Google account + JCSV bank account** (the dev shim runs on this subscription; billing under the LLC). If AI moves fully to Cloudflare Workers AI (Milestone 1c), the Claude sub becomes dev-tooling-only — still cleaner under the LLC.
+- [ ] 👤 **Google auth under the JCSV Google account** — own the GCP project (187697773608) from `jcsvonellc@gmail.com` (grant Owner, accept, then create the new `com.holdclose.holdclose` OAuth clients from the LLC account per `OPERATOR_SETUP.md §1`). One identity for OAuth, Play, and payout.
+- [ ] 🖥️ Cloudflare is already under `jcsvonellc@gmail.com` — confirm the R2/Workers billing + payment method are on the LLC.
+
 ## Milestone 1 — Production launch blockers
 
 ### 1a. Identity & sign-in
@@ -35,7 +44,7 @@ _Worker is built + tested (343 vitest green); it just needs a production deploy.
 `wrangler` is already authenticated as `jcsvonellc@gmail.com`, account `1d05533f…`._
 - [ ] 🖥️ **Enable R2** on the Cloudflare account (dashboard → R2; blocked today with code 10042 until R2 terms accepted + a payment method on file — free tier covers alpha).
 - [ ] 🖥️ From `backend/`: `npx wrangler r2 bucket create holdclose-forum-media` and `… holdclose-doc-blobs`.
-- [ ] 🖥️ Set Worker **secrets**: `wrangler secret put FORUM_JWT_SECRET`, `wrangler secret put CEREBRAS_API_KEY` (see 1c), and the watchdog keys `CLOUDFLARE_API_TOKEN` + `RESEND_API_KEY`.
+- [ ] 🖥️ Set Worker **secrets**: `wrangler secret put FORUM_JWT_SECRET` and the watchdog keys `CLOUDFLARE_API_TOKEN` + `RESEND_API_KEY`. (No inference key — AI runs on the key-less Workers AI `AI` binding; see 1c.)
 - [ ] 🖥️ Confirm/override non-secret `[vars]` in `wrangler.toml` for prod: `GOOGLE_CLIENT_ID` (web + iOS ids), `R2_PUBLIC_URL`, watchdog account/bucket ids, `RESEND_FROM/TO_EMAIL`.
 - [ ] 🖥️ `npm run deploy` (wrangler deploy) → then `npx wrangler d1 migrations apply FORUM_DB --remote`. (D1 binds by id and already exists — no data migration from the rebrand.)
 - [ ] 🖥️ **Custom domain:** attach `holdclose.care` (and/or `api.holdclose.care`) to the Worker (Workers & Pages → holdclose-forum → Domains & Routes). Add the zone to Cloudflare first — no DNS records exist yet.
@@ -43,21 +52,27 @@ _Worker is built + tested (343 vitest green); it just needs a production deploy.
 - [ ] 🤖 **Smoke-test prod:** `/health`, `/terms`, `/privacy`, a sign-in → JWT mint, a sync push/pull, `DELETE /profiles/me`, and a `/api/v1/chat` turn.
 - [ ] 🖥️ Turn off the alpha Tailscale-funnel LaunchAgents once testers are on the prod backend (or keep for a staging tier).
 
-### 1c. Production AI API — runbook
-_Today: the **coach chat** and the **Home recap** already route through the Worker
-`POST /api/v1/chat` → **Cerebras (gpt-oss-120b)**, spend-capped, key server-side.
-But the **document scanners** (prescription/appointment/insurance-card),
-**visit-prep**, and **insurance-appeal** still call the **dev shim only** — they
-have NO production route and will break in a store build. On-device TTS (Piper)
-has no server dependency. This is the biggest production-AI gap._
-- [ ] 👤 **Provision production inference:** a Cerebras account + `CEREBRAS_API_KEY` for the coach chat (fast streaming), OR consolidate everything onto **Cloudflare Workers AI** (fast text models like `@cf/meta/llama-3.3-70b-instruct-fp8-fast`) for one key-less provider — decision is speed (Cerebras) vs. simplicity+privacy (all-Cloudflare). Confirm **no-retention / no-training** terms for whatever serves PHI.
-- [ ] 🤖 **Build Worker routes for the shim-only AI surfaces** so nothing depends on the funnel shim in production:
-  - Document **scan/extract** — a JWT-gated route using **Cloudflare Workers AI via the `AI` binding** (no separate API key; runs on Cloudflare where R2 already holds the scan, so the PHI image never goes to a second vendor — a privacy win + one fewer subprocessor). Use a vision/OCR model: **`@cf/moondream/moondream3.1-9B-A2B`** (built for OCR + structured output — best fit for label/card → JSON) or `@cf/moonshot/kimi-k2.7-code` (vision + structured outputs). Test extraction accuracy vs. the current frontier-model shim path; the human-in-the-loop review screen + uncertainty flags mitigate the smaller edge model.
-  - **Visit-prep** and **insurance-appeal** generative calls — text-only, route through `/chat` (Cerebras or Workers AI text) with their existing prompts.
-- [ ] 🤖 **Point the app's production AI at the Worker, not the shim:** in store builds select `ApiChatBackend` + the Worker extract/generate endpoints; **drop `SHIM_URL` and the baked `SHIM_TOKEN`** entirely (they're an extractable-secret liability). The dev shim stays a dev-only convenience.
-- [ ] 🤖 **Extend spend caps + abuse protection** (already on `/chat`) to the new extract route; per-account quotas; graceful "coach is busy, try again" UX on 429/5xx.
-- [ ] 🤝 **Cost model + monitoring:** per-feature token budgets, the weekly watchdog thresholds, and an alert before the Cerebras bill runs away.
-- [ ] 🤖 Regression-test every AI surface against the prod API (chat, voice-intent, recap, all three scanners, visit-prep, appeal) with `USE_FAKE_LLM=false` pointed at prod.
+### 1c. Production AI — move EVERYTHING to Cloudflare Workers AI (DECIDED)
+_Decision: one AI provider, Cloudflare Workers AI, via the key-less `AI` binding.
+Retire Cerebras and drop the dev shim from the production path. Rationale: no API
+key to manage or leak; the PHI prompt/image never leaves Cloudflare's network
+(where the Worker + D1 + R2 already live) → **only one AI subprocessor, and it's
+our own infra** — the strongest possible privacy story for the competition and
+the stores. Today chat + recap route through the Worker `/chat`; the scanners,
+visit-prep, and insurance-appeal still hit the dev shim only._
+
+**⚠️ Validation caveat:** Workers AI models are smaller than the current
+frontier-via-shim model, so chat quality/latency and scan-extraction accuracy
+**must be validated on the live account at deploy** — this can't be tested from
+the dev environment (the `AI` binding calls real Cloudflare and bills neurons).
+The code can be built + unit-tested against a mocked binding now; quality is a
+deploy-time check.
+
+- [ ] 🤖 **Backend chat inference → Workers AI.** Replace the Cerebras fetch in `chat.ts` with `env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', { messages, stream: true, max_tokens })`; add the `[ai] binding = "AI"` block to `wrangler.toml`; drop `CEREBRAS_API_KEY`/`CEREBRAS_BASE_URL`; keep the vendor-neutral `data:{"text":…}` SSE re-emit + the spend-cap accounting (re-tune the cost constants for Workers AI neuron pricing). Serves chat, recap, visit-prep, and insurance-appeal (all text).
+- [ ] 🤖 **New `POST /api/v1/extract` (vision)** — JWT-gated, calls `env.AI.run` with a vision/OCR model (**`@cf/moondream/moondream3.1-9B-A2B`**, built for OCR + structured output; fallback `@cf/meta/llama-3.2-11b-vision-instruct`); accepts the scan image + extraction prompt, returns the model's JSON text (same contract the shim `/extract` gives the scanners). Apply the same per-account quota/caps.
+- [ ] 🤖 **Rewire the app off the shim.** Point the prescription/appointment/insurance-card scanners + `document_scan_transport` at `/api/v1/extract`, and visit-prep + insurance-appeal at `/chat`; select the Worker path in all builds when a backend is configured; **drop `SHIM_URL` + the baked `SHIM_TOKEN`** from store builds (extractable-secret liability). Shim stays a pure dev convenience.
+- [ ] 🤝 **Deploy-time validation:** with the Worker live, exercise every AI surface (chat, voice-intent, recap, all three scanners, visit-prep, appeal); judge chat quality + scan accuracy; if extraction is weak, try the alternate vision model or keep a frontier fallback for scans only.
+- [ ] 🤖 **Privacy + packet update:** change the subprocessor disclosure (`legal.ts`) and the packet vendor sentence from Cerebras → **Cloudflare Workers AI** (and lean into "AI runs on our own cloud infrastructure; PHI never goes to a separate AI vendor"). Watchdog cost alert now tracks Workers AI neurons, not a Cerebras bill.
 
 ### 1d. Real release signing & store accounts
 - [ ] 👤 **Apple Developer Program + Google Play Console enrollment** under the chosen publisher (org enrollment for JCSV One LLC; D-U-N-S 13-689-7602). Multi-week — start now; it gates everything in 1e/1f.
@@ -127,4 +142,4 @@ _Parallel to the above; winning Phase 1 funds Milestones 2–3. Details in `SUBM
 ---
 
 ### The critical path, in one line
-**Google OAuth clients → Cloudflare deploy (R2 + secrets + DNS) → production AI API (Workers AI `AI` binding for scan/extract via Moondream; Cerebras or Workers AI for chat; build the missing extract/visit-prep/appeal routes + drop the shim) → store enrollment + real signing → App Store & Play submissions (privacy forms, pilots, review) → paywall → public launch.** The competition runs in parallel and, if won in September, funds Milestones 2–3.
+**Consolidate under JCSV (GitHub, Claude sub, Google/Cloudflare accounts) → Google OAuth clients → Cloudflare deploy (R2 + secrets + DNS) → move all AI to Cloudflare Workers AI (key-less `AI` binding: Llama-3.3-70B text + Moondream vision; drop Cerebras + the shim) → store enrollment + real signing → App Store & Play submissions (privacy forms, pilots, review) → paywall → public launch.** The competition runs in parallel and, if won in September, funds Milestones 2–3.
