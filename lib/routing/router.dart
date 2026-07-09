@@ -47,6 +47,7 @@ import '../screens/onboarding/loved_one_setup_screen.dart';
 import '../screens/onboarding/sign_in_screen.dart';
 import '../screens/onboarding/welcome_carousel.dart';
 import '../screens/settings/loved_ones_screen.dart';
+import '../screens/settings/paywall_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/team/activity_screen.dart';
 import '../screens/team/calendar_screen.dart';
@@ -76,6 +77,9 @@ class HoldcloseRoutes {
   static const String signIn = 'sign-in';
   static const String setup = 'setup';
   static const String settings = 'settings';
+  // Subscription paywall (scaffold — NO feature gated yet). Reachable
+  // machinery only; there's no route INTO it from a gated feature today.
+  static const String paywall = 'paywall';
   static const String insuranceAppeal = 'insurance-appeal';
   // Multi-patient "Loved ones" manager (Issue #6). `lovedOnes` → the
   // switcher/manager; `lovedOnesAdd` → the setup wizard reused in add
@@ -210,6 +214,17 @@ GoRouter buildRouter({
         parentNavigatorKey: rootNavigatorKey,
         builder: (BuildContext context, GoRouterState state) =>
             const SettingsScreen(),
+      ),
+      // Subscription paywall (scaffold — NO feature gated yet). A pushed
+      // root-navigator route like Settings so it covers the tab bar. Nothing
+      // in the app routes here from a gated feature today; it's reachable
+      // machinery only until the pricing decision lands.
+      GoRoute(
+        path: '/premium',
+        name: HoldcloseRoutes.paywall,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (BuildContext context, GoRouterState state) =>
+            const PaywallScreen(),
       ),
       // AI insurance-appeal helper — reached from the emergency card's
       // insurance block; pushes onto the root navigator so it covers the

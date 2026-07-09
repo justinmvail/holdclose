@@ -133,6 +133,17 @@ dependencies:
   # intent-filter on MainActivity.
   app_links: ^6.3.0
 
+  # Subscription paywall (StoreKit + Play Billing). Wired ONLY behind the
+  # BillingService interface (StoreBillingService = real, FakeBillingService
+  # = deterministic for tests/demo); the app never imports the real impl
+  # directly — it goes through billingServiceProvider / premiumStatusProvider,
+  # which default to the fake so `flutter test` + demo mode build with NO store
+  # configured. The subscription product carries an introductory FREE TRIAL
+  # (there is always a trial before any charge); the app just reflects it. NO
+  # features are gated yet — this is machinery only. Product IDs + the trial
+  # are configured in App Store Connect / Play Console (see billing_service.dart).
+  in_app_purchase: ^3.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
