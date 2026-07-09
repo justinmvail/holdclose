@@ -23,6 +23,7 @@ Rules:
   dose be contributing to the falls we logged this week?") rather than generic.
 - 4 to 6 questions, each under about 20 words, in plain warm language a
   caregiver would actually say.
+- Write the questions in the same language the caregiver's own notes are in.
 
 Return ONLY a JSON object, no prose or code fences:
 {"questions": ["...", "..."]}

@@ -136,7 +136,7 @@ _Parallel to the above; winning Phase 1 funds Milestones 2–3. Details in `SUBM
 ---
 
 ## Backlog / polish (post-launch, non-blocking)
-- [ ] 🤖 Localization — English-only today; Spanish-first (ACL population) is the highest-value locale.
+- [ ] 🤖 Localization — the AI surfaces (chat, voice, recap, visit-prep, appeal) now reply in whatever language the caregiver writes/speaks, so multilingual coaching ships for free. UI strings are English-first with a partial `es` stub (`lib/l10n/app_es.arb` — common/nav/sign-in; missing keys fall back to en). Remaining work: translate the full `es` UI (Spanish-first for the ACL population is the highest-value locale).
 - [ ] 🤖 Remaining low-severity audit items (`DEEP_DIVE_AUDIT.md` Tier 3/4); notification-scheduling-failure surfacing.
 - [ ] 🤝 Retire stale docs (BUILD_SPEC/TASKS predate the pivot); model-level cleanup of dead `Patient.calms/escalates` + `PdfExporter.crisisCard`.
 

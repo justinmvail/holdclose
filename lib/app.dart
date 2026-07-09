@@ -204,9 +204,9 @@ class _HoldcloseAppState extends ConsumerState<HoldcloseApp> {
       // Localization / i18n (#18). Registers the generated
       // AppLocalizations delegate alongside the Global Material /
       // Cupertino / Widgets delegates so `AppLocalizations.of(context)`
-      // resolves on every routed screen. `en` is the only shipped
-      // locale today (`supportedLocales`); adding more is translation
-      // work — see BUILD_SPEC.md §1. Widget/golden tests that pump a
+      // resolves on every routed screen. `en` is complete; `es` is a
+      // partial stub (common/nav/sign-in strings) that falls back to en
+      // for missing keys — finishing it is translation work. Widget/golden tests that pump a
       // screen reading `.of(context)` must register these same two
       // fields on their MaterialApp.
       localizationsDelegates: AppLocalizations.localizationsDelegates,

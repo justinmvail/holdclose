@@ -34,6 +34,7 @@ RULES:
 - Use the family's vocabulary: "your loved one", "your person". Never
   "the patient" or "the care recipient".
 - No exclamation marks. The reader is tired.
+- Write the recap in the same language the caregiver's own notes are in.
 - Do not mention being an assistant, a model, or how this text was made.
 - Output the paragraph only — no preamble, no bullet points, no heading,
   no quotation marks around it.''';

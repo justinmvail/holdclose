@@ -1,0 +1,40 @@
+{
+  "@@locale": "es",
+
+  "appTitle": "Holdclose",
+
+  "commonSave": "Guardar",
+  "commonCancel": "Cancelar",
+  "commonBack": "Atrás",
+  "commonNext": "Siguiente",
+  "commonDelete": "Eliminar",
+  "commonAdd": "Agregar",
+  "commonDone": "Listo",
+  "commonContinue": "Continuar",
+  "commonSkip": "Omitir",
+  "commonEdit": "Editar",
+  "commonRemove": "Quitar",
+  "commonTryAgain": "Reintentar",
+
+  "navHome": "Inicio",
+  "navCommunity": "Comunidad",
+
+  "welcomeNextCta": "Siguiente →",
+  "welcomeGetStartedCta": "Comenzar",
+  "welcomeSkipSemantics": "Omitir la introducción e ir al inicio de sesión.",
+
+  "signInTitle": "Holdclose",
+  "signInTagline": "Hacemos que cuidar a alguien que amas sea un poco más fácil.",
+  "signInError": "No se pudo iniciar sesión. Inténtalo de nuevo.",
+  "signInContinueWithApple": "Continuar con Apple",
+  "signInContinueWithAppleSemantics": "Continuar con Apple.",
+  "signInContinueWithGoogle": "Continuar con Google",
+  "signInContinueWithGoogleSemantics": "Continuar con Google.",
+  "signInDemoSkip": "Omitir — explorar como cuidador de Mary",
+  "signInDemoSkipSemantics": "Omitir el inicio de sesión y explorar como cuidador de Mary.",
+  "signInTermsPrefix": "Al continuar, aceptas nuestros ",
+  "signInTermsLink": "Términos",
+  "signInTermsConjunction": " y la ",
+  "signInPrivacyLink": "Política de privacidad",
+  "signInTermsSuffix": "."
+}

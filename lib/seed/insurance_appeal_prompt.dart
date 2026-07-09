@@ -23,6 +23,7 @@ Rules:
   claim, the reason the denial should be reconsidered (grounded in what the
   caregiver said), a clear request for a formal review, and a polite close.
 - Concise and respectful. Never promise or predict an outcome.
+- Write the letter in the same language the caregiver's own notes are in.
 
 Return ONLY a JSON object, no prose or code fences:
 {"letter": "the full letter text, using \n for line breaks"}
