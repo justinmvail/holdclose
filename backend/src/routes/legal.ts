@@ -93,29 +93,32 @@ const PRIVACY_HTML = legalPage(
 <h2>4. AI features</h2>
 <p>Some features send data to our service for processing so they can work: messages you send to the coach chat (along with the care context needed to answer), documents you scan (prescriptions, appointment cards, insurance cards), and requests like visit-preparation questions or appeal-letter drafts. This processing exists to provide the feature you invoked — not to build advertising profiles.</p>
 
-<h2>5. Feedback reports</h2>
+<h2>5. Subprocessors</h2>
+<p>We use a small number of trusted service providers ("subprocessors") that act only on our instructions and only to provide the service to you. The one that handles your care data is our inference provider, <strong>Cerebras Systems, Inc.</strong>, which powers the in-app coach. When you send a message to the coach, the relevant parts of your care record (for example the medications, appointments, and notes needed to give a grounded answer) are transmitted to Cerebras over an encrypted connection so it can generate a reply; this can include health information about your loved one. Cerebras processes the request only to return that reply — it does <strong>not</strong> retain your prompts or the coach's responses after the request, and your data is <strong>not</strong> used to train any model. If we add or change a subprocessor that handles your care data, we will update this list and the effective date below.</p>
+
+<h2>6. Feedback reports</h2>
 <p>If you submit an in-app feedback report, the report contains what you choose to include. The report form has consent toggles for attaching a screenshot and diagnostic logs; nothing is attached without those toggles.</p>
 
-<h2>6. What we do not do</h2>
+<h2>7. What we do not do</h2>
 <ul>
 <li>We do not sell your personal data.</li>
 <li>We do not show ads or share your data with advertisers.</li>
 <li>We do not use your care data for any purpose other than operating and improving the service.</li>
 </ul>
 
-<h2>7. Security</h2>
+<h2>8. Security</h2>
 <p>Sync and AI traffic is encrypted in transit. Access to backend data is limited to what is needed to operate the service. No system is perfectly secure, so please use a device passcode and keep your sign-in credentials private.</p>
 
-<h2>8. Data retention and deletion</h2>
+<h2>9. Data retention and deletion</h2>
 <p>Synced data is retained while your account is active so your care circle keeps working. You can request deletion of your account and its server-side data at any time by emailing <a href="mailto:support@holdclose.care">support@holdclose.care</a>; deleting the app from your device removes the local database.</p>
 
-<h2>9. Children's privacy</h2>
+<h2>10. Children's privacy</h2>
 <p>Holdclose is intended for adult caregivers and is not directed at children under 13. We do not knowingly collect personal information from children under 13; if you believe a child has provided us personal information, contact us and we will delete it.</p>
 
-<h2>10. Changes to this policy</h2>
+<h2>11. Changes to this policy</h2>
 <p>We may update this policy as the product evolves. If a change is material, we will give notice in the app or by email before it takes effect.</p>
 
-<h2>11. Contact</h2>
+<h2>12. Contact</h2>
 <p>Juno Code Studio (JCSV One LLC) &middot; <a href="mailto:support@holdclose.care">support@holdclose.care</a></p>`,
 );
 

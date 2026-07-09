@@ -5,6 +5,7 @@ declare module 'cloudflare:test' {
   interface ProvidedEnv {
     FORUM_DB: D1Database;
     FORUM_MEDIA: R2Bucket;
+    DOC_BLOBS: R2Bucket;
     FORUM_JWT_SECRET: string;
     R2_PUBLIC_URL: string;
     GOOGLE_CLIENT_ID: string;

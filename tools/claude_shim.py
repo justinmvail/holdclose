@@ -8,6 +8,18 @@ Routes: /generate (POST {"system","user"} -> SSE stream), /extract
 
 Usage:
   python3 tools/claude_shim.py        # see tools/README.md for env vars
+
+Operational guidance — ISSUE ONE TOKEN PER TESTER:
+  SHIM_TOKEN is a comma-separated list (see SHIM_TOKENS below). Give each
+  tester their OWN token rather than a single shared one. Two reasons:
+    - Attribution: the rate limiter + logs key on the presented token, so a
+      spike or abuse is traceable to a specific person's build.
+    - Revocation: if a build (and its baked-in token) leaks, drop just that
+      one entry from SHIM_TOKEN and restart — everyone else keeps working,
+      instead of a fleet-wide token rotation.
+  Per-token request rate limiting (a token-bucket, below) is applied to the
+  /generate, /extract, and /feedback handlers so one leaked/abusive token
+  can't exhaust the local `claude` quota or fill the feedback disk.
 """
 
 import base64
@@ -65,6 +77,21 @@ HOST = os.environ.get("SHIM_HOST", "127.0.0.1")
 SHIM_TOKENS = [
     t.strip() for t in os.environ.get("SHIM_TOKEN", "").split(",") if t.strip()
 ]
+# Per-token request rate limiting (token-bucket). Keyed by the presented
+# bearer token so a leaked/abusive token throttles ITSELF, not the fleet
+# (hence the per-tester-token guidance in the module header). Applied to
+# /generate, /extract, and /feedback — the routes that spend the local
+# `claude` quota or write to disk. /phonemize is a cheap local-only call
+# and is left unmetered.
+#
+# The bucket refills at RATE tokens/second and holds at most BURST. A
+# request costs one token; an empty bucket answers 429. Defaults suit a
+# human tester (a steady request every few seconds, with a small burst);
+# override per environment. In-memory + stdlib only — a restart resets
+# every bucket, which is fine for a dev shim.
+RATELIMIT_RATE = float(os.environ.get("SHIM_RATELIMIT_RATE", "0.5"))
+RATELIMIT_BURST = float(os.environ.get("SHIM_RATELIMIT_BURST", "8"))
+
 CLAUDE_CMD = "claude"
 # Neutral, EMPTY working dir for the one-shot chat calls. Running `claude`
 # in the project dir made every chat reply load this repo's CLAUDE.md
@@ -131,6 +158,41 @@ def _shrink_image_for_cli(data, max_px=1536, target_bytes=180_000):
         return data
 
 
+class _RateLimiter:
+    """In-memory token-bucket rate limiter keyed by an arbitrary string
+    (here, the presented bearer token).
+
+    Thread-safe: ThreadingHTTPServer dispatches each request on its own
+    thread, so concurrent buckets share one lock. Buckets are created
+    lazily and never expire — the key space is bounded by the number of
+    issued tokens, and a process restart clears everything anyway.
+    """
+
+    def __init__(self, rate, burst):
+        self._rate = rate
+        self._burst = burst
+        self._buckets = {}  # key -> (tokens, last_refill_monotonic)
+        self._lock = threading.Lock()
+
+    def allow(self, key):
+        """Consume one token for [key]. Returns True if allowed, else False
+        (bucket empty → the caller should answer 429)."""
+        now = time.monotonic()
+        with self._lock:
+            tokens, last = self._buckets.get(key, (self._burst, now))
+            # Refill for the elapsed time, capped at burst.
+            tokens = min(self._burst, tokens + (now - last) * self._rate)
+            if tokens < 1.0:
+                self._buckets[key] = (tokens, now)
+                return False
+            self._buckets[key] = (tokens - 1.0, now)
+            return True
+
+
+# Single shared limiter for the whole process.
+_RATE_LIMITER = _RateLimiter(RATELIMIT_RATE, RATELIMIT_BURST)
+
+
 class Handler(BaseHTTPRequestHandler):
     def _bad(self, code, msg):
         self.send_response(code)
@@ -153,6 +215,27 @@ class Handler(BaseHTTPRequestHandler):
                 ok = True
         return ok
 
+    def _ratelimit_key(self):
+        """The token-bucket key: the presented bearer token. In open mode
+        (no SHIM_TOKENS) there's no per-tester identity, so all callers share
+        a single '<anon>' bucket — still a global backstop against a runaway
+        local client."""
+        supplied = self.headers.get("Authorization") or ""
+        prefix = "Bearer "
+        if supplied.startswith(prefix):
+            token = supplied[len(prefix):].strip()
+            if token:
+                return token
+        return "<anon>"
+
+    def _rate_limited(self):
+        """True (and answers 429) if the presented token has exhausted its
+        bucket. Call AFTER _authorized so only real tokens are metered."""
+        if not _RATE_LIMITER.allow(self._ratelimit_key()):
+            self._bad(429, "rate limit exceeded: slow down")
+            return True
+        return False
+
     def _read_body(self, max_bytes):
         """Read the request body, bounded by [max_bytes].
 
@@ -173,6 +256,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._authorized():
             return self._bad(401, "unauthorized")
+        # Per-token rate limit the routes that spend the local `claude`
+        # quota (/generate, /extract) or write to disk (/feedback). Metered
+        # after auth so an unauthenticated flood never consumes a bucket.
+        # /phonemize is a cheap local-only call, left unmetered.
+        if self.path in ("/feedback", "/extract", "/generate"):
+            if self._rate_limited():
+                return
         if self.path == "/feedback":
             return self._feedback()
         if self.path == "/phonemize":
@@ -597,6 +687,11 @@ def main():
     print(f"[shim] Uses local `{CLAUDE_CMD}` binary (your Claude Max subscription).", flush=True)
     if SHIM_TOKENS:
         print(f"[shim] Accepting {len(SHIM_TOKENS)} bearer token(s).", flush=True)
+    print(
+        f"[shim] Per-token rate limit: {RATELIMIT_RATE}/s, burst "
+        f"{RATELIMIT_BURST} (/generate, /extract, /feedback).",
+        flush=True,
+    )
     if not SHIM_TOKENS:
         # Unconditional — a Tailscale Funnel forwards PUBLIC traffic to
         # 127.0.0.1, so "bound locally" is NOT "reachable locally only".
