@@ -16,6 +16,7 @@ import 'api_chat_backend.dart';
 import 'chat_actions.dart';
 import 'chat_context_builder.dart';
 import 'chat_repository.dart';
+import 'crisis_keywords.dart' show messageTriggersCrisis;
 import 'feedback_service.dart' show feedbackUiEnabled;
 import 'forum_api_client.dart' show forumApiBaseUrl, forumBackendConfigured;
 
@@ -85,6 +86,14 @@ const String chatFriendlyErrorMessage =
 /// stream errored and [ChatService] folded `[chat error: …]` into the
 /// assistant message. Drives the chat screen's inline "Try again" action.
 bool chatBodyHasError(String body) => body.contains(chatErrorMarkerPrefix);
+
+/// Honest failure line appended to a reply when an action the coach's prose
+/// implied it performed actually THREW (alpha bug: the bubble said "logged
+/// it" while nothing saved). Brand-voiced, no vendor/transport detail; tells
+/// the caregiver plainly so they can retry or use the screen directly.
+const String chatActionFailedMessage =
+    "I couldn't save that just now — please try again, or make the change "
+    'from its screen.';
 
 /// Streaming-chat backend (TASKS.md Phase 11.3, BUILD_SPEC.md §6
 /// "every backend is an interface").
@@ -469,17 +478,25 @@ class _ActionResult {
 }
 
 /// Outcome of one action pass over a finished reply: the citations of
-/// executed actions plus the RAW markers of destructive actions that
-/// were parsed but deliberately NOT executed (they await the
-/// caregiver's explicit in-app confirmation).
+/// executed (instant) actions, the RAW markers of mutating actions parked
+/// for the caregiver's explicit in-app confirmation, and a flag when any
+/// instant executor THREW so the caller can surface an honest failure line
+/// instead of a silent "logged it" (the reply's prose would otherwise claim
+/// success while nothing saved).
 class _ActionPass {
   const _ActionPass({
     this.results = const <_ActionResult>[],
     this.pendingMarkers = const <String>[],
+    this.hadFailure = false,
   });
 
   final List<_ActionResult> results;
   final List<String> pendingMarkers;
+
+  /// True when an instant (non-confirmed) executor threw. The confirm-card
+  /// flow reports its own failures through [ChatService.confirmPendingAction],
+  /// so only instant executions feed this.
+  final bool hadFailure;
 
   /// Message citations for this pass: executed-action citations first,
   /// then one `pending_action:` citation per unconfirmed marker.
@@ -615,6 +632,26 @@ class ChatService {
     await repository.appendMessage(userMessage);
     yield userMessage;
 
+    // Code-side crisis watchdog (does NOT depend on the model): scan the
+    // caregiver's outgoing message and, on a vetted-keyword match, pin a
+    // TRUSTED crisis-resources card into the thread ABOVE the coach's reply.
+    // The card is a real assistant-role row carrying only the crisis
+    // citation (no prose), so it renders even if the model reply never
+    // lands. Done once per matching turn.
+    if (messageTriggersCrisis(userText)) {
+      final Message crisisCard = Message(
+        id: idFactory(),
+        conversationId: conversationId,
+        role: MessageRole.assistant,
+        body: '',
+        citations: const <String>[crisisCardCitation],
+        createdAt: clock(),
+        streamingDone: true,
+      );
+      await repository.appendMessage(crisisCard);
+      yield crisisCard;
+    }
+
     // Constructed before loadMessages so the catch below always has an
     // assistant turn to convert into a visible error bubble — but only
     // APPENDED after the history read, so `history` is just the prior
@@ -632,10 +669,13 @@ class ChatService {
     try {
       // The model sees every prior turn plus the just-appended user
       // message — loadMessages returns them in chronological order so
-      // the latest entry is the one to reply to.
+      // the latest entry is the one to reply to. The trusted crisis card
+      // (an empty assistant row carrying only the crisis citation) is
+      // dropped from the model's view — it's a UI pin, not a coach turn.
       final List<Message> history =
           await repository.loadMessages(conversationId);
       final List<ChatTurn> turns = history
+          .where((Message m) => !_isCrisisCardMessage(m))
           .map((Message m) => ChatTurn(role: m.role, content: m.body))
           .toList(growable: false);
       // First exchange in a brand-new thread → history is just the
@@ -694,7 +734,14 @@ class ChatService {
 
       final String rawBody = buffer.toString();
       final _ActionPass actionPass = await _executeActions(rawBody);
-      final String cleanBody = stripActionMarkers(rawBody);
+      String cleanBody = stripActionMarkers(rawBody);
+      // An instant executor threw — the prose likely claimed success, so
+      // append an honest line rather than let the reply lie about the save.
+      if (actionPass.hadFailure) {
+        cleanBody = cleanBody.isEmpty
+            ? chatActionFailedMessage
+            : '$cleanBody\n\n$chatActionFailedMessage';
+      }
 
       assistant = assistant.copyWith(
         body: cleanBody,
@@ -807,6 +854,11 @@ class ChatService {
     }
 
     final String rawBody = buffer.toString();
+    // A crisis phrase in the SPOKEN message pins the trusted card too — route
+    // to a chat (never a hands-free flash) so the resources card is visible.
+    if (messageTriggersCrisis(transcript)) {
+      return _voiceToChat(transcript, rawBody, crisis: true);
+    }
     // Only treat it as an action when a RECOGNISED tag is present — the model
     // occasionally invents an unsupported name (e.g. `log_health_log` for the
     // real `add_health_log`), which would write nothing yet flash a false
@@ -817,11 +869,15 @@ class ChatService {
         .map((RegExpMatch m) => m.group(1)!)
         .where(actions.containsKey)
         .toList(growable: false);
-    // Destructive intents NEVER complete hands-free: the turn opens as a
-    // chat whose reply carries the pending confirm card, so removing a
-    // medication / cancelling a visit always takes a deliberate tap.
-    final bool hasDestructive = knownNames.any(destructiveActionNames.contains);
-    if (knownNames.isNotEmpty && !hasDestructive) {
+    // Every action that WRITES or CHANGES care data now confirms before it
+    // applies (USER DECISION 2026-07): a med dosage, an appointment time, a
+    // logged dose — none of it commits hands-free. Only pure navigation runs
+    // instantly. So if the reply carries any mutating tag, open a chat whose
+    // reply carries the pending confirm card(s); the caregiver taps once to
+    // apply. A reply that carries ONLY instant (navigation) tags may still
+    // complete hands-free.
+    final bool hasMutating = knownNames.any(_isMutatingAction);
+    if (knownNames.isNotEmpty && !hasMutating) {
       await _executeActions(rawBody);
       final String confirmation = stripActionMarkers(rawBody);
       return VoiceIntentAction(
@@ -833,9 +889,12 @@ class ChatService {
 
   /// Persist a spoken turn + the coach's [rawBody] reply as a fresh thread
   /// and return its id, so the mic flow opens the chat with the answer
-  /// already in place (no second model call).
+  /// already in place (no second model call). When [crisis] is true a trusted
+  /// crisis-resources card is pinned above the reply (code-side, model-
+  /// independent).
   Future<VoiceIntentOutcome> _voiceToChat(
-      String transcript, String rawBody) async {
+      String transcript, String rawBody,
+      {bool crisis = false}) async {
     final DateTime now = clock();
     final String conversationId = idFactory();
     await repository.createConversation(
@@ -852,15 +911,32 @@ class ChatService {
       createdAt: now,
       streamingDone: true,
     ));
-    // A conversation reply rarely carries an action, but run any it does so
-    // a mixed reply still writes; the bubble shows the clean prose.
-    // Destructive tags surface here as pending confirm cards in the thread.
+    if (crisis) {
+      await repository.appendMessage(Message(
+        id: idFactory(),
+        conversationId: conversationId,
+        role: MessageRole.assistant,
+        body: '',
+        citations: const <String>[crisisCardCitation],
+        createdAt: now,
+        streamingDone: true,
+      ));
+    }
+    // A conversation reply rarely carries an action, but run any INSTANT
+    // (navigation) one it does; every mutating tag surfaces here as a
+    // pending confirm card in the thread rather than committing hands-free.
     final _ActionPass actionPass = await _executeActions(rawBody);
+    String body = stripActionMarkers(rawBody);
+    if (actionPass.hadFailure) {
+      body = body.isEmpty
+          ? chatActionFailedMessage
+          : '$body\n\n$chatActionFailedMessage';
+    }
     await repository.appendMessage(Message(
       id: idFactory(),
       conversationId: conversationId,
       role: MessageRole.assistant,
-      body: stripActionMarkers(rawBody),
+      body: body,
       citations: actionPass.toCitations(),
       createdAt: now,
       streamingDone: true,
@@ -875,31 +951,72 @@ class ChatService {
     return '${t.substring(0, 40).trimRight()}…';
   }
 
-  /// Actions that REMOVE or CANCEL the caregiver's data. These are never
-  /// auto-executed from a model reply — in a caregiving app a silently
-  /// deleted medication or cancelled appointment is a safety event, and
-  /// a crafted journal/med name synced from a circle peer could otherwise
-  /// smuggle such a tag into the prompt (indirect injection). They are
-  /// parked as `pending_action:` citations and run only through
-  /// [confirmPendingAction] after an explicit in-app tap.
+  /// Actions that REMOVE or CANCEL the caregiver's data — the sharpest
+  /// subset of the mutating set. Kept named so the confirm-card copy can
+  /// use removal-specific wording; gating no longer keys off this list
+  /// alone (see [instantActionNames]).
   static const Set<String> destructiveActionNames = <String>{
     'delete_medication',
     'cancel_appointment',
     'delete_task',
   };
 
-  /// Citation prefix marking a parsed-but-not-executed destructive action
+  /// The ONLY actions that run instantly from a model reply — pure
+  /// navigation / read affordances that write nothing to the caregiver's
+  /// care data. Everything else (add / update / log / complete / delete)
+  /// WRITES or CHANGES data, so it is parked as a `pending_action:`
+  /// citation and applied only after an explicit in-app confirm tap (USER
+  /// DECISION 2026-07). In a caregiving app a silently changed med dosage
+  /// or appointment time is a safety event — and a crafted name synced
+  /// from a circle peer could otherwise smuggle such a tag into the prompt
+  /// (indirect injection). Instant execution stays cheap and reversible:
+  /// navigation only moves the caregiver around the app.
+  static const Set<String> instantActionNames = <String>{
+    'navigate',
+  };
+
+  /// True when [name] WRITES or CHANGES the caregiver's care data — i.e.
+  /// any recognised action that isn't in [instantActionNames]. These gate
+  /// behind the confirm card. Unknown names are treated as non-mutating
+  /// here (they match no executor and are dropped downstream).
+  bool _isMutatingAction(String name) =>
+      actions.containsKey(name) && !instantActionNames.contains(name);
+
+  /// Citation prefix marking a parsed-but-not-applied mutating action
   /// awaiting confirmation. The remainder of the citation is the raw
   /// `[action:…]` marker, re-parsed on confirm.
   static const String pendingActionCitationPrefix = 'pending_action:';
+
+  /// Citation stamped on a TRUSTED, code-side crisis-resources card — a
+  /// standalone assistant row (empty body) the chat surface renders as the
+  /// 988 Lifeline card. Never emitted by the model; set only by the
+  /// keyword watchdog in [sendMessage] / [routeVoiceIntent].
+  static const String crisisCardCitation = 'crisis_resources';
+
+  /// True when [message] is the trusted crisis card — an empty assistant
+  /// row whose sole citation is [crisisCardCitation]. Excluded from the
+  /// model's history (it's a UI pin, not a coach turn).
+  static bool _isCrisisCardMessage(Message message) =>
+      message.role == MessageRole.assistant &&
+      message.body.isEmpty &&
+      message.citations.length == 1 &&
+      message.citations.first == crisisCardCitation;
+
+  /// True when [citation] is the trusted crisis-card marker. The chat
+  /// surface uses this to render the (non-LLM) resources card.
+  static bool isCrisisCardCitation(String citation) =>
+      citation == crisisCardCitation;
 
   /// True when [citation] is a pending-confirmation action chip.
   static bool isPendingActionCitation(String citation) =>
       citation.startsWith(pendingActionCitationPrefix);
 
   /// Human description of a pending action citation for the confirm card
-  /// ("Remove the medication “Ibuprofen”?"). Null when the citation isn't
-  /// a parseable pending action (the card then renders a generic label).
+  /// — one clear line showing exactly what will change ("Add the medication
+  /// “Donepezil” (10 mg)?", "Change the dose of “Donepezil” to 5 mg?").
+  /// Covers every mutating action the coach can propose, since ALL of them
+  /// now confirm before applying (USER DECISION 2026-07). Falls back to a
+  /// safe generic when the citation isn't a parseable pending action.
   static String? describePendingAction(String citation) {
     if (!isPendingActionCitation(citation)) return null;
     final String marker =
@@ -907,22 +1024,89 @@ class ChatService {
     final RegExpMatch? m = _actionPattern.firstMatch(marker);
     if (m == null) return null;
     final Map<String, String> args = _parseActionArgs(m.group(2)!);
+    String? arg(String key) {
+      final String v = (args[key] ?? '').trim();
+      return v.isEmpty ? null : v;
+    }
+
     switch (m.group(1)) {
+      case 'add_medication':
+        final String? name = arg('name');
+        final String? dosage = arg('dosage');
+        if (name == null) return 'Add this medication to the list?';
+        return dosage == null
+            ? 'Add the medication “$name” to the list?'
+            : 'Add the medication “$name” ($dosage)?';
+      case 'update_medication':
+        final String? name = arg('name');
+        final String label =
+            name == null ? 'this medication' : '“$name”';
+        final String? dosage = arg('dosage');
+        final String? newName = arg('new_name');
+        if (dosage != null) return 'Change the dose of $label to $dosage?';
+        if (newName != null) return 'Rename $label to “$newName”?';
+        return 'Update $label?';
       case 'delete_medication':
-        final String? name = args['name'];
-        return name == null || name.trim().isEmpty
+        final String? name = arg('name');
+        return name == null
             ? 'Remove this medication from the list?'
-            : 'Remove the medication “${name.trim()}” from the list?';
+            : 'Remove the medication “$name” from the list?';
+      case 'add_appointment':
+        final String? provider = arg('provider_name');
+        final String? when = arg('starts_at');
+        final String who =
+            provider == null ? 'this appointment' : 'the appointment with $provider';
+        return when == null ? 'Schedule $who?' : 'Schedule $who for $when?';
+      case 'update_appointment':
+        final String? provider = arg('provider_name');
+        final String who = provider == null
+            ? 'this appointment'
+            : 'the appointment with $provider';
+        final String? when = arg('starts_at');
+        return when == null ? 'Update $who?' : 'Move $who to $when?';
       case 'cancel_appointment':
-        final String? provider = args['provider_name'];
-        return provider == null || provider.trim().isEmpty
+        final String? provider = arg('provider_name');
+        return provider == null
             ? 'Cancel this appointment?'
-            : 'Cancel the appointment with ${provider.trim()}?';
+            : 'Cancel the appointment with $provider?';
+      case 'add_task':
+        final String? title = arg('title');
+        return title == null
+            ? 'Add this task for the care team?'
+            : 'Add the task “$title” for the care team?';
+      case 'complete_task':
+        final String? title = arg('title');
+        return title == null
+            ? 'Mark this task done?'
+            : 'Mark the task “$title” done?';
       case 'delete_task':
-        final String? title = args['title'];
-        return title == null || title.trim().isEmpty
+        final String? title = arg('title');
+        return title == null
             ? 'Delete this task?'
-            : 'Delete the task “${title.trim()}”?';
+            : 'Delete the task “$title”?';
+      case 'add_routine':
+        final String? name = arg('name') ?? arg('title');
+        final String? time = arg('time');
+        if (name == null) return 'Add this routine to the schedule?';
+        return time == null
+            ? 'Add the routine “$name”?'
+            : 'Add the routine “$name” at $time?';
+      case 'add_health_log':
+        final String? value = arg('value') ?? arg('note');
+        return value == null
+            ? 'Add this to the health log?'
+            : 'Add to the health log: “$value”?';
+      case 'log_dose':
+        final String? name = arg('name');
+        final String outcome = arg('outcome') ?? 'taken';
+        return name == null
+            ? 'Record this dose?'
+            : 'Record “$name” as $outcome?';
+      case 'log_journal':
+        final String? situation = arg('situation');
+        return situation == null
+            ? 'Save this journal entry?'
+            : 'Save a journal entry: “$situation”?';
     }
     return null;
   }
@@ -931,21 +1115,26 @@ class ChatService {
   /// [body] against the wired executors. Unrecognised actions are
   /// silently dropped (the marker still gets stripped from the
   /// displayed body via [stripActionMarkers]) — better to lose a tool
-  /// call than to fail the whole turn. Destructive actions are NOT run:
-  /// they come back in [_ActionPass.pendingMarkers] for the confirm-card
-  /// flow. Identical repeated tags are deduplicated (a model that
-  /// stutters the same tag twice must not double-write).
+  /// call than to fail the whole turn. MUTATING actions (anything that
+  /// writes/changes care data — everything but [instantActionNames]) are
+  /// NOT run here: they come back in [_ActionPass.pendingMarkers] for the
+  /// confirm-card flow. Only instant (navigation) actions execute. Identical
+  /// repeated tags are deduplicated (a model that stutters the same tag
+  /// twice must not double-write). A throwing instant executor no longer
+  /// vanishes silently — it flips [_ActionPass.hadFailure] so the caller can
+  /// tell the caregiver the save failed instead of letting the prose lie.
   Future<_ActionPass> _executeActions(String body) async {
     final List<_ActionResult> results = <_ActionResult>[];
     final List<String> pendingMarkers = <String>[];
     final Set<String> seenMarkers = <String>{};
+    bool hadFailure = false;
     for (final RegExpMatch m in _actionPattern.allMatches(body)) {
       final String raw = m.group(0)!;
       if (!seenMarkers.add(raw)) continue; // duplicate tag — run once
       final String name = m.group(1)!;
       final ChatActionExecutor? executor = actions[name];
       if (executor == null) continue; // unknown / unwired tool — skip
-      if (destructiveActionNames.contains(name)) {
+      if (_isMutatingAction(name)) {
         pendingMarkers.add(raw);
         continue;
       }
@@ -956,21 +1145,28 @@ class ChatService {
         if (citation != null) {
           results.add(_ActionResult(citation: citation));
         }
-      } catch (_) {
-        // Executor failure swallowed deliberately: the assistant's prose
-        // already lives in the bubble; surfacing a "tool failed" footer
-        // would derail the conversation. The marker is still stripped.
+      } catch (e, st) {
+        // The prose already lives in the bubble and may claim success, so a
+        // silent swallow would leave the caregiver believing something saved
+        // that didn't. Flag it; the caller appends an honest failure line.
+        debugPrint('Chat action "$name" failed: $e\n$st');
+        hadFailure = true;
       }
     }
-    return _ActionPass(results: results, pendingMarkers: pendingMarkers);
+    return _ActionPass(
+      results: results,
+      pendingMarkers: pendingMarkers,
+      hadFailure: hadFailure,
+    );
   }
 
-  /// Execute a destructive action the caregiver just CONFIRMED via its
-  /// in-thread card. Re-parses the marker stored in [citation], runs the
-  /// executor, and rewrites the message's citations — the pending chip is
-  /// removed either way (one decision per card), and a successful
-  /// execution contributes the executor's own citation when it has one.
-  /// Returns true when the action actually ran.
+  /// Apply a mutating action the caregiver just CONFIRMED via its in-thread
+  /// card (any write/change — add, update, log, complete, or a removal).
+  /// Re-parses the marker stored in [citation], runs the executor, and
+  /// rewrites the message's citations — the pending chip is removed either
+  /// way (one decision per card), and a successful execution contributes the
+  /// executor's own citation when it has one. Returns true when the action
+  /// actually ran.
   Future<bool> confirmPendingAction({
     required String conversationId,
     required String messageId,
@@ -990,7 +1186,11 @@ class ChatService {
               await executor(_parseActionArgs(m.group(2)!));
           executedCitation = outcome?.citation;
           ran = true;
-        } catch (_) {
+        } catch (e, st) {
+          // The confirm card reports ran=false to the UI (which shows an
+          // honest "couldn't make that change" line); log the cause so the
+          // on-device failure is diagnosable from a report.
+          debugPrint('Confirmed chat action failed: $e\n$st');
           ran = false;
         }
       }

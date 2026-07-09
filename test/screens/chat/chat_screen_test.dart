@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:holdclose/db/database.dart';
 import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/providers/link_launcher_provider.dart';
 import 'package:holdclose/providers/pending_chat_message_provider.dart';
 import 'package:holdclose/services/chat_actions.dart'
     show ChatActionExecutor;
@@ -153,6 +154,7 @@ Future<({
   ({String conversationId, String text})? pendingMessage,
   String? customTitle,
   Map<String, ChatActionExecutor>? actions,
+  LinkLauncher? linkLauncher,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 1000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -204,6 +206,8 @@ Future<({
         chatLLMBackendProvider.overrideWithValue(backend),
         if (voiceCapture != null)
           voiceCaptureProvider.overrideWithValue(voiceCapture),
+        if (linkLauncher != null)
+          linkLauncherProvider.overrideWithValue(linkLauncher),
         if (pendingMessage != null)
           pendingChatMessageProvider.overrideWith(
             () => _SeededPendingChatMessage(pendingMessage),
@@ -1356,6 +1360,55 @@ void main() {
 
       expect(find.byKey(ChatScreen.disclaimerKey), findsOneWidget);
       expect(find.text(ChatScreen.disclaimerText), findsOneWidget);
+    });
+  });
+
+  group('ChatScreen — trusted crisis card (code-side watchdog)', () {
+    // A pinned crisis card is a standalone assistant row (empty body, sole
+    // crisis citation) — exactly what the ChatService watchdog persists.
+    Message crisisCardMessage(String conversationId) => Message(
+          id: 'crisis-1',
+          conversationId: conversationId,
+          role: MessageRole.assistant,
+          body: '',
+          citations: const <String>[ChatService.crisisCardCitation],
+          createdAt: _fixedNow(),
+          streamingDone: true,
+        );
+
+    testWidgets('renders the 988 Lifeline card from app data (not model text)',
+        (WidgetTester tester) async {
+      await _pump(
+        tester,
+        conversationId: 'convo-crisis',
+        initialMessages: <Message>[crisisCardMessage('convo-crisis')],
+      );
+
+      expect(find.byKey(ChatScreen.crisisCardKey), findsOneWidget);
+      expect(find.text('988 Suicide & Crisis Lifeline'), findsOneWidget);
+      // The raw citation string never renders as prose.
+      expect(
+        find.textContaining(ChatService.crisisCardCitation),
+        findsNothing,
+      );
+    });
+
+    testWidgets('the call button hands a tel: URI to the link launcher',
+        (WidgetTester tester) async {
+      final RecordingLinkLauncher launcher = RecordingLinkLauncher();
+      await _pump(
+        tester,
+        conversationId: 'convo-crisis-call',
+        initialMessages: <Message>[crisisCardMessage('convo-crisis-call')],
+        linkLauncher: launcher,
+      );
+
+      await tester.tap(find.byKey(ChatScreen.crisisCallButtonKey('988')));
+      await tester.pumpAndSettle();
+
+      expect(launcher.launched, hasLength(1));
+      expect(launcher.launched.single.scheme, 'tel');
+      expect(launcher.launched.single.path, '988');
     });
   });
 }

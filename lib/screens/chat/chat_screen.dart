@@ -6,11 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/chat.dart';
+import '../../providers/link_launcher_provider.dart';
 import '../../providers/pending_chat_message_provider.dart';
 import '../../providers/voice_capture_provider.dart';
 import '../../services/chat_actions.dart' show chatNavigateRequestProvider;
 import '../../services/chat_repository.dart';
 import '../../services/chat_service.dart';
+import '../../services/crisis_keywords.dart';
 import '../../services/voice_intake.dart';
 import '../../theme.dart';
 import '../../widgets/caption_fade.dart';
@@ -104,6 +106,16 @@ class ChatScreen extends ConsumerStatefulWidget {
   /// Disclaimer copy. Short, brand-voiced, no exclamation marks.
   static const String disclaimerText =
       'Coaching support, not medical advice. In an emergency, call 911.';
+
+  /// The trusted, code-side crisis-resources card pinned above the coach's
+  /// reply when the caregiver's message trips the keyword watchdog. Rendered
+  /// entirely from app data (988 Lifeline etc.) — never from model output.
+  static const Key crisisCardKey = Key('chat-screen-crisis-card');
+
+  /// Per-hotline call/text button on the crisis card (keyed by number so a
+  /// widget test can tap "988" and assert the tel: hand-off).
+  static Key crisisCallButtonKey(String number) =>
+      Key('chat-screen-crisis-call-$number');
 
   /// Confirm-card keys for a pending destructive action (delete/cancel)
   /// the coach proposed — the action runs ONLY via the confirm button.
@@ -622,8 +634,8 @@ class _EmptyHint extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            "What is sundowning? Why is she accusing me? What can I "
-            "say when he asks for his mom?",
+            "How do I help after surgery? He won't use his walker. "
+            "I'm exhausted — what do I do? How do I get her to eat?",
             style: textTheme.bodyMedium?.copyWith(
               color: context.hc.primarySoft,
             ),
@@ -705,6 +717,18 @@ class _MessageRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isUser = message.role == MessageRole.user;
     final TextTheme textTheme = Theme.of(context).textTheme;
+
+    // The trusted crisis card is a standalone assistant row (empty body,
+    // sole crisis citation) the watchdog pinned above the coach's reply. It
+    // renders from app data, not model output, and is never copyable.
+    if (!isUser &&
+        message.citations.length == 1 &&
+        ChatService.isCrisisCardCitation(message.citations.first)) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 6),
+        child: _CrisisCard(),
+      );
+    }
 
     final Widget bubble;
     if (isUser) {
@@ -1005,6 +1029,130 @@ class _PendingActionCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Trusted, code-side crisis-resources card pinned into the thread above
+/// the coach's reply when the caregiver's message trips the keyword
+/// watchdog ([messageTriggersCrisis]). It is NOT model output: every line —
+/// the reassurance, the 988 Lifeline, the Eldercare Locator — comes from
+/// [crisisHotlines] in the app, so it surfaces even when the reply fails.
+/// Each hotline row has a one-tap call/text button routed through the app's
+/// [linkLauncher] (`tel:`), the same idiom the emergency card uses.
+class _CrisisCard extends ConsumerWidget {
+  const _CrisisCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Container(
+      key: ChatScreen.crisisCardKey,
+      decoration: BoxDecoration(
+        color: context.hc.surfaceWarm,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.hc.cta, width: 1.4),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.favorite_outline, size: 20, color: context.hc.cta),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "You don't have to carry this alone",
+                  style: textTheme.titleMedium?.copyWith(
+                    color: context.hc.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'If you or your loved one may be unsafe, reach a trained '
+            'counselor now. Support is free, confidential, and available '
+            'around the clock.',
+            style: textTheme.bodyMedium?.copyWith(color: context.hc.primary),
+          ),
+          const SizedBox(height: 12),
+          for (final CrisisHotline hotline in crisisHotlines) ...<Widget>[
+            _CrisisHotlineRow(hotline: hotline),
+            if (hotline != crisisHotlines.last) const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One hotline row on the [_CrisisCard]: label + description + a one-tap
+/// call/text button that dials the number through the app's [linkLauncher].
+class _CrisisHotlineRow extends ConsumerWidget {
+  const _CrisisHotlineRow({required this.hotline});
+
+  final CrisisHotline hotline;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                hotline.label,
+                style: textTheme.bodyLarge?.copyWith(
+                  color: context.hc.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                hotline.description,
+                style: textTheme.bodySmall?.copyWith(
+                  color: context.hc.primarySoft,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Semantics(
+          button: true,
+          label: 'Call ${hotline.label} at ${hotline.number}',
+          child: FilledButton.icon(
+            key: ChatScreen.crisisCallButtonKey(hotline.number),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.hc.cta,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            ),
+            onPressed: () =>
+                ref.read(linkLauncherProvider).launch(_telUri(hotline.number)),
+            icon: const Icon(Icons.call, size: 18),
+            label: Text(hotline.number),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Build a dialable `tel:` URI from a hotline number, stripping the
+/// formatting (spaces, parens, dashes) but keeping a leading `+` for
+/// international numbers — same shape the emergency card uses.
+Uri _telUri(String number) {
+  final String digits = number
+      .replaceAll(RegExp(r'[^0-9+]'), '')
+      .replaceAll(RegExp(r'(?!^)\+'), '');
+  return Uri(scheme: 'tel', path: digits);
 }
 
 /// Input row pinned to the bottom of the screen — multiline text field

@@ -365,28 +365,29 @@ void main() {
     );
 
     testWidgets(
-      'a spoken COMMAND runs the action + stays put — no chat thread',
+      'a spoken NAVIGATION command runs instantly + stays put — no chat '
+      'thread',
       (WidgetTester tester) async {
-        Map<String, String>? logged;
+        // Navigation is the only instant hands-free action now — every write
+        // confirms first (opens a thread with a card). A navigate command
+        // runs immediately, flashes the overlay, and stays on Home.
+        Map<String, String>? navigated;
         final ({GoRouter router, ChatRepository repo}) p = await _pumpRouter(
           tester,
           extraOverrides: <Override>[
             voiceCaptureProvider.overrideWithValue(
-              const _FakeVoiceCapture('log that she did not sleep'),
+              const _FakeVoiceCapture('take me to the calendar'),
             ),
-            // Reply carries an [action:…] tag → routeVoiceIntent executes it
-            // and does NOT navigate.
             chatServiceProvider.overrideWith(
               (Ref ref) => ChatService(
                 repository: ref.watch(chatRepositoryProvider),
                 backend: const _ScriptedChatBackend(
-                  'Logged that she did not sleep.\n'
-                  '[action:log_journal occurred_at="just now" '
-                  'situation="did not sleep" attempts="none"]',
+                  'Pulling up the calendar.\n'
+                  '[action:navigate target="calendar"]',
                 ),
                 actions: <String, ChatActionExecutor>{
-                  'log_journal': (Map<String, String> args) async {
-                    logged = args;
+                  'navigate': (Map<String, String> args) async {
+                    navigated = args;
                     return null;
                   },
                 },
@@ -402,9 +403,9 @@ void main() {
           await tester.pump(const Duration(milliseconds: 50));
         }
 
-        // The action ran with the spoken details…
-        expect(logged, isNotNull);
-        expect(logged!['situation'], 'did not sleep');
+        // The action ran with the spoken target…
+        expect(navigated, isNotNull);
+        expect(navigated!['target'], 'calendar');
         // …and we stayed on Home — no thread was created or navigated to.
         expect(_currentPath(p.router), '/');
         expect(await p.repo.listConversations(), isEmpty);
@@ -412,6 +413,56 @@ void main() {
         // Let the confirmation overlay's auto-dismiss timer fire so no timer
         // is left pending at teardown.
         await tester.pump(const Duration(milliseconds: 2700));
+      },
+    );
+
+    testWidgets(
+      'a spoken WRITE command opens a thread with the confirm card — never '
+      'commits hands-free',
+      (WidgetTester tester) async {
+        // Every write now confirms first, even spoken: the mic opens the
+        // freshly-minted thread so the caregiver taps Confirm.
+        final List<String> logged = <String>[];
+        final ({GoRouter router, ChatRepository repo}) p = await _pumpRouter(
+          tester,
+          extraOverrides: <Override>[
+            voiceCaptureProvider.overrideWithValue(
+              const _FakeVoiceCapture('log that she did not sleep'),
+            ),
+            chatServiceProvider.overrideWith(
+              (Ref ref) => ChatService(
+                repository: ref.watch(chatRepositoryProvider),
+                backend: const _ScriptedChatBackend(
+                  "Confirm below and I'll log it.\n"
+                  '[action:log_journal occurred_at="just now" '
+                  'situation="did not sleep" attempts="none"]',
+                ),
+                actions: <String, ChatActionExecutor>{
+                  'log_journal': (Map<String, String> args) async {
+                    logged.add(args['situation'] ?? '');
+                    return null;
+                  },
+                },
+                idFactory: _seqIds(<String>['conv-9', 'u1', 'a1']),
+                clock: () => DateTime.utc(2026, 5, 30, 12),
+              ),
+            ),
+          ],
+        );
+
+        await tester.tap(find.byKey(TabScaffold.centerVoiceButtonKey));
+        for (int i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        await tester.pumpAndSettle();
+
+        // Nothing was logged hands-free…
+        expect(logged, isEmpty);
+        // …a thread was minted and we navigated into it (where the confirm
+        // card lives).
+        final List<Conversation> convos = await p.repo.listConversations();
+        expect(convos, isNotEmpty);
+        expect(_currentPath(p.router), '/chat/conv-9');
       },
     );
 

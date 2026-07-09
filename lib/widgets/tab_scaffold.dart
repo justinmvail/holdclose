@@ -266,10 +266,15 @@ class _TabItem extends StatelessWidget {
 /// shared [voiceCaptureProvider] seam's `onPartial`). When they stop, it
 /// hands the final transcript to [ChatService.routeVoiceIntent], which lets
 /// the coach DECIDE:
-///   - a clear command (log this, add that) → the coach performs it; the
-///     bubble flashes a short confirmation and we stay put — NO chat opens;
-///   - a question or anything ambiguous → a thread is minted with the
-///     answer already in it and we navigate to `/chat/<id>`.
+///   - a pure navigation command ("take me to the calendar") → the coach
+///     performs it; the bubble flashes a short confirmation and we stay put
+///     — NO chat opens;
+///   - anything that WRITES or CHANGES care data (add / log / update /
+///     remove) → a thread is minted carrying the in-thread confirm card, so
+///     the change applies only after a deliberate tap; we navigate to it;
+///   - a question, a worry, or a crisis phrase → a thread is minted with the
+///     answer (and, for a crisis phrase, the trusted resources card) already
+///     in it, and we navigate to `/chat/<id>`.
 ///
 /// Fail-safe: a blank/cancelled capture is a silent no-op (no thread); a
 /// denied mic surfaces the standard permission snackbar; tapping the button

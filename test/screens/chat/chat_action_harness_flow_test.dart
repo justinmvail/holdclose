@@ -109,27 +109,44 @@ void main() {
   setUp(() => db = HoldcloseDatabase(NativeDatabase.memory()));
   tearDown(() async => db.close());
 
-  testWidgets('an add_medication action in the reply writes the med + strips '
-      'the marker from the bubble', (WidgetTester tester) async {
+  testWidgets('an add_medication action parks a confirm card, then writes the '
+      'med only after Confirm', (WidgetTester tester) async {
+    // Every write now confirms through the in-thread card (USER DECISION
+    // 2026-07): sending does NOT write; the Confirm tap does.
     final ({MedicationRepository meds, GoRouter router}) h = await _pumpThread(
       tester,
       db: db,
       reply: const <ChatDelta>[
-        ChatDeltaText('Done — I added it.\n'
+        ChatDeltaText("Confirm below and I'll add it.\n"
             '[action:add_medication name="Aspirin" dosage="81 mg"]'),
       ],
     );
 
     await _send(tester, 'add aspirin 81 mg');
 
-    // The tool ran through the real ChatService → the med is on disk.
+    // Nothing written yet — the confirm card is showing, prose is clean.
+    expect(await h.meds.listMedications(), isEmpty);
+    expect(find.textContaining("Confirm below and I'll add it."),
+        findsOneWidget);
+    expect(find.textContaining('[action:'), findsNothing);
+    expect(find.text('Add the medication “Aspirin” (81 mg)?'), findsOneWidget);
+
+    // Tap Confirm → the tool runs through the real ChatService and the med
+    // lands on disk.
+    const String pendingCitation =
+        '${ChatService.pendingActionCitationPrefix}'
+        '[action:add_medication name="Aspirin" dosage="81 mg"]';
+    await tester
+        .tap(find.byKey(ChatScreen.pendingActionConfirmKey(pendingCitation)));
+    await tester.pumpAndSettle();
+
     final List<Medication> meds = await h.meds.listMedications();
     expect(meds, hasLength(1));
     expect(meds.single.name, 'Aspirin');
     expect(meds.single.dosage, '81 mg');
-    // The raw marker is stripped; only the prose shows.
-    expect(find.textContaining('Done — I added it.'), findsOneWidget);
-    expect(find.textContaining('[action:'), findsNothing);
+    // The card is gone after the decision.
+    expect(find.byKey(ChatScreen.pendingActionCardKey(pendingCitation)),
+        findsNothing);
   });
 
   testWidgets('a navigate action in the reply pushes the target screen',

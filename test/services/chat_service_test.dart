@@ -380,10 +380,14 @@ void main() {
       expect(emitted.last.citations, isEmpty);
     });
 
-    test('journal-action: marker stripped + executor invoked', () async {
+    test('journal-action: marker stripped + parked for confirmation, then '
+        'executor invoked on confirm', () async {
+      // Every mutating action now confirms before applying (USER DECISION
+      // 2026-07): log_journal parks as a pending card and the executor runs
+      // only after confirmPendingAction.
       final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
         const ChatDeltaText(
-            "Logged that one for you.\n"
+            "Confirm below and I'll log it for you.\n"
             '[action:log_journal occurred_at="just now" '
             'situation="Mom asked for her mother" '
             'attempts="I told her she went to the store"]'),
@@ -405,13 +409,26 @@ void main() {
       final List<Message> emitted = await svc
           .sendMessage(conversationId: 'convo-1', userText: 'log it')
           .toList();
-      expect(emitted.last.body, 'Logged that one for you.');
-      expect(emitted.last.citations, <String>['journal:test-entry-1']);
-      // The registry hands the executor the parsed key="value" args.
+      // Nothing ran yet — the tag is stripped from the body and parked.
+      expect(emitted.last.body, "Confirm below and I'll log it for you.");
+      expect(captured, isNull);
+      final String pending = emitted.last.citations.single;
+      expect(ChatService.isPendingActionCitation(pending), isTrue);
+
+      // Confirming runs the executor with the parsed key="value" args and
+      // stamps its citation.
+      final bool ran = await svc.confirmPendingAction(
+        conversationId: 'convo-1',
+        messageId: emitted.last.id,
+        citation: pending,
+      );
+      expect(ran, isTrue);
       expect(captured, isNotNull);
       expect(captured!['situation'], 'Mom asked for her mother');
       expect(captured!['attempts'], 'I told her she went to the store');
       expect(captured!['occurred_at'], 'just now');
+      final List<Message> stored = await repo.loadMessages('convo-1');
+      expect(stored.last.citations, <String>['journal:test-entry-1']);
     });
 
     test('journal-action: no executor wired → marker stripped, no citation',
@@ -480,16 +497,24 @@ void main() {
       final List<Message> emitted = await svc
           .sendMessage(conversationId: 'convo-1', userText: 'add it')
           .toList();
+      expect(emitted.last.body, 'On the list.');
+      // add_task now confirms first; the same quote-aware parse runs on
+      // confirm and the ']'-in-value no longer truncates the tag.
+      final bool ran = await svc.confirmPendingAction(
+        conversationId: 'convo-1',
+        messageId: emitted.last.id,
+        citation: emitted.last.citations.single,
+      );
+      expect(ran, isTrue);
       expect(captured, isNotNull);
       expect(captured!['title'], 'Pick up [urgent] refill');
       expect(captured!['body'], 'today');
-      expect(emitted.last.body, 'On the list.');
     });
 
-    test('an identical repeated tag executes ONCE (model stutter)', () async {
+    test('an identical repeated tag parks ONCE (model stutter)', () async {
       const String tag = '[action:log_journal situation="x" attempts="y"]';
       final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
-        const ChatDeltaText('Logged.\n$tag\n$tag'),
+        const ChatDeltaText('Confirm below.\n$tag\n$tag'),
       ]);
       int executions = 0;
       final ChatService svc = ChatService(
@@ -505,11 +530,28 @@ void main() {
         },
       );
 
-      await svc.sendMessage(conversationId: 'convo-1', userText: 'log').toList();
+      final List<Message> emitted = await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'log')
+          .toList();
+      // A stuttered tag parks a SINGLE pending card, not two.
+      expect(
+        emitted.last.citations
+            .where(ChatService.isPendingActionCitation)
+            .length,
+        1,
+      );
+      // Nothing ran before the caregiver confirmed; confirming runs it once.
+      expect(executions, 0);
+      final bool ran = await svc.confirmPendingAction(
+        conversationId: 'convo-1',
+        messageId: emitted.last.id,
+        citation: emitted.last.citations.single,
+      );
+      expect(ran, isTrue);
       expect(executions, 1);
     });
 
-    group('destructive actions — confirm-before-commit (2026-06-11)', () {
+    group('mutating actions — confirm-before-commit (2026-07)', () {
       ChatService buildService({
         required _ScriptedChatBackend backend,
         required List<String> deletions,
@@ -623,14 +665,14 @@ void main() {
         expect(stored.last.citations, isEmpty);
       });
 
-      test('a mixed reply executes the additive action and parks only the '
-          'destructive one', () async {
+      test('a reply mixing a log and a removal parks BOTH — neither commits '
+          'without a confirm tap', () async {
         final List<String> deletions = <String>[];
         final List<String> journals = <String>[];
         final ChatService svc = ChatService(
           repository: repo,
           backend: _ScriptedChatBackend(<ChatDelta>[
-            const ChatDeltaText('Done and one to confirm.\n'
+            const ChatDeltaText('Two to confirm.\n'
                 '[action:log_journal situation="calm walk" attempts="none yet"]\n'
                 '$deleteTag'),
           ]),
@@ -652,13 +694,179 @@ void main() {
             .sendMessage(conversationId: 'convo-1', userText: 'both')
             .toList();
 
-        expect(journals, <String>['calm walk']);
+        // Both write actions are gated — nothing ran on send.
+        expect(journals, isEmpty);
         expect(deletions, isEmpty);
         expect(
           emitted.last.citations
               .where(ChatService.isPendingActionCitation)
               .length,
-          1,
+          2,
+        );
+      });
+
+      test('a med-DOSAGE update parks as pending and does NOT apply until '
+          'confirmed', () async {
+        // The sharpest case for the new gate: a dosage change must never
+        // auto-commit — a silently changed dose is a safety event.
+        final List<String> dosages = <String>[];
+        final ChatService svc = ChatService(
+          repository: repo,
+          backend: _ScriptedChatBackend(<ChatDelta>[
+            const ChatDeltaText("Confirm below and I'll change the dose.\n"
+                '[action:update_medication name="Donepezil" dosage="5 mg"]'),
+          ]),
+          idFactory: _idFactory(),
+          clock: _fixedClock,
+          actions: <String, ChatActionExecutor>{
+            'update_medication': (Map<String, String> args) async {
+              dosages.add(args['dosage'] ?? '');
+              return null;
+            },
+          },
+        );
+
+        final List<Message> emitted = await svc
+            .sendMessage(conversationId: 'convo-1', userText: 'change the dose')
+            .toList();
+
+        // Nothing applied on send.
+        expect(dosages, isEmpty);
+        final String pending = emitted.last.citations.single;
+        expect(ChatService.isPendingActionCitation(pending), isTrue);
+        // The confirm card spells out exactly what changes.
+        expect(
+          ChatService.describePendingAction(pending),
+          'Change the dose of “Donepezil” to 5 mg?',
+        );
+
+        // Only the confirm tap applies it.
+        final bool ran = await svc.confirmPendingAction(
+          conversationId: 'convo-1',
+          messageId: emitted.last.id,
+          citation: pending,
+        );
+        expect(ran, isTrue);
+        expect(dosages, <String>['5 mg']);
+      });
+
+      test('a failed executor yields an honest failure reply (not a silent '
+          '"logged it")', () async {
+        // A navigation (instant) executor that THROWS must not vanish — the
+        // reply gets an honest failure line so the caregiver isn't told
+        // something saved that didn't. navigate is the one instant action.
+        final ChatService svc = ChatService(
+          repository: repo,
+          backend: _ScriptedChatBackend(<ChatDelta>[
+            const ChatDeltaText('Pulling that up for you.\n'
+                '[action:navigate target="calendar"]'),
+          ]),
+          idFactory: _idFactory(),
+          clock: _fixedClock,
+          actions: <String, ChatActionExecutor>{
+            'navigate': (Map<String, String> args) async =>
+                throw StateError('nav boom'),
+          },
+        );
+
+        final List<Message> emitted = await svc
+            .sendMessage(conversationId: 'convo-1', userText: 'show calendar')
+            .toList();
+
+        // The prose survives, but the honest failure line is appended.
+        expect(emitted.last.body, contains('Pulling that up for you.'));
+        expect(emitted.last.body, contains(chatActionFailedMessage));
+        expect(emitted.last.streamingDone, isTrue);
+      });
+    });
+
+    // ---- Crisis watchdog (code-side, model-independent) ------------------
+
+    group('crisis watchdog', () {
+      test('a crisis phrase pins the trusted card ABOVE the reply', () async {
+        final ChatService svc = ChatService(
+          repository: repo,
+          backend: _ScriptedChatBackend(<ChatDelta>[
+            const ChatDeltaText('That sounds so heavy. You are not alone.'),
+          ]),
+          idFactory: _idFactory(),
+          clock: _fixedClock,
+        );
+
+        final List<Message> emitted = await svc
+            .sendMessage(
+              conversationId: 'convo-1',
+              userText: "Some days I just want to die, I can't do this",
+            )
+            .toList();
+
+        // user turn, crisis card, assistant placeholder + reply snapshots.
+        final Message crisisCard = emitted.firstWhere(
+          (Message m) => m.citations.contains(ChatService.crisisCardCitation),
+        );
+        expect(crisisCard.role, MessageRole.assistant);
+        expect(crisisCard.body, isEmpty);
+        expect(crisisCard.streamingDone, isTrue);
+
+        // Ordering: the crisis card lands BEFORE the coach's prose reply.
+        final List<Message> stored = await repo.loadMessages('convo-1');
+        final int cardIdx = stored.indexWhere(
+          (Message m) => m.citations.contains(ChatService.crisisCardCitation),
+        );
+        final int replyIdx = stored.indexWhere(
+          (Message m) =>
+              m.role == MessageRole.assistant &&
+              m.body.contains('You are not alone'),
+        );
+        expect(cardIdx, greaterThanOrEqualTo(0));
+        expect(replyIdx, greaterThan(cardIdx));
+      });
+
+      test('the crisis card is NOT sent back to the model as history',
+          () async {
+        final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText('I hear you.'),
+        ]);
+        final ChatService svc = ChatService(
+          repository: repo,
+          backend: backend,
+          idFactory: _idFactory(),
+          clock: _fixedClock,
+        );
+
+        await svc
+            .sendMessage(
+              conversationId: 'convo-1',
+              userText: 'I feel suicidal tonight',
+            )
+            .toList();
+
+        // The model saw only the caregiver turn — never the empty card row.
+        expect(backend.lastHistory, hasLength(1));
+        expect(backend.lastHistory!.single.role, MessageRole.user);
+      });
+
+      test('an ordinary message pins NO crisis card', () async {
+        final ChatService svc = ChatService(
+          repository: repo,
+          backend: _ScriptedChatBackend(<ChatDelta>[
+            const ChatDeltaText('Here is a gentle idea.'),
+          ]),
+          idFactory: _idFactory(),
+          clock: _fixedClock,
+        );
+
+        final List<Message> emitted = await svc
+            .sendMessage(
+              conversationId: 'convo-1',
+              userText: 'How do I help her eat more at dinner?',
+            )
+            .toList();
+
+        expect(
+          emitted.any((Message m) =>
+              m.citations.contains(ChatService.crisisCardCitation)),
+          isFalse,
         );
       });
     });
@@ -1323,21 +1531,55 @@ void main() {
     });
     tearDown(() async => db.close());
 
-    test('a spoken COMMAND runs the action and returns VoiceIntentAction '
-        '— no thread', () async {
-      Map<String, String>? logged;
+    test('a spoken NAVIGATION command runs instantly and returns '
+        'VoiceIntentAction — no thread', () async {
+      // Navigation is the only instant hands-free action — it writes nothing.
+      Map<String, String>? navigated;
       final ChatService svc = ChatService(
         repository: repo,
         backend: _ScriptedChatBackend(<ChatDelta>[
           const ChatDeltaText(
-            'Logged that she did not sleep.\n'
+            'Pulling up the calendar.\n'
+            '[action:navigate target="calendar"]',
+          ),
+        ]),
+        actions: <String, ChatActionExecutor>{
+          'navigate': (Map<String, String> args) async {
+            navigated = args;
+            return null;
+          },
+        },
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+      );
+
+      final VoiceIntentOutcome outcome =
+          await svc.routeVoiceIntent('take me to the calendar');
+
+      expect(outcome, isA<VoiceIntentAction>());
+      expect((outcome as VoiceIntentAction).summary, 'Pulling up the calendar.');
+      expect(navigated, isNotNull);
+      expect(navigated!['target'], 'calendar');
+      // No conversation was created — it acted in place.
+      expect(await repo.listConversations(), isEmpty);
+    });
+
+    test('a spoken MUTATING command (log) never commits hands-free — it '
+        'opens a thread with the pending confirm card', () async {
+      // Every write now confirms first, even spoken: log_journal parks.
+      final List<String> logged = <String>[];
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText(
+            "Confirm below and I'll log it.\n"
             '[action:log_journal occurred_at="just now" '
             'situation="did not sleep" attempts="none"]',
           ),
         ]),
         actions: <String, ChatActionExecutor>{
           'log_journal': (Map<String, String> args) async {
-            logged = args;
+            logged.add(args['situation'] ?? '');
             return null;
           },
         },
@@ -1348,13 +1590,15 @@ void main() {
       final VoiceIntentOutcome outcome =
           await svc.routeVoiceIntent('log that she did not sleep');
 
-      expect(outcome, isA<VoiceIntentAction>());
-      expect((outcome as VoiceIntentAction).summary,
-          'Logged that she did not sleep.');
-      expect(logged, isNotNull);
-      expect(logged!['situation'], 'did not sleep');
-      // No conversation was created — it acted in place.
-      expect(await repo.listConversations(), isEmpty);
+      // A thread carrying the confirm card, NOT a hands-free "Done".
+      expect(outcome, isA<VoiceIntentChat>());
+      expect(logged, isEmpty);
+      final List<Message> msgs =
+          await repo.loadMessages((outcome as VoiceIntentChat).conversationId);
+      expect(
+        msgs.last.citations.where(ChatService.isPendingActionCitation),
+        hasLength(1),
+      );
     });
 
     test('a spoken QUESTION opens a thread with the answer already persisted',
@@ -1457,6 +1701,29 @@ void main() {
       final List<Message> msgs =
           await repo.loadMessages((outcome as VoiceIntentChat).conversationId);
       expect(chatBodyHasError(msgs.last.body), isTrue);
+    });
+
+    test('a spoken crisis phrase opens a thread with the trusted card pinned',
+        () async {
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText('You are not alone in this.'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+      );
+
+      final VoiceIntentOutcome outcome =
+          await svc.routeVoiceIntent('I want to die');
+      expect(outcome, isA<VoiceIntentChat>());
+      final List<Message> msgs =
+          await repo.loadMessages((outcome as VoiceIntentChat).conversationId);
+      expect(
+        msgs.any((Message m) =>
+            m.citations.contains(ChatService.crisisCardCitation)),
+        isTrue,
+      );
     });
   });
 }
