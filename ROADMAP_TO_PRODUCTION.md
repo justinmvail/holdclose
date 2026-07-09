@@ -61,18 +61,19 @@ our own infra** — the strongest possible privacy story for the competition and
 the stores. Today chat + recap route through the Worker `/chat`; the scanners,
 visit-prep, and insurance-appeal still hit the dev shim only._
 
-**⚠️ Validation caveat:** Workers AI models are smaller than the current
-frontier-via-shim model, so chat quality/latency and scan-extraction accuracy
-**must be validated on the live account at deploy** — this can't be tested from
-the dev environment (the `AI` binding calls real Cloudflare and bills neurons).
-The code can be built + unit-tested against a mocked binding now; quality is a
-deploy-time check.
+**⚠️ Validation caveat:** Workers AI models are smaller than the frontier
+model the dev shim uses, so chat quality/latency and scan-extraction accuracy
+**must be validated on the live account at deploy** — can't be tested from the
+dev environment. The backend is built + fully unit-tested (346 green) against a
+mocked endpoint; real-inference quality is a deploy-time check.
 
-- [ ] 🤖 **Backend chat inference → Workers AI.** Replace the Cerebras fetch in `chat.ts` with `env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', { messages, stream: true, max_tokens })`; add the `[ai] binding = "AI"` block to `wrangler.toml`; drop `CEREBRAS_API_KEY`/`CEREBRAS_BASE_URL`; keep the vendor-neutral `data:{"text":…}` SSE re-emit + the spend-cap accounting (re-tune the cost constants for Workers AI neuron pricing). Serves chat, recap, visit-prep, and insurance-appeal (all text).
-- [ ] 🤖 **New `POST /api/v1/extract` (vision)** — JWT-gated, calls `env.AI.run` with a vision/OCR model (**`@cf/moondream/moondream3.1-9B-A2B`**, built for OCR + structured output; fallback `@cf/meta/llama-3.2-11b-vision-instruct`); accepts the scan image + extraction prompt, returns the model's JSON text (same contract the shim `/extract` gives the scanners). Apply the same per-account quota/caps.
-- [ ] 🤖 **Rewire the app off the shim.** Point the prescription/appointment/insurance-card scanners + `document_scan_transport` at `/api/v1/extract`, and visit-prep + insurance-appeal at `/chat`; select the Worker path in all builds when a backend is configured; **drop `SHIM_URL` + the baked `SHIM_TOKEN`** from store builds (extractable-secret liability). Shim stays a pure dev convenience.
-- [ ] 🤝 **Deploy-time validation:** with the Worker live, exercise every AI surface (chat, voice-intent, recap, all three scanners, visit-prep, appeal); judge chat quality + scan accuracy; if extraction is weak, try the alternate vision model or keep a frontier fallback for scans only.
-- [ ] 🤖 **Privacy + packet update:** change the subprocessor disclosure (`legal.ts`) and the packet vendor sentence from Cerebras → **Cloudflare Workers AI** (and lean into "AI runs on our own cloud infrastructure; PHI never goes to a separate AI vendor"). Watchdog cost alert now tracks Workers AI neurons, not a Cerebras bill.
+- [x] 🤖 **Backend chat inference → Workers AI** (commit `dd09361`). `chat.ts` now calls Cloudflare Workers AI's **OpenAI-compatible endpoint** (`…/accounts/<id>/ai/v1/chat/completions`) with `@cf/meta/llama-3.3-70b-instruct-fp8-fast`; kept the vendor-neutral `data:{"text":…}` SSE + spend caps. Serves chat, recap, visit-prep, and insurance-appeal. _(Used the REST endpoint, not the key-less `AI` binding, because the binding can't start in the vitest-pool-workers test runtime — so a `CF_AI_API_TOKEN` secret is needed. Still 100% Cloudflare Workers AI.)_
+- [x] 🤖 **New `POST /api/v1/extract` (vision)** (commit `dd09361`) — JWT-gated, calls the same endpoint with `@cf/meta/llama-3.2-11b-vision-instruct` (image via the OpenAI `image_url` message), same per-user quota/caps, returns the model's JSON text (the shim `/extract` contract). 3 new tests.
+- [x] 🤖 **Privacy disclosure + packet** updated to Cloudflare Workers AI (`legal.ts` subprocessor; packet swept by the evidence pass — commit `8f08a9f`).
+- [x] 🤖 **App already routes all AI through the Worker in production** — no code change needed. Every surface has a Worker-backed impl selected when `FORUM_API_URL` is baked in: `ApiChatBackend` (chat + recap → `/api/v1/chat`), `ApiPrescriptionScanner` / `ApiAppointmentScanner` / `ApiInsuranceCardScanner` (→ `/api/v1/extract`, via `document_scan_transport.workerExtractJson`), and `ApiVisitPrepService` / `ApiInsuranceAppealService` (→ the Worker). These were dormant only because `/extract` didn't exist and chat pointed at Cerebras — the backend migration activated them. The shim is used only when NO backend is configured (dev).
+- [ ] 🖥️ **Store builds: don't bake `SHIM_URL`/`SHIM_TOKEN`.** Pass only `FORUM_API_URL` (→ Worker path); omit the shim defines so no extractable token ships. Build-script discipline, not a code change.
+- [ ] 🤝 **Deploy-time validation:** with the Worker live, exercise every AI surface (chat, voice-intent, recap, all three scanners, visit-prep, appeal); judge chat quality + scan accuracy; if extraction is weak, swap `EXTRACT_MODEL`/`CHAT_MODEL` (a wrangler var) or keep a frontier fallback for scans only.
+- [ ] 🖥️ **Set `CF_AI_API_TOKEN`** (Cloudflare API token, "Workers AI: Read") + fill `CLOUDFLARE_ACCOUNT_ID` at deploy (see `OPERATOR_SETUP.md §2`).
 
 ### 1d. Real release signing & store accounts
 - [ ] 👤 **Apple Developer Program + Google Play Console enrollment** under the chosen publisher (org enrollment for JCSV One LLC; D-U-N-S 13-689-7602). Multi-week — start now; it gates everything in 1e/1f.
@@ -81,7 +82,7 @@ deploy-time check.
 
 ### 1e. App Store (iOS) — submission runbook
 - [ ] 👤 In App Store Connect: create the app record (bundle id `com.holdclose.holdclose`), name "Holdclose", primary category, subtitle.
-- [ ] 🤝 **App Privacy ("nutrition labels")** — declare: health data collected + linked to identity; on-device storage; the **Cerebras subprocessor**; no sale, no ads; account deletion supported. Claude drafts from the privacy policy; founder submits.
+- [ ] 🤝 **App Privacy ("nutrition labels")** — declare: health data collected + linked to identity; on-device storage; the **Cloudflare Workers AI subprocessor** (AI on our own infra, no separate vendor); no sale, no ads; account deletion supported. Claude drafts from the privacy policy; founder submits.
 - [ ] 👤 **Account-deletion requirement (5.1.1(v))** — the in-app "Delete account" now truly cascades server-side; point the reviewer to it.
 - [ ] 🤝 Store listing: description, keywords, support URL (`holdclose.care`), marketing URL, promotional text, 6.5"/5.5" screenshots + iPad if universal, optional app preview.
 - [ ] 👤 Age rating questionnaire; **export-compliance** (uses standard HTTPS/OS crypto — usually the exemption); content-rights.
