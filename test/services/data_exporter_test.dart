@@ -30,6 +30,8 @@ import 'package:holdclose/services/medication_repository.dart';
 import 'package:holdclose/services/provider_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart' show TimeOfDay;
+import 'package:flutter/services.dart'
+    show MethodCall, MethodChannel, MissingPluginException, PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 
 /// Fixed instant so the `exportedAt` envelope stamp is deterministic.
@@ -54,6 +56,61 @@ ExportSources _sourcesFor(HoldcloseDatabase db, StorageProvider storage) => (
     );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  // The native document-picker contract `RealDataFilePicker` speaks to both
+  // `ios/Runner/DocumentPickerBridge.swift` and (for Android parity)
+  // `android/.../DocumentImportBridge.kt`. Both hand the picked file's bytes
+  // back over the `holdclose/document_import` channel's `pickJson` method —
+  // decoded to a Dart `Uint8List` — or null on cancel. This group pins that
+  // wire contract with a mock handler so both native twins have a Dart-side
+  // spec to match; the settings screen's own tests use the recording fake.
+  group('RealDataFilePicker — holdclose/document_import wire contract', () {
+    const MethodChannel channel = MethodChannel('holdclose/document_import');
+    const RealDataFilePicker picker = RealDataFilePicker();
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding
+          .instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    void handleWith(Future<Object?> Function() respond) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) async {
+        expect(call.method, 'pickJson');
+        return respond();
+      });
+    }
+
+    test('bytes from the native picker surface as a Uint8List', () async {
+      final Uint8List backup =
+          Uint8List.fromList(utf8.encode('{"schemaVersion":2}'));
+      handleWith(() async => backup);
+
+      final Uint8List? out = await picker.pickJsonFile();
+      expect(out, isNotNull);
+      // Round-trips to the JSON `importFromBytes` will hand to `jsonDecode`.
+      expect(utf8.decode(out!), '{"schemaVersion":2}');
+    });
+
+    test('a null return (caregiver cancelled) yields null', () async {
+      handleWith(() async => null);
+      expect(await picker.pickJsonFile(), isNull);
+    });
+
+    test('MissingPluginException degrades to null, not a throw', () async {
+      handleWith(() async => throw MissingPluginException('no channel'));
+      expect(await picker.pickJsonFile(), isNull);
+    });
+
+    test('a native PlatformException degrades to null', () async {
+      handleWith(
+          () async => throw PlatformException(code: 'READ_FAILED'));
+      expect(await picker.pickJsonFile(), isNull);
+    });
+  });
+
   group('DataExporter.gather — Issue #20', () {
     late HoldcloseDatabase db;
     late DriftStorageProvider storage;
