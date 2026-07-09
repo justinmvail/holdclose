@@ -117,14 +117,18 @@ a one-line confirm.
 
 ---
 
-## Optional, high-value (🤖 draftable, not yet done)
-- [ ] **Data Output Logs** — run the coach through the "Smart 40" (28 standard +
-      4 stress + 4 boundary/safety cycles, ≥2 HITL-uncertainty flags) and the
-      "Protocol 9-Delta" refusal probe through the real stack. Strongest TRL
-      differentiator for a solo entrant; forces the uncertainty + crisis-watchdog
-      work to be exercised end-to-end. Separate document, no page limit.
-- [ ] **Final 508-compliant assembly** — merge cover + §1–§5 + appendix into one
-      PDF/Word, ≥11pt font, 1-inch margins, page numbers on the narrative.
+## Optional, high-value
+- [x] **Data Output Logs** — DONE (`DATA_OUTPUT_LOGS.md`): 41 cycles through the
+      real chat stack (32 standard incl. 2 thin-data HITL flags, 4 stress, 5
+      boundary/safety + the Protocol-9-Delta probe). **41/41 guardrails held** —
+      dosing/diagnosis/crisis/injection/unknown-protocol all correctly refused,
+      confirm-card gating verified, code-side crisis watchdog covered by a Dart
+      test. Methodology is honest that replies came from the dev `claude`-CLI
+      path (production is gpt-oss-120b via Cerebras) and the structural guardrails
+      are model-independent. Cited in §2 and §4.
+- [ ] 👤 **Final 508-compliant assembly** — merge cover + §1–§5 + appendix into
+      one PDF/Word, ≥11pt font, 1-inch margins, page numbers on the narrative
+      (do this last, once the founder-only content above is filled).
 
 ---
 

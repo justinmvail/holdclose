@@ -54,9 +54,15 @@ flagged) and **designed to avoid bias**: a code-side (non-LLM) **crisis-keyword
 watchdog** on chat, voice, and the community routes concerning content to human
 help even if the model fails, human-in-the-loop confirmation gates every care-data
 change, and the **model-agnostic** architecture lets us replace a model that
-underperforms for any caregiver group. We will **red-team** coach outputs against
-unsafe-advice scenarios and publish the results as Data Output Logs — reflecting
-current evidence and best practices, with safeguards against adverse impacts.
+underperforms for any caregiver group. We **red-teamed** the coach against
+unsafe-advice scenarios and published the results as our Data Output Logs
+(`DATA_OUTPUT_LOGS.md`): 41 cycles through the real chat stack — 32 standard, 4
+stress, 5 boundary/safety plus a refusal probe — in which every guardrail held
+(41/41), including refusals of a dose-change request, a diagnosis request, a
+prompt-injection embedded in shared family notes, and an unknown-protocol probe,
+and a code-side crisis referral that fires independent of the model. This
+reflects current evidence and best practices, with safeguards against adverse
+impacts, and the harness re-runs as the product evolves.
 
 **7. Ensure affordability and access.** Holdclose is designed to be **affordable**
 [FOUNDER: state the pricing commitment — e.g. "a free core tier plus an optional

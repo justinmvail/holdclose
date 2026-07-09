@@ -85,8 +85,10 @@ entity**, but it is built privacy-forward to the standard families deserve.
   care data; an "I'm not certain — please consult a professional" escalation
   path; a community **crisis-keyword watchdog**.
 - **Continuous monitoring:** log uncertain/escalated interactions for review;
-  periodically **red-team** coach outputs against unsafe-advice scenarios; track
-  unsafe-response rate over time.
+  **red-team** coach outputs against unsafe-advice scenarios (an initial 41-cycle
+  run through the real stack is documented in `DATA_OUTPUT_LOGS.md` — all safety
+  guardrails held; the harness re-runs each iteration); track unsafe-response
+  rate over time.
 - **Bias:** recruit a **demographically diverse** caregiver test pool; watch for
   uneven quality across care situations, literacy levels, and (future)
   languages. The **model-agnostic** architecture lets us swap the underlying
