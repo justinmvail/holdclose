@@ -16,6 +16,7 @@ import 'providers/auth_provider.dart';
 import 'providers/care_events_provider.dart';
 import 'providers/care_shifts_provider.dart';
 import 'providers/care_tasks_provider.dart';
+import 'providers/crash_reporter.dart';
 import 'providers/expenses_provider.dart';
 import 'providers/local_notifications_provider.dart';
 import 'providers/notifications_provider.dart';
@@ -149,12 +150,27 @@ Future<void> main() async {
   });
   WidgetsBinding.instance.addObserver(_SyncLifecycleObserver(container));
 
-  runApp(
-    UncontrolledProviderScope(
-      container: container,
-      child: const HoldcloseApp(),
-    ),
-  );
+  // Automatic crash aggregation (observability), OPT-IN + self-hosted.
+  //
+  // This is ADDITIVE to the on-device, user-initiated report path wired in
+  // [_captureLogs] above (LogBuffer + CrashLog) — that path is unchanged and
+  // stays the caregiver's own control. The reporter resolves to a silent
+  // NoopCrashReporter unless a `--dart-define=SENTRY_DSN` was baked in (EMPTY
+  // dsn = disabled) AND we're not under `flutter test`, so dev / test / demo
+  // builds initialize NOTHING and boot exactly as before. When live, the SDK
+  // is initialized around [runApp] so it guards the app's error zone, and a
+  // mandatory PHI scrubber (scrubEvent) strips every care-data field from
+  // each outbound event. The aggregator vendor is DEV-FACING only — it never
+  // appears in any user-facing string.
+  final CrashReporter crashReporter = container.read(crashReporterProvider);
+  await crashReporter.init(() {
+    runApp(
+      UncontrolledProviderScope(
+        container: container,
+        child: const HoldcloseApp(),
+      ),
+    );
+  });
 }
 
 /// Tee `debugPrint`, framework errors, and uncaught async errors into

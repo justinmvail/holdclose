@@ -133,6 +133,19 @@ dependencies:
   # intent-filter on MainActivity.
   app_links: ^6.3.0
 
+  # Automatic crash aggregation (observability). Wired ONLY behind the
+  # CrashReporter interface (SentryCrashReporter = real, NoopCrashReporter =
+  # the default for tests/demo/dev); the app never imports the real impl
+  # directly — it goes through crashReporterProvider, which defaults to the
+  # no-op so `flutter test` + demo mode NEVER initialize Sentry. Init is gated
+  # on a `--dart-define=SENTRY_DSN` (EMPTY = disabled, so dev/test/demo builds
+  # send nothing and behave exactly as before). The DSN points at a SELF-HOSTED
+  # Sentry instance. PHI scrubbing is mandatory — see crash_reporter.dart's
+  # beforeSend. This runs ALONGSIDE the existing on-device, user-initiated
+  # report path (LogBuffer + CrashLog); it does not replace it. Note: the SDK
+  # name (Sentry) is DEV-FACING only — it never appears in user-facing strings.
+  sentry_flutter: ^9.24.0
+
   # Subscription paywall (StoreKit + Play Billing). Wired ONLY behind the
   # BillingService interface (StoreBillingService = real, FakeBillingService
   # = deterministic for tests/demo); the app never imports the real impl
