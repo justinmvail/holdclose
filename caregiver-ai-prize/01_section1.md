@@ -48,8 +48,9 @@ job easier across the whole experience. Its components:
   **Emergency Card** that hands off to paramedics/ER in a crisis.
 - **Voice-to-action logging** — hands-free voice intent ("log that she didn't
   sleep") records meds, doses, appointments, and journal entries for the
-  caregiver, for the constant reality that their hands are full. Any action that
-  changes care data routes through an explicit confirmation card.
+  caregiver, for the constant reality that their hands are full. Every AI action
+  that changes existing care data — in chat *or* voice — routes through an
+  explicit confirmation card before it is applied.
 - **A Journal with pattern detection** that surfaces early warnings
   ("3+ falls this week").
 - **A Care Circle** that shares caregiving across a family or care team
@@ -57,23 +58,30 @@ job easier across the whole experience. Its components:
   connection.
 - **A caregiver community** with a crisis-keyword safety watchdog.
 
-The AI is integrated responsibly and is **model-agnostic** (currently built on
-Claude): it supports the caregiver's judgment rather than replacing it, educates
-rather than diagnoses, flags uncertainty, and escalates to human help. Data is
-local-first and private, and the product is designed to be **affordable** —
-because it exists to help families, not to extract from them.
+The AI is integrated responsibly and is **model-agnostic** — today it runs on an
+**open-weight model (gpt-oss-120b)** served via Cerebras through a quota-enforcing
+backend, and the architecture can swap the underlying model without touching the
+product. It supports the caregiver's judgment rather than replacing it, educates
+rather than diagnoses, flags uncertainty when data is thin, and escalates to
+human help. Data is local-first and private, and the product is designed to be
+**affordable** — because it exists to help families, not to extract from them.
 
 ## AI Current Stage of Development (TRL 3+)
 
 Holdclose is a **complete, functioning, tested application — not a concept.**
-[Flutter; iOS + Android; deployed to device; unit/widget/golden and end-to-end
-test suites green; server-backed care-circle sync.] This exceeds TRL-3
+It is a Flutter app running on physical iOS and Android devices, with unit,
+widget, golden, and end-to-end integration suites green and a deployed Cloudflare
+Worker backend providing care-circle sync. This exceeds TRL-3
 (experimental proof-of-concept): the technology is built and demonstrated in a
-realistic environment. The AI coach calls a large language model via API behind
-guardrails — system constraints that keep responses supportive and
-non-diagnostic, an uncertainty/escalation path to human help, and human-in-the-
-loop confirmation before any action changes care data. The architecture is
-**model-agnostic**, so Holdclose is not dependent on any single AI provider.
+realistic environment. The AI coach calls a large language model via a
+quota-enforcing backend, behind guardrails — system constraints that keep
+responses supportive and non-diagnostic, an uncertainty clause that has the coach
+say when it is unsure and point to human help, weak-data flagging in the
+scan-to-import extractors, a code-side (non-LLM) crisis watchdog on chat and
+voice, and human-in-the-loop confirmation before any AI action changes existing
+care data. The architecture is **model-agnostic** — currently an open-weight
+model (gpt-oss-120b) served via Cerebras — so Holdclose is not dependent on any
+single AI provider.
 
 **Readiness self-assessment.** TRL-3 is the eligibility floor; **Holdclose
 clears it and stands above it — a working, tested system demonstrated in a
@@ -101,8 +109,9 @@ a realistic setting), while remaining honest that operational proof *at scale* �
 outcome data from a caregiver cohort — is precisely the work of Phases 2 and 3.
 
 **Existing vs. new AI methods.** Holdclose does *not* train a new model — it
-builds on **existing large language models** (model-agnostic; currently
-[Cerebras]). Its distinct contribution is the **data-grounding layer**
+builds on **existing large language models** (model-agnostic; currently the
+open-weight **gpt-oss-120b**, served via Cerebras through the quota-enforcing
+backend). Its distinct contribution is the **data-grounding layer**
 (`chat_context_builder`): the loved one's real, *sanitized* care data — meds, dose
 windows, appointments, journal — is assembled into the model's context at
 inference, so a general-purpose LLM becomes a coach that knows *your specific

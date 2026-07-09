@@ -22,17 +22,19 @@ Send to **CaregiverAI@acl.hhs.gov**. Keep it short; gov mailboxes reward brevity
 > that employer before the July 31 deadline changes anything?
 >
 > **2. Liability / financial responsibility.** The rules ask entrants to
-> demonstrate liability insurance or financial responsibility. For an
-> **individual entrant** (not an incorporated entity), what specifically
-> satisfies this requirement — a written attestation, or actual insurance
-> coverage?
+> "demonstrate financial responsibility in the amount of **$0** for third-party
+> claims" and to indemnify the federal government. Can you confirm that, for an
+> individual / single-member-LLC entrant, a **written attestation of $0
+> financial responsibility** satisfies this — i.e., that no purchased liability
+> insurance policy is required — and let me know if any specific attestation
+> language or form is expected?
 >
 > Thank you very much. I'm preparing toward the July 31 deadline and appreciate
 > your guidance.
 >
 > Best regards,
-> [Your Name]
-> [email] · [phone]
+> [FOUNDER: your name]
+> [FOUNDER: email] · [FOUNDER: phone]
 
 ---
 

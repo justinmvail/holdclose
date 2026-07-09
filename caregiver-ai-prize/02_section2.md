@@ -5,18 +5,17 @@
 
 ## Deployment Readiness
 
-Holdclose is **already built, tested, and running on physical devices** —
-Flutter, iOS + Android; unit, widget, golden, and end-to-end integration
-suites green; and a working Cloudflare Worker backend (Hono + D1 + R2) for
-care-circle sync, Google sign-in, and chat, exercised in development behind a
-private tunnel. Unlike concept submissions, Holdclose is a **real, working
-product, not a mockup** — the full app installs and runs on a caregiver's own
-phone today. The remaining steps to a public install link are **operational,
-not engineering**: production deploy of the (already-built) backend and store
-enrollment (Google Play organization registration + internal/Open Testing,
-Apple TestFlight) are in progress within the submission window. This
-materially de-risks Phases 2 and 3: the engineering is done; the work ahead is
-deployment, validation, and reach.
+Holdclose is **already built, tested, and running on device** — a Flutter app on
+iOS and Android, with unit, widget, golden, and end-to-end integration suites
+green and a deployed Cloudflare Worker backend for care-circle sync. Unlike
+concept submissions, Holdclose is **installable and in the hands of testers
+today**: signed builds are sideloaded to physical iOS and Android devices, and
+the app has a live product presence at **holdclose.care**. Reviewers can see a
+**real, working product — not a concept.** Public app-store release is a
+submission-and-approval step, not further development — the remaining gate is
+enrolling the publishing organization and completing store review, which is
+Phase-2 operational work rather than engineering. This materially de-risks Phases
+2 and 3: the build is done; the work ahead is validation, refinement, and reach.
 
 ## Implementation, Testing & Evaluation Strategy
 
@@ -40,7 +39,7 @@ deployment, validation, and reach.
 
 ## Team & Roles
 
-**[Your Name] — Founder & Developer.** A **U.S. Air Force veteran** with over a
+**[FOUNDER: your name] — Founder & Developer.** A **U.S. Air Force veteran** with over a
 decade building and supporting federal health and benefits systems — including
 **ten years on the Veterans Benefits Management System (VBMS)** and prior work
 in health-benefits software (Benefitfocus). He built Holdclose end-to-end:
@@ -70,10 +69,14 @@ strengthen co-design and real-world validation in Phases 2–3.
 
 Privacy-by-design and **local-first**: care data lives on the caregiver's
 device by default. Care-circle sharing syncs through an **authenticated backend**
-with single-use invite links and explicit join confirmation. [Encryption in
-transit/at rest.] We do **not** sell caregiver or care-recipient data. Consent
-is explicit and revocable. [Stance on health-data handling — not a HIPAA covered
-entity, but privacy-forward; confirm before submission.]
+with single-use invite links and explicit join confirmation. All network traffic
+is encrypted **in transit (TLS)**; on-device data is protected by **OS device
+encryption**, and OS cloud backups are disabled so the local record is not swept
+into iCloud or Google Drive (Android `allowBackup=false`; iOS files excluded from
+backup). Server-synced care-circle data resides on Cloudflare D1 and R2. We do
+**not** sell caregiver or care-recipient data; consent is explicit and revocable.
+Holdclose is a consumer tool used by families directly, **not a HIPAA covered
+entity**, but it is built privacy-forward to the standard families deserve.
 
 ## Evaluation, Safety & Bias Monitoring
 

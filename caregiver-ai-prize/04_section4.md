@@ -11,15 +11,23 @@ stored on the caregiver's device by default. Sharing is opt-in via single-use,
 explicitly confirmed invites. **Data portability** is inherent (the caregiver
 owns and can export their record); we do **not** sell caregiver or care-recipient
 data; consent is explicit and revocable. The app refers to the care recipient as
-"your loved one," never "the patient" — dignity by design. [Encryption in
-transit/at rest.]
+"your loved one," never "the patient" — dignity by design. All network traffic is
+encrypted **in transit (TLS)**; on-device care data is protected by the phone's
+**OS device encryption**, with OS cloud backups disabled so the local record is
+not swept into iCloud or Google Drive (Android `allowBackup=false`; iOS files
+excluded from backup). Server-synced care-circle data resides on Cloudflare D1
+and R2.
 
 **2. Support human-in-the-loop accountability.** Holdclose **augments, never
-replaces, the caregiver's judgment.** Every action that changes care data routes
-through an explicit **confirmation card**; the coach's guidance is **grounded in
-and cites the loved one's own data**, so the caregiver sees the reasoning; and
-when the model is uncertain or the data is thin, it **says so and escalates to
-professional help** rather than asserting.
+replaces, the caregiver's judgment.** Every AI action that changes existing care
+data — in chat *or* voice — routes through an explicit **confirmation card**
+before it applies; the coach's guidance is **grounded in and cites the loved
+one's own data**, so the caregiver sees the reasoning; and when the model is
+uncertain or the data is thin, it **flags that weak-data result and escalates to
+professional help** rather than asserting. The scan-to-import extractors likewise
+flag low-confidence fields for the caregiver to check, and a code-side (non-LLM)
+crisis watchdog on chat and voice catches concerning messages even if the model
+fails.
 
 **3. Support caregivers' well-being and reduce burden.** This is Holdclose's
 purpose — **the assistant that makes a relentless, full-time job easier.**
@@ -42,14 +50,17 @@ diagnosis or a one-size template.
 
 **6. Promote safety, reliability, and transparency.** The coach's behavior is
 **transparent** (educational, not diagnostic; grounded and cited; uncertainty
-flagged) and **designed to avoid bias**: outputs are red-teamed against
-unsafe-advice scenarios, a community **crisis-keyword watchdog** routes concerning
-content to human help, and the **model-agnostic** architecture lets us replace a
-model that underperforms for any caregiver group — reflecting current evidence and
-best practices, with safeguards against adverse impacts.
+flagged) and **designed to avoid bias**: a code-side (non-LLM) **crisis-keyword
+watchdog** on chat, voice, and the community routes concerning content to human
+help even if the model fails, human-in-the-loop confirmation gates every care-data
+change, and the **model-agnostic** architecture lets us replace a model that
+underperforms for any caregiver group. We will **red-team** coach outputs against
+unsafe-advice scenarios and publish the results as Data Output Logs — reflecting
+current evidence and best practices, with safeguards against adverse impacts.
 
 **7. Ensure affordability and access.** Holdclose is designed to be **affordable**
-[free tier / low price — transparent, reasonable cost], runs on the phone
+[FOUNDER: state the pricing commitment — e.g. "a free core tier plus an optional
+low-cost subscription; transparent, reasonable pricing"], runs on the phone
 caregivers already carry, and its **local-first** design works even with limited
 connectivity — meeting caregivers where they are, which is the heart of ACL's
 home- and community-based mission.

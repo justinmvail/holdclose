@@ -29,10 +29,12 @@ Caregiver AI Prize Challenge**, Track 1 (AI Tools to Support Caregivers).
 ## Our real strengths (lean on these)
 - **Built, tested, feature-complete app** (TRL-3+) — most entrants have only
   a concept. App Store release is NOT required for Phase 1.
-- **Lived experience** — founder cared about dementia in his own family
-  (grandfather); early testers are themselves family caregivers of aging /
-  dementia-affected parents.
-- **Model-agnostic** responsible AI (currently Claude), human-in-the-loop.
+- **Lived experience** — a U.S. Air Force veteran founder who worked in VA
+  benefits systems and has repeatedly cared for his father (a 100%-disabled
+  veteran); dementia in his own family (grandfather); early testers are
+  themselves family caregivers of aging / dementia-affected parents.
+- **Model-agnostic** responsible AI — currently the open-weight gpt-oss-120b
+  served via Cerebras through a quota-enforcing backend; human-in-the-loop.
 
 ## The two things to GENERATE this month (cheap, not gaps)
 - [ ] **User-Centered evidence** — write up the friend-caregiver feedback
