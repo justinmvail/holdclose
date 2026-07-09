@@ -75,8 +75,14 @@ step.
 1. Apple Developer Program + Google Play Console **organization**
    enrollment under JCSV One LLC (D-U-N-S 13-689-7602) — see the plan on
    the Desktop; publisher DBA must not be "Careblazers".
-2. Real release signing for Android (replace the debug-keystore signing in
-   `android/app/build.gradle.kts`) + register the release SHA-1 on the
-   OAuth Android client.
+2. Real release signing for Android — the signing **config** is now wired
+   (`android/app/build.gradle.kts` reads `android/key.properties` and uses a
+   real keystore when present, else falls back to debug signing so plain
+   builds still work). To activate it: generate a keystore with a secure
+   password (Corretto-17 keytool), put it at `android/holdclose-release.keystore`
+   and its credentials in `android/key.properties` (both already gitignored),
+   then register that keystore's SHA-1 on the Google OAuth Android client so
+   Google sign-in works in release APKs. (Until then, sideloaded APKs use
+   debug signing, whose SHA-1 is already registered.)
 3. Paywall (StoreKit / Play Billing) + rev-share affiliate attribution —
    gated on #1; a build-out phase of its own.
