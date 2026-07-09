@@ -227,5 +227,100 @@ void main() {
       final TextScaler scaler = MediaQuery.textScalerOf(probeContext);
       expect(scaler.scale(10), closeTo(13.5, 0.001));
     });
+
+    testWidgets(
+        'COMPOSES the OS text scaler with the in-app scale '
+        '(a11y: an OS-wide enlargement is preserved, not discarded)',
+        (WidgetTester tester) async {
+      // Simulate a user who enlarged text OS-wide to 1.4×.
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      const Key probeKey = Key('font-scale-compose-probe');
+      final GoRouter probeRouter = GoRouter(
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/',
+            builder: (BuildContext context, GoRouterState _) => const Scaffold(
+              body: Text('scaled', key: probeKey),
+            ),
+          ),
+        ],
+      );
+
+      await tester.binding.setSurfaceSize(const Size(420, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final InMemoryStorageProvider storage = InMemoryStorageProvider();
+      // large in-app scale (1.15×) on top of the 1.4× OS scaler.
+      await storage.updateSettings(
+        AppSettings.defaults().copyWith(fontSize: FontSizeMultiplier.large),
+      );
+      addTearDown(storage.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            storageBackendProvider.overrideWithValue(storage),
+            quietHoursClockProvider.overrideWithValue(
+              () => DateTime(2026, 5, 29, 14, 0),
+            ),
+          ],
+          child: HoldcloseApp(router: probeRouter),
+        ),
+      );
+      await tester.pump();
+
+      final BuildContext probeContext = tester.element(find.byKey(probeKey));
+      final TextScaler scaler = MediaQuery.textScalerOf(probeContext);
+      // 1.4 (OS) × 1.15 (in-app) = 1.61 — under the 2.2 clamp ceiling.
+      expect(scaler.scale(10), closeTo(16.1, 0.05));
+    });
+
+    testWidgets('CLAMPS the composed scaler so an extreme OS setting can\'t '
+        'blow the layout apart', (WidgetTester tester) async {
+      // An extreme OS scaler that, times xLarge (1.35), would exceed 2.2.
+      tester.platformDispatcher.textScaleFactorTestValue = 3.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      const Key probeKey = Key('font-scale-clamp-probe');
+      final GoRouter probeRouter = GoRouter(
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/',
+            builder: (BuildContext context, GoRouterState _) => const Scaffold(
+              body: Text('scaled', key: probeKey),
+            ),
+          ),
+        ],
+      );
+
+      await tester.binding.setSurfaceSize(const Size(420, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final InMemoryStorageProvider storage = InMemoryStorageProvider();
+      await storage.updateSettings(
+        AppSettings.defaults().copyWith(fontSize: FontSizeMultiplier.xLarge),
+      );
+      addTearDown(storage.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            storageBackendProvider.overrideWithValue(storage),
+            quietHoursClockProvider.overrideWithValue(
+              () => DateTime(2026, 5, 29, 14, 0),
+            ),
+          ],
+          child: HoldcloseApp(router: probeRouter),
+        ),
+      );
+      await tester.pump();
+
+      final BuildContext probeContext = tester.element(find.byKey(probeKey));
+      final TextScaler scaler = MediaQuery.textScalerOf(probeContext);
+      // 3.0 × 1.35 = 4.05, clamped to the 2.2 ceiling.
+      expect(scaler.scale(10), closeTo(22.0, 0.001));
+    });
   });
 }

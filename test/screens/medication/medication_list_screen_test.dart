@@ -286,6 +286,36 @@ void main() {
       expect(
           find.byKey(MedicationListScreen.tileKey('m-ibu')), findsOneWidget);
     });
+
+    testWidgets('delete shows an Undo SnackBar that restores the med',
+        (WidgetTester tester) async {
+      await repo.upsertMedication(_med('m-ibu', 'Ibuprofen'));
+      await _pumpList(tester, repo: repo);
+
+      await tester.longPress(find.byKey(MedicationListScreen.tileKey('m-ibu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(MedicationListScreen.deleteConfirmKey));
+      await tester.pump(); // let the SnackBar mount (don't settle it away)
+
+      // The Undo affordance is present and the med is (soft) deleted.
+      expect(
+        find.byKey(MedicationListScreen.deleteUndoSnackBarKey),
+        findsOneWidget,
+      );
+      expect(await repo.listMedications(), isEmpty);
+
+      // Invoking Undo restores it — recovery the copy actually delivers.
+      // (Invoke the action's callback directly: a SnackBar is an overlay at
+      // the bottom of a tall test surface, so a coordinate tap is flaky.)
+      final SnackBarAction action = tester.widget<SnackBarAction>(
+        find.widgetWithText(SnackBarAction, 'Undo'),
+      );
+      action.onPressed();
+      await tester.pumpAndSettle();
+      expect(await repo.listMedications(), hasLength(1));
+      expect(
+          find.byKey(MedicationListScreen.tileKey('m-ibu')), findsOneWidget);
+    });
   });
 
   group('MedicationListScreen — refill runway', () {

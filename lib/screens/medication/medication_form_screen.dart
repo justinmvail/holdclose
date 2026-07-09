@@ -7,7 +7,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../models/medication.dart';
 import '../../providers/active_patient_provider.dart';
 import '../../providers/notifications_provider.dart';
-import '../../providers/patient_timeline_provider.dart' show invalidatePatientTimeline;
+import '../../providers/patient_timeline_provider.dart'
+    show invalidatePatientTimeline, patientTimelineEventsProvider;
 import '../../services/medication_repository.dart';
 import '../../services/notification_scheduler.dart';
 import '../../theme.dart';
@@ -102,6 +103,8 @@ class MedicationFormScreen extends ConsumerStatefulWidget {
   static const Key dateFilledFieldKey = Key('medication-form-date-filled');
   static const Key discardAfterFieldKey = Key('medication-form-discard-after');
   static const Key submitButtonKey = Key('medication-form-submit');
+  static const Key deleteUndoSnackBarKey =
+      Key('medication-form-delete-undo-snackbar');
   static const Key endDateFieldKey = Key('medication-form-end-date');
   static const Key endDateClearKey = Key('medication-form-end-date-clear');
   static const Key deleteButtonKey = Key('medication-form-delete');
@@ -242,13 +245,21 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
   Future<void> _confirmAndDelete(BuildContext context) async {
     final String? id = widget.medicationId;
     if (id == null) return;
+    // Capture the messenger + provider container before the dialog await —
+    // both the app-root ScaffoldMessenger and the ProviderContainer survive
+    // this screen's disposal, so the Undo SnackBar (shown on the medication
+    // list we return to) can refresh the list without touching `context` or
+    // `this.ref` across the async gap.
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ProviderContainer container =
+        ProviderScope.containerOf(context, listen: false);
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         title: const Text('Delete medication?'),
         content: Text(
           "${_name.text.trim()} will stop appearing on the schedule. "
-          "The dose history stays on disk so you can recover it later.",
+          "You'll have a moment to undo this.",
         ),
         actions: <Widget>[
           TextButton(
@@ -265,6 +276,10 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
     if (confirm != true) return;
     final MedicationRepository repo =
         ref.read(medicationRepositoryBackendProvider);
+    // Snapshot the live row (pre-delete, `deletedAt == null`) so Undo can
+    // re-upsert it and clear the tombstone — a real recovery affordance for
+    // the "you can undo this" promise.
+    final Medication? snapshot = await repo.getMedication(id);
     await repo.softDeleteMedication(id);
     ref.invalidate(medicationListProvider);
     invalidatePatientTimeline(ref);
@@ -273,6 +288,25 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
       context.pop();
     } else if (context.mounted) {
       context.go('/medications');
+    }
+    if (snapshot != null) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          key: MedicationFormScreen.deleteUndoSnackBarKey,
+          content: Text('${snapshot.name} deleted.'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () async {
+              await repo.upsertMedication(snapshot);
+              // Refresh the list + dashboard timeline via the container
+              // (this screen is gone, so `ref` is off-limits).
+              container.invalidate(medicationListProvider);
+              container.invalidate(patientTimelineEventsProvider);
+            },
+          ),
+        ),
+      );
     }
   }
 
@@ -817,8 +851,9 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                             onPressed: _submitting ? null : _submit,
                             style: ElevatedButton.styleFrom(
                               minimumSize: const Size.fromHeight(56),
-                              backgroundColor: context.hc.cta,
-                              foregroundColor: Colors.white,
+                              backgroundColor: context.hc.ctaFilled,
+                              foregroundColor:
+                                  theme.colorScheme.onSecondary,
                             ),
                             child: Text(
                               _submitting
@@ -826,8 +861,8 @@ class _MedicationFormScreenState extends ConsumerState<MedicationFormScreen> {
                                   : (widget.isEdit
                                       ? 'Save changes'
                                       : 'Save medication'),
-                              style: textTheme.labelLarge
-                                  ?.copyWith(color: Colors.white),
+                              style: textTheme.labelLarge?.copyWith(
+                                  color: theme.colorScheme.onSecondary),
                             ),
                           ),
                         ),
@@ -1155,8 +1190,8 @@ class _AddWindowSheetState extends State<_AddWindowSheet> {
                 icon: const Icon(Icons.add),
                 label: const Text('Pick a time for this time window'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.hc.cta,
-                  foregroundColor: Colors.white,
+                  backgroundColor: context.hc.ctaFilled,
+                  foregroundColor: Theme.of(context).colorScheme.onSecondary,
                   minimumSize: const Size.fromHeight(48),
                 ),
               ),

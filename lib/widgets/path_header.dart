@@ -170,12 +170,29 @@ class PathHeader extends StatelessWidget {
       // Terminal crumb — current page, plain navy text.
       return Text(crumb.label, style: style);
     }
-    return InkWell(
-      onTap: () => context.go(crumb.route!),
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Text(crumb.label, style: style),
+    // A tappable crumb IS a back affordance, so announce it as a button
+    // ("Back to Care") rather than plain text, and give it a ≥44px minimum
+    // hit target (WCAG 2.5.5) — the bare InkWell-on-Text was ~27px tall and
+    // read to screen readers as static text.
+    return Semantics(
+      button: true,
+      label: 'Back to ${crumb.label}',
+      child: InkWell(
+        onTap: () => context.go(crumb.route!),
+        borderRadius: BorderRadius.circular(4),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            // Center so the label sits mid-height of the enlarged target
+            // without pushing the breadcrumb row taller than the text.
+            child: Align(
+              alignment: Alignment.centerLeft,
+              widthFactor: 1,
+              child: Text(crumb.label, style: style),
+            ),
+          ),
+        ),
       ),
     );
   }

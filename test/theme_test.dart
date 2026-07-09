@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:holdclose/theme.dart';
 import 'package:flutter/material.dart';
@@ -55,12 +56,41 @@ void main() {
       expect(holdcloseColors.primarySoft, const Color(0xFF2A3B61));
       expect(holdcloseColors.text, const Color(0xFF33373D));
       expect(holdcloseColors.cta, const Color(0xFFC97458));
+      // Accessible filled-CTA background: white text on it clears WCAG-AA.
+      expect(holdcloseColors.ctaFilled, const Color(0xFFB05C40));
       expect(holdcloseColors.accentDeep, const Color(0xFFB05C40));
       expect(holdcloseColors.surfaceWarm, const Color(0xFFF8F6F3));
       expect(holdcloseColors.background, const Color(0xFFFFFFFF));
       expect(holdcloseColors.link, const Color(0xFF4054B2));
       expect(holdcloseColors.error, const Color(0xFFCF2E2E));
       expect(holdcloseColors.success, const Color(0xFF2A7C4F));
+    });
+  });
+
+  group('CTA contrast (WCAG-AA)', () {
+    // Relative luminance + contrast ratio per WCAG 2.x.
+    double channel(double c) =>
+        c <= 0.03928 ? c / 12.92 : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+    double luminance(Color c) =>
+        0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
+    double contrast(Color a, Color b) {
+      final double la = luminance(a) + 0.05;
+      final double lb = luminance(b) + 0.05;
+      return la > lb ? la / lb : lb / la;
+    }
+
+    test('white on the filled-CTA background clears AA (>= 4.5:1)', () {
+      final double ratio = contrast(
+        Colors.white,
+        holdcloseColors.ctaFilled,
+      );
+      expect(ratio, greaterThanOrEqualTo(4.5));
+    });
+
+    test('white on the DECORATIVE salmon would FAIL AA (documents the '
+        'reason the filled token exists)', () {
+      final double ratio = contrast(Colors.white, holdcloseColors.cta);
+      expect(ratio, lessThan(4.5));
     });
   });
 
@@ -78,8 +108,16 @@ void main() {
       expect(holdcloseLightTheme.colorScheme.primary, holdcloseColors.primary);
     });
 
-    test('colorScheme.secondary is the CTA salmon (#C97458)', () {
-      expect(holdcloseLightTheme.colorScheme.secondary, holdcloseColors.cta);
+    test('colorScheme.secondary is the accessible filled-CTA background '
+        '(#B05C40), not the lighter decorative salmon', () {
+      // Filled buttons read their background from `secondary` and foreground
+      // from `onSecondary`; the decorative salmon (`cb.cta`) is too light for
+      // white text (3.43:1). `secondary` is the darker AA-passing tone.
+      expect(
+        holdcloseLightTheme.colorScheme.secondary,
+        holdcloseColors.ctaFilled,
+      );
+      expect(holdcloseLightTheme.colorScheme.secondary, const Color(0xFFB05C40));
     });
 
     test('colorScheme.tertiary is accentDeep (#B05C40)', () {

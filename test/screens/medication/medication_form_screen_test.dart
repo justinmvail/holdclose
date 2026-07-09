@@ -290,6 +290,35 @@ void main() {
 
       expect(await repo.listMedications(), hasLength(1));
     });
+
+    testWidgets('delete shows an Undo SnackBar on the list that restores it',
+        (WidgetTester tester) async {
+      await repo.upsertMedication(_med('med-7', 'Ibuprofen'));
+      await _pumpForm(tester, repo: repo, editId: 'med-7');
+
+      await tester.tap(find.byKey(MedicationFormScreen.deleteButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      // Popped back to the list, med (soft) deleted, Undo offered on the
+      // list's (app-root) messenger — the "you can undo this" copy is real.
+      expect(find.text('list-stub'), findsOneWidget);
+      expect(await repo.listMedications(), isEmpty);
+      expect(
+        find.byKey(MedicationFormScreen.deleteUndoSnackBarKey),
+        findsOneWidget,
+      );
+
+      // Invoke Undo directly (SnackBar overlay tap is flaky on a tall
+      // surface) — it re-upserts the captured live snapshot.
+      final SnackBarAction action = tester.widget<SnackBarAction>(
+        find.widgetWithText(SnackBarAction, 'Undo'),
+      );
+      action.onPressed();
+      await tester.pumpAndSettle();
+      expect(await repo.listMedications(), hasLength(1));
+    });
   });
 
   group('MedicationFormScreen — PathHeader back affordance', () {

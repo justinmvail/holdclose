@@ -76,6 +76,7 @@ class CareCircleScreen extends ConsumerWidget {
 
   static const Key listKey = Key('care-circle-list');
   static const Key emptyStateKey = Key('care-circle-empty');
+  static const Key emptyInviteCtaKey = Key('care-circle-empty-invite');
 
   // Care-circle connect affordances (2026-06-06).
   static const Key usernameActionKey = Key('care-circle-username');
@@ -427,7 +428,8 @@ class _AddByUsernameSheetState extends ConsumerState<_AddByUsernameSheet> {
             const SizedBox(height: 12),
             Text(
               _error!,
-              style: textTheme.bodyMedium?.copyWith(color: context.hc.cta),
+              style:
+                  textTheme.bodyMedium?.copyWith(color: context.hc.ctaFilled),
             ),
           ],
           const SizedBox(height: 24),
@@ -436,12 +438,13 @@ class _AddByUsernameSheetState extends ConsumerState<_AddByUsernameSheet> {
             onPressed: _busy ? null : _submit,
             style: ElevatedButton.styleFrom(
               minimumSize: const Size.fromHeight(56),
-              backgroundColor: context.hc.cta,
-              foregroundColor: Colors.white,
+              backgroundColor: context.hc.ctaFilled,
+              foregroundColor: Theme.of(context).colorScheme.onSecondary,
             ),
             child: Text(
               _busy ? 'Looking…' : 'Find caregiver',
-              style: textTheme.labelLarge?.copyWith(color: Colors.white),
+              style: textTheme.labelLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onSecondary),
             ),
           ),
         ],
@@ -584,13 +587,56 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'No one else in your circle yet. Set your @username, then share '
-            'your QR or add a caregiver by their handle to share the load.',
+            "You're the only one here so far.",
+            style: textTheme.titleMedium?.copyWith(
+              color: context.hc.primary,
+              fontWeight: FontWeight.w700,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Invite a family member or friend so you can share the caregiving '
+            '— schedules, medications, and updates stay in sync between you.',
             style: textTheme.bodyLarge?.copyWith(color: context.hc.text),
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 20),
+          Semantics(
+            button: true,
+            label: 'Invite someone to your care circle.',
+            child: ElevatedButton.icon(
+              key: CareCircleScreen.emptyInviteCtaKey,
+              onPressed: () => _openInvite(context),
+              icon: Icon(
+                Icons.person_add_alt_1_outlined,
+                color: Theme.of(context).colorScheme.onSecondary,
+              ),
+              label: const Text('Invite someone'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: context.hc.ctaFilled,
+                foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                minimumSize: const Size.fromHeight(52),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  /// Open the invite options — shows the same connect sheet the strip's
+  /// "Add by @username" action uses, so the empty-state CTA leads straight
+  /// to inviting someone rather than dead-ending on jargon.
+  void _openInvite(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.hc.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext sheetContext) => const _AddByUsernameSheet(),
     );
   }
 }

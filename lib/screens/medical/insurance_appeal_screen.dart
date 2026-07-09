@@ -7,6 +7,7 @@ import '../../providers/visit_prep_provider.dart' show careContextTextProvider;
 import '../../services/insurance_appeal_service.dart';
 import '../../theme.dart';
 import '../../widgets/form/labelled_field.dart';
+import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
 
 /// AI insurance-appeal helper (`/insurance-appeal`). The caregiver describes
@@ -33,6 +34,7 @@ class InsuranceAppealScreen extends ConsumerStatefulWidget {
 
 class _InsuranceAppealScreenState
     extends ConsumerState<InsuranceAppealScreen> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _claim = TextEditingController();
   final TextEditingController _denial = TextEditingController();
   final TextEditingController _letter = TextEditingController();
@@ -49,12 +51,10 @@ class _InsuranceAppealScreenState
 
   Future<void> _draft() async {
     if (_drafting) return;
-    if (_claim.text.trim().isEmpty || _denial.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Tell me what was denied and the reason first.'),
-      ));
-      return;
-    }
+    // Inline field validation (red border + message + scroll-to-first)
+    // replaces the transient SnackBar so the caregiver sees exactly which
+    // field is missing instead of a message that vanishes.
+    if (!validateAndScrollToFirstError(_formKey)) return;
     setState(() => _drafting = true);
     final InsuranceAppealService service =
         ref.read(insuranceAppealServiceProvider);
@@ -121,7 +121,9 @@ class _InsuranceAppealScreenState
               ),
             ),
             Expanded(
-              child: ListView(
+              child: Form(
+                key: _formKey,
+                child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 children: <Widget>[
                   Container(
@@ -140,7 +142,7 @@ class _InsuranceAppealScreenState
                   const SizedBox(height: 16),
                   LabelledField(
                     label: 'What was denied?',
-                    child: TextField(
+                    child: TextFormField(
                       key: InsuranceAppealScreen.claimFieldKey,
                       controller: _claim,
                       maxLines: 2,
@@ -149,12 +151,16 @@ class _InsuranceAppealScreenState
                       decoration: const InputDecoration(
                         hintText: 'e.g. Physical therapy sessions, MRI, a med',
                       ),
+                      validator: (String? v) =>
+                          (v == null || v.trim().isEmpty)
+                              ? 'Tell me what was denied.'
+                              : null,
                     ),
                   ),
                   const SizedBox(height: 16),
                   LabelledField(
                     label: 'Reason given for the denial',
-                    child: TextField(
+                    child: TextFormField(
                       key: InsuranceAppealScreen.denialFieldKey,
                       controller: _denial,
                       maxLines: 3,
@@ -163,6 +169,10 @@ class _InsuranceAppealScreenState
                       decoration: const InputDecoration(
                         hintText: 'Copy the reason from the denial letter',
                       ),
+                      validator: (String? v) =>
+                          (v == null || v.trim().isEmpty)
+                              ? 'Add the reason from the denial letter.'
+                              : null,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -172,8 +182,8 @@ class _InsuranceAppealScreenState
                     icon: const Icon(Icons.auto_awesome_outlined),
                     label: Text(_drafting ? 'Drafting…' : 'Draft appeal letter'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: context.hc.cta,
-                      foregroundColor: Colors.white,
+                      backgroundColor: context.hc.ctaFilled,
+                      foregroundColor: theme.colorScheme.onSecondary,
                       minimumSize: const Size.fromHeight(52),
                     ),
                   ),
@@ -209,6 +219,7 @@ class _InsuranceAppealScreenState
                     ),
                   ],
                 ],
+              ),
               ),
             ),
           ],

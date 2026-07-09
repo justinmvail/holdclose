@@ -13,6 +13,7 @@ class HoldcloseColors extends ThemeExtension<HoldcloseColors> {
     required this.primarySoft,
     required this.text,
     required this.cta,
+    required this.ctaFilled,
     required this.accentDeep,
     required this.surfaceWarm,
     required this.background,
@@ -24,7 +25,20 @@ class HoldcloseColors extends ThemeExtension<HoldcloseColors> {
   final Color primary;
   final Color primarySoft;
   final Color text;
+
+  /// The salmon brand accent. Use for DECORATIVE, non-text-bearing marks
+  /// (icons, chip tints, borders, focus rings). At 3.43:1 white text on
+  /// this fails WCAG-AA, so it is NOT a filled-button background — use
+  /// [ctaFilled] for anything that carries white/on-secondary label text.
   final Color cta;
+
+  /// Accessible filled-CTA background. Darker than [cta] so white
+  /// (`onSecondary`) text on it clears WCAG-AA (4.72:1 in light mode).
+  /// Every filled primary button (ElevatedButton / FilledButton / FAB)
+  /// reads its background from here and its foreground from
+  /// `colorScheme.onSecondary`, so dark mode pairs correctly.
+  final Color ctaFilled;
+
   final Color accentDeep;
   final Color surfaceWarm;
   final Color background;
@@ -38,6 +52,7 @@ class HoldcloseColors extends ThemeExtension<HoldcloseColors> {
     Color? primarySoft,
     Color? text,
     Color? cta,
+    Color? ctaFilled,
     Color? accentDeep,
     Color? surfaceWarm,
     Color? background,
@@ -50,6 +65,7 @@ class HoldcloseColors extends ThemeExtension<HoldcloseColors> {
       primarySoft: primarySoft ?? this.primarySoft,
       text: text ?? this.text,
       cta: cta ?? this.cta,
+      ctaFilled: ctaFilled ?? this.ctaFilled,
       accentDeep: accentDeep ?? this.accentDeep,
       surfaceWarm: surfaceWarm ?? this.surfaceWarm,
       background: background ?? this.background,
@@ -70,6 +86,7 @@ class HoldcloseColors extends ThemeExtension<HoldcloseColors> {
       primarySoft: Color.lerp(primarySoft, other.primarySoft, t)!,
       text: Color.lerp(text, other.text, t)!,
       cta: Color.lerp(cta, other.cta, t)!,
+      ctaFilled: Color.lerp(ctaFilled, other.ctaFilled, t)!,
       accentDeep: Color.lerp(accentDeep, other.accentDeep, t)!,
       surfaceWarm: Color.lerp(surfaceWarm, other.surfaceWarm, t)!,
       background: Color.lerp(background, other.background, t)!,
@@ -88,6 +105,9 @@ const HoldcloseColors holdcloseColors = HoldcloseColors(
   primarySoft: Color(0xFF2A3B61),
   text: Color(0xFF33373D),
   cta: Color(0xFFC97458),
+  // Filled-button background: white text on this measures 4.72:1 (WCAG-AA
+  // pass), vs. 3.43:1 on the lighter decorative [cta].
+  ctaFilled: Color(0xFFB05C40),
   accentDeep: Color(0xFFB05C40),
   surfaceWarm: Color(0xFFF8F6F3),
   background: Color(0xFFFFFFFF),
@@ -118,6 +138,9 @@ const HoldcloseColors holdcloseColorsDark = HoldcloseColors(
   primarySoft: Color(0xFF8C9BBF),
   text: _darkText,
   cta: Color(0xFFE08A6B),
+  // Filled-button background on dark: pairs with the dark-navy
+  // `onSecondary`, so the bright orange carries dark text at high contrast.
+  ctaFilled: Color(0xFFE08A6B),
   accentDeep: Color(0xFFC97458),
   surfaceWarm: _darkSurfaceVariant,
   background: _darkSurface,
@@ -183,7 +206,10 @@ ThemeData _buildLightTheme() {
     brightness: Brightness.light,
     primary: Color(0xFF1F2A44),
     onPrimary: Color(0xFFFFFFFF),
-    secondary: Color(0xFFC97458),
+    // `secondary` is the FILLED-CTA background (the accessible #B05C40, not
+    // the lighter decorative salmon), so `onSecondary` white text on a
+    // filled button clears WCAG-AA. Decorative salmon stays on `cb.cta`.
+    secondary: Color(0xFFB05C40),
     onSecondary: Color(0xFFFFFFFF),
     tertiary: Color(0xFFB05C40),
     onTertiary: Color(0xFFFFFFFF),

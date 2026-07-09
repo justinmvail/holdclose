@@ -276,4 +276,49 @@ void main() {
       expect(_path(router), '/medical/medications');
     });
   });
+
+  group('PathHeader — a11y (breadcrumb hit target + semantics)', () {
+    testWidgets('a tappable crumb is a button labelled "Back to <label>"',
+        (WidgetTester tester) async {
+      await _pumpRouter(
+        tester,
+        _routerHosting(const PathHeader(
+          breadcrumbs: _threeCrumbs,
+          title: 'Medications',
+        )),
+      );
+
+      // The parent 'Medical' crumb announces as a button with a back label,
+      // not plain text (WCAG name/role). Find the Semantics wrapper above the
+      // crumb that carries the explicit "Back to <label>" name.
+      final Iterable<Semantics> ancestors = tester
+          .widgetList<Semantics>(find.ancestor(
+            of: find.text('Medical'),
+            matching: find.byType(Semantics),
+          ))
+          .where((Semantics s) => s.properties.label == 'Back to Medical');
+      expect(ancestors, isNotEmpty);
+      expect(ancestors.first.properties.button, isTrue);
+    });
+
+    testWidgets('a tappable crumb has a >=44px hit target',
+        (WidgetTester tester) async {
+      await _pumpRouter(
+        tester,
+        _routerHosting(const PathHeader(
+          breadcrumbs: _threeCrumbs,
+          title: 'Medications',
+        )),
+      );
+
+      // The InkWell wrapping the 'Medical' crumb text is at least 44px tall.
+      final Size inkSize = tester.getSize(
+        find.ancestor(
+          of: find.text('Medical'),
+          matching: find.byType(InkWell),
+        ),
+      );
+      expect(inkSize.height, greaterThanOrEqualTo(44));
+    });
+  });
 }

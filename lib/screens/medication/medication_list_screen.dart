@@ -116,6 +116,8 @@ class MedicationListScreen extends ConsumerWidget {
   static const Key deleteDialogKey = Key('medication-list-delete-dialog');
   static const Key deleteConfirmKey = Key('medication-list-delete-confirm');
   static const Key deleteCancelKey = Key('medication-list-delete-cancel');
+  static const Key deleteUndoSnackBarKey =
+      Key('medication-list-delete-undo-snackbar');
 
   static Key tileKey(String medicationId) =>
       Key('medication-list-tile-$medicationId');
@@ -209,8 +211,8 @@ class MedicationListScreen extends ConsumerWidget {
           return FloatingActionButton.extended(
             key: MedicationListScreen.fabKey,
             heroTag: 'medications-add-fab',
-            backgroundColor: context.hc.cta,
-            foregroundColor: Colors.white,
+            backgroundColor: context.hc.ctaFilled,
+            foregroundColor: Theme.of(context).colorScheme.onSecondary,
             onPressed: () => context.push('/medications/new'),
             icon: const Icon(Icons.add),
             label: const Text('Add medication'),
@@ -365,7 +367,9 @@ class _MedicationCard extends ConsumerWidget {
                           icon: const Icon(Icons.call, size: 18),
                           label: const Text('Call'),
                           style: TextButton.styleFrom(
-                            foregroundColor: context.hc.cta,
+                            // Darker CTA tone for the label text so salmon-
+                            // on-warm-surface clears AA; the icon inherits it.
+                            foregroundColor: context.hc.ctaFilled,
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
@@ -396,13 +400,20 @@ class _MedicationCard extends ConsumerWidget {
 
   Future<void> _confirmAndDelete(
       BuildContext context, WidgetRef ref, Medication med) async {
+    // Capture the messenger + provider container before the dialog await so
+    // the Undo SnackBar can be shown + refresh the list without touching
+    // `context` or `this.ref` across the async gap (the card may unmount
+    // when the last med is deleted and the empty state swaps in).
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final ProviderContainer container =
+        ProviderScope.containerOf(context, listen: false);
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         key: MedicationListScreen.deleteDialogKey,
         title: const Text('Remove medication?'),
         content: Text("${med.name} will stop appearing on the schedule. "
-            "The dose history stays on disk so you can recover it later."),
+            "You'll have a moment to undo this."),
         actions: <Widget>[
           TextButton(
             key: MedicationListScreen.deleteCancelKey,
@@ -423,6 +434,24 @@ class _MedicationCard extends ConsumerWidget {
     await repo.softDeleteMedication(med.id);
     ref.invalidate(medicationListProvider);
     invalidatePatientTimeline(ref);
+    // Real recovery affordance for the "you can undo this" promise: re-upsert
+    // the captured (pre-delete, live) row — it carries `deletedAt == null`,
+    // so writing it back clears the tombstone and restores the medication.
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        key: MedicationListScreen.deleteUndoSnackBarKey,
+        content: Text('${med.name} removed.'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            await repo.upsertMedication(med);
+            container.invalidate(medicationListProvider);
+            container.invalidate(patientTimelineEventsProvider);
+          },
+        ),
+      ),
+    );
   }
 }
 
@@ -485,7 +514,8 @@ class _SupplyLine extends StatelessWidget {
           child: Text(
             chipText,
             style: tt.labelMedium?.copyWith(
-              color: context.hc.cta,
+              // Darker CTA tone so the chip label clears AA on its tint.
+              color: context.hc.ctaFilled,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -536,26 +566,32 @@ class _EmptyState extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          Semantics(
-            button: true,
-            label: 'Add a medication.',
-            child: ElevatedButton.icon(
-              key: MedicationListScreen.emptyCtaKey,
-              onPressed: () => context.push('/medications/new'),
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: Text(
-                'Add a medication',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(color: Colors.white),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: context.hc.cta,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(56),
-              ),
-            ),
+          Builder(
+            builder: (BuildContext context) {
+              final Color onFilled =
+                  Theme.of(context).colorScheme.onSecondary;
+              return Semantics(
+                button: true,
+                label: 'Add a medication.',
+                child: ElevatedButton.icon(
+                  key: MedicationListScreen.emptyCtaKey,
+                  onPressed: () => context.push('/medications/new'),
+                  icon: Icon(Icons.add, color: onFilled),
+                  label: Text(
+                    'Add a medication',
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelLarge
+                        ?.copyWith(color: onFilled),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: context.hc.ctaFilled,
+                    foregroundColor: onFilled,
+                    minimumSize: const Size.fromHeight(56),
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),

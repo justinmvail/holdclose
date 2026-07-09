@@ -47,7 +47,7 @@ class MedicalHubScreen extends ConsumerWidget {
         _MedicalTileSpec(
           icon: Icons.person_search_outlined,
           label: 'Find a provider',
-          subLabel: 'search clinicians (NPI)',
+          subLabel: 'doctors & specialists',
           route: '/find-provider',
           chipColor: context.hc.link,
         ),

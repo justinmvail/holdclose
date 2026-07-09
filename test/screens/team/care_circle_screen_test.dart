@@ -193,7 +193,12 @@ void main() {
 
       expect(find.byKey(CareCircleScreen.emptyStateKey), findsOneWidget);
       expect(
-        find.textContaining('No one else in your circle yet'),
+        find.textContaining("You're the only one here so far"),
+        findsOneWidget,
+      );
+      // Plain-language empty state carries an explicit invite CTA.
+      expect(
+        find.byKey(CareCircleScreen.emptyInviteCtaKey),
         findsOneWidget,
       );
       // No pending rows ever.

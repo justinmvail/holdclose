@@ -133,6 +133,17 @@ void main() {
       );
     });
 
+    testWidgets('the Find-a-provider tile uses plain-language, not "NPI"',
+        (WidgetTester tester) async {
+      await _pumpHub(tester);
+
+      final HubTile provider = tester
+          .widgetList<HubTile>(find.byType(HubTile))
+          .firstWhere((HubTile t) => t.label == 'Find a provider');
+      expect(provider.subLabel, 'doctors & specialists');
+      expect(find.textContaining('NPI'), findsNothing);
+    });
+
     testWidgets('the landing breadcrumb starts from Home (Home › Care)',
         (WidgetTester tester) async {
       await _pumpHub(tester);

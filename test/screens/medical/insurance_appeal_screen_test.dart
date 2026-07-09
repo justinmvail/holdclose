@@ -56,14 +56,27 @@ void main() {
     expect(letter.controller!.text, contains('BlueCross'));
   });
 
-  testWidgets('requires both inputs before drafting',
-      (WidgetTester tester) async {
+  testWidgets('requires both inputs before drafting — inline field errors, '
+      'no transient SnackBar', (WidgetTester tester) async {
     await _pump(tester);
 
     await tester.tap(find.byKey(InsuranceAppealScreen.draftButtonKey));
     await tester.pumpAndSettle();
 
+    // No letter drafted, and BOTH fields surface persistent inline errors
+    // (the validators fire via the Form) — not a SnackBar that vanishes.
     expect(find.byKey(InsuranceAppealScreen.letterFieldKey), findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
     expect(find.textContaining('what was denied'), findsOneWidget);
+    expect(find.text('Add the reason from the denial letter.'), findsOneWidget);
+
+    // Filling the first field clears its error; the second still blocks.
+    await tester.enterText(
+        find.byKey(InsuranceAppealScreen.claimFieldKey), 'physical therapy');
+    await tester.tap(find.byKey(InsuranceAppealScreen.draftButtonKey));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('what was denied'), findsNothing);
+    expect(find.text('Add the reason from the denial letter.'), findsOneWidget);
+    expect(find.byKey(InsuranceAppealScreen.letterFieldKey), findsNothing);
   });
 }

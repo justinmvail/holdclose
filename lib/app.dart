@@ -213,15 +213,33 @@ class _HoldcloseAppState extends ConsumerState<HoldcloseApp> {
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: _router,
       // BUILD_SPEC.md §11.3 — apply the user's font multiplier to every
-      // routed screen by wrapping the router's child in a MediaQuery
-      // whose `textScaler` reflects `state.fontSize.scale`. The settings
-      // screen mutates the notifier and the change propagates here on
-      // the next frame without any per-screen plumbing.
+      // routed screen by wrapping the router's child in a MediaQuery whose
+      // `textScaler` reflects `state.fontSize.scale`. The settings screen
+      // mutates the notifier and the change propagates here on the next
+      // frame without any per-screen plumbing.
+      //
+      // A11y: COMPOSE with the OS text scaler rather than replacing it, so a
+      // user who enlarged text system-wide keeps that enlargement AND the
+      // in-app choice on top. The product is a scaled BiggerBy factor — we
+      // read the OS scaler at a reference font size, multiply by the in-app
+      // scale, and clamp the total so an extreme OS setting can't blow the
+      // layout apart. (Replacing the scaler outright — the old behavior —
+      // silently discarded the user's OS accessibility setting.)
       builder: (BuildContext context, Widget? child) {
         final MediaQueryData base = MediaQuery.of(context);
+        // Reference size cancels out of the ratio; 14 is Material's default
+        // body size, so `osScale` is the OS scaler's effective linear factor.
+        const double referenceFontSize = 14;
+        final double osScale =
+            base.textScaler.scale(referenceFontSize) / referenceFontSize;
+        // Clamp the combined factor to a sane ceiling so a maxed-out OS
+        // setting stacked on xLarge can't push type past what the screens
+        // were laid out to hold.
+        final double combined =
+            (osScale * fontSize.scale).clamp(0.5, 2.2);
         return MediaQuery(
           data: base.copyWith(
-            textScaler: TextScaler.linear(fontSize.scale),
+            textScaler: TextScaler.linear(combined),
           ),
           // Feedback affordance. Inert (returns the child verbatim) unless
           // the build set `--dart-define=FEEDBACK=true`, so production + tests

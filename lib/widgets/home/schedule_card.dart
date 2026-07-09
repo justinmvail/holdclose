@@ -74,6 +74,11 @@ class ScheduleCard extends ConsumerWidget {
   static const Key tomorrowSectionKey = Key('home-schedule-tomorrow');
   static const Key viewCalendarKey = Key('home-schedule-view-calendar');
   static const Key moreRowKey = Key('home-schedule-more');
+
+  /// First-run empty-state CTAs.
+  static const Key emptyAddMedKey = Key('home-schedule-empty-add-med');
+  static const Key emptyScanKey = Key('home-schedule-empty-scan');
+  static const Key emptyAskCoachKey = Key('home-schedule-empty-ask-coach');
   static Key rowKey(String eventId) => Key('home-schedule-row-$eventId');
   static Key doneCheckboxKey(String eventId) =>
       Key('home-schedule-done-$eventId');
@@ -113,7 +118,7 @@ class ScheduleCard extends ConsumerWidget {
       data: (List<CareEvent> events) {
         final _Buckets b = _bucket(events, now);
         if (b.isEmpty) {
-          return const _Message(text: 'No upcoming items.', emptyKey: true);
+          return const _EmptyState();
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -658,15 +663,130 @@ class _Block extends StatelessWidget {
   }
 }
 
+/// First-run empty state for the schedule card. A bare "No upcoming items."
+/// left a new caregiver with nothing to do; this instead points them at the
+/// three fastest ways to fill the schedule — add a medication by hand, scan a
+/// prescription, or ask the coach — mirroring the instructive med-list /
+/// journal empty states.
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme tt = Theme.of(context).textTheme;
+    return Column(
+      key: ScheduleCard.emptyKey,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          "Nothing scheduled yet.",
+          style: tt.bodyLarge?.copyWith(
+            color: context.hc.primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "Add what your loved one takes and their appointments, and today's "
+          "plan shows up here. Here's a quick start:",
+          style: tt.bodyMedium?.copyWith(color: context.hc.text),
+        ),
+        const SizedBox(height: 16),
+        _EmptyCta(
+          buttonKey: ScheduleCard.emptyAddMedKey,
+          icon: Icons.add,
+          label: 'Add a medication',
+          onTap: () => GoRouter.of(context).push('/medications/new'),
+        ),
+        const SizedBox(height: 8),
+        _EmptyCta(
+          buttonKey: ScheduleCard.emptyScanKey,
+          icon: Icons.document_scanner_outlined,
+          label: 'Scan a prescription',
+          filled: false,
+          onTap: () => GoRouter.of(context).push('/scan'),
+        ),
+        const SizedBox(height: 8),
+        _EmptyCta(
+          buttonKey: ScheduleCard.emptyAskCoachKey,
+          icon: Icons.chat_bubble_outline,
+          label: 'Ask the coach',
+          filled: false,
+          onTap: () => GoRouter.of(context).push('/chat'),
+        ),
+      ],
+    );
+  }
+}
+
+/// One full-width action in the first-run empty state — a filled brand CTA
+/// for the primary path, outlined for the alternatives. Foreground reads
+/// `colorScheme.onSecondary` so the filled variant stays legible in both
+/// palettes (WCAG-AA); the outlined variants carry navy label text.
+class _EmptyCta extends StatelessWidget {
+  const _EmptyCta({
+    required this.buttonKey,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.filled = true,
+  });
+
+  final Key buttonKey;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    if (filled) {
+      final Color onFilled = Theme.of(context).colorScheme.onSecondary;
+      return Semantics(
+        button: true,
+        label: label,
+        child: ElevatedButton.icon(
+          key: buttonKey,
+          onPressed: onTap,
+          icon: Icon(icon, color: onFilled),
+          label: Text(label),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: context.hc.ctaFilled,
+            foregroundColor: onFilled,
+            minimumSize: const Size.fromHeight(48),
+          ),
+        ),
+      );
+    }
+    return Semantics(
+      button: true,
+      label: label,
+      child: OutlinedButton.icon(
+        key: buttonKey,
+        onPressed: onTap,
+        icon: Icon(icon, color: context.hc.primary),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: context.hc.primary,
+          side: BorderSide(color: context.hc.primarySoft),
+          minimumSize: const Size.fromHeight(48),
+        ),
+      ),
+    );
+  }
+}
+
+/// The load-error message for the schedule card. (The empty state is its
+/// own instructive [_EmptyState] — this only carries the error branch's
+/// short line now.)
 class _Message extends StatelessWidget {
-  const _Message({required this.text, this.emptyKey = false});
+  const _Message({required this.text});
   final String text;
-  final bool emptyKey;
   @override
   Widget build(BuildContext context) {
     final TextTheme tt = Theme.of(context).textTheme;
     return Padding(
-      key: emptyKey ? ScheduleCard.emptyKey : null,
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Text(
         text,

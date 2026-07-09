@@ -1,6 +1,14 @@
+import 'package:holdclose/models/appointment.dart' show AppointmentStatus;
 import 'package:holdclose/models/care_event.dart';
+import 'package:holdclose/providers/home_clock_provider.dart';
+import 'package:holdclose/providers/patient_timeline_provider.dart';
+import 'package:holdclose/theme.dart';
 import 'package:holdclose/widgets/home/schedule_card.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 const String _patient = 'demo-patient-mary';
 
@@ -67,6 +75,75 @@ void main() {
           bucketSchedule(const <CareEvent>[], now);
       expect(buckets.today, isEmpty);
       expect(buckets.tomorrow, isEmpty);
+    });
+  });
+
+  group('ScheduleCard — first-run empty state', () {
+    Future<void> pumpEmpty(WidgetTester tester, {List<String>? nav}) async {
+      final GoRouter router = GoRouter(
+        initialLocation: '/',
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/',
+            builder: (_, __) => const Scaffold(
+              body: Padding(
+                padding: EdgeInsets.all(16),
+                child: ScheduleCard(),
+              ),
+            ),
+            routes: <RouteBase>[
+              for (final String p in <String>['medications/new', 'scan', 'chat'])
+                GoRoute(
+                  path: p,
+                  builder: (_, GoRouterState s) {
+                    nav?.add('/${s.uri.path.replaceFirst('/', '')}');
+                    return const Scaffold(body: Text('dest'));
+                  },
+                ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            homeClockProvider.overrideWithValue(() => now),
+            patientTimelineEventsProvider
+                .overrideWith((Ref ref) async => const <CareEvent>[]),
+            scheduleAppointmentStatusProvider.overrideWith(
+              (Ref ref) async => const <String, AppointmentStatus>{},
+            ),
+          ],
+          child: MaterialApp.router(
+            theme: ThemeData(
+              extensions: const <ThemeExtension<dynamic>>[holdcloseColors],
+            ),
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('shows instructive copy + three quick-start CTAs',
+        (WidgetTester tester) async {
+      await pumpEmpty(tester);
+
+      expect(find.byKey(ScheduleCard.emptyKey), findsOneWidget);
+      expect(find.text('Nothing scheduled yet.'), findsOneWidget);
+      expect(find.byKey(ScheduleCard.emptyAddMedKey), findsOneWidget);
+      expect(find.byKey(ScheduleCard.emptyScanKey), findsOneWidget);
+      expect(find.byKey(ScheduleCard.emptyAskCoachKey), findsOneWidget);
+    });
+
+    testWidgets('the Add-a-medication CTA routes to /medications/new',
+        (WidgetTester tester) async {
+      final List<String> nav = <String>[];
+      await pumpEmpty(tester, nav: nav);
+
+      await tester.tap(find.byKey(ScheduleCard.emptyAddMedKey));
+      await tester.pumpAndSettle();
+      expect(nav, contains('/medications/new'));
     });
   });
 }
