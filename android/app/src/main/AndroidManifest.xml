@@ -18,6 +18,21 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- Dose + appointment reminders (flutter_local_notifications, Phase
+         12.8). Without these the scheduled alarms NEVER fire on Android:
+         the plugin needs POST_NOTIFICATIONS to display on API 33+, an
+         exact-alarm permission because we schedule with
+         AndroidScheduleMode.exactAllowWhileIdle, and RECEIVE_BOOT_COMPLETED
+         so the boot receiver below re-arms pending reminders after a
+         reboot (Android drops all alarms on power-cycle otherwise).
+         We use USE_EXACT_ALARM (no runtime prompt) because the app targets
+         API 33+ and reminders are the app's core value; SCHEDULE_EXACT_ALARM
+         is kept as the fallback permission the plugin can request at runtime
+         on OEMs/policy configs that gate USE_EXACT_ALARM. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Backups are OFF (2026-06-11): the app-data dir holds the loved
          one's health record in PLAINTEXT (the drift SQLite DB: meds,
          dose history, behaviors, journal) plus the feedback outbox.
@@ -68,6 +83,34 @@
                 <data android:scheme="holdclose"/>
             </intent-filter>
         </activity>
+        <!-- flutter_local_notifications scheduled-reminder receivers
+             (Phase 12.8). The plugin stops declaring these itself from v16
+             on, so a scheduled dose/appointment alarm has nothing to
+             deliver it without these three entries:
+               - ScheduledNotificationReceiver fires the pending alarm and
+                 posts the notification when its time arrives.
+               - ScheduledNotificationBootReceiver re-arms every pending
+                 alarm after a device reboot / app update (Android clears
+                 alarms on power-cycle), paired with RECEIVE_BOOT_COMPLETED.
+               - ActionBroadcastReceiver routes notification-action taps
+                 back into the plugin.
+             All exported="false": nothing outside the app may trigger them. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

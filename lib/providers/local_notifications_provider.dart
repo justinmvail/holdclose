@@ -31,6 +31,20 @@ class LocalNotificationsProvider implements NotificationsProvider {
   bool _initialized = false;
   final StreamController<String> _taps = StreamController<String>.broadcast();
 
+  /// Surfaces a scheduling/cancel failure the OS layer swallowed to keep
+  /// the caller's save from hanging (see [schedule]). A production run can
+  /// listen and warn the caregiver that a reminder didn't land instead of
+  /// the failure vanishing into a debugPrint. Broadcast so both the boot
+  /// wiring and a future in-app banner can subscribe.
+  final StreamController<NotificationScheduleFailure> _failures =
+      StreamController<NotificationScheduleFailure>.broadcast();
+
+  /// Stream of scheduling failures. Empty on the happy path; emits one
+  /// [NotificationScheduleFailure] per swallowed platform exception so the
+  /// caller can surface "we couldn't set that reminder" without the save
+  /// itself failing.
+  Stream<NotificationScheduleFailure> scheduleFailures() => _failures.stream;
+
   static const String _channelId = 'holdclose_trackers';
   static const String _channelName = 'Tracker reminders';
   static const String _channelDesc =
@@ -107,11 +121,17 @@ class LocalNotificationsProvider implements NotificationsProvider {
   Future<void> schedule(ScheduledNotification notification) async {
     // A notification op must NEVER break the caller's flow. The
     // medication/appointment form save schedules reminders on the same
-    // await it shows "Saving…" on — and on Android release the plugin can
-    // throw an uncaught PlatformException ("TypeToken must be created with
-    // a type argument", from R8/desugaring stripping Gson's generic
-    // signature) that hangs the save forever (fb 2026-06-14). Swallow any
-    // platform failure here: drop the reminder, let the save complete.
+    // await it shows "Saving…" on — so a platform exception here can't be
+    // rethrown or it would hang the save. But it must NOT vanish silently:
+    // if the reminder failed to land the caregiver has to know. Catch the
+    // failure so the save completes, then SURFACE it on [scheduleFailures]
+    // (and log) rather than dropping it into a debugPrint.
+    //
+    // The historical failure was an uncaught PlatformException on Android
+    // release ("TypeToken must be created with a type argument", from
+    // R8/desugaring stripping Gson's generic signature, fb 2026-06-14) —
+    // now covered by the -keepattributes Signature keep-rule in
+    // proguard-rules.pro, but the guard stays as a fail-safe.
     try {
       await _ensureInitialized();
       final tz.TZDateTime scheduledTz = tz.TZDateTime.from(
@@ -143,8 +163,35 @@ class LocalNotificationsProvider implements NotificationsProvider {
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
       );
-    } catch (e) {
-      debugPrint('notifications: schedule failed (id ${notification.id}): $e');
+    } catch (e, stack) {
+      _reportFailure(
+        'schedule failed (id ${notification.id})',
+        e,
+        stack,
+        notificationId: notification.id,
+      );
+    }
+  }
+
+  /// Log a swallowed platform failure loudly (with stack) and emit it on
+  /// [scheduleFailures] so a listener can surface it. Never rethrows — the
+  /// caller's save must still complete.
+  void _reportFailure(
+    String what,
+    Object error,
+    StackTrace stack, {
+    int? notificationId,
+  }) {
+    debugPrintStack(
+      label: 'notifications: $what: $error',
+      stackTrace: stack,
+    );
+    if (!_failures.isClosed) {
+      _failures.add(NotificationScheduleFailure(
+        message: what,
+        error: error,
+        notificationId: notificationId,
+      ));
     }
   }
 
@@ -158,8 +205,8 @@ class LocalNotificationsProvider implements NotificationsProvider {
       for (final int id in ids) {
         await _plugin.cancel(id);
       }
-    } catch (e) {
-      debugPrint('notifications: cancelMany failed: $e');
+    } catch (e, stack) {
+      _reportFailure('cancelMany failed', e, stack);
     }
   }
 
@@ -168,8 +215,8 @@ class LocalNotificationsProvider implements NotificationsProvider {
     try {
       await _ensureInitialized();
       await _plugin.cancelAll();
-    } catch (e) {
-      debugPrint('notifications: cancelAll failed: $e');
+    } catch (e, stack) {
+      _reportFailure('cancelAll failed', e, stack);
     }
   }
 
@@ -202,11 +249,12 @@ class LocalNotificationsProvider implements NotificationsProvider {
   @override
   Stream<String> taps() => _taps.stream;
 
-  /// Releases the broadcast tap controller — call from app teardown
-  /// so the stream doesn't leak.
+  /// Releases the broadcast controllers — call from app teardown so the
+  /// tap + failure streams don't leak.
   @visibleForTesting
   void dispose() {
     _taps.close();
+    _failures.close();
   }
 
   static NotificationPermission _grantedFromBool(bool? granted) {
@@ -215,4 +263,32 @@ class LocalNotificationsProvider implements NotificationsProvider {
         ? NotificationPermission.granted
         : NotificationPermission.denied;
   }
+}
+
+/// A platform-layer notification op ([LocalNotificationsProvider.schedule]
+/// and the cancel paths) that the provider had to swallow to keep the
+/// caller's save from hanging. Surfaced on
+/// [LocalNotificationsProvider.scheduleFailures] so the failure is visible
+/// (loggable / bannerable) instead of vanishing into a debugPrint.
+@immutable
+class NotificationScheduleFailure {
+  const NotificationScheduleFailure({
+    required this.message,
+    required this.error,
+    this.notificationId,
+  });
+
+  /// Human-readable summary of which op failed (e.g.
+  /// `'schedule failed (id 42)'`).
+  final String message;
+
+  /// The caught platform error.
+  final Object error;
+
+  /// The [ScheduledNotification.id] involved, when the failure was tied to
+  /// a specific reminder (null for the bulk cancel paths).
+  final int? notificationId;
+
+  @override
+  String toString() => 'NotificationScheduleFailure($message: $error)';
 }

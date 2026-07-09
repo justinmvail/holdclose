@@ -1,9 +1,24 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Release-signing credentials (store blocker fix). Loaded from
+// android/key.properties, which is GITIGNORED — the app never holds a
+// signing secret in source. When the file is absent (CI, a fresh clone,
+// another dev) `keystoreProperties` stays empty and the release build
+// falls back to debug signing below, so `flutter run --release` and local
+// builds still work without the real keystore.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+val hasReleaseSigning = keystoreProperties.getProperty("storeFile") != null
 
 android {
     namespace = "com.careblazers.careblazers"
@@ -62,11 +77,34 @@ android {
         }
     }
 
+    signingConfigs {
+        // Real release signing, populated only when android/key.properties
+        // is present. The store-bound APK/AAB must be signed with the
+        // Holdclose release keystore (its SHA-1 is registered on the Google
+        // OAuth Android client); a debug-signed release would break Google
+        // Sign-In and can't be uploaded to Play.
+        if (hasReleaseSigning) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                // storeFile is relative to the android/ (root) project dir.
+                storeFile = keystoreProperties.getProperty("storeFile")
+                    ?.let { rootProject.file(it) }
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Sign with the real release keystore when key.properties is
+            // present (the store build); otherwise fall back to debug keys
+            // so `flutter run --release`, CI, and fresh clones still build.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             // Run R8 with our keep rules (proguard-rules.pro). Even with
             // minify off, core-library desugaring runs R8/D8 and strips the
             // Gson `Signature` attribute that flutter_local_notifications
