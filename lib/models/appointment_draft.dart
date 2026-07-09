@@ -20,6 +20,7 @@ class AppointmentDraft {
     this.durationMinutes,
     this.reason,
     this.notes,
+    this.uncertain = const <String>{},
   });
 
   final String? providerName;
@@ -40,6 +41,11 @@ class AppointmentDraft {
   /// Visit purpose / chief complaint — becomes an agenda item.
   final String? reason;
   final String? notes;
+
+  /// Field keys the extractor flagged as low-confidence (from the model's
+  /// `uncertain` array). The scan-review form surfaces these with an amber
+  /// "check this" banner so the caregiver verifies them before saving.
+  final Set<String> uncertain;
 
   bool get isEmpty =>
       _blank(providerName) &&
@@ -94,7 +100,18 @@ class AppointmentDraft {
       durationMinutes: intOf(json['durationMinutes']) ?? intOf(json['duration']),
       reason: str(json['reason']) ?? str(json['purpose']) ?? str(json['visitReason']),
       notes: str(json['notes']),
+      uncertain: _uncertainFrom(json['uncertain']),
     );
+  }
+
+  /// Parses the model's `uncertain` array (field keys it wasn't sure of)
+  /// into a set. Mirrors [AppointmentFormScreen.uncertainFieldsFrom].
+  static Set<String> _uncertainFrom(Object? raw) {
+    if (raw is! List) return const <String>{};
+    return <String>{
+      for (final Object? e in raw)
+        if (e is String && e.trim().isNotEmpty) e.trim(),
+    };
   }
 
   /// Map a free-text role word onto a [ProviderRole]; null only for a null

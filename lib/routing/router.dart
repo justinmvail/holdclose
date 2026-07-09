@@ -520,12 +520,16 @@ GoRouter buildRouter({
                   GoRoute(
                     path: 'scan/review',
                     name: HoldcloseRoutes.medicationScanReview,
-                    builder: (BuildContext context, GoRouterState state) =>
-                        MedicationImportReviewScreen(
-                      draft: state.extra is MedicationDraft
-                          ? state.extra as MedicationDraft
-                          : const MedicationDraft(),
-                    ),
+                    builder: (BuildContext context, GoRouterState state) {
+                      final MedicationDraft draft =
+                          state.extra is MedicationDraft
+                              ? state.extra as MedicationDraft
+                              : const MedicationDraft();
+                      return MedicationImportReviewScreen(
+                        draft: draft,
+                        uncertain: draft.uncertain,
+                      );
+                    },
                   ),
                   // Edit a medication, pre-filled from its saved row (Phase
                   // 15.6). `:id/edit` is a two-segment path so it never
@@ -593,6 +597,9 @@ GoRouter buildRouter({
                       initialDraft: state.extra is AppointmentDraft
                           ? state.extra as AppointmentDraft
                           : null,
+                      initialUncertain: state.extra is AppointmentDraft
+                          ? (state.extra as AppointmentDraft).uncertain
+                          : const <String>{},
                     ),
                   ),
                   GoRoute(

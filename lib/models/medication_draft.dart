@@ -27,6 +27,7 @@ class MedicationDraft {
     this.pharmacyPhone,
     this.dateFilled,
     this.discardAfter,
+    this.uncertain = const <String>{},
   });
 
   /// Medication name as printed on the label (e.g. "Donepezil").
@@ -66,6 +67,12 @@ class MedicationDraft {
 
   /// Discard-after / use-by date, verbatim.
   final String? discardAfter;
+
+  /// Field keys the extractor flagged as low-confidence (from the model's
+  /// `uncertain` array). The review screen renders these with an amber
+  /// "check this — we weren't sure" treatment so the caregiver verifies
+  /// them before saving. Empty when the scan was confident (or manual).
+  final Set<String> uncertain;
 
   /// True when the scan produced nothing usable in ANY field — the review
   /// screen opens blank for full manual entry, and a second-photo merge
@@ -120,7 +127,19 @@ class MedicationDraft {
       discardAfter: str(json['discardAfter']) ??
           str(json['discard_after']) ??
           str(json['discardBy']),
+      uncertain: _uncertainFrom(json['uncertain']),
     );
+  }
+
+  /// Parses the model's `uncertain` array (field keys it wasn't sure of)
+  /// into a set. Mirrors [MedicationImportReviewScreen.uncertainFieldsFrom]
+  /// so the review screen and the draft agree on the shape.
+  static Set<String> _uncertainFrom(Object? raw) {
+    if (raw is! List) return const <String>{};
+    return <String>{
+      for (final Object? e in raw)
+        if (e is String && e.trim().isNotEmpty) e.trim(),
+    };
   }
 
   /// Map a free-text route word onto a [MedicationRoute]. Returns null
