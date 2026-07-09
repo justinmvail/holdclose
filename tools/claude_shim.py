@@ -14,6 +14,7 @@ import base64
 import hmac
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -70,6 +71,24 @@ CLAUDE_CMD = "claude"
 # (~10k tokens) and scan the tree before answering — pure waste for a chat
 # completion. An empty cwd drops all of it. Created once at startup.
 CHAT_CWD = tempfile.mkdtemp(prefix="careblazers-shim-chat-")
+
+
+def _neutralize_at_mentions(text):
+    """Defang `@path` file mentions in CLIENT-supplied prompt text.
+
+    SECURITY: the `claude` CLI expands `@path` tokens in a prompt into the
+    file's contents. This shim is reachable over the public Tailscale
+    Funnel, so raw client text like `@/Users/jvail/.claude/.credentials.json`
+    or `@backend/.dev.vars` would exfiltrate arbitrary local files (incl. the
+    JWT signing secret) in the model's reply. Substitute the leading `@` of
+    any mention-shaped token with its fullwidth twin `＠` (U+FF20) — the CLI
+    mention parser no longer matches, the model still reads it as "@…", and
+    this mirrors the fullwidth-bracket sanitization the app already applies
+    in chat_context_builder.dart. Only the shim's OWN trusted image mention
+    (appended AFTER this call) may reference a real path.
+    """
+    # A mention is `@` at a word boundary followed by a path-ish char.
+    return re.sub(r"(?<![^\s(\[{<])@(?=[\w./~-])", "＠", text)
 
 
 def _shrink_image_for_cli(data, max_px=1536, target_bytes=180_000):
@@ -168,7 +187,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(body)
             system = payload["system"]
-            user = payload["user"]
+            user = _neutralize_at_mentions(payload["user"])
             # Opt-in token streaming. Only the chat endpoint sets this; the
             # decoder + recap leave it off because their parsers accumulate a
             # single final message (partial chunks would corrupt their JSON /
@@ -388,7 +407,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(body)
             system = payload["system"]
-            user = payload.get("user", "")
+            # Neutralize @-mentions in client text BEFORE the trusted image
+            # mention is appended below, so only our own temp path expands.
+            user = _neutralize_at_mentions(payload.get("user", ""))
             image_b64 = payload.get("image_base64")
         except Exception as exc:
             return self._bad(400, f"bad request: {exc}")
