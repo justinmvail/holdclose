@@ -50,10 +50,10 @@ But the **document scanners** (prescription/appointment/insurance-card),
 **visit-prep**, and **insurance-appeal** still call the **dev shim only** — they
 have NO production route and will break in a store build. On-device TTS (Piper)
 has no server dependency. This is the biggest production-AI gap._
-- [ ] 👤 **Provision production inference:** a Cerebras account + `CEREBRAS_API_KEY` (or chosen provider); confirm contractual **no-retention / no-training** terms (already stated in the privacy policy).
+- [ ] 👤 **Provision production inference:** a Cerebras account + `CEREBRAS_API_KEY` for the coach chat (fast streaming), OR consolidate everything onto **Cloudflare Workers AI** (fast text models like `@cf/meta/llama-3.3-70b-instruct-fp8-fast`) for one key-less provider — decision is speed (Cerebras) vs. simplicity+privacy (all-Cloudflare). Confirm **no-retention / no-training** terms for whatever serves PHI.
 - [ ] 🤖 **Build Worker routes for the shim-only AI surfaces** so nothing depends on the funnel shim in production:
-  - Document **scan/extract** — a JWT-gated `/api/v1/extract` (or extend `/chat`) that accepts the image + extraction prompt. **Note:** extraction needs a **vision-capable** model — verify gpt-oss-120b/Cerebras supports image input; if not, wire a vision model here (this is a real architecture decision, not a config toggle).
-  - **Visit-prep** and **insurance-appeal** generative calls — route through `/chat` (they're text-only) with their existing prompts.
+  - Document **scan/extract** — a JWT-gated route using **Cloudflare Workers AI via the `AI` binding** (no separate API key; runs on Cloudflare where R2 already holds the scan, so the PHI image never goes to a second vendor — a privacy win + one fewer subprocessor). Use a vision/OCR model: **`@cf/moondream/moondream3.1-9B-A2B`** (built for OCR + structured output — best fit for label/card → JSON) or `@cf/moonshot/kimi-k2.7-code` (vision + structured outputs). Test extraction accuracy vs. the current frontier-model shim path; the human-in-the-loop review screen + uncertainty flags mitigate the smaller edge model.
+  - **Visit-prep** and **insurance-appeal** generative calls — text-only, route through `/chat` (Cerebras or Workers AI text) with their existing prompts.
 - [ ] 🤖 **Point the app's production AI at the Worker, not the shim:** in store builds select `ApiChatBackend` + the Worker extract/generate endpoints; **drop `SHIM_URL` and the baked `SHIM_TOKEN`** entirely (they're an extractable-secret liability). The dev shim stays a dev-only convenience.
 - [ ] 🤖 **Extend spend caps + abuse protection** (already on `/chat`) to the new extract route; per-account quotas; graceful "coach is busy, try again" UX on 429/5xx.
 - [ ] 🤝 **Cost model + monitoring:** per-feature token budgets, the weekly watchdog thresholds, and an alert before the Cerebras bill runs away.
@@ -127,4 +127,4 @@ _Parallel to the above; winning Phase 1 funds Milestones 2–3. Details in `SUBM
 ---
 
 ### The critical path, in one line
-**Google OAuth clients → Cloudflare deploy (R2 + secrets + DNS) → production AI API (provision key + build the missing extract/visit-prep/appeal routes + drop the shim) → store enrollment + real signing → App Store & Play submissions (privacy forms, pilots, review) → paywall → public launch.** The competition runs in parallel and, if won in September, funds Milestones 2–3.
+**Google OAuth clients → Cloudflare deploy (R2 + secrets + DNS) → production AI API (Workers AI `AI` binding for scan/extract via Moondream; Cerebras or Workers AI for chat; build the missing extract/visit-prep/appeal routes + drop the shim) → store enrollment + real signing → App Store & Play submissions (privacy forms, pilots, review) → paywall → public launch.** The competition runs in parallel and, if won in September, funds Milestones 2–3.
