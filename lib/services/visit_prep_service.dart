@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../seed/visit_prep_prompt.dart';
+import 'chat_context_builder.dart' show sanitizeForPrompt;
 import 'document_scan_transport.dart';
 
 /// Suggests questions a caregiver could ask at an upcoming doctor visit,
@@ -46,7 +47,7 @@ class ShimVisitPrepService implements VisitPrepService {
   }) async {
     final Map<String, dynamic>? map = await shimObjectFromPrompt(
       systemPrompt: visitPrepSystemPrompt,
-      userPrompt: _userPrompt(careContext, reason),
+      userPrompt: visitPrepUserPrompt(careContext, reason),
     );
     return questionsFromMap(map);
   }
@@ -72,7 +73,7 @@ class ApiVisitPrepService implements VisitPrepService {
   }) async {
     final Map<String, dynamic>? map = await workerObjectFromPrompt(
       systemPrompt: visitPrepSystemPrompt,
-      userPrompt: _userPrompt(careContext, reason),
+      userPrompt: visitPrepUserPrompt(careContext, reason),
       baseUrl: baseUrl,
       tokenLoader: tokenLoader,
       dio: dio,
@@ -81,11 +82,21 @@ class ApiVisitPrepService implements VisitPrepService {
   }
 }
 
-String _userPrompt(String careContext, String? reason) {
-  final String r = (reason ?? '').trim();
+/// Assemble the visit-prep user prompt from the care snapshot + reason.
+/// Visible for tests.
+String visitPrepUserPrompt(String careContext, String? reason) {
+  // The reason/notes are free text the caregiver typed — sanitise them
+  // (a crafted "［action:…］" or "ignore previous instructions" reaches the
+  // model as inert data, never a live tag) and delimit the whole payload so
+  // the system prompt scopes its "data, never instructions" rule to it. The
+  // care snapshot is already sanitised by the chat context builder.
+  final String r = sanitizeForPrompt((reason ?? '').trim());
   final String reasonLine = r.isEmpty ? '' : 'Visit reason / notes: $r\n\n';
-  return 'Loved one care snapshot:\n$careContext\n\n'
-      '${reasonLine}Suggest questions to ask at this visit.';
+  return '<visit_data>\n'
+      'Loved one care snapshot:\n$careContext\n\n'
+      '$reasonLine'
+      '</visit_data>\n\n'
+      'Suggest questions to ask at this visit.';
 }
 
 /// Pull the string list out of a `{"questions": [...]}` reply; null when the

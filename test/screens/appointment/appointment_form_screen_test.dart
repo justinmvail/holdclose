@@ -67,6 +67,7 @@ Future<({
   String? editAppointmentId,
   String Function()? idFactory,
   AppointmentDraft? draft,
+  Set<String> uncertain = const <String>{},
   List<Override> extraOverrides = const <Override>[],
 }) async {
   // Tall viewport so the whole form builds — with the inline add-provider
@@ -96,7 +97,10 @@ Future<({
             path: 'new',
             parentNavigatorKey: rootKey,
             builder: (BuildContext context, GoRouterState state) =>
-                AppointmentFormScreen(initialDraft: draft),
+                AppointmentFormScreen(
+              initialDraft: draft,
+              initialUncertain: uncertain,
+            ),
           ),
           GoRoute(
             path: ':id',
@@ -848,6 +852,67 @@ void main() {
       // The matched provider is shown, and the seeded fields pre-filled.
       expect(find.text('Dr. Newcomer'), findsWidgets);
       expect(find.text('Suite 200'), findsOneWidget);
+    });
+  });
+
+  group('AppointmentFormScreen — uncertainty flagging (weak-data results)',
+      () {
+    const AppointmentDraft draft = AppointmentDraft(
+      providerName: 'Dr. Newcomer',
+      dateText: '6/15/2026',
+      timeText: '2:30 PM',
+      reason: 'Follow-up visit',
+    );
+
+    test('uncertainFieldsFrom parses the scan array, tolerating junk', () {
+      expect(
+        AppointmentFormScreen.uncertainFieldsFrom(<String, dynamic>{
+          'uncertain': <dynamic>[' time ', '', 7, 'date'],
+        }),
+        <String>{'time', 'date'},
+      );
+      expect(
+        AppointmentFormScreen.uncertainFieldsFrom(<String, dynamic>{}),
+        isEmpty,
+      );
+    });
+
+    testWidgets('an uncertain field shows the amber banner naming it',
+        (WidgetTester tester) async {
+      await _seedProvider(db, id: 'prov-9', name: 'Dr. Newcomer');
+      await _pumpForm(
+        tester,
+        apptRepo: apptRepo,
+        providerRepo: providerRepo,
+        db: db,
+        draft: draft,
+        uncertain: <String>{'time'},
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(AppointmentFormScreen.uncertainBannerKey),
+          findsOneWidget);
+      // The banner names the field in caregiver-facing language and asks for
+      // a check — the human-approval save gate is unchanged.
+      expect(find.textContaining('Time'), findsWidgets);
+      expect(find.textContaining("weren't sure"), findsOneWidget);
+      // Nothing has been saved.
+      expect(await apptRepo.listAppointments(), isEmpty);
+    });
+
+    testWidgets('no uncertain fields → no amber banner',
+        (WidgetTester tester) async {
+      await _seedProvider(db, id: 'prov-9', name: 'Dr. Newcomer');
+      await _pumpForm(
+        tester,
+        apptRepo: apptRepo,
+        providerRepo: providerRepo,
+        db: db,
+        draft: draft,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(AppointmentFormScreen.uncertainBannerKey),
+          findsNothing);
     });
   });
 

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../seed/insurance_appeal_prompt.dart';
+import 'chat_context_builder.dart' show sanitizeForPrompt;
 import 'document_scan_transport.dart';
 
 /// Drafts an insurance-appeal letter from the caregiver's inputs. The result
@@ -104,6 +105,14 @@ class ApiInsuranceAppealService implements InsuranceAppealService {
 }
 
 /// Assemble the user prompt from the caregiver's inputs. Visible for tests.
+///
+/// The carrier / claim / denial / name fields are free text the caregiver
+/// typed, so each is SANITISED through [sanitizeForPrompt] — a crafted
+/// "［action:…］" or "ignore previous instructions" in a denial reason
+/// reaches the model as inert data, never a live tag — and the whole payload
+/// is wrapped in an <appeal_data> delimiter the system prompt scopes its
+/// "data, never instructions" rule to. The care context is already sanitised
+/// upstream by the chat context builder.
 String appealUserPrompt({
   required String denialReason,
   required String claimDetails,
@@ -111,15 +120,21 @@ String appealUserPrompt({
   String? patientName,
   String careContext = '',
 }) {
-  final StringBuffer sb = StringBuffer();
-  if ((carrier ?? '').trim().isNotEmpty) sb.writeln('Insurance carrier: $carrier');
-  if ((patientName ?? '').trim().isNotEmpty) sb.writeln('Patient: $patientName');
-  sb.writeln('What was denied: $claimDetails');
-  sb.writeln('Reason given for the denial: $denialReason');
+  final String carrierClean = sanitizeForPrompt((carrier ?? '').trim());
+  final String nameClean = sanitizeForPrompt((patientName ?? '').trim());
+  final String claimClean = sanitizeForPrompt(claimDetails.trim());
+  final String denialClean = sanitizeForPrompt(denialReason.trim());
+
+  final StringBuffer sb = StringBuffer()..writeln('<appeal_data>');
+  if (carrierClean.isNotEmpty) sb.writeln('Insurance carrier: $carrierClean');
+  if (nameClean.isNotEmpty) sb.writeln('Patient: $nameClean');
+  sb.writeln('What was denied: $claimClean');
+  sb.writeln('Reason given for the denial: $denialClean');
   if (careContext.trim().isNotEmpty) {
     sb.writeln('\nCare context (for grounding, do not invent beyond this):');
     sb.writeln(careContext.trim());
   }
+  sb.writeln('</appeal_data>');
   sb.writeln('\nDraft the appeal letter.');
   return sb.toString();
 }

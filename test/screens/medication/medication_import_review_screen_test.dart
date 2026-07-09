@@ -23,6 +23,7 @@ Future<void> _pumpReview(
   WidgetTester tester, {
   required MedicationRepository repo,
   required MedicationDraft draft,
+  Set<String> uncertain = const <String>{},
   String idValue = '1',
 }) async {
   await tester.binding.setSurfaceSize(const Size(440, 2800));
@@ -43,7 +44,10 @@ Future<void> _pumpReview(
             path: 'scan/review',
             parentNavigatorKey: rootKey,
             builder: (BuildContext c, GoRouterState s) =>
-                MedicationImportReviewScreen(draft: draft),
+                MedicationImportReviewScreen(
+              draft: draft,
+              uncertain: uncertain,
+            ),
           ),
         ],
       ),
@@ -168,5 +172,81 @@ void main() {
     expect(find.text('Lisinopril'), findsNothing);
     expect(find.byKey(MedicationImportReviewScreen.nameFieldKey),
         findsOneWidget);
+  });
+
+  group('uncertainty flagging (weak-data results)', () {
+    test('uncertainFieldsFrom parses the scan array, tolerating junk', () {
+      expect(
+        MedicationImportReviewScreen.uncertainFieldsFrom(<String, dynamic>{
+          'uncertain': <dynamic>[' dosage ', '', 3, 'refills'],
+        }),
+        <String>{'dosage', 'refills'},
+      );
+      // Missing / malformed → empty set (never crashes an old reply).
+      expect(
+        MedicationImportReviewScreen.uncertainFieldsFrom(
+            <String, dynamic>{'uncertain': 'nope'}),
+        isEmpty,
+      );
+      expect(
+        MedicationImportReviewScreen.uncertainFieldsFrom(<String, dynamic>{}),
+        isEmpty,
+      );
+    });
+
+    testWidgets('an uncertain field renders the amber "check this" treatment',
+        (tester) async {
+      await _pumpReview(
+        tester,
+        repo: repo,
+        draft: _draft,
+        uncertain: <String>{'dosage'},
+      );
+
+      // Summary banner names the weak read...
+      expect(find.byKey(MedicationImportReviewScreen.uncertainBannerKey),
+          findsOneWidget);
+      // ...and the flagged field carries its own amber hint.
+      expect(
+        find.byKey(const Key('rx-import-uncertain-dosage')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining("we weren't sure we read it right",
+            findRichText: false),
+        findsOneWidget,
+      );
+      // A field NOT flagged has no hint.
+      expect(find.byKey(const Key('rx-import-uncertain-name')), findsNothing);
+      // The human-approval gate is intact: nothing saved yet.
+      expect(await repo.listMedications(), isEmpty);
+    });
+
+    testWidgets('editing a flagged field clears its amber hint', (tester) async {
+      await _pumpReview(
+        tester,
+        repo: repo,
+        draft: _draft,
+        uncertain: <String>{'dosage'},
+      );
+      expect(find.byKey(const Key('rx-import-uncertain-dosage')),
+          findsOneWidget);
+
+      await tester.enterText(
+          find.byKey(MedicationImportReviewScreen.dosageFieldKey), '20 mg');
+      await tester.pump();
+
+      // The caregiver has verified it — the amber treatment retires.
+      expect(find.byKey(const Key('rx-import-uncertain-dosage')), findsNothing);
+      // The single-field banner also clears once the only flag is gone.
+      expect(find.byKey(MedicationImportReviewScreen.uncertainBannerKey),
+          findsNothing);
+    });
+
+    testWidgets('no uncertain fields → no amber banner', (tester) async {
+      await _pumpReview(tester, repo: repo, draft: _draft);
+      expect(find.byKey(MedicationImportReviewScreen.uncertainBannerKey),
+          findsNothing);
+    });
   });
 }

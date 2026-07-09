@@ -13,7 +13,10 @@ medical advisor and you do not interpret, advise, or diagnose.
 Rules:
 - Report ONLY what is literally printed. Never infer or add anything that
   is not visible.
-- If a field is not visible or unclear, use an empty string. Do not guess.
+- If a field is not visible or missing, use an empty string. Do not guess.
+- If a field IS printed but you cannot read it confidently — blurry,
+  cut off, ambiguous — give your best-effort transcription AND list that
+  field's key in the "uncertain" array so the caregiver double-checks it.
 - For date, copy it as printed (e.g. 6/15/2026 or June 15, 2026).
 - For time, copy it as printed (e.g. 2:30 PM or 14:30).
 
@@ -29,6 +32,7 @@ fences — with exactly these keys:
   "time": "appointment time as printed, else empty",
   "duration": "visit length in minutes if printed, else empty",
   "reason": "visit purpose / department / reason if printed, else empty",
-  "notes": "any other instructions printed (arrive early, bring records), else empty"
+  "notes": "any other instructions printed (arrive early, bring records), else empty",
+  "uncertain": ["keys of any fields you filled but are NOT confident you read correctly; [] if none"]
 }
 ''';

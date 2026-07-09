@@ -288,6 +288,11 @@ class CatchMeUpCard extends ConsumerWidget {
   /// The loading skeleton body.
   static const Key skeletonKey = Key('home-catch-me-up-skeleton');
 
+  /// The trusted, code-side AI-disclosure caption under the recap — the
+  /// same "this was written by your coach, check it" idiom the other AI
+  /// surfaces carry.
+  static const Key captionKey = Key('home-catch-me-up-caption');
+
   /// The refresh affordance.
   static const Key refreshKey = Key('home-catch-me-up-refresh');
 
@@ -383,13 +388,31 @@ class _SummaryBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
-    return Text(
-      summary,
-      key: CatchMeUpCard.summaryKey,
-      style: textTheme.bodyLarge?.copyWith(
-        color: context.hc.text,
-        height: 1.4,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          summary,
+          key: CatchMeUpCard.summaryKey,
+          style: textTheme.bodyLarge?.copyWith(
+            color: context.hc.text,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Trusted, code-side AI disclosure — the recap is machine-written
+        // from the recent log, so the caregiver is told to spot-check it
+        // (same idiom the other AI surfaces use). The vendor stays unnamed.
+        Text(
+          'Summarized by your coach from your recent log — check anything '
+          'important.',
+          key: CatchMeUpCard.captionKey,
+          style: textTheme.bodySmall?.copyWith(
+            color: context.hc.text.withValues(alpha: 0.6),
+          ),
+        ),
+      ],
     );
   }
 }

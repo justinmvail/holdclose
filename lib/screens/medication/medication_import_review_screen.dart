@@ -32,12 +32,38 @@ import 'prescription_scan_flow.dart';
 /// empty fields** (Rx #, quantity, refills, pharmacy) without clobbering
 /// what's already there.
 class MedicationImportReviewScreen extends ConsumerStatefulWidget {
-  const MedicationImportReviewScreen({super.key, required this.draft});
+  const MedicationImportReviewScreen({
+    super.key,
+    required this.draft,
+    this.uncertain = const <String>{},
+  });
 
   /// The AI's proposed read. An empty draft renders blank fields.
   final MedicationDraft draft;
 
+  /// JSON keys the scan flagged as read-but-not-confident (its `uncertain`
+  /// array — see [uncertainFieldsFrom]). Each named field gets an amber
+  /// "check this — we weren't sure" treatment so the caregiver verifies it
+  /// before saving. Defaults to none; a blank/manual scan carries an empty
+  /// set. Keys match the extraction schema (`name`, `dosage`, `route`, …).
+  final Set<String> uncertain;
+
+  /// Pull the scan's `uncertain` array out of a raw extraction JSON [map]
+  /// into a set of field keys. Tolerant of a missing/malformed value (any
+  /// non-list, or non-string entries, are ignored → empty set), so an old
+  /// or partial reply never crashes the review screen. Visible for the
+  /// scan flow that constructs this screen, and for tests.
+  static Set<String> uncertainFieldsFrom(Map<String, dynamic> map) {
+    final dynamic raw = map['uncertain'];
+    if (raw is! List) return const <String>{};
+    return <String>{
+      for (final dynamic e in raw)
+        if (e is String && e.trim().isNotEmpty) e.trim(),
+    };
+  }
+
   static const Key bannerKey = Key('rx-import-banner');
+  static const Key uncertainBannerKey = Key('rx-import-uncertain-banner');
   static const Key scanAnotherKey = Key('rx-import-scan-another');
   static const Key nameFieldKey = Key('rx-import-name');
   static const Key dosageFieldKey = Key('rx-import-dosage');
@@ -77,10 +103,16 @@ class _MedicationImportReviewScreenState
   bool _submitting = false;
   bool _scanning = false;
 
+  /// Fields the scan flagged as read-but-not-confident, shown with the
+  /// amber "check this" treatment. Mutable: a field clears from the set the
+  /// moment the caregiver edits it (they've now verified it themselves).
+  late Set<String> _uncertain;
+
   @override
   void initState() {
     super.initState();
     final MedicationDraft d = widget.draft;
+    _uncertain = <String>{...widget.uncertain};
     _name = TextEditingController(text: d.name ?? '');
     _dosage = TextEditingController(text: d.dosage ?? '');
     _prescriber = TextEditingController(text: d.prescriber ?? '');
@@ -230,6 +262,14 @@ class _MedicationImportReviewScreenState
                           const _ReviewBanner(
                             key: MedicationImportReviewScreen.bannerKey,
                           ),
+                          if (_uncertain.isNotEmpty) ...<Widget>[
+                            const SizedBox(height: 12),
+                            _UncertainBanner(
+                              key: MedicationImportReviewScreen
+                                  .uncertainBannerKey,
+                              count: _uncertain.length,
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           OutlinedButton.icon(
                             key: MedicationImportReviewScreen.scanAnotherKey,
@@ -249,6 +289,7 @@ class _MedicationImportReviewScreenState
                             controller: _name,
                             fieldKey:
                                 MedicationImportReviewScreen.nameFieldKey,
+                            fieldName: 'name',
                             hint: 'e.g. Tizanidine',
                             titleCase: true,
                             validator: (String? v) =>
@@ -261,6 +302,7 @@ class _MedicationImportReviewScreenState
                             controller: _dosage,
                             fieldKey:
                                 MedicationImportReviewScreen.dosageFieldKey,
+                            fieldName: 'dosage',
                             hint: 'e.g. 2 mg',
                             validator: (String? v) =>
                                 (v == null || v.trim().isEmpty)
@@ -307,6 +349,7 @@ class _MedicationImportReviewScreenState
                             controller: _prescriber,
                             fieldKey:
                                 MedicationImportReviewScreen.prescriberFieldKey,
+                            fieldName: 'prescriber',
                             hint: 'e.g. Dr. Berger',
                             titleCase: true,
                           ),
@@ -315,6 +358,7 @@ class _MedicationImportReviewScreenState
                             controller: _notes,
                             fieldKey:
                                 MedicationImportReviewScreen.notesFieldKey,
+                            fieldName: 'notes',
                             hint: 'e.g. Take one tablet by mouth at bedtime.',
                             maxLines: 3,
                           ),
@@ -328,6 +372,7 @@ class _MedicationImportReviewScreenState
                             controller: _rxNumber,
                             fieldKey:
                                 MedicationImportReviewScreen.rxNumberFieldKey,
+                            fieldName: 'rxNumber',
                             hint: 'e.g. 1687749',
                           ),
                           _textField(
@@ -335,6 +380,7 @@ class _MedicationImportReviewScreenState
                             controller: _quantity,
                             fieldKey:
                                 MedicationImportReviewScreen.quantityFieldKey,
+                            fieldName: 'quantity',
                             hint: 'e.g. 180',
                           ),
                           _textField(
@@ -342,6 +388,7 @@ class _MedicationImportReviewScreenState
                             controller: _refills,
                             fieldKey:
                                 MedicationImportReviewScreen.refillsFieldKey,
+                            fieldName: 'refills',
                             hint: 'e.g. 3',
                           ),
                           _textField(
@@ -349,6 +396,7 @@ class _MedicationImportReviewScreenState
                             controller: _pharmacyName,
                             fieldKey: MedicationImportReviewScreen
                                 .pharmacyNameFieldKey,
+                            fieldName: 'pharmacyName',
                             hint: 'e.g. CVS Pharmacy',
                           ),
                           _textField(
@@ -356,6 +404,7 @@ class _MedicationImportReviewScreenState
                             controller: _pharmacyPhone,
                             fieldKey: MedicationImportReviewScreen
                                 .pharmacyPhoneFieldKey,
+                            fieldName: 'pharmacyPhone',
                             hint: 'e.g. 843-767-4500',
                             keyboardType: TextInputType.phone,
                           ),
@@ -364,6 +413,7 @@ class _MedicationImportReviewScreenState
                             controller: _dateFilled,
                             fieldKey:
                                 MedicationImportReviewScreen.dateFilledFieldKey,
+                            fieldName: 'dateFilled',
                             hint: 'e.g. 12/3/21',
                           ),
                           _textField(
@@ -371,6 +421,7 @@ class _MedicationImportReviewScreenState
                             controller: _discardAfter,
                             fieldKey: MedicationImportReviewScreen
                                 .discardAfterFieldKey,
+                            fieldName: 'discardAfter',
                             hint: 'e.g. 12/3/22',
                           ),
                           const SizedBox(height: 8),
@@ -441,39 +492,92 @@ class _MedicationImportReviewScreenState
   }
 
   /// Compact labelled text field builder — keeps the long form readable.
+  ///
+  /// When [fieldName] is one the scan flagged as uncertain ([_uncertain]),
+  /// the field paints an amber border + a "check this — we weren't sure"
+  /// hint so the caregiver verifies before saving; editing the field clears
+  /// its uncertain flag (they've now confirmed it themselves).
   Widget _textField({
     required String label,
     required TextEditingController controller,
     required Key fieldKey,
+    String? fieldName,
     String? hint,
     String? Function(String?)? validator,
     int maxLines = 1,
     bool titleCase = false,
     TextInputType? keyboardType,
   }) {
+    final bool uncertain =
+        fieldName != null && _uncertain.contains(fieldName);
+    final Color amber = context.hc.cta;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: LabelledField(
         label: label,
-        child: TextFormField(
-          key: fieldKey,
-          controller: controller,
-          maxLines: maxLines,
-          minLines: maxLines > 1 ? 2 : 1,
-          keyboardType: keyboardType,
-          textInputAction:
-              maxLines > 1 ? TextInputAction.newline : TextInputAction.next,
-          textCapitalization:
-              titleCase ? TextCapitalization.words : TextCapitalization.none,
-          inputFormatters: titleCase
-              ? <TextInputFormatter>[TitleCaseTextFormatter()]
-              : null,
-          decoration: InputDecoration(hintText: hint),
-          validator: validator,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            TextFormField(
+              key: fieldKey,
+              controller: controller,
+              maxLines: maxLines,
+              minLines: maxLines > 1 ? 2 : 1,
+              keyboardType: keyboardType,
+              textInputAction: maxLines > 1
+                  ? TextInputAction.newline
+                  : TextInputAction.next,
+              textCapitalization: titleCase
+                  ? TextCapitalization.words
+                  : TextCapitalization.none,
+              inputFormatters: titleCase
+                  ? <TextInputFormatter>[TitleCaseTextFormatter()]
+                  : null,
+              onChanged: uncertain
+                  // The caregiver has looked at it — drop the flag so the
+                  // amber treatment doesn't nag once they've verified.
+                  ? (_) => setState(() => _uncertain.remove(fieldName))
+                  : null,
+              decoration: InputDecoration(
+                hintText: hint,
+                enabledBorder: uncertain
+                    ? OutlineInputBorder(
+                        borderSide: BorderSide(color: amber, width: 1.5),
+                      )
+                    : null,
+              ),
+              validator: validator,
+            ),
+            if (uncertain) ...<Widget>[
+              const SizedBox(height: 6),
+              Row(
+                key: _uncertainHintKey(fieldName),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(Icons.error_outline, size: 16, color: amber),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      "Check this — we weren't sure we read it right.",
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: amber),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
+
+  /// Per-field key for the amber "check this" hint, so a test can target
+  /// exactly the flagged field's caption.
+  static Key _uncertainHintKey(String fieldName) =>
+      Key('rx-import-uncertain-$fieldName');
 }
 
 /// Section divider label inside the review form.
@@ -492,6 +596,45 @@ class _SectionLabel extends StatelessWidget {
             .textTheme
             .titleSmall
             ?.copyWith(color: color, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/// Amber caution banner shown when the scan flagged one or more fields as
+/// read-but-not-confident. Points the caregiver at the amber-outlined
+/// fields below to verify before saving — the human-approval gate is what
+/// makes a low-confidence read safe.
+class _UncertainBanner extends StatelessWidget {
+  const _UncertainBanner({super.key, required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme tt = Theme.of(context).textTheme;
+    final Color amber = context.hc.cta;
+    final String fields = count == 1 ? 'one field' : '$count fields';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: amber.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: amber),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.error_outline, size: 20, color: amber),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "We weren't sure we read $fields correctly — they're marked "
+              'below in amber. Please check them before you save.',
+              style: tt.bodyMedium?.copyWith(color: context.hc.text),
+            ),
+          ),
+        ],
       ),
     );
   }

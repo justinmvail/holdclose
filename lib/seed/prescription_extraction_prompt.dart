@@ -19,8 +19,10 @@ Rules:
 - Report ONLY what is literally printed on the label. Never infer,
   correct, complete, or add anything that is not visible in the image.
 - Never provide dosing advice, medical advice, warnings, or a diagnosis.
-- If a field is not visible, unclear, or you are unsure, use an empty
-  string. Do not guess.
+- If a field is not visible or missing, use an empty string. Do not guess.
+- If a field IS printed but you cannot read it confidently — blurry,
+  cut off, ambiguous — give your best-effort transcription AND list that
+  field's key in the "uncertain" array so the caregiver double-checks it.
 
 A prescription label often wraps around the bottle, so a single photo may
 show only some fields. Fill in every field you CAN read; leave the rest
@@ -40,6 +42,7 @@ fences — with exactly these keys:
   "pharmacyName": "dispensing pharmacy name, e.g. CVS Pharmacy, else empty",
   "pharmacyPhone": "pharmacy phone number, else empty",
   "dateFilled": "date filled, verbatim, else empty",
-  "discardAfter": "discard-after or use-by date, verbatim, else empty"
+  "discardAfter": "discard-after or use-by date, verbatim, else empty",
+  "uncertain": ["keys of any fields you filled but are NOT confident you read correctly; [] if none"]
 }
 ''';

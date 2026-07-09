@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../seed/activity_summary_prompt.dart';
+import '../services/chat_context_builder.dart' show sanitizeForPrompt;
 import '../services/forum_api_client.dart'
     show forumApiBaseUrl, forumApiVersionPrefix, forumBackendConfigured;
 import 'forum_jwt_provider.dart' show forumSessionManagerProvider;
@@ -254,17 +255,27 @@ class ClaudeCLIProvider implements LLMProvider {
   /// [generateActivitySummary]. One line per event, oldest first (the card
   /// pre-sorts ascending), tagged with a coarse part-of-day so the model
   /// can phrase "this morning / this evening" without raw timestamps.
+  ///
+  /// Each event [summary] is family-typed content (a journal situation
+  /// line, a dose/appointment label) so it's SANITISED through
+  /// [sanitizeForPrompt] — a crafted "［action:…］" or "ignore previous
+  /// instructions" reaches the model as inert data, never a live tag — and
+  /// the list is wrapped in an <activity_data> delimiter the system prompt
+  /// scopes its "data, never instructions" rule to (defense in depth with
+  /// the chat context builder's identical treatment).
   static String buildActivityUserMessage({
     required int lastNHours,
     required List<ActivityEvent> events,
   }) {
     final StringBuffer sb = StringBuffer()
       ..writeln('window_hours: $lastNHours')
+      ..writeln('<activity_data>')
       ..writeln('events (oldest first):');
     for (final ActivityEvent e in events) {
-      sb.writeln(
-          '- ${_timeOfDay(e.occurredAt)} · [${e.kind.name}] ${e.summary}');
+      sb.writeln('- ${_timeOfDay(e.occurredAt)} · [${e.kind.name}] '
+          '${sanitizeForPrompt(e.summary)}');
     }
+    sb.write('</activity_data>');
     return sb.toString().trimRight();
   }
 

@@ -110,6 +110,7 @@ class AppointmentFormScreen extends ConsumerStatefulWidget {
     this.initialNotes,
     this.initialDate,
     this.initialDraft,
+    this.initialUncertain = const <String>{},
   });
 
   /// Non-null on the edit path; null on the add path.
@@ -120,6 +121,42 @@ class AppointmentFormScreen extends ConsumerStatefulWidget {
   /// selects a matching provider or pre-fills the inline add-provider form.
   /// The caregiver reviews and approves everything before saving.
   final AppointmentDraft? initialDraft;
+
+  /// Extraction JSON keys the scan flagged as read-but-not-confident (its
+  /// `uncertain` array — see [uncertainFieldsFrom]). On the scan-review
+  /// (add + draft) path an amber caution banner names these fields so the
+  /// caregiver double-checks them before saving. Defaults to none.
+  final Set<String> initialUncertain;
+
+  /// Pull the scan's `uncertain` array out of a raw extraction JSON [map]
+  /// into a set of field keys. Tolerant of a missing/malformed value (any
+  /// non-list, or non-string entries, are ignored → empty set). Visible for
+  /// the scan flow that constructs this screen, and for tests.
+  static Set<String> uncertainFieldsFrom(Map<String, dynamic> map) {
+    final dynamic raw = map['uncertain'];
+    if (raw is! List) return const <String>{};
+    return <String>{
+      for (final dynamic e in raw)
+        if (e is String && e.trim().isNotEmpty) e.trim(),
+    };
+  }
+
+  /// Friendly caregiver-facing label for each extraction JSON key the
+  /// uncertain banner might name. Unknown keys fall back to the raw key.
+  static String uncertainFieldLabel(String key) =>
+      const <String, String>{
+        'providerName': 'Provider',
+        'providerRole': 'Provider role',
+        'providerPhone': 'Provider phone',
+        'providerAddress': 'Provider address',
+        'location': 'Location',
+        'date': 'Date',
+        'time': 'Time',
+        'duration': 'Duration',
+        'reason': 'Reason',
+        'notes': 'Notes',
+      }[key] ??
+      key;
 
   /// A day pre-selected on the add path — passed by the Schedule
   /// calendar's "Add" affordance (`?date=YYYY-MM-DD`) so the new
@@ -137,6 +174,8 @@ class AppointmentFormScreen extends ConsumerStatefulWidget {
   bool get isEdit => appointmentId != null;
 
   static const Key formKey = Key('appointment-form');
+  static const Key uncertainBannerKey =
+      Key('appointment-form-uncertain-banner');
   static const Key providerDropdownKey = Key('appointment-form-provider');
   static const Key addProviderToggleKey =
       Key('appointment-form-add-provider-toggle');
@@ -649,6 +688,18 @@ class _AppointmentFormScreenState
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                       children: <Widget>[
                   const SizedBox(height: 4),
+                  // Scan-review path only: if the scan wasn't confident about
+                  // some fields, flag them in amber so the caregiver verifies
+                  // before saving. The human-approval save gate is unchanged.
+                  if (!widget.isEdit &&
+                      widget.initialDraft != null &&
+                      widget.initialUncertain.isNotEmpty) ...<Widget>[
+                    _UncertainBanner(
+                      key: AppointmentFormScreen.uncertainBannerKey,
+                      fields: widget.initialUncertain,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   LabelledField(
                     label: 'Provider',
                     child: providersAsync.when(
@@ -1167,6 +1218,49 @@ class _PickerField extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Amber caution banner for the scan-review path: the scan flagged one or
+/// more fields as read-but-not-confident, so it names them (friendly
+/// labels) and asks the caregiver to double-check before saving. The
+/// save gate is unchanged — this only draws the eye to the weak reads.
+class _UncertainBanner extends StatelessWidget {
+  const _UncertainBanner({super.key, required this.fields});
+
+  final Set<String> fields;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme tt = Theme.of(context).textTheme;
+    final Color amber = context.hc.cta;
+    final List<String> labels = <String>[
+      for (final String f in fields)
+        AppointmentFormScreen.uncertainFieldLabel(f),
+    ]..sort();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: amber.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: amber),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.error_outline, size: 20, color: amber),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "We weren't sure we read ${labels.join(', ')} correctly. "
+              'Please check ${labels.length == 1 ? 'it' : 'them'} before you '
+              'save.',
+              style: tt.bodyMedium?.copyWith(color: context.hc.text),
+            ),
+          ),
+        ],
       ),
     );
   }
