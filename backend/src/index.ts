@@ -6,6 +6,7 @@ import { chatRouter, type ChatBindings } from './routes/chat';
 import { circlesRouter } from './routes/circles';
 import { commentsRouter } from './routes/comments';
 import { documentsRouter } from './routes/documents';
+import { extractRouter, type ExtractBindings } from './routes/extract';
 import { joinRouter } from './routes/join';
 import { privacyRouter, termsRouter } from './routes/legal';
 import { postsRouter } from './routes/posts';
@@ -17,7 +18,8 @@ import { handleScheduled, type WatchdogEnv } from './watchdog';
 import type { Context } from 'hono';
 
 export type Bindings = AuthBindings &
-  ChatBindings & {
+  ChatBindings &
+  ExtractBindings & {
   FORUM_DB: D1Database;
   FORUM_MEDIA: R2Bucket;
   // R2 bucket holding caregiver document scans (emergency card / POA / ID
@@ -89,6 +91,7 @@ api.route('/sync', syncRouter());
 // quotas + the global daily spend cap are enforced and token usage is
 // logged. The inference host's API key lives only here, never on-device.
 api.route('/chat', chatRouter());
+api.route('/extract', extractRouter());
 api.route('/documents', documentsRouter());
 api.route('/votes', votesRouter());
 

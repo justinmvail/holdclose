@@ -7,7 +7,7 @@
 FORUM_JWT_SECRET=dev-only-jwt-secret-change-me
 
 # Needed only to exercise POST /api/v1/chat locally:
-# CEREBRAS_API_KEY=
+# CF_AI_API_TOKEN=  (Cloudflare API token, scope "Workers AI: Read" — for /api/v1/chat + /extract)
 
 # Optional override — the default audience lives in wrangler.toml [vars]:
 # GOOGLE_CLIENT_ID=

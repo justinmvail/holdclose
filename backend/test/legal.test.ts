@@ -54,9 +54,11 @@ describe('GET /privacy (public Privacy Policy page)', () => {
     expect(body).toMatch(/Google account identifier .*sub.*, email address/);
     expect(body).toContain('documents you scan');
     expect(body).toContain('coach chat');
-    // The subprocessor disclosure (inference provider that receives PHI).
+    // The subprocessor disclosure — AI runs on Cloudflare Workers AI (our
+    // own infra), so care data isn't sent to a separate AI vendor.
     expect(body).toContain('Subprocessors');
-    expect(body).toContain('Cerebras');
+    expect(body).toContain('Cloudflare');
+    expect(body).toContain('not sent to a separate AI vendor');
     expect(body).toContain('not');
     expect(body).toContain('consent toggles');
     expect(body).toContain('do not sell your personal data');

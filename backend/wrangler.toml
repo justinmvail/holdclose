@@ -48,17 +48,28 @@ CLOUDFLARE_ACCOUNT_ID = ""
 CLOUDFLARE_D1_DATABASE_ID = ""
 CLOUDFLARE_R2_BUCKET_NAME = "holdclose-forum-media"
 
-# --- LLM coach (/api/v1/chat) cost controls ---------------------------
-# The inference host is OpenAI-compatible (Cerebras gpt-oss-120b). The
-# API key is a SECRET — set it with `wrangler secret put CEREBRAS_API_KEY`
-# (never in this file / the repo). Everything below is non-secret tuning.
+# --- AI coach + scan extraction (Cloudflare Workers AI) ---------------
+# Inference runs on Cloudflare Workers AI via its OpenAI-compatible
+# endpoint (https://api.cloudflare.com/client/v4/accounts/<id>/ai/v1). The
+# PHI-bearing prompt/image never leaves Cloudflare's network — the same
+# infra hosting the Worker + D1 + R2 — so there is no separate AI vendor.
+# The token is a SECRET: `wrangler secret put CF_AI_API_TOKEN` (Cloudflare
+# API token scoped "Workers AI: Read"). CLOUDFLARE_ACCOUNT_ID is set in the
+# watchdog vars above (reused here). CHAT_MODEL is the text model (chat,
+# recap, visit-prep, appeal); EXTRACT_MODEL is the vision model for scans.
 #
-# Spend caps (micro-dollars; $1 = 1_000_000). The global cap is
+# Spend caps (micro-dollars; $1 = 1_000_000) still apply as a usage/cost
+# circuit breaker. The global cap is
 #   max(CHAT_GLOBAL_FLOOR_MICROS, CHAT_PER_USER_BUDGET_MICROS × users)
 # so it's $5/day in alpha (the floor wins with few users) and scales as a
 # ratio of users in prod. Per-user daily token cap is the abuse stop.
-CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
-CHAT_MODEL = "gpt-oss-120b"
+# NOTE: Workers AI bills in "neurons", not tokens — treat the micro-per-
+# token constants in chat.ts as a proxy and tune to your plan.
+CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# Vision model for scan-to-import. VALIDATE at deploy — smaller edge models
+# read messy label photos less reliably than a frontier model; the human-
+# in-the-loop review + uncertainty flags are the mitigation.
+EXTRACT_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
 CHAT_MAX_INPUT_CHARS = "48000"
 CHAT_MAX_OUTPUT_TOKENS = "1024"
 CHAT_USER_DAILY_TOKENS = "300000"

@@ -7,11 +7,16 @@ import type { AuthBindings, AuthVariables } from '../middleware/auth';
 
 export type ChatBindings = AuthBindings & {
   FORUM_DB: D1Database;
-  // The inference host. Key is a SECRET (`wrangler secret put
-  // CEREBRAS_API_KEY`); base URL + model + caps are plain vars so each
-  // environment can tune them without a redeploy of code.
-  CEREBRAS_API_KEY: string;
-  CEREBRAS_BASE_URL?: string;
+  // Inference runs on Cloudflare Workers AI (the loved one's data stays on
+  // Cloudflare's network — the same infra hosting the Worker + D1 + R2 —
+  // and never goes to a separate AI vendor). We call the OpenAI-compatible
+  // Workers AI endpoint: https://api.cloudflare.com/client/v4/accounts/
+  // <id>/ai/v1/chat/completions. Token is a SECRET (`wrangler secret put
+  // CF_AI_API_TOKEN`, scope "Workers AI: Read"); account id + model + caps
+  // are plain vars so each environment tunes them without a code redeploy.
+  CF_AI_API_TOKEN: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CF_AI_BASE_URL?: string;
   CHAT_MODEL?: string;
   // Caps (all optional — defaults below). Strings because Worker vars
   // arrive as strings.
@@ -26,10 +31,11 @@ export type ChatVariables = AuthVariables;
 
 type Db = ReturnType<typeof drizzle>;
 
-// gpt-oss-120b pricing, expressed in MICRO-DOLLARS per token ($1 =
-// 1_000_000 micros). $0.35 / 1M input tokens → 0.35 micro/token; $0.75 /
-// 1M output → 0.75 micro/token. If the model or price changes, update
-// these two numbers (and the comment in schema.ts's llmUsage table).
+// Cost proxy in MICRO-DOLLARS per token ($1 = 1_000_000 micros). Workers
+// AI actually bills in "neurons", not tokens, so these are a rough proxy
+// that keeps the spend-cap circuit-breaker meaningful; tune them to your
+// Workers AI plan's effective per-token cost. Kept token-based so the
+// per-user daily-token quota and the llmUsage table stay unchanged.
 const INPUT_MICROS_PER_TOKEN = 0.35;
 const OUTPUT_MICROS_PER_TOKEN = 0.75;
 
@@ -39,8 +45,7 @@ const OUTPUT_MICROS_PER_TOKEN = 0.75;
 // users), so with a handful of users the $5 floor wins automatically and
 // no separate alpha flag is needed.
 const DEFAULTS = {
-  baseUrl: 'https://api.cerebras.ai/v1',
-  model: 'gpt-oss-120b',
+  model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   maxInputChars: 48_000, // ~12K tokens of prompt; blocks payload-stuffing
   maxOutputTokens: 1024, // one call can't generate forever
   userDailyTokens: 300_000, // ≈ $0.10/user/day hard ceiling
@@ -78,7 +83,7 @@ export function chatRouter() {
     const userId = c.get('userId');
     const env = c.env;
 
-    if (!env.CEREBRAS_API_KEY) {
+    if (!env.CF_AI_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID) {
       return c.json({ error: 'server_misconfigured' }, 500);
     }
 
@@ -157,8 +162,10 @@ export function chatRouter() {
       return c.json({ error: 'capacity' }, 503);
     }
 
-    // --- Call the inference host (OpenAI-compatible, streaming) ---------
-    const baseUrl = env.CEREBRAS_BASE_URL ?? DEFAULTS.baseUrl;
+    // --- Call Workers AI (OpenAI-compatible, streaming) -----------------
+    const baseUrl =
+      env.CF_AI_BASE_URL ??
+      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/v1`;
     const model = env.CHAT_MODEL ?? DEFAULTS.model;
     const maxOutputTokens = num(
       env.CHAT_MAX_OUTPUT_TOKENS,
@@ -168,7 +175,7 @@ export function chatRouter() {
     const upstream = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${env.CEREBRAS_API_KEY}`,
+        Authorization: `Bearer ${env.CF_AI_API_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -235,8 +242,15 @@ export function chatRouter() {
           const data = trimmed.slice(5).trim();
           if (data === '' || data === '[DONE]') continue;
           let chunk: {
+            // Workers AI native shape: {"response":"…","usage":{…}}.
+            response?: string;
+            // OpenAI-compatible shape (also handled, in case the model or a
+            // gateway emits it): {"choices":[{"delta":{"content":"…"}}]}.
             choices?: { delta?: { content?: string } }[];
-            usage?: { prompt_tokens?: number; completion_tokens?: number };
+            usage?: {
+              prompt_tokens?: number;
+              completion_tokens?: number;
+            };
           };
           try {
             chunk = JSON.parse(data);
@@ -249,7 +263,7 @@ export function chatRouter() {
             completionTokens =
               chunk.usage.completion_tokens ?? completionTokens;
           }
-          const delta = chunk.choices?.[0]?.delta?.content;
+          const delta = chunk.response ?? chunk.choices?.[0]?.delta?.content;
           if (delta) {
             emittedChars += delta.length;
             controller.enqueue(

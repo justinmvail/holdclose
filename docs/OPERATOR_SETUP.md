@@ -53,7 +53,7 @@ payment method on file; the free tier covers alpha usage). Then, from
 ```bash
 npx wrangler r2 bucket create holdclose-forum-media   # FORUM_MEDIA
 npx wrangler r2 bucket create holdclose-doc-blobs     # DOC_BLOBS
-npx wrangler secret put CEREBRAS_API_KEY              # /api/v1/chat 500s without it
+npx wrangler secret put CF_AI_API_TOKEN               # Workers AI token — /api/v1/chat + /extract 500 without it
 npm run deploy                                        # wrangler deploy
 npx wrangler d1 migrations apply FORUM_DB --remote
 ```

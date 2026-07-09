@@ -4,7 +4,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const SECRET = env.FORUM_JWT_SECRET;
 const ORIGIN = 'https://forum.holdclose.local';
-const CEREBRAS = 'https://api.cerebras.ai';
+// Matches CF_AI_BASE_URL in vitest.config.ts (a mockable stand-in for the
+// Workers AI OpenAI-compatible endpoint).
+const AI_HOST = 'https://ai.holdclose.test';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -29,8 +31,6 @@ async function clearUsage() {
   await env.FORUM_DB.prepare('DELETE FROM llm_usage').run();
 }
 
-/** Insert a usage row directly (bypassing the route) to set up quota/cap
- * scenarios. created_at = now so it lands inside the current UTC day. */
 async function seedUsage(opts: {
   userId: string;
   promptTokens?: number;
@@ -40,7 +40,7 @@ async function seedUsage(opts: {
   await env.FORUM_DB.prepare(
     `INSERT INTO llm_usage
        (id, user_id, created_at, model, prompt_tokens, completion_tokens, cost_micros)
-     VALUES (?, ?, ?, 'gpt-oss-120b', ?, ?, ?)`,
+     VALUES (?, ?, ?, 'test-model', ?, ?, ?)`,
   )
     .bind(
       crypto.randomUUID(),
@@ -53,8 +53,9 @@ async function seedUsage(opts: {
     .run();
 }
 
-/** A minimal OpenAI-style streaming SSE body: two content deltas + a final
- * usage chunk + the terminator. */
+/** OpenAI-style streaming SSE body (what the Workers AI OpenAI-compatible
+ * endpoint returns): two content deltas + a final usage chunk + the
+ * terminator. chat.ts re-emits these as vendor-neutral `data:{"text":…}`. */
 function sseBody(prompt: number, completion: number) {
   return [
     'data: {"choices":[{"delta":{"content":"Hello"}}]}',
@@ -68,9 +69,9 @@ function sseBody(prompt: number, completion: number) {
   ].join('\n');
 }
 
-function mockCerebras(prompt: number, completion: number) {
+function mockAI(prompt: number, completion: number) {
   fetchMock
-    .get(CEREBRAS)
+    .get(AI_HOST)
     .intercept({ path: '/v1/chat/completions', method: 'POST' })
     .reply(200, sseBody(prompt, completion), {
       headers: { 'content-type': 'text/event-stream' },
@@ -105,12 +106,11 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  // Every test that registers an interceptor must consume it.
   fetchMock.assertNoPendingInterceptors();
 });
 
 describe('POST /api/v1/chat', () => {
-  it('rejects unauthenticated callers (no upstream call)', async () => {
+  it('rejects unauthenticated callers (no inference call)', async () => {
     const res = await SELF.fetch(`${ORIGIN}/api/v1/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -120,7 +120,7 @@ describe('POST /api/v1/chat', () => {
   });
 
   it('streams a vendor-neutral reply and logs real token usage', async () => {
-    mockCerebras(1200, 8);
+    mockAI(1200, 8);
     const res = await chat('user-happy', { system: 'be kind', user: 'hi' });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/event-stream');
@@ -138,12 +138,11 @@ describe('POST /api/v1/chat', () => {
     expect(row?.completion_tokens).toBe(8);
     // 1200*0.35 + 8*0.75 = 426 micro-dollars
     expect(row?.cost_micros).toBe(426);
-    // Defaults to the 'chat' surface when no feature tag is sent.
     expect(row?.feature).toBe('chat');
   });
 
   it('records the feature tag for per-surface accounting', async () => {
-    mockCerebras(500, 4);
+    mockAI(500, 4);
     const res = await chat('user-recap', {
       system: 'summarize',
       user: 'events',
@@ -156,7 +155,7 @@ describe('POST /api/v1/chat', () => {
     expect(row?.feature).toBe('recap');
   });
 
-  it('rejects an oversized prompt with 413 (no upstream call)', async () => {
+  it('rejects an oversized prompt with 413 (no inference call)', async () => {
     const res = await chat('user-big', {
       system: 'x'.repeat(40_000),
       user: 'y'.repeat(20_000),
@@ -171,8 +170,6 @@ describe('POST /api/v1/chat', () => {
   });
 
   it('trips the global daily spend circuit breaker with 503', async () => {
-    // A different user burned the whole $5 floor today; the requester is
-    // under their own per-user quota but the org-wide cap is hit.
     await seedUsage({ userId: 'whale', costMicros: 5_000_000 });
     const res = await chat('user-fresh', { system: 's', user: 'u' });
     expect(res.status).toBe(503);

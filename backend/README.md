@@ -122,7 +122,7 @@ curl http://127.0.0.1:8787/api/v1/posts   # → {"posts":[]} — a 500 here mean
 **`.dev.vars`** (gitignored; auto-loaded by `wrangler dev`) supplies the
 local secrets. Without `FORUM_JWT_SECRET`, every JWT-gated route returns
 `500 {"error":"server_misconfigured"}` while `/health` and pre-auth reads
-keep working — which looks alive but isn't. `CEREBRAS_API_KEY` is needed
+keep working — which looks alive but isn't. `CF_AI_API_TOKEN` (a Cloudflare API token) is needed
 only to exercise `POST /api/v1/chat`.
 
 > **Dev-Mac note:** on the operator's Mac the worker already runs on 8787
@@ -174,7 +174,7 @@ wrangler d1 create holdclose-forum
 wrangler r2 bucket create holdclose-forum-media   # FORUM_MEDIA — avatars + post images
 wrangler r2 bucket create holdclose-doc-blobs     # DOC_BLOBS — caregiver document scans
 wrangler secret put FORUM_JWT_SECRET   # Phase 13.3 — auth middleware
-wrangler secret put CEREBRAS_API_KEY   # /api/v1/chat inference key (chat 500s without it)
+wrangler secret put CF_AI_API_TOKEN   # Cloudflare Workers AI token (chat + extract 500 without it)
 
 # Non-secret vars live in wrangler.toml [vars]; override per environment
 # at deploy time:
