@@ -387,10 +387,12 @@ extractions for the caregiver to check rather than silently accept them.
 Privacy-by-design and **local-first**: care data lives on the caregiver's
 device by default. Care-circle sharing syncs through an **authenticated backend**
 with single-use invite links and explicit join confirmation. All network traffic
-is encrypted **in transit (TLS)**; on-device data is protected by **OS device
-encryption**, and OS cloud backups are disabled so the local record is not swept
-into iCloud or Google Drive (Android `allowBackup=false`; iOS files excluded from
-backup). Server-synced care-circle data resides on Cloudflare D1 and R2. We do
+is encrypted **in transit (TLS)**; the on-device care database is **encrypted
+at rest with SQLCipher** (key in the device keychain/keystore), on top of **OS
+device encryption**, and OS cloud backups are disabled so the local record is
+not swept into iCloud or Google Drive (Android `allowBackup=false`; iOS files
+excluded from backup). Server-synced care-circle data resides on Cloudflare D1
+and R2. We do
 **not** sell caregiver or care-recipient data; consent is explicit and revocable.
 Holdclose is a consumer tool used by families directly, **not a HIPAA covered
 entity**, but it is built privacy-forward to the standard families deserve.
@@ -506,10 +508,12 @@ explicitly confirmed invites. **Data portability** is inherent (the caregiver
 owns and can export their record); we do **not** sell caregiver or care-recipient
 data; consent is explicit and revocable. The app refers to the care recipient as
 "your loved one," never "the patient" — dignity by design. All network traffic is
-encrypted **in transit (TLS)**; on-device care data is protected by the phone's
-**OS device encryption**, with OS cloud backups disabled so the local record is
-not swept into iCloud or Google Drive (Android `allowBackup=false`; iOS files
-excluded from backup). Server-synced care-circle data resides on Cloudflare D1
+encrypted **in transit (TLS)**; the on-device care database is **encrypted at
+rest with SQLCipher** (the encryption key is held in the device
+keychain/keystore), layered on top of the phone's **OS device encryption**,
+with OS cloud backups disabled so the local record is not swept into iCloud or
+Google Drive (Android `allowBackup=false`; iOS files excluded from backup).
+Server-synced care-circle data resides on Cloudflare D1
 and R2. Critically, **the AI itself runs on Cloudflare Workers AI** — an
 open-weight model on our own cloud infrastructure — so the loved one's care data
 used to ground the coach **never goes to a separate AI vendor**. There is no

@@ -59,7 +59,7 @@ Severities are the verifier's adjusted values.
 
 | # | Sev | Finding | Fix |
 |---|-----|---------|-----|
-| 20 | MED | **iOS backups sweep the plaintext PHI DB, scans, voice notes, feedback outbox into iCloud** — Android sets `allowBackup=false` for exactly this reason; iOS has no parity. | Set `NSURLIsExcludedFromBackupKey` on those files/dirs + `NSFileProtectionComplete`; consider SQLCipher. |
+| 20 | MED | **iOS backups sweep the PHI DB, scans, voice notes, feedback outbox into iCloud** — Android sets `allowBackup=false` for exactly this reason; iOS has no parity. | RESOLVED (at-rest): the local DB is now encrypted with **SQLCipher**, key in the device keychain/keystore, so a swept-up copy is ciphertext. iOS files are also backup-excluded (`NSURLIsExcludedFromBackupKey`) + `NSFileProtectionComplete` as defense in depth. |
 | 21 | MED | **SHIM_TOKEN baked into sideloaded binaries** guards the operator's Claude subscription; extractable, no per-tester attribution, no rate limiting. | Per-tester tokens (rotation list already supports it) + shim rate limiting; longer-term move alpha to the quota-capped Worker `/chat`. |
 | 22 | MED | **Data portability is one-way** — `importInto` exists but is never wired to UI; export omits coach chat history. | Add a "Restore from backup" Settings row; add chat sections to the export. |
 | 23 | LOW | Feedback reports default both consent toggles ON (PHI screenshot + 300-line log). | Default the screenshot toggle OFF, or show a redaction preview. |
@@ -92,9 +92,10 @@ Severities are the verifier's adjusted values.
 - **§5 dementia meritorious (+$50K)** under-evidenced after the de-dementia
   pivot — needs 1-2 dementia caregivers in testing + dementia Smart-40 scenarios,
   or drop the claim.
-- Encryption brackets must be filled **truthfully** (local DB is plaintext;
-  claim OS device encryption + Android backup-off, not "at rest encryption",
-  unless SQLCipher is adopted first).
+- Encryption brackets must be filled **truthfully**. SQLCipher is now
+  adopted, so the local DB IS encrypted at rest (key in the device
+  keychain/keystore) — claim that alongside OS device encryption + backups
+  off (Android `allowBackup=false`, iOS backup-excluded) and TLS in transit.
 
 **Cheapest high-value wins:** the Smart-40 log (28 standard + 4 stress + 4
 boundary/safety cycles, ≥2 HITL flags) + the Protocol-9-Delta refusal probe run

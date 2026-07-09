@@ -35,7 +35,7 @@ dementia recommendation._
 | User-centered design in impl/testing | ✅ | |
 | Timeline + milestones | ✅ | |
 | **Team roles + bio sketch** | ⚠️ 👤 | veteran/VBMS bio drafted; confirm specifics |
-| Metrics + data-privacy procedures | ✅ | encryption brackets now filled truthfully (TLS in transit; OS device encryption; OS backups off — Android `allowBackup=false`, iOS backup-excluded; server data on Cloudflare D1/R2). **No at-rest DB encryption claimed** (local SQLite is plaintext). |
+| Metrics + data-privacy procedures | ✅ | encryption brackets filled truthfully (TLS in transit; **local SQLite encrypted at rest via SQLCipher, key in the device keychain/keystore**; OS device encryption; OS backups off — Android `allowBackup=false`, iOS backup-excluded; server data on Cloudflare D1/R2). |
 | Evaluation + continuous improvement | ✅ | |
 | Safety + bias monitoring | ✅ | guardrails + human-in-the-loop confirm on every care-data change (chat + voice), uncertainty/weak-data flagging, and a **code-side (non-LLM) crisis watchdog** — all now TRUE after this session's fixes. Red-team + Data Output Logs still to run (see below). |
 

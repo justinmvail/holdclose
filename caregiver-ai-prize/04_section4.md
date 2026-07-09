@@ -12,10 +12,12 @@ explicitly confirmed invites. **Data portability** is inherent (the caregiver
 owns and can export their record); we do **not** sell caregiver or care-recipient
 data; consent is explicit and revocable. The app refers to the care recipient as
 "your loved one," never "the patient" — dignity by design. All network traffic is
-encrypted **in transit (TLS)**; on-device care data is protected by the phone's
-**OS device encryption**, with OS cloud backups disabled so the local record is
-not swept into iCloud or Google Drive (Android `allowBackup=false`; iOS files
-excluded from backup). Server-synced care-circle data resides on Cloudflare D1
+encrypted **in transit (TLS)**; the on-device care database is **encrypted at
+rest with SQLCipher** (the encryption key is held in the device
+keychain/keystore), layered on top of the phone's **OS device encryption**,
+with OS cloud backups disabled so the local record is not swept into iCloud or
+Google Drive (Android `allowBackup=false`; iOS files excluded from backup).
+Server-synced care-circle data resides on Cloudflare D1
 and R2. Critically, **the AI itself runs on Cloudflare Workers AI** — an
 open-weight model on our own cloud infrastructure — so the loved one's care data
 used to ground the coach **never goes to a separate AI vendor**. There is no

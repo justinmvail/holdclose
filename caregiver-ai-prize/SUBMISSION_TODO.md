@@ -132,10 +132,10 @@ a one-line confirm.
       vendor/model named in any user-facing app string (this is a narrative-only
       mention, which the packet permits).
 - [x] **Encryption brackets** — filled truthfully in §2 and §4: **TLS in
-      transit; OS device encryption on-device; OS backups disabled (Android
-      `allowBackup=false`, iOS files excluded from backup); server data on
-      Cloudflare D1/R2.** Deliberately does **NOT** claim at-rest DB encryption
-      (the local SQLite DB is plaintext PHI).
+      transit; local SQLite encrypted at rest via SQLCipher, key in the device
+      keychain/keystore; OS device encryption on-device; OS backups disabled
+      (Android `allowBackup=false`, iOS files excluded from backup); server
+      data on Cloudflare D1/R2.**
 - [x] **HIPAA stance** — stated: consumer tool used by families, **not a HIPAA
       covered entity**, built privacy-forward.
 - [x] **§2 deployment-readiness overclaim** — dropped the false "Play Open

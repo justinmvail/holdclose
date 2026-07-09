@@ -82,7 +82,7 @@ const PRIVACY_HTML = legalPage(
 <p>This policy describes what information Holdclose — operated by Juno Code Studio (JCSV One LLC) — collects, how it is used, and the choices you have. The short version: your care data lives on your device by default, we only move it to our servers to provide features you turn on, we do not sell personal data, and there are no ads.</p>
 
 <h2>1. Care data stays on your device by default</h2>
-<p>The information you record about your loved one — medications, dose logs, appointments, health log entries, journal entries, and the emergency card — is stored in a local database on your phone. If you never sign in or join a care circle, that data does not leave your device except as described below for AI features you actively use.</p>
+<p>The information you record about your loved one — medications, dose logs, appointments, health log entries, journal entries, and the emergency card — is stored in a local database on your phone. That local database is <strong>encrypted at rest</strong>, and its encryption key is held in your device's secure keychain/keystore. If you never sign in or join a care circle, that data does not leave your device except as described below for AI features you actively use.</p>
 
 <h2>2. Account information</h2>
 <p>When you sign in with Google, we store the identity Google asserts for you — your Google account identifier ("sub"), email address, and display name — so we can recognize your account across devices and sign-ins. We do not receive or store your Google password.</p>
@@ -107,7 +107,7 @@ const PRIVACY_HTML = legalPage(
 </ul>
 
 <h2>8. Security</h2>
-<p>Sync and AI traffic is encrypted in transit. Access to backend data is limited to what is needed to operate the service. No system is perfectly secure, so please use a device passcode and keep your sign-in credentials private.</p>
+<p>The care data stored on your device is encrypted at rest, with the encryption key held in your device's secure keychain/keystore. Sync and AI traffic is encrypted in transit. Access to backend data is limited to what is needed to operate the service. No system is perfectly secure, so please use a device passcode and keep your sign-in credentials private.</p>
 
 <h2>9. Data retention and deletion</h2>
 <p>Synced data is retained while your account is active so your care circle keeps working. You can request deletion of your account and its server-side data at any time by emailing <a href="mailto:support@holdclose.care">support@holdclose.care</a>; deleting the app from your device removes the local database.</p>

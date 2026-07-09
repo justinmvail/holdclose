@@ -123,10 +123,12 @@ extractions for the caregiver to check rather than silently accept them.
 Privacy-by-design and **local-first**: care data lives on the caregiver's
 device by default. Care-circle sharing syncs through an **authenticated backend**
 with single-use invite links and explicit join confirmation. All network traffic
-is encrypted **in transit (TLS)**; on-device data is protected by **OS device
-encryption**, and OS cloud backups are disabled so the local record is not swept
-into iCloud or Google Drive (Android `allowBackup=false`; iOS files excluded from
-backup). Server-synced care-circle data resides on Cloudflare D1 and R2. We do
+is encrypted **in transit (TLS)**; the on-device care database is **encrypted
+at rest with SQLCipher** (key in the device keychain/keystore), on top of **OS
+device encryption**, and OS cloud backups are disabled so the local record is
+not swept into iCloud or Google Drive (Android `allowBackup=false`; iOS files
+excluded from backup). Server-synced care-circle data resides on Cloudflare D1
+and R2. We do
 **not** sell caregiver or care-recipient data; consent is explicit and revocable.
 Holdclose is a consumer tool used by families directly, **not a HIPAA covered
 entity**, but it is built privacy-forward to the standard families deserve.

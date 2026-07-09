@@ -228,8 +228,21 @@ holdclose/                  # repo root (matches pubspec name:)
     (`<current_data>` + fullwidth-bracket substitution in
     `chat_context_builder.dart`); treat any new prompt interpolation
     the same way.
-  - Android backups stay OFF (`allowBackup="false"` — the local DB is
-    plaintext PHI).
+  - The local drift/SQLite DB is ENCRYPTED AT REST with **SQLCipher**
+    (`lib/db/encrypted_open.dart`, wired into `HoldcloseDatabase.open()`).
+    The key is a strong random passphrase minted on first run and held in
+    the OS keychain/keystore via `flutter_secure_storage` — never hardcoded.
+    Existing plaintext installs are rekey-migrated in place on first launch
+    (`sqlcipher_export`) so upgraders keep their care data. Only the real
+    on-device file DB is encrypted; the in-memory test path
+    (`NativeDatabase.memory()`) stays plaintext and the suite never loads
+    SQLCipher. Android backups also stay OFF (`allowBackup="false"`) and iOS
+    files are backup-excluded (defense in depth on top of encryption).
+    Deps: `sqlcipher_flutter_libs` (0.6.x, pairs with `sqlite3: 2.x`) +
+    `sqlite3` (direct, for the pre-open rekey). NOTE for device builds: the
+    SQLCipher native lib supersedes the plain `sqlite3_flutter_libs` build —
+    validate on a real device (Keychain/Keystore + an existing-data upgrade)
+    since `flutter test` runs the in-memory path only.
 - **Bottom tab bar is always exactly four items in this order —
   Home, Care, Chat, Community — never collapsed or conditionally
   hidden.** ("Medical" was renamed **Care**; the former "Team" tab folded

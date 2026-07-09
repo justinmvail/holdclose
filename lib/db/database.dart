@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import 'encrypted_open.dart';
 import 'tables.dart';
 
 part 'database.g.dart';
@@ -28,9 +28,13 @@ part 'database.g.dart';
 /// `care_shifts` (Phase 14.31).
 ///
 /// Construct with [HoldcloseDatabase.open] in production — it lazily
-/// opens a SQLite file under the platform's app-documents directory via
-/// `drift_flutter`. Tests pass a `NativeDatabase.memory()` directly to
-/// the unnamed constructor so each test gets an isolated DB.
+/// opens an ENCRYPTED SQLite file (`holdclose.sqlite`) under the platform's
+/// app-documents directory. The file is encrypted at rest with SQLCipher; the
+/// key lives in the OS keychain/keystore (see `encrypted_open.dart` for the
+/// key management + the plaintext→cipher upgrade migration). Tests pass a
+/// `NativeDatabase.memory()` directly to the unnamed constructor so each test
+/// gets an isolated, UNENCRYPTED in-memory DB — the encryption path is
+/// production-only and never runs under `flutter test`.
 @DriftDatabase(
   tables: <Type>[
     JournalEntriesTable,
@@ -82,8 +86,14 @@ class HoldcloseDatabase extends _$HoldcloseDatabase {
   /// failures that struck when separate connections wrote concurrently
   /// (e.g. a chat/setup write racing the sync engine). Tests bypass this in
   /// favour of `NativeDatabase.memory()`.
-  factory HoldcloseDatabase.open() =>
-      openShared(driftDatabase(name: 'holdclose'));
+  ///
+  /// The file is ENCRYPTED AT REST with SQLCipher — [encryptedFileExecutor]
+  /// mints/reads the key from the OS keychain/keystore and migrates any
+  /// existing plaintext install in place (so an upgrading tester keeps their
+  /// care data). It returns a lazily-connected executor, so this stays a
+  /// synchronous factory: the async key-read + migration + encrypted open run
+  /// on the first query.
+  factory HoldcloseDatabase.open() => openShared(encryptedFileExecutor());
 
   /// The memoisation behind [open], with an injectable [executor] so the
   /// singleton + no-op-close behaviour is testable without the platform
