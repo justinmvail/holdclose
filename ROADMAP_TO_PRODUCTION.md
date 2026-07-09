@@ -100,9 +100,9 @@ mocked endpoint; real-inference quality is a deploy-time check.
 ---
 
 ## Milestone 2 — Production hardening (around launch)
-- [ ] 👤 **At-rest DB encryption decision.** Local SQLite is plaintext PHI (mitigated by OS device encryption + backup exclusion). Adopt SQLCipher (`sqlcipher_flutter_libs` + key in Keychain/Keystore) or keep the honest "OS-protected" posture — drives the store privacy claims.
+- [x] 🤖 **At-rest DB encryption — SQLCipher** (commit `c488cf6`). Local DB now encrypted; 256-bit key minted on first run + stored in Keychain/Keystore (`flutter_secure_storage`); existing plaintext installs auto-migrate in place (ATTACH + `sqlcipher_export`, crash-safe swap). In-memory test path stays unencrypted (suite unaffected). Privacy policy/packet updated to "encrypted at rest." → 🖥️ **needs device validation:** `cd ios && pod install` (new pod), then install a plaintext build (28) with data → install this branch → confirm the data survived the migration. Watch for a native sqlite3/SQLCipher link collision on the first device build (Dart-level override handles it; a Podfile/Gradle `pickFirst` nudge is the fallback).
 - [ ] 🤖 **Android "Restore from backup" file picker** — iOS-only today; add a Kotlin `ACTION_OPEN_DOCUMENT` bridge for parity.
-- [ ] 🤝 **Crash-report aggregation** — on-device capture ships; decide whether to add a privacy-respecting aggregator (self-hosted Sentry, PII-scrubbed) or keep user-initiated-only (no-vendor-name rule applies).
+- [x] 🤖 **Crash-report aggregation** (commit `bec54ed`) — both channels now: the on-device user-initiated report **plus** automatic `sentry_flutter` behind a `--dart-define=SENTRY_DSN` (empty = off, so dev/test/demo send nothing). `beforeSend` scrubs PHI (no message bodies, care data, or email/name — only exception type + stack + os/version). No vendor name in the UI (dev-facing). → 🖥️ **operator:** stand up a self-hosted Sentry, get the DSN, add `SENTRY_DSN` to the release build defines.
 - [ ] 🤖 **Dependency refresh** — 104 packages behind; sweep majors with the suite as the gate.
 - [ ] 🤝 **Load/cost check** on the Worker `/chat` spend caps before opening to real volume.
 
@@ -111,7 +111,7 @@ mocked endpoint; real-inference quality is a deploy-time check.
 ## Milestone 3 — Business model (monetization phase)
 _Paid-subscription + affiliate plan; gated on org enrollment (1d)._
 - [ ] 👤 **Pricing decision** — free core tier + subscription tiers/price points.
-- [ ] 🤖 **Paywall** — `in_app_purchase` (StoreKit + Play Billing); gate the premium surface; restore-purchases; receipt validation.
+- [~] 🤖 **Paywall scaffold built** (commit `0ab25e4`) — `in_app_purchase` BillingService (real + fake), `premiumStatusProvider` ({isPremium, inTrial}), `PaywallScreen` + route, a `PremiumGate` helper, always-a-free-trial model. **No features gated yet** (deliberate — flip them on later). Fake billing is the default so the app builds/tests with no store configured. → 🤝 remaining: (a) 👤 **create the subscription products** in App Store Connect + Play Console (price points, product IDs — replace the placeholder constants), (b) 👤 decide which features go premium (then 🤖 wrap them with `PremiumGate`), (c) 🤖 server-side receipt validation via a Worker route (client-side entitlement for now). → 🖥️ **needs device validation:** `pod install` + a device build to exercise real StoreKit/Play Billing.
 - [ ] 🤝 **Rev-share affiliate attribution** — per-creator referral codes → commission on *paying* subscribers; attribution backend + creator dashboard.
 - [ ] 👤 Tax/payout setup + terms for the affiliate program.
 

@@ -48,10 +48,10 @@ info / real people.
 - [ ] Content rating (IARC); target audience; ads declaration (none); public privacy URL `holdclose.care/privacy`. *(PERSONAL)*
 - [ ] Upload AAB → promote internal → closed → open → production; enroll in Play App Signing. *(CONSOLE)*
 
-## G. Product decisions (Claude implements once you decide)
-- [ ] **At-rest DB encryption** — adopt SQLCipher, or keep the honest "OS-protected + backups off" posture. Drives the store privacy claims. *(DECISION)*
-- [ ] **Pricing** — free core tier + subscription tiers/price points. *(DECISION)*
-- [ ] **Crash-report aggregation** — self-hosted aggregator vs. user-initiated-only. *(DECISION)*
+## G. Product decisions — DECIDED + implemented (now need your side)
+- [x] **At-rest DB encryption → SQLCipher** (built, `c488cf6`). → **you:** validate on device — `cd ios && pod install`, install a plaintext build with data, then this branch, confirm the data survived the auto-migration.
+- [x] **Crash aggregation → both** (built, `bec54ed`). → **you:** stand up a self-hosted Sentry, add its `SENTRY_DSN` to release build defines.
+- [~] **Pricing → free now, paywalled features later, always a free trial** (paywall machinery built, `0ab25e4`). → **you:** create the subscription products (price points + IDs) in App Store Connect + Play Console, and decide which features become premium (I then wire the gate).
 
 ## H. Business model (monetization phase)
 - [ ] Affiliate program: tax/payout setup + terms. *(ACCOUNT/$)*
