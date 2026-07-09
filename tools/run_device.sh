@@ -74,9 +74,19 @@ case "$AUTH" in
     )
     ;;
   demo)
+    # The live shim binds 127.0.0.1 behind the Tailscale Funnel, so a LAN
+    # address is unreachable from a phone (connection refused) AND trips
+    # iOS's Local Network permission prompt. Default to the funnel URL +
+    # token from dev_defines.sh; the LAN fallback only works against a
+    # scratch shim started with SHIM_HOST=0.0.0.0.
+    if [[ -z "${SHIM_URL:-}" && -f tools/dev_defines.sh ]]; then
+      # shellcheck disable=SC1091
+      source tools/dev_defines.sh
+    fi
     DEFINES+=(
       --dart-define=DEMO_MODE=true
       --dart-define=SHIM_URL="${SHIM_URL:-http://192.168.50.71:8765}"
+      --dart-define=SHIM_TOKEN="${SHIM_TOKEN:-}"
     )
     ;;
   *)

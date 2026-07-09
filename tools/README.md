@@ -46,7 +46,7 @@ builds.
 | `AUTH` | `demo` / `google` | `demo` | `demo` = fake auth (`DEMO_MODE`), LAN shim, no backend/Google. `google` = real Google sign-in (`ALPHA_AUTH`), backend-verified; **auto-sources `dev_defines.sh`**, errors if it's missing. |
 | `SEED` | `1` / unset | unset | Wipe the on-device DB and reseed the comprehensive ~6-months-back / 1-month-forward dataset once on next launch (`SEED_DEMO`). |
 | `DEVICE` | device id | Justin's iPhone (`00008101-001A3C680E81001E`) | `flutter run` target. |
-| `SHIM_URL` | URL | LAN `http://192.168.50.71:8765` (demo) / `dev_defines.sh` value (google) | Override the LLM shim. |
+| `SHIM_URL` | URL | funnel URL + `SHIM_TOKEN` from `dev_defines.sh` (both modes; demo falls back to LAN `http://192.168.50.71:8765` only when no `dev_defines.sh` — that needs a scratch shim on `SHIM_HOST=0.0.0.0` and trips iOS's Local Network prompt) | Override the LLM shim. |
 
 Both scripts also derive `APP_VERSION` (name from `pubspec.yaml` + epoch) and
 the build-stamp defines (`BUILD_STAMP`, `GIT_SHA`, `GIT_BRANCH`, `BUILD_TIME`)
