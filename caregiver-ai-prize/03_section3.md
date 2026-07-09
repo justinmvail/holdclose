@@ -14,6 +14,31 @@ cannot be written silently; the caregiver sees and confirms it first. The coach
 is scoped to be **educational, not diagnostic**, and defers to professionals on
 medical decisions.
 
+**Actionable workflow — Input → AI Analysis → Caregiver Action.** The
+scan-to-import flow shows the pattern concretely. The caregiver is always the
+last step before any care-data change:
+
+```
+  ┌──────────────┐    ┌────────────────────┐    ┌─────────────────────┐    ┌──────────────────┐
+  │  1. INPUT    │    │  2. AI ANALYSIS    │    │ 3. CAREGIVER ACTION │    │  4. RESULT       │
+  │              │──▶ │                    │──▶ │  (human-in-the-loop)│──▶ │                  │
+  │ Photograph a │    │ Model extracts     │    │ Review screen shows │    │ Medication +     │
+  │ prescription │    │ drug, dose,        │    │ each field; low-    │    │ dose windows are │
+  │ label with   │    │ frequency, refills │    │ confidence fields   │    │ created in the   │
+  │ the camera   │    │ into structured    │    │ are flagged amber   │    │ care record only │
+  │              │    │ fields; flags any  │    │ ("check this").     │    │ after the        │
+  │              │    │ uncertain field    │    │ Caregiver edits +   │    │ caregiver taps   │
+  │              │    │ instead of         │    │ approves — or       │    │ Approve.         │
+  │              │    │ guessing.          │    │ discards.           │    │                  │
+  └──────────────┘    └────────────────────┘    └─────────────────────┘    └──────────────────┘
+```
+
+Nothing is written to the care record until the caregiver approves it. The same
+Input → AI → **caregiver-confirms** → Result shape governs the chat/voice coach
+(any data-changing action parks behind an in-thread confirmation card) and the
+appointment-card and insurance-card scanners — one consistent, human-in-the-loop
+pattern across every AI surface.
+
 ## Transparency & Explainability
 
 The coach is clearly an **AI assistant, not a clinician.** Its guidance is

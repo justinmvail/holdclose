@@ -33,8 +33,9 @@ Caregiver AI Prize Challenge**, Track 1 (AI Tools to Support Caregivers).
   benefits systems and has repeatedly cared for his father (a 100%-disabled
   veteran); dementia in his own family (grandfather); early testers are
   themselves family caregivers of aging / dementia-affected parents.
-- **Model-agnostic** responsible AI — currently the open-weight gpt-oss-120b
-  served via Cerebras through a quota-enforcing backend; human-in-the-loop.
+- **Model-agnostic** responsible AI — the AI runs on **Cloudflare Workers AI**
+  (an open-weight model on our own cloud infrastructure), so the loved one's data
+  never goes to a separate AI vendor; human-in-the-loop.
 
 ## The two things to GENERATE this month (cheap, not gaps)
 - [ ] **User-Centered evidence** — write up the friend-caregiver feedback

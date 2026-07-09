@@ -16,7 +16,11 @@ encrypted **in transit (TLS)**; on-device care data is protected by the phone's
 **OS device encryption**, with OS cloud backups disabled so the local record is
 not swept into iCloud or Google Drive (Android `allowBackup=false`; iOS files
 excluded from backup). Server-synced care-circle data resides on Cloudflare D1
-and R2.
+and R2. Critically, **the AI itself runs on Cloudflare Workers AI** — an
+open-weight model on our own cloud infrastructure — so the loved one's care data
+used to ground the coach **never goes to a separate AI vendor**. There is no
+third-party model provider in the data path to trust; the privacy boundary is
+ours to hold.
 
 **2. Support human-in-the-loop accountability.** Holdclose **augments, never
 replaces, the caregiver's judgment.** Every AI action that changes existing care
@@ -64,9 +68,24 @@ and a code-side crisis referral that fires independent of the model. This
 reflects current evidence and best practices, with safeguards against adverse
 impacts, and the harness re-runs as the product evolves.
 
-**7. Ensure affordability and access.** Holdclose is designed to be **affordable**
-[FOUNDER: state the pricing commitment — e.g. "a free core tier plus an optional
-low-cost subscription; transparent, reasonable pricing"], runs on the phone
-caregivers already carry, and its **local-first** design works even with limited
-connectivity — meeting caregivers where they are, which is the heart of ACL's
-home- and community-based mission.
+**7. Ensure affordability and access.** The Challenge's own judging partner
+measured exactly what keeps caregivers off of helpful technology. In the Caregiver
+Action Network 2026 Caregiver Tech Insights Survey (n = 272), the top three
+adoption barriers are **cost (43%)**, **not knowing which products to trust
+(42%)**, and **privacy and security concerns (40%)**. Holdclose's core design
+choices answer each one directly:
+
+- **Cost (43%).** Holdclose is designed to be **affordable** [FOUNDER: state the
+  pricing commitment — e.g. "a free core tier plus an optional low-cost
+  subscription; transparent, reasonable pricing"] and runs on the phone caregivers
+  already carry, so there is no new hardware to buy.
+- **Don't-know-which-to-trust (42%).** The coach is **non-diagnostic and
+  transparent** — its guidance is grounded in and cites the loved one's own data,
+  it flags uncertainty, and human-in-the-loop confirmation gates every care-data
+  change (Principles 2 and 6), so a caregiver can see *why* it says what it says.
+- **Privacy and security (40%).** Holdclose is **local-first**, and the AI runs on
+  **Cloudflare Workers AI** (an open-weight model on our own cloud infrastructure),
+  so the loved one's data **never goes to a separate AI vendor** (Principle 1).
+
+Its **local-first** design also works even with limited connectivity, meeting
+caregivers where they are — the heart of ACL's home- and community-based mission.

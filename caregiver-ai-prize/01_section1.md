@@ -6,12 +6,22 @@
 ## Understanding of Need
 
 Family caregiving is not a single hard moment — it is a relentless, often
-full-time job made of thousands of them. An estimated 63 million Americans care
-for an aging or ill family member, most without training, many while holding
-other jobs and raising their own children. They manage medications and narrow
-dose windows, track shifting symptoms, coordinate appointments and other family
-members, and carry the emotional weight of watching someone they love decline —
-usually with no one guiding them and no time to stop and look anything up.
+full-time job made of thousands of them. An estimated **63 million** Americans
+care for an aging or ill family member — on average **51 years old** and giving
+about **27 hours a week** to roughly **$600 billion** in unpaid care each year
+(Caregiver Action Network, 2026 Caregiver Tech Insights Survey, n = 272). Most do
+it without training, many while holding other jobs and raising their own children.
+They manage medications and narrow dose windows, track shifting symptoms,
+coordinate appointments and other family members, and carry the emotional weight
+of watching someone they love decline — usually with no one guiding them and no
+time to stop and look anything up.
+
+The coordination alone is a second job. In the CAN survey, **37% of caregivers
+spend 11 or more hours a week on care coordination**, and nearly **one in three**
+describe their loved one's care as *fragmented* across too many systems and
+providers. The most time-consuming coordination burdens are exactly the ones
+Holdclose was built to absorb: **managing medications and refills (50%)** and
+**scheduling appointments (46%)**.
 
 Existing help does not fit the reality. Generic resources — websites,
 hotlines, pamphlets — do not know the specific loved one, and professional
@@ -58,9 +68,10 @@ job easier across the whole experience. Its components:
   connection.
 - **A caregiver community** with a crisis-keyword safety watchdog.
 
-The AI is integrated responsibly and is **model-agnostic** — today it runs on an
-**open-weight model (gpt-oss-120b)** served via Cerebras through a quota-enforcing
-backend, and the architecture can swap the underlying model without touching the
+The AI is integrated responsibly and is **model-agnostic**: the AI runs on
+**Cloudflare Workers AI** — an open-weight model on our own cloud infrastructure —
+so the loved one's data never goes to a separate AI vendor, and the architecture
+can swap the underlying model without touching the
 product. It supports the caregiver's judgment rather than replacing it, educates
 rather than diagnoses, flags uncertainty when data is thin, and escalates to
 human help. Data is local-first and private, and the product is designed to be
@@ -79,9 +90,10 @@ responses supportive and non-diagnostic, an uncertainty clause that has the coac
 say when it is unsure and point to human help, weak-data flagging in the
 scan-to-import extractors, a code-side (non-LLM) crisis watchdog on chat and
 voice, and human-in-the-loop confirmation before any AI action changes existing
-care data. The architecture is **model-agnostic** — currently an open-weight
-model (gpt-oss-120b) served via Cerebras — so Holdclose is not dependent on any
-single AI provider.
+care data. The architecture is **model-agnostic** — the AI runs on **Cloudflare
+Workers AI** (an open-weight model on our own cloud infrastructure), so the loved
+one's data never goes to a separate AI vendor and Holdclose is not dependent on
+any single AI provider.
 
 **Readiness self-assessment.** TRL-3 is the eligibility floor; **Holdclose
 clears it and stands above it — a working, tested system demonstrated in a
@@ -109,9 +121,10 @@ a realistic setting), while remaining honest that operational proof *at scale* �
 outcome data from a caregiver cohort — is precisely the work of Phases 2 and 3.
 
 **Existing vs. new AI methods.** Holdclose does *not* train a new model — it
-builds on **existing large language models** (model-agnostic; currently the
-open-weight **gpt-oss-120b**, served via Cerebras through the quota-enforcing
-backend). Its distinct contribution is the **data-grounding layer**
+builds on **existing large language models** (model-agnostic; the AI runs on
+**Cloudflare Workers AI**, an open-weight model on our own cloud infrastructure,
+so the loved one's data never goes to a separate AI vendor). Its distinct
+contribution is the **data-grounding layer**
 (`chat_context_builder`): the loved one's real, *sanitized* care data — meds, dose
 windows, appointments, journal — is assembled into the model's context at
 inference, so a general-purpose LLM becomes a coach that knows *your specific
@@ -135,52 +148,51 @@ through Phases 2 and 3.
 ## Supporting Research
 
 The need Holdclose addresses — and the specific features we built — are
-corroborated by the Challenge sponsor's own evidence base, most directly the
-**Caregiver Action Network (CAN) 2026 Caregiver Tech Insights Survey** (n = 272
-family caregivers), presented at ACL's May 28, 2026 Challenge webinar. CAN is a
-partner organization supporting this Challenge, so this data reflects the exact
-population and priorities ACL is targeting.
-
-**The burden is real and quantified.** An estimated 63 million U.S. family
-caregivers provide roughly **$600 billion** in unpaid care each year, averaging
-**27 hours per week**, and half report at least one negative financial impact
-(ACL Caregiver AI webinar, May 2026). Coordination alone is a second job:
-**37% of caregivers spend 11+ hours per week *just on care coordination***, and
-nearly **one in three** describe their care situation as fragmented — citing
-information scattered across systems and too many providers (CAN 2026).
+corroborated by the Challenge's **own non-federal judging partner**, the
+**Caregiver Action Network (CAN)**, whose **2026 Caregiver Tech Insights Survey**
+(n = 272 family caregivers) was presented at ACL's May 28, 2026 Challenge webinar.
+Because CAN is the organization judging this very Track, its data reflects the
+exact population and priorities the Challenge is asking us to serve — and its
+findings map almost one-to-one onto the features Holdclose already ships.
 
 **Caregivers are already reaching for AI — and want it grounded and
-trustworthy.** **59%** have used AI and **33%** use it regularly for caregiving;
-the leading uses are **understanding a diagnosis or condition (44%)**,
-**preparing questions for doctor visits (32%)**, **organizing medical
-information (27%)**, and **emotional support (24%)** (CAN 2026). These are
-precisely the jobs Holdclose's data-grounded coach performs — the difference
-being that its guidance is grounded in the loved one's real record rather than a
-blank chatbox.
+trustworthy.** In the CAN survey, **59% have used or tried AI** for caregiving.
+The leading uses line up directly with Holdclose's capabilities:
 
-**The feature set maps to the tasks caregivers most want help with.** The most
-time-consuming coordination tasks are **managing medications and refills (50%)**
-and **scheduling appointments (46%)** — the exact functions of Holdclose's
-medication/dose-window tracking and appointment management. Asked what they would
-most like to delegate, caregivers named tracking follow-ups and care plans (43%),
-managing prescription refills (43%), coordinating between doctors (41%), and
-scheduling (40%) (CAN 2026).
+| CAN caregiver AI use case | Share | The Holdclose feature that does it |
+|---|---|---|
+| Understanding a diagnosis or condition | **44%** | the data-grounded coach |
+| Preparing questions for doctor visits | **32%** | AI doctor-visit prep |
+| Organizing medical information | **27%** | the care suite (meds, appts, health log) |
+| Receiving emotional support | **24%** | the coach |
+| Writing insurance appeals | **22%** | AI insurance-appeal drafting |
+| Admin / care-coordination assistance | **21%** | the Care Circle + scan-to-import |
+
+Every one of these is a feature Holdclose ships today. The difference is that
+Holdclose's coach is **grounded in the loved one's real record** — meds, dose
+windows, appointments, journal — rather than a blank chatbox, so its help fits
+*your* person.
+
+**What caregivers most want to delegate is exactly what Holdclose automates.**
+Asked which tasks they would most like to hand off, caregivers named **tracking
+follow-ups and care plans (43%)**, **finding providers (43%)**, **managing
+prescription refills (43%)**, **coordinating between doctors (41%)**, and
+**scheduling appointments (40%)** (CAN 2026). Holdclose targets this list head-on:
+refill-runway alerts, NPI-based "Find a provider" search, appointment management,
+and a shared Care Circle for coordination. The wish list *is* the feature list.
 
 **The adoption barriers validate our core design choices.** The top barriers to
 caregiver technology adoption are **cost (43%)**, **not knowing which products to
-trust (42%)**, **privacy and security concerns (40%)**, and **lack of time to set
-tools up (34%)** (CAN 2026). Holdclose answers each directly: an **affordable**
+trust (42%)**, and **privacy and security concerns (40%)** (CAN 2026). Holdclose
+answers each directly, and Section 4 (Principle 7) shows how: an **affordable**
 model; a **trustworthy, non-diagnostic** coach whose reasoning is visible and
-grounded; a **local-first** privacy architecture; and a **single, low-setup** app
-(22% of caregivers explicitly prefer "everything in one consolidated app").
+grounded; and a **local-first, vendor-invisible** privacy architecture in which
+the loved one's data never goes to a separate AI vendor.
 
-**Primary sources.**
-- Caregiver Action Network, *Caregiver Tech Insights Survey: Findings Report
-  2026* (n = 272 family caregivers). caregiveraction.org/tech-insights-survey
-- ACL, *Smart Innovation for Better Care — The Caregiver Experience* (Caregiver
-  AI Prize Challenge informational webinar), May 28, 2026.
-- U.S. HHS / ACL, Caregiver AI Prize Challenge launch materials, 2026 (care-gap
-  and direct-care-workforce projections).
+**Primary source.** Caregiver Action Network, *2026 Caregiver Tech Insights
+Survey* (n = 272 family caregivers), presented at ACL, *Smart Innovation for
+Better Care — The Caregiver Experience* (Caregiver AI Prize Challenge
+informational webinar), May 28, 2026.
 
 [Optional, if page budget allows: AARP/NAC *Caregiving in the U.S. 2025*; AARP
 *Valuing the Invaluable 2023* ($600B unpaid-care valuation); peer-reviewed

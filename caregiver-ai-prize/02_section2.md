@@ -65,6 +65,59 @@ strengthen co-design and real-world validation in Phases 2–3.
   unsafe medical directives** (adjudicated review).
 - **Medication tracking** — consistency of dose logging over time.
 
+## Net Time Saved (data-backed estimate)
+
+ACL's Technology Readiness Guide asks for an estimate of the **hours returned to
+the caregiver per week**. We build one from the Challenge judging partner's own
+data rather than an invented figure. In the Caregiver Action Network 2026
+Caregiver Tech Insights Survey (n = 272), **37% of caregivers spend 11 or more
+hours a week on care coordination alone**, and the coordination burden
+concentrates in four tasks Holdclose directly targets: managing medications and
+refills (50%), scheduling appointments (46%), coordinating between doctors, and
+tracking follow-ups and care plans.
+
+Holdclose attacks these four tasks with refill-runway alerts, one-tap
+appointment and dose-window management, voice-to-action logging, AI
+scan-to-import (a prescription or appointment card becomes structured records in
+seconds instead of manual entry), and a shared Care Circle that removes duplicated
+"who did what" coordination across the family.
+
+**Estimate.** If a caregiver carrying an 11+ hour coordination week recovers even
+**15–25% of that time** through faster logging, automated refill tracking,
+scan-to-import, and shared coordination, that is a conservative **~1.5 to ~3 hours
+returned per week**. We present this as a **data-backed estimate, not a measured
+result** — the derivation (CAN coordination hours × Holdclose's coverage of the
+dominant coordination tasks) is explicit so a reviewer can weigh it. Measuring the
+*actual* net time saved — instrumented in-app timing plus caregiver self-report,
+against a pre-Holdclose baseline — is a defined Phase 2 metric (see Performance
+Metrics and the pilot plan above).
+
+## Bench Metrics — measurable today vs. the Phase 2 measurement plan
+
+ACL's guide suggests basic bench-test metrics (F1, precision, recall, accuracy).
+We report **only what we can measure honestly today** and lay out a plan for the
+rest — no fabricated numbers.
+
+**Measurable today — the safety guardrail pass-rate.** Our optional Data Output
+Logs (`DATA_OUTPUT_LOGS.md`) drive **41 real inference cycles** through the actual
+coach stack — 32 standard (including 2 thin-data uncertainty flags), 4 stress, and
+5 boundary/safety cycles including a prompt-injection probe and the
+Protocol-9-Delta unknown-term probe. **All 41 guardrails held (41/41):** every
+dosing, diagnosis, prognosis, crisis, injection, and unknown-protocol case was
+correctly refused or escalated, and the code-side crisis watchdog fired
+independent of the model. That 41/41 pass-rate is the measurable safety result we
+can stand behind now.
+
+**Phase 2 measurement plan — classifier accuracy on a labeled corpus.** The
+scan-to-import extractors (prescription, appointment, and insurance-card) are
+classification-shaped and *are* the right surface for F1/precision/recall/accuracy.
+We do **not** yet have a labeled test corpus, so we do not report those numbers.
+In Phase 2 we will assemble a labeled corpus of real-world scans (with a
+held-out test set), then measure **precision, recall, F1, and overall
+field-extraction accuracy** per field type — with special weight on **recall of
+low-confidence fields**, since the product's safety design is to flag uncertain
+extractions for the caregiver to check rather than silently accept them.
+
 ## Data Privacy Procedures
 
 Privacy-by-design and **local-first**: care data lives on the caregiver's
