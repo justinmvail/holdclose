@@ -428,6 +428,24 @@ abstract class AppLocalizations {
   /// **'One per line.'**
   String get lovedOneSetupOnePerLine;
 
+  /// Field label for the optional loved-one blood-type dropdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Blood type (optional)'**
+  String get lovedOneSetupBloodTypeLabel;
+
+  /// Helper text under the blood-type dropdown explaining it is optional.
+  ///
+  /// In en, this message translates to:
+  /// **'Handy for EMS — leave it if you\'re not sure.'**
+  String get lovedOneSetupBloodTypeHint;
+
+  /// Blood-type dropdown option meaning the caregiver does not know the blood type.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get lovedOneSetupBloodTypeUnknown;
+
   /// Primary submit button label on the loved-one setup wizard.
   ///
   /// In en, this message translates to:

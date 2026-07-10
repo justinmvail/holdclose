@@ -26,6 +26,21 @@ typedef PatientIdFactory = String Function();
 
 String _defaultPatientIdFactory() => mintId('patient');
 
+/// The eight ABO/Rh blood types offered in the setup dropdown. A ninth
+/// "Unknown" choice (localized) maps to `null` on the [Patient] — blood
+/// type is optional, so "not sure" is a first-class answer, not a blank.
+/// These are medical codes, not translatable copy.
+const List<String> kBloodTypes = <String>[
+  'A+',
+  'A-',
+  'B+',
+  'B-',
+  'AB+',
+  'AB-',
+  'O+',
+  'O-',
+];
+
 /// ID factory the setup wizard uses. Tests override this with a fixed
 /// value so the persisted patient id is stable across runs.
 @Riverpod(keepAlive: true)
@@ -68,6 +83,7 @@ class LovedOneSetupScreen extends ConsumerStatefulWidget {
   static const Key dobClearKey = Key('loved-one-setup-dob-clear');
   static const Key diagnosisFieldKey = Key('loved-one-setup-diagnosis');
   static const Key allergiesFieldKey = Key('loved-one-setup-allergies');
+  static const Key bloodTypeFieldKey = Key('loved-one-setup-blood-type');
   static const Key saveButtonKey = Key('loved-one-setup-save');
 
   /// Cancel/close affordance — shown ONLY in ADD mode (`isAdd: true`) so a
@@ -93,6 +109,11 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
   /// Optional — when picked, the stored age is derived from it (DOB is
   /// what EMS/clinicians expect; the age field stays for quick entry).
   DateTime? _dateOfBirth;
+
+  /// Optional ABO/Rh blood type; `null` = "Unknown" (the default). Stored
+  /// straight through to [Patient.bloodType] and surfaced on the Emergency
+  /// Card for EMS/ER handoff.
+  String? _bloodType;
 
   bool _submitting = false;
 
@@ -171,6 +192,7 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
       diagnosedAt: DateTime.now(),
       medications: const <CrisisMedication>[],
       allergies: _lines(_allergies),
+      bloodType: _bloodType,
       // Calms / escalates are no longer collected in setup — default to
       // empty lists; they stay on the model and can be filled in later.
       calms: const <String>[],
@@ -411,6 +433,33 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
                 decoration: InputDecoration(
                   hintText: l10n.lovedOneSetupAllergiesHint,
                 ),
+              ),
+              const SizedBox(height: 20),
+              _FieldLabel(label: l10n.lovedOneSetupBloodTypeLabel),
+              const SizedBox(height: 4),
+              _Hint(text: l10n.lovedOneSetupBloodTypeHint),
+              const SizedBox(height: 8),
+              // Optional ABO/Rh picker — the first item ("Unknown") maps to
+              // `null`, so "not sure" is a valid, default answer rather than
+              // a forced blank. No validator: leaving it Unknown is fine.
+              DropdownButtonFormField<String?>(
+                key: LovedOneSetupScreen.bloodTypeFieldKey,
+                initialValue: _bloodType,
+                decoration: const InputDecoration(),
+                items: <DropdownMenuItem<String?>>[
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(l10n.lovedOneSetupBloodTypeUnknown),
+                  ),
+                  for (final String type in kBloodTypes)
+                    DropdownMenuItem<String?>(
+                      value: type,
+                      child: Text(type),
+                    ),
+                ],
+                onChanged: _submitting
+                    ? null
+                    : (String? v) => setState(() => _bloodType = v),
               ),
               const SizedBox(height: 32),
               Semantics(

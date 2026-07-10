@@ -115,6 +115,7 @@ class EmergencyCardScreen extends ConsumerWidget {
   static const Key conditionsSectionKey = Key('emergency-card-conditions');
   static const Key medicationsSectionKey = Key('emergency-card-medications');
   static const Key allergiesSectionKey = Key('emergency-card-allergies');
+  static const Key bloodTypeSectionKey = Key('emergency-card-blood-type');
   static const Key contactsSectionKey = Key('emergency-card-contacts');
   static const Key insuranceCallKey = Key('emergency-card-insurance-call');
   static const Key insuranceAppealKey = Key('emergency-card-insurance-appeal');
@@ -234,6 +235,15 @@ class _Body extends ConsumerWidget {
                 items: card?.allergies ?? const <String>[],
                 emptyLabel: 'None on file',
               ),
+            ),
+            const SizedBox(height: 12),
+            // Blood type sits beside allergies — both are triage-critical
+            // fields EMS reads first. Optional: a null/absent value shows
+            // "Unknown" rather than collapsing the section.
+            _SectionCard(
+              sectionKey: EmergencyCardScreen.bloodTypeSectionKey,
+              label: 'Blood type',
+              child: _BloodTypeBlock(bloodType: patient.bloodType),
             ),
             const SizedBox(height: 12),
             _SectionCard(
@@ -765,6 +775,35 @@ String _donorLabel(DonorStatus status) {
       return 'Not an organ donor';
     case DonorStatus.unknown:
       return 'Unknown';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Blood type (single value, or "Unknown" when unset)
+// ---------------------------------------------------------------------------
+
+class _BloodTypeBlock extends StatelessWidget {
+  const _BloodTypeBlock({required this.bloodType});
+
+  /// The loved one's ABO/Rh type, or null when never entered ("Unknown").
+  final String? bloodType;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? value = bloodType;
+    // Unknown is a valid answer, not a gap — render it in the muted
+    // "empty" style so a paramedic sees it was left blank on purpose.
+    if (value == null || value.isEmpty) {
+      return const _EmptyLine(label: 'Unknown');
+    }
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Text(
+      value,
+      style: textTheme.bodyLarge?.copyWith(
+        color: context.hc.text,
+        fontWeight: FontWeight.w700,
+      ),
+    );
   }
 }
 

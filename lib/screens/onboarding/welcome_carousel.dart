@@ -216,11 +216,16 @@ class _PageBody extends StatelessWidget {
                 color: context.hc.primary,
                 borderRadius: BorderRadius.circular(28),
               ),
-              child: Text(
-                page.glyph,
-                style: textTheme.displayLarge?.copyWith(
-                  color: Colors.white,
-                  fontSize: 56,
+              // Decorative feature glyph — ExcludeSemantics so VoiceOver /
+              // TalkBack don't announce "pill" / "speech balloon" before the
+              // real title + body (UIUX_REVIEW: a11y on the first impression).
+              child: ExcludeSemantics(
+                child: Text(
+                  page.glyph,
+                  style: textTheme.displayLarge?.copyWith(
+                    color: Colors.white,
+                    fontSize: 56,
+                  ),
                 ),
               ),
             ),

@@ -128,6 +128,59 @@ void main() {
     });
   });
 
+  group('EmergencyCardScreen — blood type', () {
+    testWidgets('renders the blood-type section with the value on file',
+        (WidgetTester tester) async {
+      // Mary's seed carries bloodType 'O+' — a triage-critical field that
+      // sits beside allergies for EMS.
+      await _pump(
+        tester,
+        overrides: <Override>[
+          emergencyCardViewProvider.overrideWith((Ref ref) async => _view()),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(EmergencyCardScreen.bloodTypeSectionKey),
+        findsOneWidget,
+      );
+      expect(find.text('Blood type'), findsOneWidget);
+      expect(find.text('O+'), findsOneWidget);
+    });
+
+    testWidgets('shows "Unknown" when no blood type is on file (optional)',
+        (WidgetTester tester) async {
+      final EmergencyCardView view = EmergencyCardView(
+        patient: maryHenderson().copyWith(bloodType: null),
+        card: null,
+        medications: const <Medication>[],
+      );
+      await _pump(
+        tester,
+        overrides: <Override>[
+          emergencyCardViewProvider.overrideWith((Ref ref) async => view),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(EmergencyCardScreen.bloodTypeSectionKey),
+        findsOneWidget,
+      );
+      expect(find.text('O+'), findsNothing);
+      // "Unknown" also renders in the Organ Donor section, so scope the
+      // assertion to the blood-type section's subtree.
+      expect(
+        find.descendant(
+          of: find.byKey(EmergencyCardScreen.bloodTypeSectionKey),
+          matching: find.text('Unknown'),
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('EmergencyCardScreen — insurance call', () {
     testWidgets('shows the member-services phone + Call, and dials it',
         (WidgetTester tester) async {

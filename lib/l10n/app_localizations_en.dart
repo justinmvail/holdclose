@@ -181,6 +181,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lovedOneSetupOnePerLine => 'One per line.';
 
   @override
+  String get lovedOneSetupBloodTypeLabel => 'Blood type (optional)';
+
+  @override
+  String get lovedOneSetupBloodTypeHint =>
+      'Handy for EMS — leave it if you\'re not sure.';
+
+  @override
+  String get lovedOneSetupBloodTypeUnknown => 'Unknown';
+
+  @override
   String get lovedOneSetupSave => 'Save and continue';
 
   @override

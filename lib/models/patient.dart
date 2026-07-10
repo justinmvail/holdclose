@@ -64,6 +64,13 @@ abstract class Patient with _$Patient {
     required DateTime diagnosedAt,
     required List<CrisisMedication> medications,
     required List<String> allergies,
+
+    /// Optional blood type for EMS/ER handoff (A+/A-/B+/B-/AB+/AB-/O+/O-).
+    /// Null or "Unknown" is fine — the setup wizard never requires it, and
+    /// old rows (the patients table persists the model as a JSON blob)
+    /// deserialize with null here. Rendered near allergies on the crisis
+    /// card so triage-critical fields sit together.
+    String? bloodType,
     required List<String> calms,
     required List<String> escalates,
     required Contact primaryCaregiver,

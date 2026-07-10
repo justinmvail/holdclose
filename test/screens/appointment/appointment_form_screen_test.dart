@@ -29,6 +29,18 @@ String Function() _counterFactory() {
   return () => 'id${n++}';
 }
 
+/// A repository whose write throws — stands in for the "database is locked"
+/// failure so the form's save-error recovery (try/catch/finally) can be
+/// exercised without corrupting a real drift connection.
+class _ThrowingAppointmentRepository extends AppointmentRepository {
+  _ThrowingAppointmentRepository(super.db);
+
+  @override
+  Future<void> upsertAppointment(model.Appointment appointment) async {
+    throw StateError('database is locked');
+  }
+}
+
 Future<void> _seedProvider(
   HoldcloseDatabase db, {
   required String id,
@@ -279,6 +291,75 @@ void main() {
       expect(saved.status, model.AppointmentStatus.upcoming);
       expect(saved.notes, 'Bring journal.');
     });
+
+    testWidgets('shows a success snackbar on save',
+        (WidgetTester tester) async {
+      await _seedProvider(db, id: 'prov-1', name: 'Dr. Ortega');
+      await _pumpForm(
+        tester,
+        apptRepo: apptRepo,
+        providerRepo: providerRepo,
+        db: db,
+      );
+
+      await tester.tap(find.byKey(AppointmentFormScreen.providerDropdownKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dr. Ortega').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(AppointmentFormScreen.submitButtonKey));
+      await tester.pumpAndSettle(); // let the save awaits + snackbar settle
+
+      // The SnackBar renders its text twice (visual + a11y live region), so
+      // assert at-least-one rather than exactly-one.
+      expect(find.text('Appointment saved.'), findsWidgets);
+    });
+
+    testWidgets(
+      'a failed DB save re-enables Save, keeps the data, and shows a '
+      'recoverable snackbar (the "database is locked" failure mode)',
+      (WidgetTester tester) async {
+        await _seedProvider(db, id: 'prov-1', name: 'Dr. Ortega');
+        // A repo whose upsert throws, standing in for a locked-DB write.
+        await _pumpForm(
+          tester,
+          apptRepo: _ThrowingAppointmentRepository(db),
+          providerRepo: providerRepo,
+          db: db,
+        );
+
+        await tester
+            .tap(find.byKey(AppointmentFormScreen.providerDropdownKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Dr. Ortega').last);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(AppointmentFormScreen.notesFieldKey),
+          'Bring journal.',
+        );
+        await tester.tap(find.byKey(AppointmentFormScreen.submitButtonKey));
+        await tester.pumpAndSettle();
+
+        // Recoverable error surfaced; nothing persisted, never navigated.
+        expect(find.text("Couldn't save right now — try again."),
+            findsOneWidget);
+        expect(await apptRepo.listAppointments(), isEmpty);
+        // The entered notes survive so the caregiver can just retry.
+        final TextField notes = tester.widget<TextField>(
+          find.descendant(
+            of: find.byKey(AppointmentFormScreen.notesFieldKey),
+            matching: find.byType(TextField),
+          ),
+        );
+        expect(notes.controller!.text, 'Bring journal.');
+        // Save is re-enabled (not stuck spinning).
+        final ElevatedButton save = tester.widget<ElevatedButton>(
+          find.byKey(AppointmentFormScreen.submitButtonKey),
+        );
+        expect(save.onPressed, isNotNull);
+      },
+    );
 
     testWidgets(
         'double-tapping Save writes exactly ONE appointment row '

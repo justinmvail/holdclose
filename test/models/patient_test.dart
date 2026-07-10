@@ -106,6 +106,23 @@ void main() {
       expect(back.dateOfBirth, isNull);
       expect(back, equals(mary));
     });
+
+    test('round-trips with a blood type on file', () {
+      final Patient mary = maryHenderson().copyWith(bloodType: 'O+');
+      final Patient back = Patient.fromJson(mary.toJson());
+      expect(back, equals(mary));
+      expect(back.bloodType, 'O+');
+    });
+
+    test('round-trips with bloodType null (optional / unknown)', () {
+      // Blood type is optional — "unknown" persists as null, and old rows
+      // (blob-serialized before this field existed) deserialize with null.
+      final Patient mary = maryHenderson();
+      expect(mary.bloodType, isNull);
+      final Patient back = Patient.fromJson(mary.toJson());
+      expect(back.bloodType, isNull);
+      expect(back, equals(mary));
+    });
   });
 
   group('PatientX.ageOn', () {

@@ -18,12 +18,21 @@ class LabelledField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          label,
-          style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+        // The label is a sibling `Text` above a bare field, so once the
+        // caregiver types a value a screen reader announces only the typed
+        // text — an AT user can't tell "Dosage" from "Frequency". Attach
+        // the label to the FIELD's semantics (so it's spoken with the
+        // field on focus) and hide the visual Text from AT to avoid a
+        // double read. Visuals are unchanged — Semantics/ExcludeSemantics
+        // add no layout. (UIUX_REVIEW: one change fixes ~34 form fields.)
+        ExcludeSemantics(
+          child: Text(
+            label,
+            style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
         ),
         const SizedBox(height: 4),
-        child,
+        Semantics(label: label, child: child),
       ],
     );
   }

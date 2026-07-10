@@ -227,6 +227,18 @@
   "@lovedOneSetupOnePerLine": {
     "description": "Hint reminding the caregiver to enter one item per line in the allergies field."
   },
+  "lovedOneSetupBloodTypeLabel": "Blood type (optional)",
+  "@lovedOneSetupBloodTypeLabel": {
+    "description": "Field label for the optional loved-one blood-type dropdown."
+  },
+  "lovedOneSetupBloodTypeHint": "Handy for EMS — leave it if you're not sure.",
+  "@lovedOneSetupBloodTypeHint": {
+    "description": "Helper text under the blood-type dropdown explaining it is optional."
+  },
+  "lovedOneSetupBloodTypeUnknown": "Unknown",
+  "@lovedOneSetupBloodTypeUnknown": {
+    "description": "Blood-type dropdown option meaning the caregiver does not know the blood type."
+  },
   "lovedOneSetupSave": "Save and continue",
   "@lovedOneSetupSave": {
     "description": "Primary submit button label on the loved-one setup wizard."

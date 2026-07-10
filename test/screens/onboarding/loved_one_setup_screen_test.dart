@@ -269,6 +269,57 @@ void main() {
       },
     );
 
+    testWidgets('blood type defaults to null (Unknown) when left unpicked',
+        (WidgetTester tester) async {
+      final InMemoryStorageProvider storage = InMemoryStorageProvider();
+      addTearDown(storage.dispose);
+
+      await _pumpSetup(tester, storage: storage);
+
+      await tester.enterText(
+        find.byKey(LovedOneSetupScreen.nameFieldKey),
+        'Mary',
+      );
+      await _tapSave(tester);
+
+      // The dropdown defaults to "Unknown" → null; blood type is optional.
+      final Patient? saved = await storage.getPatient();
+      expect(saved!.bloodType, isNull);
+    });
+
+    testWidgets('picking a blood type persists it on the Patient',
+        (WidgetTester tester) async {
+      final InMemoryStorageProvider storage = InMemoryStorageProvider();
+      addTearDown(storage.dispose);
+
+      await _pumpSetup(tester, storage: storage);
+
+      await tester.enterText(
+        find.byKey(LovedOneSetupScreen.nameFieldKey),
+        'Mary',
+      );
+
+      // Scroll the dropdown into view, open it, and choose O+.
+      final Finder dropdown =
+          find.byKey(LovedOneSetupScreen.bloodTypeFieldKey);
+      await tester.scrollUntilVisible(
+        dropdown,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      // The menu overlay renders every option; tap the O+ entry (the field
+      // itself shows no value yet, so this is unambiguous).
+      await tester.tap(find.text('O+').last);
+      await tester.pumpAndSettle();
+
+      await _tapSave(tester);
+
+      final Patient? saved = await storage.getPatient();
+      expect(saved!.bloodType, 'O+');
+    });
+
     testWidgets('age without a date of birth leaves dateOfBirth null',
         (WidgetTester tester) async {
       final InMemoryStorageProvider storage = InMemoryStorageProvider();

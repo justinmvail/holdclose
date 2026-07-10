@@ -38,6 +38,7 @@ Patient maryHenderson() => Patient(
         ),
       ],
       allergies: const <String>['Penicillin'],
+      bloodType: 'O+',
       calms: const <String>[
         'Sitting on her left side (she hears better there).',
         'The phrase "Mom, it\'s okay."',

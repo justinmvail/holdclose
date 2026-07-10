@@ -512,6 +512,13 @@ class _AppointmentFormScreenState
     }
     setState(() => _submitting = true);
 
+    // Wrap the drift writes in try/catch/finally (mirrors the chat screen's
+    // proven `finally` re-enable). A failed local save — the team's own
+    // "database is locked" bug is the canonical case — must NOT strand the
+    // caregiver on a spinning, permanently-dimmed Save with a full form of
+    // just-entered agenda items: the `finally` re-enables Save, the `catch`
+    // keeps every field populated and shows a recoverable snackbar to retry.
+    try {
     final AppointmentRepository repo =
         ref.read(appointmentRepositoryBackendProvider);
     final AppointmentIdFactory mint =
@@ -572,10 +579,38 @@ class _AppointmentFormScreenState
     await scheduler.rescheduleForAppointment(id);
 
     if (!mounted) return;
+    // Confirmation on the destination — the app-level ScaffoldMessenger
+    // survives the pop, matching the delete flow's toast so a distracted
+    // caregiver knows the save landed (UIUX_REVIEW).
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Appointment saved.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     if (context.canPop()) {
       context.pop();
     } else {
       context.go('/appointments');
+    }
+    } catch (_) {
+      // Keep the form populated so nothing entered is lost; surface a
+      // recoverable error instead of a dead, spinning button.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't save right now — try again."),
+            duration: Duration(seconds: 3),
+          ),
+        );
+    } finally {
+      // Always re-enable Save — on success (before we navigate) AND on an
+      // errored write — so the button never stays stuck disabled.
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

@@ -24,6 +24,18 @@ Medication _med(String id, String name,
         {String dosage = '10 mg', MedicationRoute route = MedicationRoute.oral}) =>
     Medication(id: id, name: name, dosage: dosage, route: route);
 
+/// A repository whose write throws — stands in for the "database is locked"
+/// failure so the form's save-error recovery (try/catch/finally) can be
+/// exercised without corrupting a real drift connection.
+class _ThrowingMedicationRepository extends MedicationRepository {
+  _ThrowingMedicationRepository(super.db);
+
+  @override
+  Future<void> upsertMedication(Medication medication) async {
+    throw StateError('database is locked');
+  }
+}
+
 Future<MedicationRepository> _pumpForm(
   WidgetTester tester, {
   required MedicationRepository repo,
@@ -123,6 +135,58 @@ void main() {
       // Popped back to the medication list.
       expect(find.text('list-stub'), findsOneWidget);
     });
+
+    testWidgets('shows a success snackbar on save', (WidgetTester tester) async {
+      await _pumpForm(tester, repo: repo);
+
+      await tester.enterText(
+          find.byKey(MedicationFormScreen.nameFieldKey), 'Donepezil');
+      await tester.enterText(
+          find.byKey(MedicationFormScreen.dosageFieldKey), '10');
+      await tester.tap(find.byKey(MedicationFormScreen.submitButtonKey));
+      await tester.pumpAndSettle(); // let the save awaits + snackbar settle
+
+      // The SnackBar renders its text twice (visual + a11y live region), so
+      // assert at-least-one rather than exactly-one.
+      expect(find.text('Medication saved.'), findsWidgets);
+    });
+  });
+
+  group('MedicationFormScreen — save error recovery', () {
+    testWidgets(
+      'a failed DB save re-enables Save, keeps the data, and shows a '
+      'recoverable snackbar (the "database is locked" failure mode)',
+      (WidgetTester tester) async {
+        // A repo whose upsert throws, standing in for the "database is
+        // locked" write failure the team's memory notes.
+        await _pumpForm(tester, repo: _ThrowingMedicationRepository(db));
+
+        await tester.enterText(
+            find.byKey(MedicationFormScreen.nameFieldKey), 'Donepezil');
+        await tester.enterText(
+            find.byKey(MedicationFormScreen.dosageFieldKey), '10');
+        await tester.tap(find.byKey(MedicationFormScreen.submitButtonKey));
+        await tester.pumpAndSettle();
+
+        // Recoverable error surfaced; still on the form (never navigated).
+        expect(find.text("Couldn't save right now — try again."),
+            findsOneWidget);
+        expect(find.text('list-stub'), findsNothing);
+        // The entered data is preserved so the caregiver can just retry.
+        final TextField name = tester.widget<TextField>(
+          find.descendant(
+            of: find.byKey(MedicationFormScreen.nameFieldKey),
+            matching: find.byType(TextField),
+          ),
+        );
+        expect(name.controller!.text, 'Donepezil');
+        // Save is re-enabled (not stuck spinning) — its onPressed is wired.
+        final ElevatedButton save = tester.widget<ElevatedButton>(
+          find.byKey(MedicationFormScreen.submitButtonKey),
+        );
+        expect(save.onPressed, isNotNull);
+      },
+    );
   });
 
   group('MedicationFormScreen — validation', () {
