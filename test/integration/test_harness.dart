@@ -387,11 +387,12 @@ Finder tabFor(String label) => find.descendant(
 
 /// Home → Care tab → Care Circle hub tile → [CareTeamHubScreen].
 ///
-/// The Care Circle tile only appears on the Care hub when
-/// `teamCoordinationEnabled` is on; the harness's default settings
-/// (`AppSettings.defaults()`) ship it true, so the tile is present without
-/// any extra seeding. The hub itself is also gated, but reached via the
-/// (only-shown-when-enabled) tile it always renders its tile grid.
+/// The Care Circle tile is always shown on the Care hub now (UIUX_REVIEW) —
+/// the door to inviting family stays discoverable regardless of the
+/// `teamCoordinationEnabled` setting. When coordination is off the hub greets
+/// a first-time caregiver with the "Caring with others?" onboarding CTA; the
+/// harness's default settings (`AppSettings.defaults()`) ship coordination
+/// true, so the sub-hub renders its populated tile grid.
 Future<void> openCareCircle(WidgetTester tester) async {
   await tester.tap(tabFor('Care'));
   await tester.pumpAndSettle();

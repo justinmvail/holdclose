@@ -350,6 +350,21 @@ void main() {
         findsOneWidget,
       );
 
+      // A11y (UIUX_REVIEW): the control carries an explicit Semantics node
+      // announcing it as an unchecked button with the appointment name
+      // ("Mark done. Dr Smith"), and offers a ≥44px hit target.
+      final Semantics semantics = tester.widget<Semantics>(
+        find.descendant(of: checkbox, matching: find.byType(Semantics)).first,
+      );
+      expect(semantics.properties.label, 'Mark done. Dr Smith');
+      expect(semantics.properties.button, isTrue);
+      expect(semantics.properties.checked, isFalse);
+      final Size hitSize = tester.getSize(
+        find.descendant(of: checkbox, matching: find.byType(SizedBox)).first,
+      );
+      expect(hitSize.width, greaterThanOrEqualTo(44));
+      expect(hitSize.height, greaterThanOrEqualTo(44));
+
       await tester.tap(checkbox);
       await tester.pumpAndSettle();
 
@@ -363,6 +378,22 @@ void main() {
         ),
         findsOneWidget,
       );
+
+      // The successful mark-done closes its loop with a confirmation
+      // SnackBar, and the Semantics now report the checked state.
+      expect(find.text('Marked "Dr Smith" as done.'), findsOneWidget);
+      final Semantics checkedSemantics = tester.widget<Semantics>(
+        find.descendant(of: checkbox, matching: find.byType(Semantics)).first,
+      );
+      expect(checkedSemantics.properties.label, 'Mark not done. Dr Smith');
+      expect(checkedSemantics.properties.checked, isTrue);
+
+      // Toggling back to not-done confirms the reverse.
+      await tester.tap(checkbox);
+      await tester.pumpAndSettle();
+      final Appointment? reverted = await repo.getAppointment('appt-1');
+      expect(reverted?.status, AppointmentStatus.upcoming);
+      expect(find.text('Marked "Dr Smith" as not done.'), findsOneWidget);
     },
   );
 }

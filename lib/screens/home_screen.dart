@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import '../providers/home_clock_provider.dart';
 import '../theme.dart';
+import '../widgets/home/add_action_sheet.dart';
 import '../widgets/home/catch_me_up_card.dart';
 import '../widgets/home/community_recap_card.dart';
 import '../widgets/home/schedule_card.dart';
@@ -33,6 +34,13 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.hc.background,
+      // The labeled quick-add affordance for the app's most frequent
+      // actions (log a dose, add an appointment, a journal entry, a quick
+      // note). Bottom-right `endFloat` keeps it clear of the shell's
+      // center-mic tab button (which sits in the middle slot of the bar
+      // on the OUTER scaffold, below this branch body) so the two never
+      // collide. The mic is voice-first; this is the non-voice path.
+      floatingActionButton: const AddActionFab(),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

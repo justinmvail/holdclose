@@ -1,19 +1,17 @@
-import 'package:holdclose/models/settings.dart';
-import 'package:holdclose/providers/storage_provider.dart';
 import 'package:holdclose/screens/medical/medical_hub_screen.dart';
 import 'package:holdclose/widgets/hub_tile.dart';
 import 'package:holdclose/widgets/path_header.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
-/// The seven tiles in their documented order (BUILD_SPEC.md §5.13,
-/// TASKS.md Phase 14.15): (label, icon, route). This is the default
-/// (team-coordination off) tile set; the gated **Care Circle** tile is a
-/// trailing eighth that only appears when the toggle is on (asserted
-/// separately below).
+/// The eleven tiles in their display order: (label, icon, route).
+///
+/// **Emergency Card leads** (UIUX_REVIEW) — the highest-stakes glanceable
+/// surface — and the **Care Circle** tile is always present (the door to
+/// inviting family stays discoverable; the `/team` sub-hub itself handles
+/// the coordination-off onboarding). Neither is gated by the Settings
+/// toggle anymore.
 ///
 /// `route` is the exact string each tile `context.push`es — it doubles as
 /// the per-tile [MedicalHubScreen.tileKey] seed, so it must match the
@@ -22,16 +20,17 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 /// the pushed URI but is not part of the matched route path (see
 /// [_matchedPath]).
 const List<(String, IconData, String)> _expected = <(String, IconData, String)>[
+  ('Emergency Card', Icons.shield_outlined, '/medical/cards/emergency'),
+  ('Medications', Icons.medication_outlined, '/medications'),
   ('Scan a document', Icons.document_scanner_outlined, '/scan'),
   ('Find a provider', Icons.person_search_outlined, '/find-provider'),
   ('Care summary', Icons.summarize_outlined, '/care-summary'),
-  ('Medications', Icons.medication_outlined, '/medications'),
   ('Schedule', Icons.schedule_outlined, '/team/calendar?from=medical'),
   ('Appointments', Icons.event_outlined, '/appointments'),
   ('Health Log', Icons.monitor_heart_outlined, '/medical/health-log'),
   ('Routines', Icons.assignment_outlined, '/medical/routines'),
-  ('Emergency Card', Icons.shield_outlined, '/medical/cards/emergency'),
   ('Journal', Icons.book_outlined, '/journal'),
+  ('Care Circle', Icons.diversity_3_outlined, '/team'),
 ];
 
 /// The route path a tile resolves to, with any `?query` stripped. A
@@ -43,9 +42,8 @@ String _matchedPath(String route) => Uri.parse(route).path;
 
 /// A router that mounts the hub at `/medical` and registers a stub
 /// destination for every tile route so a `context.push` resolves end to
-/// end (plus the gated Care Circle `/team` route). The destinations the
-/// hub points at land in later phases; here we only assert the navigation
-/// target is correct.
+/// end. The destinations the hub points at land in later phases; here we
+/// only assert the navigation target is correct.
 GoRouter _router() {
   return GoRouter(
     initialLocation: '/medical',
@@ -54,11 +52,6 @@ GoRouter _router() {
         path: '/medical',
         builder: (BuildContext context, GoRouterState state) =>
             const MedicalHubScreen(),
-      ),
-      GoRoute(
-        path: '/team',
-        builder: (BuildContext context, GoRouterState state) =>
-            const Scaffold(body: Center(child: Text('DEST /team'))),
       ),
       for (final (_, _, String route) in _expected)
         GoRoute(
@@ -71,44 +64,21 @@ GoRouter _router() {
   );
 }
 
-/// An in-memory store pre-seeded with [teamEnabled] coordination so the
-/// settings provider hydrates into the right state on first pump. The
-/// default (`false`) keeps the hub at its seven base tiles; `true` adds
-/// the trailing Care Circle tile.
-InMemoryStorageProvider _seededStorage({required bool teamEnabled}) {
-  final InMemoryStorageProvider storage = InMemoryStorageProvider();
-  storage.updateSettings(
-    AppSettings.defaults().copyWith(teamCoordinationEnabled: teamEnabled),
-  );
-  return storage;
-}
-
 /// Pumps the hub at a tall phone surface so all tiles render inside the
 /// viewport (the grid scrolls, but a tall surface keeps every tile
-/// hittable). [MedicalHubScreen] is a ConsumerWidget that reads
-/// `settingsProvider`, so it's wrapped in a ProviderScope with the
-/// storage seam overridden to drive the team-coordination toggle. We
-/// deliberately skip `holdcloseLightTheme` — its google_fonts
-/// TextStyles fire fire-and-forget Futures that surface as uncaught
-/// errors in a font-less test host; the screen re-applies its brand
-/// colors directly, so navigation behavior is unaffected.
-Future<GoRouter> _pumpHub(
-  WidgetTester tester, {
-  bool teamEnabled = false,
-}) async {
+/// hittable). [MedicalHubScreen] is a plain StatelessWidget now (the tile
+/// list no longer reads settings), so no ProviderScope is needed. We
+/// deliberately skip `holdcloseLightTheme` — its google_fonts TextStyles
+/// fire fire-and-forget Futures that surface as uncaught errors in a
+/// font-less test host; the screen re-applies its brand colors directly,
+/// so navigation behavior is unaffected.
+Future<GoRouter> _pumpHub(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(412, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final GoRouter router = _router();
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: <Override>[
-        storageProvider.overrideWithValue(
-          _seededStorage(teamEnabled: teamEnabled),
-        ),
-      ],
-      child: MaterialApp.router(routerConfig: router),
-    ),
+    MaterialApp.router(routerConfig: router),
   );
   await tester.pumpAndSettle();
   return router;
@@ -116,13 +86,16 @@ Future<GoRouter> _pumpHub(
 
 void main() {
   group('MedicalHubScreen', () {
-    testWidgets('renders all seven tiles in the documented order',
+    testWidgets(
+        'renders all eleven tiles in order, Emergency Card first',
         (WidgetTester tester) async {
       await _pumpHub(tester);
 
       final List<HubTile> tiles =
           tester.widgetList<HubTile>(find.byType(HubTile)).toList();
-      expect(tiles.length, 10);
+      expect(tiles.length, 11);
+      // Emergency Card leads the grid (UIUX_REVIEW).
+      expect(tiles.first.label, 'Emergency Card');
       expect(
         tiles.map((HubTile t) => t.label).toList(),
         <String>[for (final (String label, _, _) in _expected) label],
@@ -160,15 +133,17 @@ void main() {
     });
 
     testWidgets(
-        'with team coordination on, a trailing Care Circle tile appears',
+        'the Care Circle tile is always present with an inviting sub-label',
         (WidgetTester tester) async {
-      await _pumpHub(tester, teamEnabled: true);
+      // No longer gated on the Settings toggle (UIUX_REVIEW) — the door to
+      // inviting family stays discoverable regardless of coordination state.
+      await _pumpHub(tester);
 
       final List<HubTile> tiles =
           tester.widgetList<HubTile>(find.byType(HubTile)).toList();
-      // The base tiles plus the gated Care Circle tile (route /team).
-      expect(tiles.length, 11);
-      expect(tiles.last.label, 'Care Circle');
+      final HubTile careCircle =
+          tiles.firstWhere((HubTile t) => t.label == 'Care Circle');
+      expect(careCircle.subLabel, 'invite family to share the load');
       expect(
         find.byKey(MedicalHubScreen.tileKey('/team')),
         findsOneWidget,

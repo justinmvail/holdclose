@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -35,17 +33,21 @@ final scheduleAppointmentStatusProvider =
 
 /// Flip an appointment between completed and upcoming, persist it, and
 /// refresh the schedule's status + the timeline so the checkbox + any
-/// dependent UI update. Defensive: a missing appointment is a no-op.
-Future<void> _toggleAppointmentDone(WidgetRef ref, String appointmentId) async {
+/// dependent UI update. Returns the resulting done-state (`true` when it
+/// was just marked done) so the caller can confirm the change to the
+/// caregiver; a missing appointment is a no-op and returns null.
+Future<bool?> _toggleAppointmentDone(
+    WidgetRef ref, String appointmentId) async {
   final AppointmentRepository repo = ref.read(appointmentRepositoryProvider);
   final Appointment? appt = await repo.getAppointment(appointmentId);
-  if (appt == null) return;
+  if (appt == null) return null;
   final AppointmentStatus next = appt.status == AppointmentStatus.completed
       ? AppointmentStatus.upcoming
       : AppointmentStatus.completed;
   await repo.upsertAppointment(appt.copyWith(status: next));
   ref.invalidate(scheduleAppointmentStatusProvider);
   ref.invalidate(patientTimelineEventsProvider);
+  return next == AppointmentStatus.completed;
 }
 
 /// The "Schedule" dashboard card — the caregiver's at-a-glance view of
@@ -109,7 +111,7 @@ class ScheduleCard extends ConsumerWidget {
       for (final MapEntry<String, AppointmentStatus> e in apptStatus.entries)
         if (e.value == AppointmentStatus.completed) e.key,
     };
-    void toggleAppt(String id) => unawaited(_toggleAppointmentDone(ref, id));
+    Future<bool?> toggleAppt(String id) => _toggleAppointmentDone(ref, id);
 
     final Widget body = async.when(
       loading: () => const _Skeleton(),
@@ -224,8 +226,9 @@ class _Section extends StatelessWidget {
   /// Ids of appointments currently marked done (drives the checkbox).
   final Set<String> doneApptIds;
 
-  /// Toggle an appointment's done state by id.
-  final void Function(String appointmentId) onToggleAppt;
+  /// Toggle an appointment's done state by id, resolving to the resulting
+  /// done-state (`true` when just marked done) so the row can confirm it.
+  final Future<bool?> Function(String appointmentId) onToggleAppt;
 
   @override
   Widget build(BuildContext context) {
@@ -420,25 +423,35 @@ class _GroupedRow extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(
                   left: _leadingSlot, top: 2, bottom: 2),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: <Widget>[
-                  _DoseStatusMark(taken: m.taken, dimmed: past),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      m.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: tt.bodyMedium?.copyWith(
-                        color: baseText,
-                        decoration:
-                            m.taken ? TextDecoration.lineThrough : null,
-                        decorationColor: baseText,
+              // Merge the status glyph + med name into one Semantics node
+              // (UIUX_REVIEW) so a reader announces "<med>, taken" / "<med>,
+              // not taken yet" as a single item — the icon+color alone left
+              // the state invisible to AT users.
+              child: Semantics(
+                label: m.taken
+                    ? '${m.name}, taken'
+                    : '${m.name}, not taken yet',
+                excludeSemantics: true,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    _DoseStatusMark(taken: m.taken, dimmed: past),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        m.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: tt.bodyMedium?.copyWith(
+                          color: baseText,
+                          decoration:
+                              m.taken ? TextDecoration.lineThrough : null,
+                          decorationColor: baseText,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             ],
@@ -490,7 +503,7 @@ class _Row extends StatelessWidget {
   final CareEvent event;
   final DateTime now;
   final Set<String> doneApptIds;
-  final void Function(String appointmentId) onToggleAppt;
+  final Future<bool?> Function(String appointmentId) onToggleAppt;
 
   @override
   Widget build(BuildContext context) {
@@ -561,7 +574,8 @@ class _Row extends StatelessWidget {
                   key: ScheduleCard.doneCheckboxKey(event.id),
                   done: doneApptIds.contains(apptId),
                   dimmed: past,
-                  onTap: () => onToggleAppt(apptId),
+                  label: event.title,
+                  onToggle: () => onToggleAppt(apptId),
                 ),
               ],
               if (onTap != null)
@@ -580,28 +594,77 @@ class _Row extends StatelessWidget {
 
 /// A tappable "mark as done" bullet — a hollow circle that fills to a check.
 /// Its own tap target so it doesn't trigger the row's navigation.
+///
+/// A11y (UIUX_REVIEW): wrapped in a [Semantics] node that announces it as a
+/// checkbox button carrying the appointment's name + checked state (so a
+/// screen reader says "<visit>, Mark done, checkbox, not checked" instead of
+/// an unlabeled tappable), and sized to a ≥44×44 hit target (WCAG 2.5.5) even
+/// though the glyph is 22px. On a successful toggle it confirms the change
+/// with a SnackBar so the daily action closes its loop.
 class _DoneCheckbox extends StatelessWidget {
   const _DoneCheckbox({
     super.key,
     required this.done,
-    required this.onTap,
+    required this.label,
+    required this.onToggle,
     this.dimmed = false,
   });
 
   final bool done;
-  final VoidCallback onTap;
+
+  /// The appointment's title — folded into the Semantics label so AT users
+  /// know *which* item this control toggles.
+  final String label;
+
+  /// Persists the flip and resolves to the resulting done-state (`true` when
+  /// just marked done, `false` when un-done, `null` if the appointment was
+  /// missing) — drives the confirmation SnackBar.
+  final Future<bool?> Function() onToggle;
   final bool dimmed;
+
+  Future<void> _handleTap(BuildContext context) async {
+    final ScaffoldMessengerState? messenger =
+        ScaffoldMessenger.maybeOf(context);
+    final bool? nowDone = await onToggle();
+    if (nowDone == null || messenger == null) return;
+    messenger
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            nowDone
+                ? 'Marked "$label" as done.'
+                : 'Marked "$label" as not done.',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
 
   @override
   Widget build(BuildContext context) {
     final Color c = done ? context.hc.success : context.hc.primarySoft;
-    return InkResponse(
-      onTap: onTap,
-      radius: 20,
-      child: Icon(
-        done ? Icons.check_circle : Icons.radio_button_unchecked,
-        size: 22,
-        color: dimmed ? c.withValues(alpha: 0.55) : c,
+    return Semantics(
+      button: true,
+      checked: done,
+      label: done ? 'Mark not done. $label' : 'Mark done. $label',
+      excludeSemantics: true,
+      child: InkResponse(
+        onTap: () => _handleTap(context),
+        // radius 22 → a 44px round target, over the WCAG 2.5.5 floor, while
+        // the glyph itself stays 22px.
+        radius: 22,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: Icon(
+              done ? Icons.check_circle : Icons.radio_button_unchecked,
+              size: 22,
+              color: dimmed ? c.withValues(alpha: 0.55) : c,
+            ),
+          ),
+        ),
       ),
     );
   }
