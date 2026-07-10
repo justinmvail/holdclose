@@ -1,5 +1,15 @@
 # Holdclose — UI/UX Review (Synthesis)
 
+> **UPDATE 2026-07-09 — the Top-10 (and several supporting items) are FIXED** across
+> commits `50b8448` (contrast + toggle), `b567dbf` (Home FAB, Emergency Card + Care
+> Circle surfaced, mark-done a11y), `828ac87` (guidelines/crisis, chat examples,
+> de-jargon, sign-in reassurance, Skip-trap), `4f29fc8` (save-error recovery, form
+> screen-reader labels, blood-type field). Full suite green (1993 Flutter / 346
+> backend). Product decisions: Care Circle **surfaced**, blood-type **added**. Two
+> follow-ups remain: server-side receipt validation (paywall) is separate, and the
+> **button-color shift wants a device eyeball**. Original review preserved below.
+
+
 *Audience: family caregivers, 45–65, often non-technical, frequently stressed and interrupted. Evaluation lens: ACL Caregiver-AI Prize §3 — usability, forgiveness, transparency, human-in-the-loop, tested in realistic conditions. Findings below merge 77 raw observations from 8 reviewers, deduplicated and re-ranked by impact.*
 
 ---
