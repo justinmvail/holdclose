@@ -91,7 +91,38 @@ Inside `/api/v1`, three routers mount **before** the global
 
 Everything mounted **after** `auth()` is **JWT-gated** (requires a valid
 `Authorization: Bearer <token>`): `/profiles`, `/circles`, `/reports`,
-`/sync`, `/chat`, `/documents`, `/votes`.
+`/sync`, `/chat`, `/billing`, `/documents`, `/votes`.
+
+### `/billing` — server-side IAP receipt verification + entitlements
+
+The device NEVER declares its own premium status. It forwards a store
+receipt and the Worker validates it against the platform store API, then
+persists the authoritative entitlement (one row per user, keyed by the JWT
+`sub`) in the `entitlements` D1 table.
+
+- `POST /api/v1/billing/verify` — body
+  `{platform: "ios"|"android", productId, receipt}` (`receipt` is the Apple
+  signed-transaction JWS / transactionId, or the Google purchaseToken).
+  Verifies with the platform verifier, UPSERTs the caller's entitlement,
+  returns `{isPremium, inTrial, expiresAt, productId, platform}`.
+  `isPremium = status∈{active,trial} && (expiresAt==null || expiresAt>now)`.
+  Status codes: `400` bad body · `401` unauth · `200` invalid-but-well-formed
+  receipt (returns `isPremium:false`, persists a `none` row, never 500) ·
+  `502` store API unreachable · `500 server_misconfigured` when the requested
+  platform's creds are absent.
+- `GET /api/v1/billing/entitlement` — the authoritative entitlement the app
+  reads on launch: `{isPremium, inTrial, expiresAt, productId}`, defaulting
+  to `{isPremium:false, inTrial:false, expiresAt:null, productId:null}` when
+  no row exists.
+
+Verification runs through the `PurchaseVerifier` interface
+(`src/billing/verifier.ts`): `AppleVerifier` (App Store Server API, an ES256
+request JWT signed with the App Store Connect `.p8`) and `GoogleVerifier`
+(Play Developer API `purchases.subscriptionsv2.get`, a service-account
+`JWT→OAuth` exchange), both over `fetch`. A `FakeVerifier` (or fetch-mocking
+the store hosts) backs the offline test suite. **Real Apple/Google
+verification can only be validated end-to-end once store products +
+credentials exist** (a deploy/operator step — see below).
 
 The Worker also exports a `scheduled` handler that runs the metrics
 watchdog on the cron trigger (see below).
@@ -175,6 +206,22 @@ wrangler r2 bucket create holdclose-forum-media   # FORUM_MEDIA — avatars + po
 wrangler r2 bucket create holdclose-doc-blobs     # DOC_BLOBS — caregiver document scans
 wrangler secret put FORUM_JWT_SECRET   # Phase 13.3 — auth middleware
 wrangler secret put CF_AI_API_TOKEN   # Cloudflare Workers AI token (chat + extract 500 without it)
+
+# --- In-app-purchase receipt verification (/api/v1/billing) ---
+# Secrets (the private keys) go via `wrangler secret put`; the non-secret
+# ids/emails/package are plain [vars] in wrangler.toml (override per env with
+# --var). A billing/verify for a platform whose creds are absent returns
+# 500 server_misconfigured, so both platforms' creds must be provisioned
+# before that platform can transact. These can ONLY be end-to-end validated
+# once the App Store / Play products + credentials exist.
+wrangler secret put APPLE_PRIVATE_KEY          # the App Store Connect .p8 (ES256), full PEM
+wrangler secret put GOOGLE_PLAY_SA_PRIVATE_KEY # the Play service-account private_key (PEM)
+#   plus these NON-secret vars (wrangler.toml [vars] or --var at deploy):
+#     APPLE_ISSUER_ID       — App Store Connect issuer id (UUID)
+#     APPLE_KEY_ID          — the .p8 key id
+#     APPLE_BUNDLE_ID       — the app bundle id (com.holdclose.holdclose)
+#     GOOGLE_PLAY_SA_EMAIL  — the Play service-account email
+#     GOOGLE_PLAY_PACKAGE   — the Android package (com.careblazers.careblazers)
 
 # Non-secret vars live in wrangler.toml [vars]; override per environment
 # at deploy time:

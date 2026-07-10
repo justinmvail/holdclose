@@ -76,6 +76,32 @@ CHAT_USER_DAILY_TOKENS = "300000"
 CHAT_GLOBAL_FLOOR_MICROS = "5000000"
 CHAT_PER_USER_BUDGET_MICROS = "100000"
 
+# --- In-app-purchase receipt verification (/api/v1/billing) -----------
+# The device never declares its own premium status: it forwards a store
+# receipt to POST /billing/verify, the Worker validates it against the
+# platform store API, and the authoritative entitlement lands in the
+# `entitlements` D1 table (GET /billing/entitlement is the app's launch-time
+# source of truth).
+#
+# The PRIVATE KEYS are SECRETS — set them, never here:
+#   wrangler secret put APPLE_PRIVATE_KEY          # App Store Connect .p8 (ES256) PEM
+#   wrangler secret put GOOGLE_PLAY_SA_PRIVATE_KEY # Play service-account private_key PEM
+#
+# The ids/emails/package below are NOT secret; fill them at deploy for prod
+# (or override with --var). A billing/verify for a platform whose creds are
+# absent returns 500 server_misconfigured. These can only be validated
+# end-to-end once the App Store / Play products + credentials exist.
+#
+# Apple — App Store Server API (verify a signed transaction; sign the request
+# JWT with the App Store Connect .p8):
+APPLE_ISSUER_ID = ""                              # App Store Connect issuer id (UUID)
+APPLE_KEY_ID = ""                                 # the .p8 key id
+APPLE_BUNDLE_ID = "com.holdclose.holdclose"       # the app bundle id (JWT `bid`)
+# Google — Play Developer API (purchases.subscriptionsv2.get / products.get,
+# via a service-account JWT→OAuth exchange):
+GOOGLE_PLAY_SA_EMAIL = ""                         # the Play service-account email
+GOOGLE_PLAY_PACKAGE = "com.careblazers.careblazers"  # the Android package (deliberate careblazers keep)
+
 [[d1_databases]]
 binding = "FORUM_DB"
 database_name = "holdclose-forum"

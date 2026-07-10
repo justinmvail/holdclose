@@ -11,3 +11,15 @@ FORUM_JWT_SECRET=dev-only-jwt-secret-change-me
 
 # Optional override — the default audience lives in wrangler.toml [vars]:
 # GOOGLE_CLIENT_ID=
+
+# Needed only to exercise POST /api/v1/billing/verify locally against the
+# REAL stores (otherwise that platform returns 500 server_misconfigured).
+# The private keys are the full PEM contents. Leave unset unless you're
+# validating end-to-end against real App Store / Play credentials.
+# APPLE_ISSUER_ID=
+# APPLE_KEY_ID=
+# APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+# APPLE_BUNDLE_ID=com.holdclose.holdclose
+# GOOGLE_PLAY_SA_EMAIL=
+# GOOGLE_PLAY_SA_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+# GOOGLE_PLAY_PACKAGE=com.careblazers.careblazers

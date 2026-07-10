@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 
 import { auth, type AuthBindings, type AuthVariables } from './middleware/auth';
 import { authRouter } from './routes/auth';
+import { billingRouter, type BillingBindings } from './routes/billing';
 import { chatRouter, type ChatBindings } from './routes/chat';
 import { circlesRouter } from './routes/circles';
 import { commentsRouter } from './routes/comments';
@@ -19,7 +20,8 @@ import type { Context } from 'hono';
 
 export type Bindings = AuthBindings &
   ChatBindings &
-  ExtractBindings & {
+  ExtractBindings &
+  BillingBindings & {
   FORUM_DB: D1Database;
   FORUM_MEDIA: R2Bucket;
   // R2 bucket holding caregiver document scans (emergency card / POA / ID
@@ -91,6 +93,12 @@ api.route('/sync', syncRouter());
 // quotas + the global daily spend cap are enforced and token usage is
 // logged. The inference host's API key lives only here, never on-device.
 api.route('/chat', chatRouter());
+// Server-side IAP receipt verification + the authoritative entitlement the
+// app reads on launch. Behind the forum JWT (mounted after auth() above) so
+// every purchase is tied to a real account — the device never declares its
+// own premium status; the Worker verifies the store receipt and persists the
+// truth.
+api.route('/billing', billingRouter());
 api.route('/extract', extractRouter());
 api.route('/documents', documentsRouter());
 api.route('/votes', votesRouter());

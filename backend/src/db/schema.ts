@@ -301,6 +301,49 @@ export const llmUsage = sqliteTable(
 
 export type LlmUsage = typeof llmUsage.$inferSelect;
 
+// Server-side subscription entitlement — the AUTHORITATIVE record of whether
+// a user has premium, one row per user keyed by the forum JWT `sub` (the
+// `careblazers_user_id`). The device NEVER decides its own entitlement: it
+// posts a store receipt (Apple JWS / Google purchaseToken) to
+// POST /billing/verify, the Worker validates it against the platform store
+// API, and this row is upserted. GET /billing/entitlement then reads this row
+// as the launch-time source of truth. `latestReceipt` retains the last
+// verified token so a future re-check (renewal, refund) can re-validate
+// without another device round-trip.
+export const entitlements = sqliteTable(
+  'entitlements',
+  {
+    // The forum JWT sub / careblazers_user_id. One entitlement per user.
+    userId: text('user_id').primaryKey(),
+    platform: text().notNull(),
+    productId: text('product_id').notNull(),
+    status: text().notNull().default('none'),
+    // Subscription expiry in ms epoch; null for a non-expiring product or
+    // when the store gives no expiry (treated as "no expiry" by isPremium).
+    expiresAt: integer('expires_at'),
+    environment: text().notNull().default('production'),
+    // The last verified token/JWS (Apple signed transaction or Google
+    // purchaseToken) — kept for server-side re-checks.
+    latestReceipt: text('latest_receipt'),
+    updatedAt: timestampColumn('updated_at').notNull(),
+    createdAt: timestampColumn('created_at').notNull(),
+  },
+  (t) => [
+    check('entitlements_platform_enum', sql`${t.platform} IN ('ios', 'android')`),
+    check(
+      'entitlements_status_enum',
+      sql`${t.status} IN ('active', 'expired', 'trial', 'none')`,
+    ),
+    check(
+      'entitlements_environment_enum',
+      sql`${t.environment} IN ('production', 'sandbox')`,
+    ),
+  ],
+);
+
+export type Entitlement = typeof entitlements.$inferSelect;
+export type NewEntitlement = typeof entitlements.$inferInsert;
+
 export const profilesRelations = relations(profiles, ({ many }) => ({
   posts: many(posts),
   comments: many(comments),
