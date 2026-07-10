@@ -5,16 +5,28 @@ import { Hono } from 'hono';
 import { llmUsage, profiles } from '../db/schema';
 import type { AuthBindings, AuthVariables } from '../middleware/auth';
 
+// Minimal shape of the native Workers AI binding we use. With `stream: true`
+// a text model returns a ReadableStream of SSE bytes (`data: {"response":…}`)
+// — exactly what the parser below already reads. Typed locally so we don't
+// pin a specific @cloudflare/workers-types `Ai` signature.
+type WorkersAiBinding = {
+  run(
+    model: string,
+    options: Record<string, unknown>,
+  ): Promise<ReadableStream<Uint8Array>>;
+};
+
 export type ChatBindings = AuthBindings & {
   FORUM_DB: D1Database;
   // Inference runs on Cloudflare Workers AI (the loved one's data stays on
-  // Cloudflare's network — the same infra hosting the Worker + D1 + R2 —
-  // and never goes to a separate AI vendor). We call the OpenAI-compatible
-  // Workers AI endpoint: https://api.cloudflare.com/client/v4/accounts/
-  // <id>/ai/v1/chat/completions. Token is a SECRET (`wrangler secret put
-  // CF_AI_API_TOKEN`, scope "Workers AI: Read"); account id + model + caps
-  // are plain vars so each environment tunes them without a code redeploy.
-  CF_AI_API_TOKEN: string;
+  // Cloudflare's network — the same infra hosting the Worker + D1 + R2 — and
+  // never goes to a separate AI vendor). The deployed worker uses the native
+  // `AI` binding (no runtime token — see `[env.dev.ai]` in wrangler.toml).
+  // CF_AI_API_TOKEN + CLOUDFLARE_ACCOUNT_ID remain a REST fallback for an
+  // environment configured with a token instead (OpenAI-compatible endpoint
+  // /client/v4/accounts/<id>/ai/v1/chat/completions).
+  AI?: WorkersAiBinding;
+  CF_AI_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CF_AI_BASE_URL?: string;
   CHAT_MODEL?: string;
@@ -83,7 +95,7 @@ export function chatRouter() {
     const userId = c.get('userId');
     const env = c.env;
 
-    if (!env.CF_AI_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID) {
+    if (!env.AI && (!env.CF_AI_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID)) {
       return c.json({ error: 'server_misconfigured' }, 500);
     }
 
@@ -162,36 +174,55 @@ export function chatRouter() {
       return c.json({ error: 'capacity' }, 503);
     }
 
-    // --- Call Workers AI (OpenAI-compatible, streaming) -----------------
-    const baseUrl =
-      env.CF_AI_BASE_URL ??
-      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/v1`;
+    // --- Call Workers AI (native binding preferred; REST fallback) ------
     const model = env.CHAT_MODEL ?? DEFAULTS.model;
     const maxOutputTokens = num(
       env.CHAT_MAX_OUTPUT_TOKENS,
       DEFAULTS.maxOutputTokens,
     );
+    const messages = [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ];
 
-    const upstream = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.CF_AI_API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        stream: true,
-        max_tokens: maxOutputTokens,
-        stream_options: { include_usage: true },
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-      }),
-    });
-
-    if (!upstream.ok || !upstream.body) {
-      return c.json({ error: 'coach_unavailable' }, 502);
+    // The deployed worker uses the native `AI` binding (no runtime token);
+    // the REST branch stays a fallback for an env configured with
+    // CF_AI_API_TOKEN instead. Both stream SSE the loop below parses the same
+    // way — the binding emits `data: {"response":…}`, the OpenAI-compatible
+    // endpoint emits `data: {"choices":[{"delta":{"content":…}}]}` (+ usage).
+    let upstreamBody: ReadableStream<Uint8Array>;
+    if (env.AI) {
+      try {
+        upstreamBody = await env.AI.run(model, {
+          messages,
+          stream: true,
+          max_tokens: maxOutputTokens,
+        });
+      } catch {
+        return c.json({ error: 'coach_unavailable' }, 502);
+      }
+    } else {
+      const baseUrl =
+        env.CF_AI_BASE_URL ??
+        `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/v1`;
+      const upstream = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.CF_AI_API_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          stream: true,
+          max_tokens: maxOutputTokens,
+          stream_options: { include_usage: true },
+          messages,
+        }),
+      });
+      if (!upstream.ok || !upstream.body) {
+        return c.json({ error: 'coach_unavailable' }, 502);
+      }
+      upstreamBody = upstream.body;
     }
 
     // --- Re-emit a vendor-neutral SSE the app parses, and log usage -----
@@ -201,7 +232,7 @@ export function chatRouter() {
     // invisible per the UI rule, and decouples the app from the host).
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
-    const reader = upstream.body.getReader();
+    const reader = upstreamBody.getReader();
 
     let promptTokens = 0;
     let completionTokens = 0;

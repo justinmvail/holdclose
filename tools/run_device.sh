@@ -20,10 +20,19 @@
 #   DEVICE=<id>        Target device (default: Justin's iPhone, wireless).
 #   SHIM_URL=<url>     Override the LLM shim URL (default: LAN in demo mode, or
 #                      the dev_defines.sh value in google mode).
+#   BACKEND=<env>      Which deployed Worker the build talks to (AUTH=google
+#                      only). Compile-time environment selection — one build is
+#                      pinned to exactly one backend. One of:
+#                        local           = the Tailscale-Funnel'd laptop Worker
+#                                          from dev_defines.sh (DEFAULT).
+#                        cloudflare-dev  = the deployed edge Worker
+#                                          holdclose-forum-dev.jcsvonellc.workers.dev
+#                        cloudflare-prod = holdclose.care (once DNS is pointed).
 #
 # Examples:
 #   tools/run_device.sh                       # demo auth, LAN shim (quick)
-#   AUTH=google tools/run_device.sh           # real Google auth + backend
+#   AUTH=google tools/run_device.sh           # real Google auth + laptop backend
+#   AUTH=google BACKEND=cloudflare-dev tools/run_device.sh   # → Cloudflare edge deploy
 #   AUTH=google SEED=1 tools/run_device.sh    # ...plus a fresh seeded dataset
 #
 # NOTE: `flutter run` has no --build-number flag, so the epoch is carried by
@@ -64,6 +73,27 @@ case "$AUTH" in
     fi
     # shellcheck disable=SC1091
     source tools/dev_defines.sh
+
+    # BACKEND = compile-time environment selection: pin this build to exactly
+    # one Worker (no runtime discovery — that would add a single point of
+    # failure + a redirect attack surface; Cloudflare's edge already provides
+    # the global failover a discovery service would try to fake). 'local' keeps
+    # the Funnel'd laptop Worker from dev_defines.sh; the cloudflare-* rows
+    # point at deployed Workers. Add a row per new environment.
+    BACKEND="${BACKEND:-local}"
+    case "$BACKEND" in
+      local) : ;;  # keep FORUM_API_URL (+ SHIM_URL) from dev_defines.sh
+      cloudflare|cloudflare-dev)
+        FORUM_API_URL="https://holdclose-forum-dev.jcsvonellc.workers.dev" ;;
+      cloudflare-prod)
+        FORUM_API_URL="https://holdclose.care" ;;  # once DNS points at the prod Worker
+      *)
+        echo "error: unknown BACKEND='$BACKEND'" \
+             "(use: local | cloudflare-dev | cloudflare-prod)." >&2
+        exit 1 ;;
+    esac
+    echo "→ backend=${BACKEND}  FORUM_API_URL=${FORUM_API_URL:-<none>}"
+
     DEFINES+=(
       --dart-define=ALPHA_AUTH=true
       --dart-define=SHIM_URL="${SHIM_URL:-}"
@@ -82,6 +112,10 @@ case "$AUTH" in
     if [[ -z "${SHIM_URL:-}" && -f tools/dev_defines.sh ]]; then
       # shellcheck disable=SC1091
       source tools/dev_defines.sh
+    fi
+    if [[ -n "${BACKEND:-}" && "${BACKEND}" != "local" ]]; then
+      echo "note: BACKEND='${BACKEND}' is ignored in demo mode (no real backend" \
+           "or auth); use AUTH=google to hit a deployed Worker." >&2
     fi
     DEFINES+=(
       --dart-define=DEMO_MODE=true

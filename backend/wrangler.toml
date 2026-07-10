@@ -37,7 +37,7 @@ R2_PUBLIC_URL = "https://media.holdclose.local"
 # secret, so it lives here; override per environment via
 # `wrangler deploy --var GOOGLE_CLIENT_ID:...` or set it for local dev in
 # `.dev.vars`.
-GOOGLE_CLIENT_ID = "187697773608-uha89s0cc6f9bm4mefcu7r93sopas5jq.apps.googleusercontent.com,187697773608-ica8fo1ho8brojse9ai1lq63kbb2nqae.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = "948989327057-a0o985t2648v1su957ltgohm45i138pb.apps.googleusercontent.com,948989327057-1m5kkffbqa06p87fprkigumfn3gk6fv3.apps.googleusercontent.com,948989327057-5soo39g145ajmlj1h8o4uc4fcmjnm8p8.apps.googleusercontent.com"
 
 # Watchdog wiring (Phase 13.13). Non-secret values live here; secrets
 # (CLOUDFLARE_API_TOKEN, RESEND_API_KEY) are set via `wrangler secret
@@ -121,3 +121,64 @@ bucket_name = "holdclose-forum-media"
 [[r2_buckets]]
 binding = "DOC_BLOBS"
 bucket_name = "holdclose-doc-blobs"
+
+# --- dev environment ---------------------------------------------------
+# Deploys as `holdclose-forum-dev` in the jcsvonellc Cloudflare account
+# (1d05533f4440827e2768c13a6c80c5ea). A named wrangler environment, so the
+# same account can host other apps' `-dev` workers alongside it. Deploy with
+# `wrangler deploy --env dev`; migrate with
+# `wrangler d1 migrations apply FORUM_DB --env dev --remote`.
+#
+# R2 enabled 2026-07-10; dev buckets `holdclose-forum-media-dev` +
+# `holdclose-doc-blobs-dev` created and bound below (as FORUM_MEDIA /
+# DOC_BLOBS). Uploads write to R2; serving forum media publicly still needs a
+# real public bucket URL in R2_PUBLIC_URL (follow-up). Workers AI is the
+# native `[env.dev.ai]` binding below.
+[env.dev]
+name = "holdclose-forum-dev"
+
+[env.dev.vars]
+R2_PUBLIC_URL = "https://media-dev.holdclose.local"
+GOOGLE_CLIENT_ID = "948989327057-a0o985t2648v1su957ltgohm45i138pb.apps.googleusercontent.com,948989327057-1m5kkffbqa06p87fprkigumfn3gk6fv3.apps.googleusercontent.com,948989327057-5soo39g145ajmlj1h8o4uc4fcmjnm8p8.apps.googleusercontent.com"
+RESEND_FROM_EMAIL = "watchdog@holdclose.local"
+RESEND_TO_EMAIL = "ops@holdclose.local"
+CLOUDFLARE_ACCOUNT_ID = "1d05533f4440827e2768c13a6c80c5ea"
+CLOUDFLARE_D1_DATABASE_ID = "aff9f3a7-5d3e-4bf6-86e9-df3735d4e62a"
+CLOUDFLARE_R2_BUCKET_NAME = "holdclose-forum-media-dev"
+CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+EXTRACT_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
+CHAT_MAX_INPUT_CHARS = "48000"
+CHAT_MAX_OUTPUT_TOKENS = "1024"
+CHAT_USER_DAILY_TOKENS = "300000"
+CHAT_GLOBAL_FLOOR_MICROS = "5000000"
+CHAT_PER_USER_BUDGET_MICROS = "100000"
+APPLE_BUNDLE_ID = "com.holdclose.holdclose"
+GOOGLE_PLAY_PACKAGE = "com.careblazers.careblazers"
+
+[[env.dev.d1_databases]]
+binding = "FORUM_DB"
+database_name = "holdclose-forum-dev"
+database_id = "aff9f3a7-5d3e-4bf6-86e9-df3735d4e62a"
+migrations_dir = "drizzle"
+
+[env.dev.triggers]
+crons = []
+
+# Native Workers AI binding — the coach chat calls this at runtime (no
+# CF_AI_API_TOKEN needed; the deploy creds carry `ai:write`). Scan/vision
+# extraction still uses the REST path (CF_AI_API_TOKEN) pending live
+# vision-format validation. Deliberately env-scoped (NOT top-level) so the
+# vitest test harness, which loads the top-level config, never boots the AI
+# runtime — that was the reason the top-level [ai] binding was removed.
+[env.dev.ai]
+binding = "AI"
+
+# R2 buckets for the dev env. Binding names MUST match what the code reads
+# (`env.FORUM_MEDIA` / `env.DOC_BLOBS`), not wrangler's suggested snake-case.
+[[env.dev.r2_buckets]]
+binding = "FORUM_MEDIA"
+bucket_name = "holdclose-forum-media-dev"
+
+[[env.dev.r2_buckets]]
+binding = "DOC_BLOBS"
+bucket_name = "holdclose-doc-blobs-dev"

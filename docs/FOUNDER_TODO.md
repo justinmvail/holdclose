@@ -22,15 +22,30 @@ info / real people.
 - [ ] **Create iOS + Android OAuth clients** for `com.holdclose.holdclose` (steps in `OPERATOR_SETUP.md §1`). **Paste the iOS client id to Claude** to wire it. *(CONSOLE)*
 
 ## C. Cloudflare production deploy
-- [ ] **Enable R2** (dashboard → R2; blocked today with code 10042 until terms + payment method). *(CONSOLE/$)*
+> **Dev environment is LIVE (2026-07-10).** The backend is deployed to the
+> jcsvonellc Cloudflare account (ID `1d05533f…c5ea`) as the `dev` wrangler
+> environment → **`holdclose-forum-dev.jcsvonellc.workers.dev`**. Live +
+> verified: Worker, D1 `holdclose-forum-dev` (9 migrations), JWT auth, and the
+> **AI coach on native Workers AI** (chat streamed a real Llama-3.3-70b reply
+> end-to-end). Deploy = `wrangler deploy --env dev`. R2 uploads now wired too
+> (buckets `holdclose-forum-media-dev` + `holdclose-doc-blobs-dev` bound as
+> FORUM_MEDIA/DOC_BLOBS; public media serving still needs a real R2_PUBLIC_URL).
+> Not yet on dev: scan/vision extraction (still REST-token). Point the app at
+> it via `FORUM_API_URL=https://holdclose-forum-dev.jcsvonellc.workers.dev`.
+> The items below are the remaining **production** (holdclose.care) deploy.
+- [x] **Enable R2** — done 2026-07-10 (account-wide). Dev buckets `holdclose-forum-media-dev` + `holdclose-doc-blobs-dev` created + bound. Prod buckets (`holdclose-forum-media` / `holdclose-doc-blobs`) still to create at prod deploy. *(CONSOLE/$)*
 - [ ] Create buckets `holdclose-forum-media` + `holdclose-doc-blobs`. *(CONSOLE)*
 - [ ] Set Worker secrets: `FORUM_JWT_SECRET`, `CLOUDFLARE_API_TOKEN`, `RESEND_API_KEY`. (No AI key — Workers AI is key-less.) *(CONSOLE)*
 - [ ] `npm run deploy` + `wrangler d1 migrations apply FORUM_DB --remote`. *(CONSOLE)*
 - [ ] **Point `holdclose.care` DNS at the Worker** (add the zone to Cloudflare, attach the custom domain). Required for the Terms/Privacy pages + invite links. *(CONSOLE)*
-- [ ] After the AI migration deploys: **validate real inference** — chat quality + scan-extraction accuracy on Workers AI (can't be tested off the live account). *(DECISION/CONSOLE)*
+- [~] **Validate real inference** — ✅ chat verified end-to-end on Workers AI (dev env, native binding, real Llama-3.3-70b stream). Still to validate: scan/vision extraction (needs the native vision-input format wired + a real label photo). *(DECISION/CONSOLE)*
 
 ## D. Store enrollment & signing (multi-week — start early)
-- [ ] **Apple Developer Program** enrollment (org, JCSV One LLC / D-U-N-S 13-689-7602). *(ACCOUNT/$)*
+- [~] **Apple Developer Program** enrollment (org, JCSV One LLC / D-U-N-S 13-689-7602). Started 2026-07-10; **blocked on Apple throttles after many attempts — don't fight it, resume next day.** Restart notes:
+  - **Use the EXISTING Apple Account — do NOT create a new one.** `jcsvonellc@gmail.com` is an alias on Justin's personal `justinmichaelvail@icloud.com` (same account). A new account isn't needed: the org identity = the D-U-N-S, not the holder email. New-account creation kept failing "Your account cannot be created at this time" on BOTH Wi-Fi and cellular → not an IP throttle alone; likely the VoIP phone number and/or an anti-fraud flag from repeated tries.
+  - Existing-account enrollment hit "max attempts / contact us" lock (from dropped email codes before forwarding was live). Auto-resets ~24h, or click **contact us** to reset.
+  - ✅ **Work email `admin@junocode.studio`** set up via Cloudflare Email Routing → forwards to `jcsvonellc@gmail.com` (destination Verified, routing rule Active). Apple's verify email now Forwards (was Dropped). So the email step passes first try next time — enter the code ONCE, no resends.
+  - For any phone verification, use a **real mobile number** — the Google Voice number (843) 642-8302 is VoIP and Apple may be rejecting it. *(ACCOUNT/$)*
 - [ ] **Google Play Console** enrollment (org). *(ACCOUNT/$)*
 - [ ] **Android release keystore** — generate with a secure password (Corretto-17 keytool) → `android/holdclose-release.keystore` + `android/key.properties`; **register its SHA-1 on the OAuth Android client** (steps in `OPERATOR_SETUP.md §4.2`). *(CONSOLE)*
 - [ ] **Apple signing** — App ID `com.holdclose.holdclose`, distribution cert, provisioning profile. *(CONSOLE)*
@@ -43,7 +58,12 @@ info / real people.
 - [ ] Upload a real-signed build → TestFlight (internal → external pilot) → submit for review. *(CONSOLE)*
 
 ## F. Google Play submission
-- [~] **Play org account ALREADY EXISTS** — "Juno Code Studio", Organization account, ID 5351202474101549368 (found 2026-07-10). The $25 + org creation is done; org accounts SKIP the closed-testing gate. **Remaining: finish the 3 verifications** (Action Required banner) — in order: (1) Verify identity (upload gov ID; ~few days), (2) Verify org's website ⚠️ if it lists holdclose.care this is BLOCKED until Cloudflare DNS is live — else verify a site you already control, (3) Verify phone (auto after 1+2). Also: add `jcsvonellc@gmail.com` under Users & permissions if it's not the owner.
+- [~] **Play org account "Juno Code Studio"** — Organization account, ID 5351202474101549368. $25 + org creation done; org accounts SKIP the closed-testing gate. Verification progress (2026-07-10):
+  - ✅ **Org registration** — uploaded the IRS **CP 575** for JCSV One LLC (in `~/Downloads/EIN Certificate.pdf`; backups: SC Certificate of Existence + certified Articles, same folder).
+  - ✅ **Website** — verified `junocode.studio` (the live JCSV/Juno Code Studio site, on Cloudflare — NOT holdclose.care, so it was never blocked on the DNS work) via **Google Search Console** ownership (DNS TXT).
+  - ⏳ **Identity** — docs uploaded; Google reviewing (~few days); account owner gets an email when done. NOTHING to do until then.
+  - 🔒 **Phone** — auto-unlocks after identity approves; then enter a number + code.
+  - TODO once identity clears: add `jcsvonellc@gmail.com` under Users & permissions if it's not the owner.
 - [ ] Create the Holdclose app (no closed-testing period needed on an org account). *(CONSOLE)*
 - [ ] **Data safety form** (mirror the iOS labels). *(PERSONAL)*
 - [ ] Content rating (IARC); target audience; ads declaration (none); public privacy URL `holdclose.care/privacy`. *(PERSONAL)*
