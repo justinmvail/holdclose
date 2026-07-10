@@ -449,7 +449,7 @@ class _AddAppointmentFab extends StatelessWidget {
       key: CalendarScreen.addFabKey,
       heroTag: 'calendar-add-fab',
       onPressed: onPressed,
-      backgroundColor: context.hc.cta,
+      backgroundColor: context.hc.ctaFilled,
       foregroundColor: Colors.white,
       icon: const Icon(Icons.add),
       label: const Text('Add appointment'),

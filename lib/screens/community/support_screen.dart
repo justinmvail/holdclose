@@ -281,7 +281,7 @@ class _SelfCheckBody extends StatelessWidget {
             key: SupportScreen.submitKey,
             onPressed: canSubmit ? onSubmit : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: context.hc.cta,
+              backgroundColor: context.hc.ctaFilled,
               foregroundColor: Colors.white,
               disabledBackgroundColor:
                   context.hc.cta.withValues(alpha: 0.4),

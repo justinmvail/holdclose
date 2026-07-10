@@ -172,7 +172,7 @@ class _EmptyState extends StatelessWidget {
             icon: const Icon(Icons.groups_outlined),
             label: const Text('Coordinate care'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: context.hc.cta,
+              backgroundColor: context.hc.ctaFilled,
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(56),
             ),

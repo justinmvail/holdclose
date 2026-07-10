@@ -97,7 +97,8 @@ class _CareSummaryScreenState extends ConsumerState<CareSummaryScreen> {
                     label: Text(
                         _sharing ? 'Preparing…' : 'Share care summary'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: context.hc.cta,
+                      // Filled Share action → AA-contrast token for white text.
+                      backgroundColor: context.hc.ctaFilled,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(52),
                     ),

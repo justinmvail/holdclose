@@ -411,7 +411,8 @@ class _HealthLogEntryFormState extends ConsumerState<HealthLogEntryForm> {
                       onPressed: _submitting ? null : _submit,
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size.fromHeight(56),
-                        backgroundColor: context.hc.cta,
+                        // Filled Save action → AA-contrast token for white text.
+                        backgroundColor: context.hc.ctaFilled,
                         foregroundColor: Colors.white,
                       ),
                       child: Text(

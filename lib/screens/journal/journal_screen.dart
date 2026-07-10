@@ -80,7 +80,7 @@ class JournalScreen extends ConsumerWidget {
         // collide ("multiple heroes share the same tag"). A per-screen tag
         // keeps every FAB's Hero unique.
         heroTag: 'journal-add-fab',
-        backgroundColor: context.hc.cta,
+        backgroundColor: context.hc.ctaFilled,
         foregroundColor: Colors.white,
         onPressed: () => showJournalAddSheet(context),
         icon: const Icon(Icons.add),
@@ -223,7 +223,7 @@ class _EmptyState extends StatelessWidget {
             child: ElevatedButton(
               key: JournalScreen.emptyCtaKey,
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.hc.cta,
+                backgroundColor: context.hc.ctaFilled,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),

@@ -184,7 +184,7 @@ class _AddShiftFab extends StatelessWidget {
         key: ShiftsScreen.fabKey,
         heroTag: 'shifts-add-fab',
         onPressed: onPressed,
-        backgroundColor: context.hc.cta,
+        backgroundColor: context.hc.ctaFilled,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
@@ -788,7 +788,7 @@ class _ScheduleShiftSheetState extends ConsumerState<_ScheduleShiftSheet> {
               onPressed: _submitting ? null : _save,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(56),
-                backgroundColor: context.hc.cta,
+                backgroundColor: context.hc.ctaFilled,
                 foregroundColor: Colors.white,
               ),
               child: Text(

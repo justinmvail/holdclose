@@ -284,7 +284,8 @@ class _EmergencyCardFormState extends ConsumerState<_EmergencyCardForm> {
               key: EmergencyCardEditScreen.saveButtonKey,
               onPressed: _saving ? null : _save,
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.hc.cta,
+                // Filled Save → AA-contrast token for white text.
+                backgroundColor: context.hc.ctaFilled,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),

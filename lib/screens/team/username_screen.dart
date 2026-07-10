@@ -234,7 +234,7 @@ class _UsernameScreenState extends ConsumerState<UsernameScreen> {
                     : _save,
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(56),
-                  backgroundColor: context.hc.cta,
+                  backgroundColor: context.hc.ctaFilled,
                   foregroundColor: Colors.white,
                 ),
                 child: Text(

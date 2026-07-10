@@ -292,7 +292,8 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
                     icon: const Icon(Icons.search),
                     label: Text(_searching ? 'Searching…' : 'Search'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: context.hc.cta,
+                      // Filled Search action → AA-contrast token for white text.
+                      backgroundColor: context.hc.ctaFilled,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(52),
                     ),
@@ -398,13 +399,15 @@ class _ResultCard extends ConsumerWidget {
             onTap: () => ref.read(linkLauncherProvider).launch(_telUri(phone)),
             child: Row(
               children: <Widget>[
-                Icon(Icons.call, size: 16, color: context.hc.cta),
+                // Tappable call link on the light card → AA-contrast salmon.
+                Icon(Icons.call, size: 16, color: context.hc.ctaFilled),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text('Call  $phone',
                       overflow: TextOverflow.ellipsis,
                       style: tt.bodyMedium?.copyWith(
-                          color: context.hc.cta, fontWeight: FontWeight.w600)),
+                          color: context.hc.ctaFilled,
+                          fontWeight: FontWeight.w600)),
                 ),
               ],
             ),
@@ -439,7 +442,9 @@ class _ResultCard extends ConsumerWidget {
               : TextButton(
                   key: FindProviderScreen.saveKey(result.npi ?? result.name),
                   onPressed: onSave,
-                  style: TextButton.styleFrom(foregroundColor: context.hc.cta),
+                  // Text action on the light card → AA-contrast salmon.
+                  style: TextButton.styleFrom(
+                      foregroundColor: context.hc.ctaFilled),
                   child: const Text('Save'),
                 ),
         ],

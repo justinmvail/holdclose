@@ -35,7 +35,7 @@ class CarePlanRoutinesScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         key: addFabKey,
         heroTag: 'care-plan-routines-add-fab',
-        backgroundColor: context.hc.cta,
+        backgroundColor: context.hc.ctaFilled,
         foregroundColor: Colors.white,
         onPressed: () => context.push('/medical/routines/new'),
         icon: const Icon(Icons.add),

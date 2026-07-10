@@ -147,7 +147,7 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.hc.cta,
+                backgroundColor: context.hc.ctaFilled,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),
@@ -324,7 +324,7 @@ class _AddEntryFab extends StatelessWidget {
         key: HealthLogScreen.fabKey,
         heroTag: 'health-log-add-fab',
         onPressed: onPressed,
-        backgroundColor: context.hc.cta,
+        backgroundColor: context.hc.ctaFilled,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(

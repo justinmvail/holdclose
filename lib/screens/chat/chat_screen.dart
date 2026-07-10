@@ -933,7 +933,8 @@ class _AssistantBubble extends StatelessWidget {
                     key: ChatScreen.retryKey,
                     onPressed: onRetry,
                     style: TextButton.styleFrom(
-                      foregroundColor: context.hc.cta,
+                      // AA-contrast salmon for text on the light surface.
+                      foregroundColor: context.hc.ctaFilled,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 4,
@@ -1015,7 +1016,8 @@ class _PendingActionCard extends StatelessWidget {
               FilledButton(
                 key: ChatScreen.pendingActionConfirmKey(citation),
                 style: FilledButton.styleFrom(
-                  backgroundColor: context.hc.cta,
+                  // Filled primary action → AA-contrast token for white text.
+                  backgroundColor: context.hc.ctaFilled,
                   foregroundColor: Colors.white,
                 ),
                 onPressed: onDecision == null
@@ -1130,7 +1132,8 @@ class _CrisisHotlineRow extends ConsumerWidget {
           child: FilledButton.icon(
             key: ChatScreen.crisisCallButtonKey(hotline.number),
             style: FilledButton.styleFrom(
-              backgroundColor: context.hc.cta,
+              // Filled crisis-call action → AA-contrast token for white text.
+              backgroundColor: context.hc.ctaFilled,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             ),
@@ -1316,7 +1319,9 @@ class _ComposerState extends ConsumerState<_Composer> {
                 ? 'Listening. Speak your message.'
                 : 'Speak your message.',
             child: Material(
-              color: _listening ? context.hc.cta : context.hc.surfaceWarm,
+              // Listening = filled salmon behind a white spinner → AA token.
+              // Idle keeps the light warm surface with a decorative salmon glyph.
+              color: _listening ? context.hc.ctaFilled : context.hc.surfaceWarm,
               shape: const CircleBorder(),
               child: InkWell(
                 key: ChatScreen.composerMicKey,
@@ -1345,9 +1350,10 @@ class _ComposerState extends ConsumerState<_Composer> {
             enabled: !sending,
             label: 'Send message to the coach.',
             child: Material(
+              // Filled send button carries a white glyph → AA-contrast token.
               color: sending
-                  ? context.hc.cta.withValues(alpha: 0.5)
-                  : context.hc.cta,
+                  ? context.hc.ctaFilled.withValues(alpha: 0.5)
+                  : context.hc.ctaFilled,
               shape: const CircleBorder(),
               child: InkWell(
                 key: ChatScreen.sendButtonKey,

@@ -149,7 +149,7 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
                   key: WelcomeCarousel.primaryCtaKey,
                   onPressed: _onCtaPressed,
                   style: FilledButton.styleFrom(
-                    backgroundColor: context.hc.cta,
+                    backgroundColor: context.hc.ctaFilled,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(

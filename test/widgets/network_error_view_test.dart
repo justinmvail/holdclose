@@ -100,7 +100,8 @@ void main() {
           tester.widget<ElevatedButton>(find.byType(ElevatedButton));
       final Color? bg = button.style?.backgroundColor
           ?.resolve(<WidgetState>{});
-      expect(bg, holdcloseColors.cta);
+      // Filled retry button carries white text → the AA-contrast token.
+      expect(bg, holdcloseColors.ctaFilled);
     });
   });
 

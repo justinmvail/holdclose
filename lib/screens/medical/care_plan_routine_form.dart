@@ -397,7 +397,7 @@ class _CarePlanRoutineFormState extends ConsumerState<CarePlanRoutineForm> {
                 key: CarePlanRoutineForm.submitButtonKey,
                 onPressed: _submitting ? null : _submit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.hc.cta,
+                  backgroundColor: context.hc.ctaFilled,
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(56),
                 ),

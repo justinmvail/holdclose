@@ -174,7 +174,7 @@ class _CommunityFeedScreenState extends ConsumerState<CommunityFeedScreen> {
               // with another tab landing's default-tagged FAB (the Chat
               // conversation list) mid-transition.
               heroTag: 'community-compose-fab',
-              backgroundColor: context.hc.cta,
+              backgroundColor: context.hc.ctaFilled,
               foregroundColor: Colors.white,
               onPressed: () =>
                   context.pushNamed(HoldcloseRoutes.communityCompose),

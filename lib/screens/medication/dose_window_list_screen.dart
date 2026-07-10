@@ -83,7 +83,7 @@ class DoseWindowListScreen extends ConsumerWidget {
       backgroundColor: context.hc.background,
       floatingActionButton: FloatingActionButton.extended(
         key: fabKey,
-        backgroundColor: context.hc.cta,
+        backgroundColor: context.hc.ctaFilled,
         foregroundColor: Colors.white,
         onPressed: () => context.push('/medications/windows/new'),
         icon: const Icon(Icons.add),
@@ -529,7 +529,7 @@ class _DoseWindowFormScreenState
                 key: DoseWindowFormScreen.submitButtonKey,
                 onPressed: _submitting ? null : _submit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.hc.cta,
+                  backgroundColor: context.hc.ctaFilled,
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(56),
                 ),

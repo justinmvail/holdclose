@@ -854,7 +854,8 @@ class _AppointmentFormScreenState
                           label: Text(
                               _suggesting ? 'Thinking…' : 'Suggest questions'),
                           style: TextButton.styleFrom(
-                            foregroundColor: context.hc.cta,
+                            // Text on the light form → AA-contrast salmon.
+                            foregroundColor: context.hc.ctaFilled,
                           ),
                         ),
                       ],
@@ -886,7 +887,8 @@ class _AppointmentFormScreenState
                       onPressed: _submitting ? null : _submit,
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size.fromHeight(56),
-                        backgroundColor: context.hc.cta,
+                        // Filled Save action → AA-contrast token for white text.
+                        backgroundColor: context.hc.ctaFilled,
                         foregroundColor: Colors.white,
                       ),
                       child: Text(
@@ -1080,7 +1082,8 @@ class _AppointmentFormScreenState
                   key: AppointmentFormScreen.newProviderSaveButtonKey,
                   onPressed: _saveInlineProvider,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: context.hc.cta,
+                    // Filled Save action → AA-contrast token for white text.
+                    backgroundColor: context.hc.ctaFilled,
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(48),
                   ),
@@ -1320,7 +1323,8 @@ class _QuestionPickerSheetState extends State<_QuestionPickerSheet> {
                         title: Text(widget.questions[i]),
                         contentPadding: EdgeInsets.zero,
                         controlAffinity: ListTileControlAffinity.leading,
-                        activeColor: context.hc.cta,
+                        // Filled checkbox carries a white check → AA token.
+                        activeColor: context.hc.ctaFilled,
                       ),
                   ],
                 ),
@@ -1336,7 +1340,8 @@ class _QuestionPickerSheetState extends State<_QuestionPickerSheet> {
                 Navigator.of(context).pop(selected);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.hc.cta,
+                // Filled primary action → AA-contrast token for white text.
+                backgroundColor: context.hc.ctaFilled,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(48),
               ),

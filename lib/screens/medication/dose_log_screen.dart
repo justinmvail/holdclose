@@ -758,7 +758,7 @@ class _MarkTakenButton extends StatelessWidget {
         key: buttonKey,
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: context.hc.cta,
+          backgroundColor: context.hc.ctaFilled,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           minimumSize: const Size(0, 44),

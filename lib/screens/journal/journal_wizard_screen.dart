@@ -361,7 +361,8 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
         ElevatedButton(
           key: JournalWizardScreen.submitButtonKey,
           style: ElevatedButton.styleFrom(
-            backgroundColor: context.hc.cta,
+            // Filled Save → AA-contrast token for white text.
+            backgroundColor: context.hc.ctaFilled,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             minimumSize: const Size.fromHeight(56),
@@ -421,7 +422,8 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
                 child: ElevatedButton(
                   key: JournalWizardScreen.submitButtonKey,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: context.hc.cta,
+                    // Filled Save → AA-contrast token for white text.
+                    backgroundColor: context.hc.ctaFilled,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
@@ -438,7 +440,8 @@ class _JournalWizardScreenState extends ConsumerState<JournalWizardScreen> {
                 child: ElevatedButton(
                   key: JournalWizardScreen.nextButtonKey,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: context.hc.cta,
+                    // Filled primary action → AA-contrast token for white text.
+                    backgroundColor: context.hc.ctaFilled,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),

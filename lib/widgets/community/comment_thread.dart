@@ -562,7 +562,7 @@ class _InlineReplyComposerState extends State<InlineReplyComposer> {
                     : CommentThread.replySendKey(parent.id),
                 onPressed: widget.isSending ? null : _handleSubmit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.hc.cta,
+                  backgroundColor: context.hc.ctaFilled,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,

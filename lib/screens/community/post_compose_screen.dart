@@ -597,7 +597,7 @@ class _FirstPostAckSheet extends StatelessWidget {
                 child: ElevatedButton(
                   key: PostComposeScreen.ackAcceptKey,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: context.hc.cta,
+                    backgroundColor: context.hc.ctaFilled,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () => Navigator.of(context).pop(true),

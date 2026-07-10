@@ -449,7 +449,8 @@ class _MedicationImportReviewScreenState
                               onPressed: _submitting ? null : _save,
                               style: ElevatedButton.styleFrom(
                                 minimumSize: const Size.fromHeight(56),
-                                backgroundColor: context.hc.cta,
+                                // Filled Save → AA-contrast token for white text.
+                                backgroundColor: context.hc.ctaFilled,
                                 foregroundColor: Colors.white,
                               ),
                               child: Text(

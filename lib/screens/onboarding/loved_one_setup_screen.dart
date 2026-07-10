@@ -410,7 +410,7 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
                   onPressed: _submitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
-                    backgroundColor: context.hc.cta,
+                    backgroundColor: context.hc.ctaFilled,
                     foregroundColor: Colors.white,
                   ),
                   child: Text(

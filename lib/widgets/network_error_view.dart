@@ -88,7 +88,7 @@ class NetworkErrorView extends StatelessWidget {
               child: ElevatedButton(
                 key: retryButtonKey,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.hc.cta,
+                  backgroundColor: context.hc.ctaFilled,
                   foregroundColor: Colors.white,
                 ),
                 onPressed: onRetry,

@@ -319,7 +319,7 @@ class _JournalEntryScreenState extends ConsumerState<JournalEntryScreen> {
             ElevatedButton(
               key: JournalEntryScreen.saveButtonKey,
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.hc.cta,
+                backgroundColor: context.hc.ctaFilled,
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(56),
               ),

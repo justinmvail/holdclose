@@ -8,7 +8,11 @@ import '../theme.dart';
 /// would have a hard time"). So the state is shown three ways at once:
 ///   * **"ON" / "OFF" text inside the track**,
 ///   * the **thumb position** (left = off, right = on), and
-///   * a **red → green track color** that animates smoothly on toggle.
+///   * a **neutral navy → green track color** that animates smoothly on
+///     toggle. OFF is a low-emphasis navy (`primarySoft`), not red — a benign
+///     "off" setting must read as calm, not as an error/danger state (a wall
+///     of red "OFF" pills in Settings falsely signals something is wrong).
+///     Red stays reserved for genuinely destructive/error states.
 ///
 /// Drop-in for a Material [Switch]: same `value` + `onChanged` contract, and a
 /// null `onChanged` renders a dimmed, non-interactive control.
@@ -32,7 +36,9 @@ class HoldcloseSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     final HoldcloseColors hc = context.hc;
     final bool enabled = onChanged != null;
-    final Color track = value ? hc.success : hc.error;
+    // ON = success green; OFF = a muted navy neutral (NOT error red), so a
+    // column of benign "OFF" settings doesn't read as a wall of alarms.
+    final Color track = value ? hc.success : hc.primarySoft;
 
     return Semantics(
       container: true,

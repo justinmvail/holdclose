@@ -417,7 +417,8 @@ class _CenterVoiceButtonState extends ConsumerState<_CenterVoiceButton> {
           : 'Speak to the coach. Tap and say what you need.',
       child: Material(
         key: TabScaffold.centerVoiceButtonKey,
-        color: context.hc.cta,
+        // Filled center mic carries a white glyph → AA-contrast token.
+        color: context.hc.ctaFilled,
         shape: const CircleBorder(),
         elevation: 3,
         child: InkWell(

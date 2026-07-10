@@ -392,7 +392,7 @@ class _DetailBody extends StatelessWidget {
               key: AppointmentDetailScreen.saveNotesButtonKey,
               onPressed: onSaveNotes,
               style: ElevatedButton.styleFrom(
-                backgroundColor: context.hc.cta,
+                backgroundColor: context.hc.ctaFilled,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(140, 48),
               ),

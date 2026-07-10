@@ -451,7 +451,7 @@ class _FeedbackSheetState extends ConsumerState<FeedbackSheet> {
               child: FilledButton(
                 key: FeedbackSheet.sendButtonKey,
                 style: FilledButton.styleFrom(
-                  backgroundColor: context.hc.cta,
+                  backgroundColor: context.hc.ctaFilled,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
