@@ -41,15 +41,20 @@ dependencies:
 
   # Storage
   drift: ^2.20.0
-  drift_flutter: ^0.2.0
+  # NOTE: drift_flutter is deliberately NOT a dependency. It transitively
+  # pulls in `sqlite3_flutter_libs`, whose native plugin class collides at
+  # iOS compile time with `sqlcipher_flutter_libs` ("Sqlite3FlutterLibsPlugin
+  # has different definitions in different modules"). Since the DB is opened
+  # manually via lib/db/encrypted_open.dart (NativeDatabase + the sqlcipher
+  # `open` override) — driftDatabase() is no longer used — drift_flutter is
+  # unnecessary and its removal is what lets SQLCipher be the sole sqlite3.
   path_provider: ^2.1.0
   path: ^1.9.0
   flutter_secure_storage: ^9.2.0
   # SQLCipher at-rest encryption of the local drift/SQLite file (the DB
-  # holds plaintext PHI). Ships a SQLCipher-compiled `libsqlite3` per
-  # platform that supersedes the plain build from `sqlite3_flutter_libs`
-  # (a transitive drift_flutter dep) — do NOT depend on both native libs
-  # in the same binary; this one wins via the sqlite3 `open` override in
+  # holds PHI). Ships a SQLCipher-compiled `libsqlite3` per platform and is
+  # the ONLY native sqlite3 in the binary (drift_flutter removed, above);
+  # it's selected via the sqlite3 `open` override in
   # `lib/db/encrypted_open.dart`. Pinned to the 0.6.x line because it
   # pairs with `sqlite3: 2.x` (the version drift 2.31 resolves); the
   # 0.7.0+ releases are no-op shims for the `sqlite3: 3.x` era. See
