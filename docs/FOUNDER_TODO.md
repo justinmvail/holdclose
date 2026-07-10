@@ -16,7 +16,7 @@ info / real people.
 - [ ] **Claude subscription** — move billing to the JCSV Google account + JCSV bank. *(ACCOUNT/$)*
 - [ ] **Google/GCP ownership** — from `jcsvonellc@gmail.com`, take Owner on GCP project 187697773608 (grant + accept). One identity for OAuth, Play, payout. *(ACCOUNT)*
 - [ ] **Cloudflare billing** — confirm R2/Workers billing + payment method are on the LLC (account already under `jcsvonellc@gmail.com`). *(ACCOUNT/$)*
-- [ ] **Publisher identity** — individual vs. JCSV One LLC entity (affects OAuth, store accounts, prize payout). *(DECISION)*
+- [x] **Publisher identity → JCSV One LLC** (decided 2026-07-10). Entity everywhere: an **entity** ACL application (prize paid to the LLC), **organization** Apple + Play accounts, GCP project + GitHub owned by `jcsvonellc@gmail.com`. Cover page team/entity = "Juno Code Studio (JCSV One LLC)".
 
 ## B. Sign-in — Google OAuth (unblocks `AUTH=google` builds; ~5 min)
 - [ ] **Create iOS + Android OAuth clients** for `com.holdclose.holdclose` (steps in `OPERATOR_SETUP.md §1`). **Paste the iOS client id to Claude** to wire it. *(CONSOLE)*
@@ -86,9 +86,36 @@ info / real people.
 
 ---
 
-### If you only do five things this week
-1. **Google OAuth clients** (B) — unblocks sign-in in one sitting.
-2. **Enable R2 + deploy the backend** (C) — makes everything real.
-3. **Start Apple + Play org enrollment** (D) — the long pole; nothing ships without it.
-4. **Fill the tester evidence + bio** (I) — the competition's weakest section, deadline-driven.
-5. **Send the outreach email** (I) — letters take time to come back.
+### Order of operations (2026-07-10)
+
+Two parallel tracks: **Competition** (hard deadline July 31, 2026, 5pm ET) and
+**Production** (no deadline, but store enrollment has weeks of lead time). Two
+things must start TODAY because they wait on *other people*, not you: store org
+enrollment and competition letters/tester evidence.
+
+**Wave 1 — today (start everything with external lead time):**
+1. ✅ Publisher = JCSV One LLC (done).
+2. Start **Apple Developer Program + Google Play Console org enrollment** (JCSV One LLC / D-U-N-S 13-689-7602) — longest pole; multi-week approval.
+3. **Send the competition outreach emails + start recruiting testers** — letters + real quotes come from others on their timeline.
+4. **Consolidate GitHub + GCP under JCSV** (transfer repo; take Owner on GCP 187697773608) — so the OAuth clients you make next are already under the LLC.
+
+**Wave 2 — this week (quick unblocks + your content):**
+5. **Create the Google OAuth clients** → paste Claude the iOS id → sign-in works (also unblocks AUTH=google + billing testing).
+6. **Confirm bio + cover-page attestations + the two decisions** (§5 dementia keep/drop, the §4 pricing sentence).
+
+**Wave 3 — next (make the backend real; no deadline pressure):**
+7. **Cloudflare deploy** — enable R2, secrets (incl. `CF_AI_API_TOKEN`), `npm run deploy`, migrate D1, point `holdclose.care` DNS at the Worker.
+8. **Validate on the live deploy** — chat/scan quality on Workers AI + the delete-account round-trip.
+
+**Wave 4 — rolling, before ~July 28:**
+9. Feed Claude tester evidence as it lands (real, consented).
+10. **~July 28–30: Claude assembles the final 508 PDF; you review + send** to CaregiverAI@acl.hhs.gov before **July 31, 5pm ET** ← the one true deadline.
+
+**Wave 5 — when enrollment approves (likely AFTER July 31, and that's fine):**
+11. Release keystore + Apple signing (keystore SHA-1 needs the OAuth Android client from step 5).
+12. App Store + Play listings, privacy/data-safety forms, upload, review → pilot.
+13. Monetization tail: Sentry DSN, store subscription products, affiliate setup.
+
+**Key:** the competition submission does NOT depend on the store deploy — the
+app already runs on testers' phones (that's the TRL-3 "deployment readiness").
+Don't let the production track crowd out the July-31 work.
