@@ -306,6 +306,93 @@ class SyncPushResult {
   final List<({String id, int rev, bool accepted})> applied;
 }
 
+/// The server-authoritative entitlement returned by the billing routes
+/// (`POST /api/v1/billing/verify` + `GET /api/v1/billing/entitlement`). This
+/// is the ONLY thing the client trusts to grant premium — the device never
+/// decides its own entitlement (2026-07 hardening: no client self-grant).
+///
+/// Wire shape (see `backend/src/routes/billing.ts`):
+/// `{ isPremium, inTrial, expiresAt, productId, platform? }`. `expiresAt` is
+/// epoch **milliseconds** or null; `productId`/`platform` may be null on the
+/// free-tier `GET` (no purchase on file).
+class ServerEntitlement {
+  const ServerEntitlement({
+    required this.isPremium,
+    this.inTrial = false,
+    this.expiresAt,
+    this.productId,
+    this.platform,
+  });
+
+  /// The free/no-entitlement baseline, used when the server reports no
+  /// purchase (or as the safe fallback shape).
+  static const ServerEntitlement free = ServerEntitlement(isPremium: false);
+
+  final bool isPremium;
+  final bool inTrial;
+
+  /// Epoch **milliseconds** the entitlement expires, or null for
+  /// no-expiry / no-entitlement.
+  final int? expiresAt;
+  final String? productId;
+  final String? platform;
+
+  factory ServerEntitlement.fromJson(Map<String, Object?> json) =>
+      ServerEntitlement(
+        isPremium: json['isPremium'] == true,
+        inTrial: json['inTrial'] == true,
+        expiresAt: (json['expiresAt'] as num?)?.toInt(),
+        productId: json['productId'] as String?,
+        platform: json['platform'] as String?,
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'isPremium': isPremium,
+        'inTrial': inTrial,
+        'expiresAt': expiresAt,
+        'productId': productId,
+        'platform': platform,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ServerEntitlement &&
+      other.isPremium == isPremium &&
+      other.inTrial == inTrial &&
+      other.expiresAt == expiresAt &&
+      other.productId == productId &&
+      other.platform == platform;
+
+  @override
+  int get hashCode =>
+      Object.hash(isPremium, inTrial, expiresAt, productId, platform);
+
+  @override
+  String toString() => 'ServerEntitlement(isPremium: $isPremium, '
+      'inTrial: $inTrial, expiresAt: $expiresAt, productId: $productId, '
+      'platform: $platform)';
+}
+
+/// The billing surface [StoreBillingService] depends on — the small slice of
+/// the backend it needs to trust the SERVER for entitlement. Kept as its own
+/// interface (rather than passing the whole [ForumApiClient]) so the billing
+/// service can be unit-tested against a fake without the forum machinery, per
+/// the repo's "every backend behind an interface with a fake" invariant.
+/// [ForumApiClient] implements it; tests inject a fake.
+abstract class EntitlementApi {
+  /// Verify a store receipt server-side and return the SERVER-decided
+  /// entitlement. `POST /api/v1/billing/verify`.
+  Future<ServerEntitlement> verifyPurchase({
+    required String platform,
+    required String productId,
+    required String receipt,
+  });
+
+  /// Read the stored authoritative entitlement (hydrate on launch / restore).
+  /// `GET /api/v1/billing/entitlement`.
+  Future<ServerEntitlement> getEntitlement();
+}
+
 /// Async producer of a bearer token for the Authorization header.
 /// Production wires this to `ForumSessionManager.currentToken` (the
 /// SERVER-minted session token); tests inject a constant closure so the
@@ -331,7 +418,7 @@ typedef ForumTokenExpiredRecovery = Future<bool> Function();
 /// On non-2xx the client raises [ForumApiException] with the Worker's
 /// `{error: '...'}` payload extracted; callers should NOT need to
 /// touch [Dio]/[DioException] directly.
-class ForumApiClient {
+class ForumApiClient implements EntitlementApi {
   ForumApiClient({
     required ForumTokenLoader tokenLoader,
     ForumTokenExpiredRecovery? onTokenExpired,
@@ -390,6 +477,45 @@ class ForumApiClient {
     } on ForumApiException catch (e) {
       throw GoogleAuthException(statusCode: e.statusCode, code: e.error);
     }
+  }
+
+  // -------- Billing (server-verified entitlement) -------------------------
+
+  /// Verify a store purchase receipt server-side and return the SERVER's
+  /// entitlement decision (`POST /api/v1/billing/verify`). The client never
+  /// self-grants premium — it POSTs the platform receipt and trusts only the
+  /// response. [platform] is `'ios'` or `'android'`; [receipt] is the iOS
+  /// `serverVerificationData` (StoreKit JWS) or the Android purchase token.
+  ///
+  /// A well-formed but invalid receipt still returns 200 with
+  /// `isPremium:false` (the server persisted the lack of entitlement); only a
+  /// transport/misconfig/store-outage raises [ForumApiException].
+  @override
+  Future<ServerEntitlement> verifyPurchase({
+    required String platform,
+    required String productId,
+    required String receipt,
+  }) async {
+    final Response<dynamic> r = await _post(
+      '$_apiBase/billing/verify',
+      data: <String, Object?>{
+        'platform': platform,
+        'productId': productId,
+        'receipt': receipt,
+      },
+    );
+    return ServerEntitlement.fromJson(_asJsonObject(r));
+  }
+
+  /// Read the caller's stored authoritative entitlement
+  /// (`GET /api/v1/billing/entitlement`). This is what the app hydrates
+  /// premium state from on launch — the source of truth the device reflects,
+  /// never decides. Returns [ServerEntitlement.free]-shaped data when no
+  /// purchase is on file.
+  @override
+  Future<ServerEntitlement> getEntitlement() async {
+    final Response<dynamic> r = await _get('$_apiBase/billing/entitlement');
+    return ServerEntitlement.fromJson(_asJsonObject(r));
   }
 
   // -------- Profiles ------------------------------------------------------

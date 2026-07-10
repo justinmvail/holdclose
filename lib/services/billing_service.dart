@@ -6,7 +6,10 @@
 /// invariant (see `auth_provider.dart` / `llm_provider.dart`):
 ///
 ///  * [StoreBillingService] — the REAL impl over `in_app_purchase`
-///    (StoreKit on iOS, Play Billing on Android).
+///    (StoreKit on iOS, Play Billing on Android). It VERIFIES every purchase
+///    against the Worker (`POST /billing/verify`) and hydrates from
+///    `GET /billing/entitlement`: the SERVER decides entitlement, the client
+///    never self-grants (it only caches the server's last answer for offline).
 ///  * [FakeBillingService] — a DETERMINISTIC impl for tests + demo. It
 ///    touches no platform plugin and, by default, reports the loved-one
 ///    caregiver as already premium so nothing is accidentally gated while
@@ -24,9 +27,13 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'forum_api_client.dart' show EntitlementApi, ServerEntitlement;
 
 // ---------------------------------------------------------------------------
 // Product IDs
@@ -91,6 +98,22 @@ class PremiumStatus {
 
   /// Convenience for the test/demo default + any "everything unlocked" path.
   static const PremiumStatus premium = PremiumStatus(isPremium: true);
+
+  /// Map the SERVER's authoritative [ServerEntitlement] (from
+  /// `POST /billing/verify` or `GET /billing/entitlement`) into the app's
+  /// entitlement. The server is the source of truth — [isPremium]/[inTrial]
+  /// come straight from it. [trialEndsAt] is derived from the server's
+  /// `expiresAt` (epoch **ms**) only while `inTrial`, matching the semantics
+  /// of the paid-vs-trial distinction the store enforces.
+  factory PremiumStatus.fromServerEntitlement(ServerEntitlement e) {
+    return PremiumStatus(
+      isPremium: e.isPremium,
+      inTrial: e.inTrial,
+      trialEndsAt: e.inTrial && e.expiresAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(e.expiresAt!)
+          : null,
+    );
+  }
 
   /// True when premium features are unlocked — an active paid subscription
   /// OR an in-progress free trial. The ONLY flag a feature gate reads.
@@ -277,34 +300,52 @@ class ProductLoadResult {
 // Real impl — in_app_purchase (StoreKit + Play Billing)
 // ---------------------------------------------------------------------------
 
-/// Real [BillingService] over `in_app_purchase`.
+/// Real [BillingService] over `in_app_purchase` — with SERVER-VERIFIED
+/// entitlement (2026-07: the client no longer self-grants premium).
 ///
-/// Bridges the plugin's [InAppPurchase.purchaseStream] into a
-/// [PremiumStatus] stream: a `purchased`/`restored` for one of our product
-/// ids flips the caregiver to premium; nothing else does. Every completed
-/// (or errored) purchase that is still `pendingCompletePurchase` is finalized
-/// via [InAppPurchase.completePurchase] so the store doesn't re-deliver it.
+/// The store plugin still drives the *purchase flow* (the native
+/// StoreKit/Play sheet) and surfaces receipts on
+/// [InAppPurchase.purchaseStream]. But a `purchased`/`restored` event does
+/// NOT flip the caregiver to premium on its own — instead we extract the
+/// platform receipt (iOS: [PurchaseVerificationData.serverVerificationData],
+/// the StoreKit JWS; Android: the purchase token) and POST it to the Worker's
+/// `POST /billing/verify` through [EntitlementApi]. **The SERVER decides
+/// entitlement**; we reflect only what it returns.
 ///
-/// **Receipt validation is CLIENT-SIDE for now.** We trust the store's
-/// stream status locally. That's enough to gate UI, but it is spoofable on a
-/// jailbroken/rooted device.
-///
-/// TODO(server-validation): validate the receipt in
-/// [PurchaseDetails.verificationData] against a FUTURE Cloudflare Worker
-/// route (e.g. `POST /api/v1/billing/verify`) that calls Apple's
-/// `verifyReceipt` / Google Play Developer API, records the entitlement
-/// server-side (keyed by the account spine), and returns the authoritative
-/// [PremiumStatus]. Until that lands, [_deriveStatus] trusts the local
-/// stream. The Worker route is intentionally NOT built in this scaffold.
+/// Hydration + offline posture:
+///  * On [initialize] we load the last SERVER entitlement from a small local
+///    cache (so the UI isn't blank before the network answers), then call
+///    `GET /billing/entitlement` to refresh from the server.
+///  * A client that can't reach the server falls back to that CACHED SERVER
+///    value — never to a self-asserted "the stream said purchased, so
+///    premium". A device with no server configured ([EntitlementApi] null)
+///    stays at the cached value / free; it cannot self-grant.
+///  * [restorePurchases] replays the store's purchases; each re-verifies
+///    against the server, and we also re-read `GET /billing/entitlement`.
 class StoreBillingService implements BillingService {
   StoreBillingService({
     InAppPurchase? iap,
     Set<String> productIds = HoldcloseProductIds.all,
+    // The server billing API. Null when NO backend is configured — the
+    // service then can't verify, so it never grants premium from the store
+    // stream (it only reflects the cached server value / free).
+    EntitlementApi? entitlementApi,
+    // Injectable for tests so no real SharedPreferences plugin is needed.
+    Future<SharedPreferences> Function()? prefs,
   })  : _iap = iap ?? InAppPurchase.instance,
-        _productIds = productIds;
+        _productIds = productIds,
+        _entitlementApi = entitlementApi,
+        _prefs = prefs ?? SharedPreferences.getInstance;
+
+  /// SharedPreferences key holding the JSON of the last SERVER-returned
+  /// [ServerEntitlement] (the offline fallback — a cache of the server's
+  /// decision, NEVER a client self-grant).
+  static const String cachePrefsKey = 'billing.server_entitlement.v1';
 
   final InAppPurchase _iap;
   final Set<String> _productIds;
+  final EntitlementApi? _entitlementApi;
+  final Future<SharedPreferences> Function() _prefs;
 
   StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
   final StreamController<PremiumStatus> _statusController =
@@ -320,17 +361,27 @@ class StoreBillingService implements BillingService {
 
   @override
   Future<void> initialize() async {
-    // Listen BEFORE restoring so the restore's replayed purchases aren't
-    // missed. The plugin's stream is broadcast + long-lived.
+    // 1) Warm the UI from the CACHED server entitlement so a returning
+    //    subscriber isn't shown "locked" while the network round-trips.
+    final PremiumStatus? cached = await _readCache();
+    if (cached != null) _emit(cached);
+
+    // 2) Listen BEFORE restoring so the restore's replayed purchases aren't
+    //    missed. The plugin's stream is broadcast + long-lived.
     _purchaseSub ??= _iap.purchaseStream.listen(
       _onPurchases,
       onError: (Object _) {
         // A stream error must not brick the app — hold the last known
-        // status (default: free) and let the paywall surface "try again".
+        // (server/cached) status and let the paywall surface "try again".
       },
     );
-    // Kick off a restore so a returning subscriber lands premium without
-    // tapping "Restore". Best-effort: a failure just leaves status at free.
+
+    // 3) Hydrate authoritative state from the SERVER. On failure we keep the
+    //    cached value (step 1) — we do NOT fall back to a store-stream grant.
+    await _refreshFromServer();
+
+    // 4) Kick a store restore so any open purchase re-verifies server-side.
+    //    Best-effort — a failure just leaves us on the server/cached value.
     try {
       await _iap.restorePurchases();
     } catch (_) {
@@ -358,20 +409,58 @@ class StoreBillingService implements BillingService {
     final PurchaseParam param = PurchaseParam(productDetails: details);
     // A subscription is non-consumable — the entitlement persists and is
     // restorable. The store shows the intro free trial in the native sheet.
+    // The completed purchase arrives on the stream → server verification.
     return _iap.buyNonConsumable(purchaseParam: param);
   }
 
   @override
-  Future<void> restorePurchases() => _iap.restorePurchases();
+  Future<void> restorePurchases() async {
+    // Ask the store to replay entitlements — each replayed purchase lands on
+    // the stream and re-verifies server-side — AND re-read the authoritative
+    // entitlement directly (covers the "restore on a fresh device where the
+    // server already knows" case even before the stream fires).
+    try {
+      await _iap.restorePurchases();
+    } catch (_) {
+      // Best-effort; the server read below still refreshes state.
+    }
+    await _refreshFromServer();
+  }
 
   @override
   Stream<PremiumStatus> watchPremiumStatus() =>
       _replayLatest(_statusController, () => _status);
 
+  /// Pull the authoritative entitlement from `GET /billing/entitlement` and
+  /// reflect it. On any failure (no backend, offline, transient error) we
+  /// leave the current (cached server) status untouched — we NEVER downgrade
+  /// a genuine cached grant to free just because the network blipped, and we
+  /// NEVER upgrade to premium without a server answer.
+  Future<void> _refreshFromServer() async {
+    final EntitlementApi? api = _entitlementApi;
+    if (api == null) return; // No backend → nothing authoritative to read.
+    try {
+      final ServerEntitlement e = await api.getEntitlement();
+      await _applyServerEntitlement(e);
+    } catch (_) {
+      // Keep the cached/last-known server value — do not self-grant/-revoke.
+    }
+  }
+
   Future<void> _onPurchases(List<PurchaseDetails> purchases) async {
     for (final PurchaseDetails p in purchases) {
+      // A completed/restored purchase for one of OUR products is a receipt to
+      // VERIFY server-side. The server — not this stream event — grants.
+      final bool completed = _productIds.contains(p.productID) &&
+          (p.status == PurchaseStatus.purchased ||
+              p.status == PurchaseStatus.restored);
+      if (completed) {
+        await _verifyWithServer(p);
+      }
+
       // Finalize anything the store still considers open, or it re-delivers
-      // on next launch. (Even errored/canceled ones must be completed.)
+      // on next launch. (Even errored/canceled ones must be completed.) Done
+      // AFTER verification so a crash mid-verify re-delivers the receipt.
       if (p.pendingCompletePurchase) {
         try {
           await _iap.completePurchase(p);
@@ -380,35 +469,80 @@ class StoreBillingService implements BillingService {
         }
       }
     }
-    final PremiumStatus next = _deriveStatus(purchases);
-    if (next != _status) {
-      _status = next;
-      if (!_statusController.isClosed) _statusController.add(next);
+  }
+
+  /// Extract the platform receipt from [p] and POST it to the server. The
+  /// server's response is the ONLY thing that can change entitlement here.
+  /// If there's no backend, or the call fails, we leave state as-is (the
+  /// cached server value) — a store event alone never grants premium.
+  Future<void> _verifyWithServer(PurchaseDetails p) async {
+    final EntitlementApi? api = _entitlementApi;
+    if (api == null) return; // Can't verify → can't grant.
+
+    final String platform = _platformFor(p);
+    final String receipt = _receiptFor(p);
+    if (receipt.isEmpty) return;
+
+    try {
+      final ServerEntitlement e = await api.verifyPurchase(
+        platform: platform,
+        productId: p.productID,
+        receipt: receipt,
+      );
+      await _applyServerEntitlement(e);
+    } catch (_) {
+      // Verification unreachable/failed — hold the cached server value.
     }
   }
 
-  /// Map the latest purchase stream event to an entitlement.
-  ///
-  /// CLIENT-SIDE trust (see the class TODO): any of OUR product ids in a
-  /// `purchased`/`restored` state grants premium. A `canceled`/`error`/absent
-  /// state for all of them leaves us at free. `pending` doesn't grant yet.
-  ///
-  /// The free-trial window isn't reliably exposed on [PurchaseDetails] across
-  /// platforms, so [inTrial]/[trialEndsAt] are left unset here — the store
-  /// enforces the trial, and the paywall reads the trial *offer* off
-  /// [SubscriptionOffering.introTrial] instead. Server-side validation will
-  /// supply the authoritative trial window later.
-  PremiumStatus _deriveStatus(List<PurchaseDetails> purchases) {
-    final bool active = purchases.any((PurchaseDetails p) =>
-        _productIds.contains(p.productID) &&
-        (p.status == PurchaseStatus.purchased ||
-            p.status == PurchaseStatus.restored));
-    if (active) return PremiumStatus.premium;
-    // This batch grants nothing — keep an already-granted entitlement (a
-    // later canceled/error event for a DIFFERENT product mustn't revoke it),
-    // otherwise stay free. A true revocation is surfaced by server-side
-    // validation (the class TODO), not by an absent local stream event.
-    return _status.isPremium ? _status : PremiumStatus.free;
+  /// iOS reports `PurchaseDetails.verificationData.serverVerificationData`
+  /// (the StoreKit JWS the App Store Server API validates). Android's purchase
+  /// token is the same field for the `in_app_purchase` plugin. We pass the
+  /// productId separately so the Google verifier can address the right SKU.
+  static String _receiptFor(PurchaseDetails p) =>
+      p.verificationData.serverVerificationData;
+
+  static String _platformFor(PurchaseDetails p) =>
+      defaultTargetPlatform == TargetPlatform.android ? 'android' : 'ios';
+
+  /// Persist the server's decision to the cache + emit it. This is the single
+  /// choke point where entitlement actually changes — and it only ever runs
+  /// with a value that CAME FROM the server.
+  Future<void> _applyServerEntitlement(ServerEntitlement e) async {
+    await _writeCache(e);
+    _emit(PremiumStatus.fromServerEntitlement(e));
+  }
+
+  void _emit(PremiumStatus next) {
+    if (next == _status) return;
+    _status = next;
+    if (!_statusController.isClosed) _statusController.add(next);
+  }
+
+  // -------- Local cache of the last SERVER entitlement --------------------
+
+  Future<PremiumStatus?> _readCache() async {
+    try {
+      final SharedPreferences prefs = await _prefs();
+      final String? raw = prefs.getString(cachePrefsKey);
+      if (raw == null || raw.isEmpty) return null;
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final ServerEntitlement e =
+          ServerEntitlement.fromJson(Map<String, Object?>.from(decoded));
+      return PremiumStatus.fromServerEntitlement(e);
+    } catch (_) {
+      return null; // A corrupt cache is just a cold start.
+    }
+  }
+
+  Future<void> _writeCache(ServerEntitlement e) async {
+    try {
+      final SharedPreferences prefs = await _prefs();
+      await prefs.setString(cachePrefsKey, jsonEncode(e.toJson()));
+    } catch (_) {
+      // A cache write failure is non-fatal — the server stays authoritative.
+    }
   }
 
   @override

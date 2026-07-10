@@ -868,6 +868,113 @@ void main() {
     });
   });
 
+  // ---- Billing (server-verified entitlement) -------------------------------
+
+  group('billing — verifyPurchase + getEntitlement', () {
+    test('verifyPurchase POSTs {platform, productId, receipt} with the JWT and '
+        'parses the SERVER entitlement', () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{
+          'isPremium': true,
+          'inTrial': false,
+          'expiresAt': 1721692800000,
+          'productId': 'com.holdclose.premium.monthly',
+          'platform': 'ios',
+        },
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      final ServerEntitlement e = await client.verifyPurchase(
+        platform: 'ios',
+        productId: 'com.holdclose.premium.monthly',
+        receipt: 'apple-jws',
+      );
+
+      expect(adapter.lastRequest!.method, 'POST');
+      expect(
+        adapter.lastRequest!.uri.toString(),
+        'https://forum-api.workers.dev/api/v1/billing/verify',
+      );
+      expect(adapter.lastRequest!.headers['Authorization'], 'Bearer $fakeJwt');
+      expect(adapter.lastBody, <String, Object?>{
+        'platform': 'ios',
+        'productId': 'com.holdclose.premium.monthly',
+        'receipt': 'apple-jws',
+      });
+      expect(e.isPremium, isTrue);
+      expect(e.inTrial, isFalse);
+      expect(e.expiresAt, 1721692800000);
+      expect(e.productId, 'com.holdclose.premium.monthly');
+      expect(e.platform, 'ios');
+    });
+
+    test('verifyPurchase reflects a SERVER isPremium:false (invalid receipt)',
+        () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{
+          'isPremium': false,
+          'inTrial': false,
+          'expiresAt': null,
+          'productId': 'com.holdclose.premium.monthly',
+          'platform': 'android',
+        },
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      final ServerEntitlement e = await client.verifyPurchase(
+        platform: 'android',
+        productId: 'com.holdclose.premium.monthly',
+        receipt: 'bad-token',
+      );
+      expect(e.isPremium, isFalse);
+      expect(e.expiresAt, isNull);
+    });
+
+    test('getEntitlement GETs /billing/entitlement with the JWT and parses it',
+        () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{
+          'isPremium': false,
+          'inTrial': false,
+          'expiresAt': null,
+          'productId': null,
+        },
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      final ServerEntitlement e = await client.getEntitlement();
+
+      expect(adapter.lastRequest!.method, 'GET');
+      expect(
+        adapter.lastRequest!.uri.toString(),
+        'https://forum-api.workers.dev/api/v1/billing/entitlement',
+      );
+      expect(adapter.lastRequest!.headers['Authorization'], 'Bearer $fakeJwt');
+      expect(e.isPremium, isFalse);
+      expect(e.productId, isNull);
+    });
+
+    test('a 502 store_unavailable surfaces as a ForumApiException', () async {
+      final _RecordingAdapter adapter = _RecordingAdapter.json(
+        <String, Object?>{'error': 'store_unavailable'},
+        statusCode: 502,
+      );
+      final ForumApiClient client = buildClient(adapter);
+
+      await expectLater(
+        client.verifyPurchase(
+          platform: 'ios',
+          productId: 'p',
+          receipt: 'r',
+        ),
+        throwsA(isA<ForumApiException>()
+            .having((ForumApiException e) => e.statusCode, 'statusCode', 502)
+            .having((ForumApiException e) => e.error, 'error',
+                'store_unavailable')),
+      );
+    });
+  });
+
   // ---- Enum wire encodings -------------------------------------------------
 
   group('wire-value enums', () {

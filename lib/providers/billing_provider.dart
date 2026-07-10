@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../services/billing_service.dart';
+import '../services/forum_api_client.dart'
+    show EntitlementApi, forumApiClientProvider, forumBackendConfigured;
 
 part 'billing_provider.g.dart';
 
@@ -34,10 +36,18 @@ bool get _isUnderFlutterTest {
 /// Whether to use the deterministic [FakeBillingService]. True under
 /// `flutter test`, in demo mode, or when explicitly forced with
 /// `--dart-define=USE_FAKE_BILLING=true`. An explicit define always wins.
+///
+/// A build that BAKES IN a real backend URL
+/// (`--dart-define=FORUM_API_URL=...`) always uses the real
+/// [StoreBillingService] (server-verified entitlement) — otherwise an
+/// alpha/prod build would silently self-grant premium via the fake. The
+/// explicit `USE_FAKE_BILLING` define still wins for the rare "real backend
+/// but force-fake billing" bench case.
 bool get _useFakeBilling {
   if (const bool.hasEnvironment('USE_FAKE_BILLING')) {
     return const bool.fromEnvironment('USE_FAKE_BILLING');
   }
+  if (forumBackendConfigured) return false;
   return _demoMode || _isUnderFlutterTest;
 }
 
@@ -55,8 +65,19 @@ bool get _useFakeBilling {
 /// `ref.onDispose` so the plugin's purchase-stream subscription is released.
 @Riverpod(keepAlive: true)
 BillingService billingBackend(Ref ref) {
-  final BillingService service =
-      _useFakeBilling ? FakeBillingService() : StoreBillingService();
+  final BillingService service;
+  if (_useFakeBilling) {
+    service = FakeBillingService();
+  } else {
+    // Real store impl. When a backend is configured, hand it the
+    // `EntitlementApi` (the forum client) so it VERIFIES purchases + hydrates
+    // premium from the SERVER — the client never self-grants. With no backend
+    // configured the api is null and the store impl reflects only its cached
+    // server value / free (it still can't self-grant).
+    final EntitlementApi? api =
+        forumBackendConfigured ? ref.watch(forumApiClientProvider) : null;
+    service = StoreBillingService(entitlementApi: api);
+  }
   // Kick the store/purchase-stream wiring; a late entitlement restore
   // arrives on watchPremiumStatus(). Errors are swallowed inside initialize().
   service.initialize();
@@ -75,8 +96,11 @@ final BillingBackendProvider billingServiceProvider = billingBackendProvider;
 /// .premiumStatus] as the initial value so a `PremiumGate` never flickers to
 /// "locked" for a frame before the stream's first event lands.
 ///
-/// **Default is premium** under `flutter test` / demo (the fake reports
-/// premium), so nothing is accidentally gated while the store is unconfigured.
+/// When a backend is configured this is sourced from the SERVER-verified
+/// entitlement (`GET /billing/entitlement`, cached for offline) — the client
+/// never self-grants. **Default is premium** under `flutter test` / demo /
+/// no-backend builds (the fake reports premium), so nothing is accidentally
+/// gated while the store is unconfigured.
 @Riverpod(keepAlive: true)
 Stream<PremiumStatus> premiumStatus(Ref ref) {
   final BillingService service = ref.watch(billingServiceProvider);

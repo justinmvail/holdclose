@@ -172,6 +172,24 @@ class FakeForumApiClient extends ForumApiClient {
     return fresh;
   }
 
+  // ---- Billing endpoints -------------------------------------------------
+  //
+  // The demo/no-backend build never grants premium from THIS client — the
+  // fake billing service (isPremium=true) is what the demo uses. These
+  // overrides just keep the fake self-consistent (no network) if something
+  // reaches for them: verify/read both report the free baseline.
+
+  @override
+  Future<ServerEntitlement> verifyPurchase({
+    required String platform,
+    required String productId,
+    required String receipt,
+  }) async =>
+      ServerEntitlement.free;
+
+  @override
+  Future<ServerEntitlement> getEntitlement() async => ServerEntitlement.free;
+
   // ---- Profile endpoints -------------------------------------------------
 
   @override
