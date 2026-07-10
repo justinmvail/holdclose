@@ -208,7 +208,7 @@ class _Body extends ConsumerWidget {
           else ...<Widget>[
             _SectionCard(
               sectionKey: EmergencyCardScreen.patientSectionKey,
-              label: 'Patient',
+              label: 'Your loved one',
               child: _PatientBlock(patient: patient),
             ),
             const SizedBox(height: 12),

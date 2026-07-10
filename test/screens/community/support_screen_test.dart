@@ -79,6 +79,35 @@ void main() {
     });
   });
 
+  group('SupportScreen — In a crisis card (UIUX_REVIEW)', () {
+    testWidgets('always-open crisis card renders every crisis line',
+        (tester) async {
+      await _pump(tester);
+
+      // The card is at the top and NOT collapsible — no expand tap needed.
+      expect(find.byKey(SupportScreen.crisisCardKey), findsOneWidget);
+      expect(find.text('In a crisis'), findsOneWidget);
+      for (final RespiteResource resource in crisisResources) {
+        expect(
+          find.byKey(SupportScreen.crisisResourceKey(resource.id)),
+          findsOneWidget,
+          reason: '${resource.id} crisis row should render without a tap',
+        );
+      }
+    });
+
+    testWidgets('tapping the 988 line dials it', (tester) async {
+      final RecordingLinkLauncher launcher = await _pump(tester);
+
+      await tester.tap(
+        find.byKey(SupportScreen.crisisResourceKey('crisis-lifeline-988')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(launcher.launched, contains(Uri.parse('tel:988')));
+    });
+  });
+
   group('SupportScreen — burnout self-check', () {
     testWidgets('submit is disabled until every statement is answered',
         (tester) async {

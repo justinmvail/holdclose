@@ -26,6 +26,7 @@
   "signInTitle": "Holdclose",
   "signInTagline": "Hacemos que cuidar a alguien que amas sea un poco más fácil.",
   "signInError": "No se pudo iniciar sesión. Inténtalo de nuevo.",
+  "signInReassurance": "Iniciar sesión mantiene tus notas seguras y sincronizadas en tus dispositivos. Nunca publicamos nada, y la información de tu ser querido se mantiene privada.",
   "signInContinueWithApple": "Continuar con Apple",
   "signInContinueWithAppleSemantics": "Continuar con Apple.",
   "signInContinueWithGoogle": "Continuar con Google",
@@ -36,5 +37,7 @@
   "signInTermsLink": "Términos",
   "signInTermsConjunction": " y la ",
   "signInPrivacyLink": "Política de privacidad",
-  "signInTermsSuffix": "."
+  "signInTermsSuffix": ".",
+
+  "lovedOneSetupLastStep": "Último paso"
 }

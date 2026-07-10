@@ -184,7 +184,8 @@ void main() {
       );
     });
 
-    testWidgets('Skip flips onboardingCompletedProvider',
+    testWidgets(
+        'Skip routes to /sign-in WITHOUT marking onboarding complete',
         (WidgetTester tester) async {
       final ({ProviderContainer container, GoRouter router}) pumped =
           await _pumpCarousel(tester);
@@ -192,12 +193,18 @@ void main() {
       await tester.tap(find.byKey(WelcomeCarousel.skipButtonKey));
       await tester.pumpAndSettle();
 
-      // Task 31's router redirect (BUILD_SPEC.md §5.11 + §5.12) treats
-      // "onboarding incomplete" as a hard gate to `/onboarding`. Skip
-      // routes to `/sign-in`, so it MUST mark onboarding done —
-      // otherwise the redirect bounces the tap straight back to the
-      // carousel and the caregiver can never reach sign-in.
-      expect(pumped.container.read(onboardingCompletedProvider), isTrue);
+      // UIUX_REVIEW: Skip must NOT flip the onboarding flag — doing so made
+      // the value prop reachable exactly once (a reflexive Skip permanently
+      // deleted the only explanation of what Holdclose is). The real
+      // router's onboarding gate lets `/sign-in` through even while
+      // incomplete, so Skip still reaches sign-in; onboarding then
+      // completes on a successful sign-in.
+      expect(find.text('test-sign-in'), findsOneWidget);
+      expect(
+        pumped.router.routerDelegate.currentConfiguration.uri.path,
+        '/sign-in',
+      );
+      expect(pumped.container.read(onboardingCompletedProvider), isFalse);
     });
   });
 

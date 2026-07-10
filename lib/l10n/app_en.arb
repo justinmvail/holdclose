@@ -106,6 +106,10 @@
   "@signInError": {
     "description": "Error banner message shown when an OAuth sign-in flow fails or is cancelled."
   },
+  "signInReassurance": "Signing in keeps your notes safe and in sync across your devices. We never post anything, and your loved one's information stays private.",
+  "@signInReassurance": {
+    "description": "Plain-language privacy-reassurance line shown just above the sign-in buttons: why sign in, and that data stays private. Keeps the vendor invisible per the brand rule."
+  },
   "signInContinueWithApple": "Continue with Apple",
   "@signInContinueWithApple": {
     "description": "Label on the Sign in with Apple button (iOS only)."
@@ -151,6 +155,10 @@
     "description": "Trailing punctuation that closes the sign-in consent line after the Privacy Policy link."
   },
 
+  "lovedOneSetupLastStep": "Last step",
+  "@lovedOneSetupLastStep": {
+    "description": "Light overline cue above the setup heading letting a tired caregiver know the onboarding finish line is near."
+  },
   "lovedOneSetupTitle": "Let's set up your person",
   "@lovedOneSetupTitle": {
     "description": "Heading on the new-user loved-one setup wizard."

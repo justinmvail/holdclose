@@ -237,7 +237,7 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
                           ButtonSegment<String>(
                               value: 'NPI-1', label: Text('People')),
                           ButtonSegment<String>(
-                              value: 'NPI-2', label: Text('Orgs')),
+                              value: 'NPI-2', label: Text('Clinics')),
                           ButtonSegment<String>(
                               value: 'ALL', label: Text('All')),
                         ],
@@ -300,8 +300,9 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Results come from the public NPI Registry of U.S. '
-                    'clinicians. Tap Save to add one to your providers.',
+                    'Results come from the official U.S. directory of '
+                    'licensed doctors and clinics. Tap Save to add one to '
+                    'your providers.',
                     style: tt.bodySmall
                         ?.copyWith(color: context.hc.primarySoft),
                   ),
@@ -414,7 +415,9 @@ class _ResultCard extends ConsumerWidget {
           ),
         ),
       _line(context, tt, 'Fax', result.fax),
-      _line(context, tt, 'NPI', result.npi),
+      // "NPI" is billing jargon — surface it plainly as "Provider ID," last
+      // and de-emphasized, so a family caregiver isn't asked to parse it.
+      _line(context, tt, 'Provider ID', result.npi),
     ].whereType<Widget>().toList();
 
     return Container(

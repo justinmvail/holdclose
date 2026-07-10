@@ -86,6 +86,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signInError => 'Couldn\'t sign in. Try again.';
 
   @override
+  String get signInReassurance =>
+      'Signing in keeps your notes safe and in sync across your devices. We never post anything, and your loved one\'s information stays private.';
+
+  @override
   String get signInContinueWithApple => 'Continue with Apple';
 
   @override
@@ -118,6 +122,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get signInTermsSuffix => '.';
+
+  @override
+  String get lovedOneSetupLastStep => 'Last step';
 
   @override
   String get lovedOneSetupTitle => 'Let\'s set up your person';

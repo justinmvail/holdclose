@@ -282,9 +282,10 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            "When something's confusing — a behavior you haven't seen "
-            'before, a phrase that keeps coming up — start a chat and '
-            'a coach who knows your loved one will meet you there.',
+            'When you hit a hard moment — recovery after surgery, a med '
+            "timing that's confusing, a walker they won't use, a hard "
+            'conversation, or a day that just wore you down — start a chat '
+            'and a coach who knows your loved one will meet you there.',
             style: textTheme.bodyLarge?.copyWith(
               color: context.hc.text,
             ),

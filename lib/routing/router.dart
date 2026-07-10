@@ -850,8 +850,12 @@ GoRouter buildRouter({
 /// safety limit kicks in):
 ///
 /// 1. **Onboarding gate** — until [onboardingCompleted] flips true,
-///    every location collapses to `/onboarding`. The welcome carousel
-///    itself returns null so the redirect doesn't ping-pong.
+///    every location collapses to `/onboarding` **except `/sign-in`**,
+///    which is allowed through so the carousel's "Skip" can reach it
+///    without marking onboarding done (the value prop stays reachable —
+///    UIUX_REVIEW). The carousel and sign-in both return null so the
+///    redirect doesn't ping-pong. Onboarding then completes on a
+///    successful sign-in.
 /// 2. **Auth gate** — onboarding complete but [authState] is
 ///    [AuthStateSignedOut] funnels every location to `/sign-in`. Sign-in
 ///    returns null for the same reason.
@@ -887,7 +891,14 @@ String? holdcloseRedirect({
   const String home = '/';
 
   if (!onboardingCompleted) {
-    return location == onboarding ? null : onboarding;
+    // `/sign-in` is allowed through even while onboarding is incomplete so
+    // the carousel's "Skip" can reach it WITHOUT marking onboarding done
+    // (UIUX_REVIEW: completing on Skip made the value prop reachable
+    // exactly once). Onboarding then completes on a successful sign-in.
+    // Both target locations return null so go_router sees a stable
+    // decision and stops re-evaluating.
+    if (location == onboarding || location == signIn) return null;
+    return onboarding;
   }
 
   final bool signedIn = authState is AuthStateSignedIn;

@@ -87,6 +87,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get signInError => 'No se pudo iniciar sesión. Inténtalo de nuevo.';
 
   @override
+  String get signInReassurance =>
+      'Iniciar sesión mantiene tus notas seguras y sincronizadas en tus dispositivos. Nunca publicamos nada, y la información de tu ser querido se mantiene privada.';
+
+  @override
   String get signInContinueWithApple => 'Continuar con Apple';
 
   @override
@@ -119,6 +123,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get signInTermsSuffix => '.';
+
+  @override
+  String get lovedOneSetupLastStep => 'Último paso';
 
   @override
   String get lovedOneSetupTitle => 'Let\'s set up your person';

@@ -14,8 +14,11 @@ import '../../theme.dart';
 ///
 /// Both the top-right "Skip" and the bottom CTA hand off to `/sign-in`.
 /// On page 3 the CTA reads "Get started" and additionally flips
-/// [onboardingCompletedProvider] true so task 31's router redirect
-/// stops bouncing the caregiver back here on the next launch.
+/// [onboardingCompletedProvider] true so the router redirect stops
+/// bouncing the caregiver back here on the next launch. **Skip does NOT
+/// flip that flag** — the value prop must stay reachable if a reflexive
+/// Skip happens (the router lets `/sign-in` through the onboarding gate),
+/// and a successful sign-in completes onboarding instead.
 class WelcomeCarousel extends ConsumerStatefulWidget {
   const WelcomeCarousel({super.key});
 
@@ -33,6 +36,11 @@ class WelcomeCarousel extends ConsumerStatefulWidget {
       glyph: 'H',
       title: 'Holdclose',
       body: 'We make caring for someone you love a little easier.',
+      // Concrete value prop so page 1 isn't a pleasant-but-empty promise
+      // (UIUX_REVIEW: page 1 named no capability). Kept as a separate
+      // subtitle so the brand tagline above stays intact.
+      subtitle: 'A calm place for medications, appointments, and a coach '
+          'that actually knows your person.',
     ),
     WelcomeCarouselPage(
       glyph: '📱',
@@ -81,13 +89,13 @@ class _WelcomeCarouselState extends ConsumerState<WelcomeCarousel> {
   }
 
   void _onSkipPressed() {
-    // Both Skip and "Get started" mark onboarding done so the task 31
-    // router redirect (BUILD_SPEC.md §5.11) lets `/sign-in` through —
-    // without the flip, the strict "onboarding incomplete → /onboarding"
-    // gate would bounce Skip's `context.go('/sign-in')` back to the
-    // carousel. Skip = "I've seen enough of the intro, take me to the
-    // app."
-    ref.read(onboardingCompletedProvider.notifier).complete();
+    // Skip does NOT mark onboarding complete (UIUX_REVIEW: doing so made
+    // the value prop reachable exactly once — a reflexive Skip in the
+    // first two seconds permanently deleted the only explanation of what
+    // Holdclose is). Onboarding is marked complete only by "Get started"
+    // or a successful sign-in; the router's onboarding gate lets `/sign-in`
+    // through even while incomplete, so a skipper who has second thoughts
+    // can still get back to the carousel.
     context.go('/sign-in');
   }
 
@@ -228,6 +236,16 @@ class _PageBody extends StatelessWidget {
             style: textTheme.bodyLarge,
             textAlign: TextAlign.center,
           ),
+          if (page.subtitle != null) ...<Widget>[
+            const SizedBox(height: 16),
+            Text(
+              page.subtitle!,
+              style: textTheme.bodyLarge?.copyWith(
+                color: context.hc.primarySoft,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ],
       ),
     );
@@ -280,11 +298,17 @@ class WelcomeCarouselPage {
     required this.glyph,
     required this.title,
     required this.body,
+    this.subtitle,
   });
 
   final String glyph;
   final String title;
   final String body;
+
+  /// Optional concrete value-prop line rendered beneath [body] (page 1
+  /// only, today). Null on the feature pages, which carry their value in
+  /// [body] already.
+  final String? subtitle;
 }
 
 /// The brand "Hc" split mark: navy left / white capital H, white

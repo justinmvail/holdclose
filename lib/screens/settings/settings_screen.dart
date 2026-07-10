@@ -246,16 +246,16 @@ class _AudioSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const _SectionHeader(title: 'Read scripts aloud'),
+        const _SectionHeader(title: 'Read replies aloud'),
         _SectionCard(
           child: Column(
             children: <Widget>[
               HoldcloseSwitchListTile(
                 key: SettingsScreen.readAloudToggleKey,
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Read scripts aloud'),
+                title: const Text('Read replies aloud'),
                 subtitle: const Text(
-                  'Plays the coaching scripts through your phone voice.',
+                  "Plays the coach's replies through your phone voice.",
                 ),
                 value: audioOn,
                 onChanged: (bool v) => notifier.setReadScriptsAloud(v),

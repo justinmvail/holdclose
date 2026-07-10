@@ -8,6 +8,7 @@ import '../../l10n/app_localizations.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/link_launcher_provider.dart';
 import '../../providers/loved_one_lookup_provider.dart';
+import '../../providers/onboarding_provider.dart';
 import '../../providers/settings_provider.dart' show demoModeEnabled;
 import '../../theme.dart';
 
@@ -49,6 +50,7 @@ class SignInScreen extends ConsumerStatefulWidget {
   static const Key termsLinkKey = Key('sign-in-terms');
   static const Key privacyLinkKey = Key('sign-in-privacy');
   static const Key errorBannerKey = Key('sign-in-error');
+  static const Key reassuranceKey = Key('sign-in-reassurance');
 
   /// Tagline beneath the wordmark. Mirrors page 1 of the welcome
   /// carousel so the brand voice stays consistent across the
@@ -77,6 +79,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     _sub = auth.watchAuthState().listen((AuthState state) {
       if (!mounted) return;
       if (state is AuthStateSignedIn) {
+        // A successful sign-in is what completes onboarding now — the
+        // carousel's "Skip" deliberately no longer does (UIUX_REVIEW), and
+        // a caregiver reaching sign-in via Skip could otherwise be bounced
+        // back to `/onboarding` from `/` because the flag never flipped.
+        ref.read(onboardingCompletedProvider.notifier).complete();
         context.go('/');
         return;
       }
@@ -196,6 +203,20 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 ),
                 const SizedBox(height: 16),
               ],
+              // Plain-language reassurance at the moment trust matters most:
+              // the caregiver is about to hand over their identity and then
+              // enter their loved one's PHI. Say why sign-in is needed and
+              // that the data stays private — the vendor stays invisible per
+              // the brand rule (no "Google"/model names in the copy).
+              Text(
+                l10n.signInReassurance,
+                key: SignInScreen.reassuranceKey,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: context.hc.primarySoft,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
               if (widget.alphaMode) ...<Widget>[
                 if (widget.showGoogleInAlpha) ...<Widget>[
                   // Google-ONLY: REAL Google sign-in, verified by the

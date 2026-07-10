@@ -11,9 +11,16 @@ import '../../theme.dart';
 ///
 /// Rendered as the in-tab body when the Community sub-nav's Support
 /// segment is active (it is NOT a routed screen of its own; the
-/// `CommunityFeedScreen` owns the Scaffold + sub-nav). Three collapsible
-/// cards, each expanding inline:
+/// `CommunityFeedScreen` owns the Scaffold + sub-nav). An always-open
+/// "In a crisis" card leads, then three collapsible cards, each expanding
+/// inline:
 ///
+///   * **In a crisis** — the [crisisResources] lines (988 + Eldercare
+///     Locator), rendered non-collapsible at the TOP so a caregiver in
+///     acute distress reaches them without hunting (UIUX_REVIEW: 988 used
+///     to be buried inside the collapsed "Respite resources" card, whose
+///     name reads as "a break," not "crisis"). The community guidelines'
+///     "In crisis" section points here by name.
 ///   * **Burnout self-check** — the 10-item Likert form from
 ///     [burnoutQuestions], scored entirely on-device by [scoreBurnout]
 ///     (no LLM). After submit the result band + a coaching-style
@@ -35,6 +42,10 @@ class SupportScreen extends ConsumerStatefulWidget {
   static const String selfCheckId = 'self-check';
   static const String respiteId = 'respite';
   static const String qandaId = 'qanda';
+
+  /// The always-open "In a crisis" card at the top.
+  static const Key crisisCardKey = Key('support-crisis-card');
+  static Key crisisResourceKey(String id) => Key('support-crisis-$id');
 
   static Key cardHeaderKey(String id) => Key('support-card-header-$id');
   static Key cardBodyKey(String id) => Key('support-card-body-$id');
@@ -97,6 +108,8 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
       key: SupportScreen.listKey,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: <Widget>[
+        _CrisisCard(onLaunch: _launch),
+        const SizedBox(height: 12),
         _CollapsibleCard(
           id: SupportScreen.selfCheckId,
           icon: Icons.spa_outlined,
@@ -128,6 +141,63 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
           child: _QandaBody(),
         ),
       ],
+    );
+  }
+}
+
+/// The always-open "In a crisis" card at the top of Support. Unlike the
+/// cards below it, this one never collapses — a caregiver in acute
+/// distress must reach 988 and the Eldercare Locator without a tap
+/// (UIUX_REVIEW). Reuses [_ResourceRow] for the dial-out rows.
+class _CrisisCard extends StatelessWidget {
+  const _CrisisCard({required this.onLaunch});
+
+  final Future<void> Function(Uri uri) onLaunch;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    return Material(
+      key: SupportScreen.crisisCardKey,
+      color: context.hc.surfaceWarm,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(Icons.emergency_share_outlined, color: context.hc.error),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'In a crisis',
+                    style: textTheme.titleLarge?.copyWith(
+                      color: context.hc.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'If someone is in immediate danger, call 911. For urgent '
+              'emotional support, these lines answer any hour.',
+              style: textTheme.bodyMedium?.copyWith(color: context.hc.text),
+            ),
+            const SizedBox(height: 12),
+            for (final RespiteResource resource in crisisResources) ...<Widget>[
+              _ResourceRow(
+                resource: resource,
+                onLaunch: onLaunch,
+                rowKey: SupportScreen.crisisResourceKey(resource.id),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -491,10 +561,19 @@ class _RespiteBody extends StatelessWidget {
 }
 
 class _ResourceRow extends StatelessWidget {
-  const _ResourceRow({required this.resource, required this.onLaunch});
+  const _ResourceRow({
+    required this.resource,
+    required this.onLaunch,
+    this.rowKey,
+  });
 
   final RespiteResource resource;
   final Future<void> Function(Uri uri) onLaunch;
+
+  /// Widget key for the tappable row. Defaults to the respite-list key
+  /// when null so existing callers/tests keep working; the crisis card
+  /// passes its own key so the two lists don't collide.
+  final Key? rowKey;
 
   @override
   Widget build(BuildContext context) {
@@ -515,7 +594,7 @@ class _ResourceRow extends StatelessWidget {
         color: context.hc.background,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          key: SupportScreen.respiteResourceKey(resource.id),
+          key: rowKey ?? SupportScreen.respiteResourceKey(resource.id),
           borderRadius: BorderRadius.circular(12),
           onTap: target == null ? null : () => onLaunch(target),
           child: Padding(

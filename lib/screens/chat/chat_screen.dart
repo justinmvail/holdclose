@@ -635,7 +635,8 @@ class _EmptyHint extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             "How do I help after surgery? He won't use his walker. "
-            "I'm exhausted — what do I do? How do I get her to eat?",
+            "What if I missed her morning dose? I'm exhausted — what do "
+            'I do? How do I bring up moving to assisted living?',
             style: textTheme.bodyMedium?.copyWith(
               color: context.hc.primarySoft,
             ),

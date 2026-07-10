@@ -248,6 +248,12 @@ abstract class AppLocalizations {
   /// **'Couldn\'t sign in. Try again.'**
   String get signInError;
 
+  /// Plain-language privacy-reassurance line shown just above the sign-in buttons: why sign in, and that data stays private. Keeps the vendor invisible per the brand rule.
+  ///
+  /// In en, this message translates to:
+  /// **'Signing in keeps your notes safe and in sync across your devices. We never post anything, and your loved one\'s information stays private.'**
+  String get signInReassurance;
+
   /// Label on the Sign in with Apple button (iOS only).
   ///
   /// In en, this message translates to:
@@ -313,6 +319,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'.'**
   String get signInTermsSuffix;
+
+  /// Light overline cue above the setup heading letting a tired caregiver know the onboarding finish line is near.
+  ///
+  /// In en, this message translates to:
+  /// **'Last step'**
+  String get lovedOneSetupLastStep;
 
   /// Heading on the new-user loved-one setup wizard.
   ///

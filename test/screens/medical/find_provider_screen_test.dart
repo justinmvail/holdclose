@@ -159,8 +159,8 @@ void main() {
 
     await _pump(tester, repo: repo, service: service);
 
-    // Switch to Organizations → enumeration_type NPI-2.
-    await tester.tap(find.text('Orgs'));
+    // Switch to Clinics (organizations) → enumeration_type NPI-2.
+    await tester.tap(find.text('Clinics'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(FindProviderScreen.cityKey), 'Charleston');
     FocusManager.instance.primaryFocus?.unfocus();

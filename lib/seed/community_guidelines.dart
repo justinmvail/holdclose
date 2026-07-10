@@ -41,12 +41,14 @@ const List<CommunityGuidelineSection> communityGuidelines =
   CommunityGuidelineSection(
     title: 'Scope — caregiving, not everything.',
     body:
-        "This board is for dementia caregiving questions, scripts that "
-        "worked, scripts that didn't, and the moments in between. Posts "
-        "about politics, religion, fundraising, products, or general "
-        "venting drift off-mission and we move them to a quieter place. "
-        "Asking 'how do I respond when she calls me by her mother's "
-        "name?' belongs here. Asking 'which insurance plan is best?' "
+        "This board is for the real work of caring for someone — the "
+        "things that helped, the things that didn't, and the moments in "
+        "between. Whatever you're caring through — recovery from surgery, "
+        "a chronic condition, mobility, memory, aging — you belong here. "
+        "Posts about politics, religion, fundraising, products, or "
+        "general venting drift off-mission and we move them to a quieter "
+        "place. Asking 'how do I get Dad to use his walker without a "
+        "fight?' belongs here. Asking 'which insurance plan is best?' "
         "belongs somewhere else.",
   ),
   CommunityGuidelineSection(
@@ -64,11 +66,11 @@ const List<CommunityGuidelineSection> communityGuidelines =
     title: 'In crisis — leave this app and call.',
     body:
         "If you or your loved one is in immediate danger, this board "
-        "is not the place. The Crisis tab (the bell on the right) has "
-        "the 988 Suicide & Crisis Lifeline, the Alzheimer's "
-        "Association 24/7 Helpline, and your local 911. We will not "
-        "be faster than the people on those lines. Post here after "
-        "you're safe — we'll be here when you get back.",
+        "is not the place. Under Community › Support, the 'In a crisis' "
+        "card has the 988 Suicide & Crisis Lifeline and the Eldercare "
+        "Locator, and 911 is always your fastest line. We will not be "
+        "faster than the people on those lines. Post here after you're "
+        "safe — we'll be here when you get back.",
   ),
 ];
 

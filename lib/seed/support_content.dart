@@ -6,6 +6,8 @@
 ///     self-check the [SupportScreen] renders. The scoring lives in
 ///     `lib/services/burnout_score.dart`; this file owns only the prompts
 ///     and the 1–5 scale labels.
+///   * [crisisResources] — the 988 line + Eldercare Locator, surfaced in
+///     the always-open "In a crisis" card at the top of the screen.
 ///   * [respiteResources] — national caregiver hotlines + help lines. The
 ///     "search local respite" affordance launches [respiteSearchUrl]; a
 ///     real local directory is deferred to a later phase.
@@ -126,6 +128,18 @@ const List<RespiteResource> respiteResources = <RespiteResource>[
         'you can hand off the care for a while.',
     url: 'https://archrespite.org/respitelocator',
   ),
+];
+
+/// Crisis help lines shown in the always-open "In a crisis" card at the
+/// TOP of the [SupportScreen] (UIUX_REVIEW: a caregiver in acute distress
+/// must not have to parse "Respite" — meaning "a break" — as "where the
+/// crisis line is"). Reuses [RespiteResource] so the same tappable row
+/// renders both lists; kept as its own const so the crisis card is
+/// unmistakable and can't be collapsed out of reach. These refer
+/// Holdclose to professional support; per BUILD_SPEC.md §13.1 they do not
+/// diagnose or prescribe. The community guidelines' "In crisis" section
+/// points here by name — keep the two in sync.
+const List<RespiteResource> crisisResources = <RespiteResource>[
   RespiteResource(
     id: 'crisis-lifeline-988',
     name: '988 Suicide & Crisis Lifeline',
@@ -134,6 +148,15 @@ const List<RespiteResource> respiteResources = <RespiteResource>[
         'Call or text 988, any time.',
     phone: '988',
     url: 'https://988lifeline.org',
+  ),
+  RespiteResource(
+    id: 'crisis-eldercare-locator',
+    name: 'Eldercare Locator',
+    description:
+        'A free line to urgent local help — adult protective services, '
+        'in-home support, and safety resources near you.',
+    phone: '1-800-677-1116',
+    url: 'https://eldercare.acl.gov',
   ),
 ];
 

@@ -396,9 +396,11 @@ void main() {
           authState: signedOut,
           patientConfigured: true,
         ),
-        '/onboarding',
-        reason: 'sign-in is gated behind onboarding — bounce back to '
-            'the carousel until it completes',
+        isNull,
+        reason: 'UIUX_REVIEW: `/sign-in` is allowed through the onboarding '
+            'gate so the carousel Skip can reach it WITHOUT marking '
+            'onboarding done — the value prop stays reachable. Onboarding '
+            'completes on a successful sign-in.',
       );
     });
 
@@ -775,9 +777,11 @@ void main() {
         await tester.tap(find.byKey(WelcomeCarousel.skipButtonKey));
         await tester.pumpAndSettle();
 
-        // Skip routes to `/sign-in` (carousel does `context.go`); the
-        // auth gate keeps the user there since `signedOut` is still
-        // active and onboarding's `complete()` hasn't fired.
+        // Skip routes to `/sign-in` (carousel does `context.go`) WITHOUT
+        // firing onboarding's `complete()` (UIUX_REVIEW). The onboarding
+        // gate now lets `/sign-in` through even while incomplete, so the
+        // tap reaches sign-in instead of bouncing back to the carousel;
+        // the auth gate then holds the user there (still `signedOut`).
         expect(find.byType(SignInScreen), findsOneWidget);
         expect(find.byType(WelcomeCarousel), findsNothing);
       },

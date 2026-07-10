@@ -289,6 +289,17 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
             key: LovedOneSetupScreen.formKey,
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
             children: <Widget>[
+              // Light "Last step" cue so a tired caregiver knows the
+              // onboarding finish line is near (UIUX_REVIEW).
+              Text(
+                l10n.lovedOneSetupLastStep.toUpperCase(),
+                style: textTheme.labelMedium?.copyWith(
+                  color: context.hc.primarySoft,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 6),
               Text(
                 l10n.lovedOneSetupTitle,
                 style: textTheme.headlineMedium?.copyWith(

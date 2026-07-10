@@ -300,7 +300,7 @@ void main() {
     );
 
     testWidgets(
-      'toggling Read scripts aloud OFF persists the change',
+      'toggling Read replies aloud OFF persists the change',
       (WidgetTester tester) async {
         final ({InMemoryStorageProvider storage, ProviderContainer container})
             pumped = await _pumpSettings(tester);
