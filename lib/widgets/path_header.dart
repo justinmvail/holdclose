@@ -244,7 +244,25 @@ class PathHeader extends StatelessWidget {
           Icon(leadingIcon, size: 24, color: context.hc.primary),
           const SizedBox(width: 8),
         ],
-        Expanded(child: Text(title, style: titleStyle)),
+        // The title stays on ONE line and shrinks to fit when the row is
+        // tight (a leading icon + up to four trailing actions squeeze the
+        // available width, and the real device font — Montserrat — is wider
+        // than the test fallback, so a short word like "Medications" would
+        // otherwise wrap mid-word to "Medicatio\nns"). scaleDown only
+        // shrinks when needed, so at normal widths the title is unchanged;
+        // it never wraps, and never ellipsizes a page title away.
+        Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              title,
+              style: titleStyle,
+              maxLines: 1,
+              softWrap: false,
+            ),
+          ),
+        ),
         if (trailing != null) ...<Widget>[
           const SizedBox(width: 8),
           trailing!,
