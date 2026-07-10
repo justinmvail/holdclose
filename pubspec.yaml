@@ -1,7 +1,7 @@
 name: holdclose
 description: "In-the-moment coach for dementia caregivers."
 publish_to: 'none'
-version: 0.1.0+28
+version: 0.1.0+29
 
 environment:
   sdk: ^3.5.0
