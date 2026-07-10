@@ -43,7 +43,8 @@ info / real people.
 - [ ] Upload a real-signed build → TestFlight (internal → external pilot) → submit for review. *(CONSOLE)*
 
 ## F. Google Play submission
-- [ ] Create the app; set up closed → open testing tracks (required before production). *(CONSOLE)*
+- [~] **Play org account ALREADY EXISTS** — "Juno Code Studio", Organization account, ID 5351202474101549368 (found 2026-07-10). The $25 + org creation is done; org accounts SKIP the closed-testing gate. **Remaining: finish the 3 verifications** (Action Required banner) — in order: (1) Verify identity (upload gov ID; ~few days), (2) Verify org's website ⚠️ if it lists holdclose.care this is BLOCKED until Cloudflare DNS is live — else verify a site you already control, (3) Verify phone (auto after 1+2). Also: add `jcsvonellc@gmail.com` under Users & permissions if it's not the owner.
+- [ ] Create the Holdclose app (no closed-testing period needed on an org account). *(CONSOLE)*
 - [ ] **Data safety form** (mirror the iOS labels). *(PERSONAL)*
 - [ ] Content rating (IARC); target audience; ads declaration (none); public privacy URL `holdclose.care/privacy`. *(PERSONAL)*
 - [ ] Upload AAB → promote internal → closed → open → production; enroll in Play App Signing. *(CONSOLE)*
