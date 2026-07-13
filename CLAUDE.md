@@ -97,6 +97,19 @@ submission.
 - Tests required for every screen + service + provider. Widget tests
   under `test/screens/`, service tests under `test/services/`,
   repository / provider tests under `test/providers/`.
+- **Three test tiers — know which one can catch what.** `flutter test`
+  (globs `test/` only) + `backend/npm test` are HERMETIC: every backend,
+  binding and LLM is faked, so they can never catch a bug that only exists
+  on the deploy (a missing secret, an unbound binding, a var a named
+  wrangler env didn't inherit, a host whose stream ends differently). Those
+  need the LIVE tiers: `cd backend && npm run test:live` (drives the
+  deployed Worker over real HTTPS) and `tools/live_backend_test.sh` (drives
+  the APP's real dio/SSE/sync client against that Worker — the only test
+  crossing the app↔backend seam). Both forge a session JWT from
+  `FORUM_JWT_SECRET`, self-clean, and refuse to touch production. Neither
+  runs by default (`test_live/` and `backend/test-live/` are outside the
+  default globs) — they cost real inference. All three 2026-07-13 backend
+  bugs were invisible to the hermetic tiers and obvious to the live ones.
 - **Coverage threshold ~80%.** Generated files (`*.g.dart`,
   `*.freezed.dart`, anything under `generated/`) are excluded — strip via
   `lcov --remove` before computing. (The old autoloop "test gate" that

@@ -20,6 +20,12 @@
     "noEmit": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"],
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "test-live/**/*.ts",
+    "vitest.config.ts",
+    "vitest.live.config.ts"
+  ],
   "exclude": ["node_modules", ".wrangler"]
 }

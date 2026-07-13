@@ -11,6 +11,11 @@ export default defineWorkersConfig(async () => {
 
   return {
     test: {
+      // Only the hermetic suite. test-live/** is the LIVE-backend suite
+      // (real HTTPS against a deployed Worker) and runs solely via
+      // `npm run test:live` (vitest.live.config.ts) — it must never ride
+      // along with `npm test`.
+      include: ['test/**/*.test.ts'],
       setupFiles: ['./test/setup-d1.ts'],
       poolOptions: {
         workers: {

@@ -78,6 +78,52 @@ function mockAI(prompt: number, completion: number) {
     });
 }
 
+/** EXACTLY what the native `env.AI` binding emits (captured live, 2026-07-13):
+ * OpenAI-shaped deltas, a `finish_reason:"stop"` delta, then a usage chunk —
+ * and NO `[DONE]`; the real stream then goes silent forever without closing.
+ * The trailing junk delta stands in for "the stream did not end here": if the
+ * pump doesn't finalize at finish_reason + usage, it would emit this too. */
+function mockAiBindingShape(prompt: number, completion: number) {
+  const body = [
+    'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}',
+    '',
+    'data: {"choices":[{"delta":{"content":""},"finish_reason":"stop"}]}',
+    '',
+    `data: {"choices":[],"usage":{"prompt_tokens":${prompt},"completion_tokens":${completion}}}`,
+    '',
+    'data: {"choices":[{"delta":{"content":"LEAKED_AFTER_END"}}]}',
+    '',
+  ].join('\n');
+  fetchMock
+    .get(AI_HOST)
+    .intercept({ path: '/v1/chat/completions', method: 'POST' })
+    .reply(200, body, {
+      headers: { 'content-type': 'text/event-stream' },
+    });
+}
+
+/** An upstream that keeps talking AFTER its `[DONE]` terminator. Models the
+ * native `env.AI` binding, whose stream sends `[DONE]` and then simply never
+ * closes — see the "[DONE] is terminal" test. */
+function mockAiWithTrailerAfterDone(prompt: number, completion: number) {
+  const body = [
+    'data: {"choices":[{"delta":{"content":"Hello"}}]}',
+    '',
+    `data: {"choices":[],"usage":{"prompt_tokens":${prompt},"completion_tokens":${completion}}}`,
+    '',
+    'data: [DONE]',
+    '',
+    'data: {"choices":[{"delta":{"content":"LEAKED_AFTER_DONE"}}]}',
+    '',
+  ].join('\n');
+  fetchMock
+    .get(AI_HOST)
+    .intercept({ path: '/v1/chat/completions', method: 'POST' })
+    .reply(200, body, {
+      headers: { 'content-type': 'text/event-stream' },
+    });
+}
+
 async function usageRow(userId: string, tries = 40) {
   for (let i = 0; i < tries; i++) {
     const row = await env.FORUM_DB.prepare(
@@ -139,6 +185,63 @@ describe('POST /api/v1/chat', () => {
     // 1200*0.35 + 8*0.75 = 426 micro-dollars
     expect(row?.cost_micros).toBe(426);
     expect(row?.feature).toBe('chat');
+  });
+
+  it("the upstream's [DONE] is TERMINAL — usage is logged and nothing after it is emitted", async () => {
+    // Regression guard (live suite, 2026-07-13). The pump used to SKIP the
+    // upstream `[DONE]` and wait for the reader to signal `done` instead.
+    // Against the native `env.AI` binding — whose stream sends `[DONE]` and
+    // then never closes — that hung the Worker until the runtime killed it
+    // ("your Worker's code had hung"), and `logUsage()`, which lived in that
+    // unreachable branch, NEVER RAN. `llm_usage` stayed empty on the deploy,
+    // so the per-user daily token quota AND the global spend cap — both
+    // computed from that table — were silently unenforced.
+    //
+    // A hermetic fetchMock body always closes, so a hang can't be reproduced
+    // here. Instead we pin the property that FIXES it: `[DONE]` ends the
+    // stream. Content after it must never reach the client, and the usage row
+    // must be written without waiting on the reader closing.
+    mockAiWithTrailerAfterDone(900, 5);
+    const res = await chat('user-done-terminal', { system: 's', user: 'u' });
+    expect(res.status).toBe(200);
+
+    const text = await res.text();
+    expect(text).toContain('data: {"text":"Hello"}');
+    expect(text).toContain('data: [DONE]');
+    expect(text).not.toContain('LEAKED_AFTER_DONE');
+
+    const row = await usageRow('user-done-terminal');
+    expect(row).not.toBeNull();
+    expect(row?.prompt_tokens).toBe(900);
+    expect(row?.completion_tokens).toBe(5);
+  });
+
+  it('finalizes on the model\'s own completion when the host sends NO [DONE] — the AI-binding shape', async () => {
+    // The bug the live suite caught (2026-07-13), in its real form. The native
+    // env.AI binding never sends `[DONE]` and never closes its stream: it just
+    // stops talking after `finish_reason` + the usage chunk. The pump used to
+    // wait for the reader's `done`, so the Worker HUNG until the runtime killed
+    // it — and `logUsage()`, living in that unreachable branch, never ran.
+    // llm_usage stayed empty on the deploy, leaving the per-user token quota
+    // and the global daily spend cap (both computed from it) UNENFORCED.
+    //
+    // A fetchMock body always closes, so the hang itself can't be reproduced
+    // hermetically. What we CAN pin — and what actually fixes it — is that the
+    // pump finalizes at finish_reason + usage without any terminator: it must
+    // bill the call with the host's REAL token counts and stop reading.
+    mockAiBindingShape(1100, 6);
+    const res = await chat('user-binding-shape', { system: 'be kind', user: 'hi' });
+    expect(res.status).toBe(200);
+
+    const text = await res.text();
+    expect(text).toContain('data: {"text":"Hello"}');
+    expect(text).toContain('data: [DONE]'); // WE emit the terminator the app expects
+    expect(text).not.toContain('LEAKED_AFTER_END'); // we stopped at completion
+
+    const row = await usageRow('user-binding-shape');
+    expect(row).not.toBeNull();
+    expect(row?.prompt_tokens).toBe(1100); // the host's real counts, not estimates
+    expect(row?.completion_tokens).toBe(6);
   });
 
   it('records the feature tag for per-surface accounting', async () => {

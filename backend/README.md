@@ -168,9 +168,10 @@ only to exercise `POST /api/v1/chat`.
 ## Tests
 
 ```bash
-npm test             # vitest run (one-shot)
+npm test             # vitest run (one-shot) — hermetic, no network
 npm run test:watch   # vitest watch mode
 npm run typecheck    # tsc --noEmit
+npm run test:live    # ⚠ drives the DEPLOYED Worker (real D1/R2/inference)
 ```
 
 Vitest spins up an isolated miniflare runtime per test file and
@@ -178,6 +179,45 @@ exposes the Worker via `SELF.fetch(...)` from `cloudflare:test`. D1
 and R2 bindings declared in `wrangler.toml` are auto-emulated — no
 extra setup needed. `test/setup-d1.ts` re-applies the SQL migrations
 from `drizzle/` before each test file so the schema is fresh.
+
+### Live-backend suite (`test-live/`)
+
+`npm run test:live` runs `test-live/live-backend.test.ts` in plain Node
+against a **deployed** Worker (default: the `dev` environment) over real
+HTTPS. It is the acceptance suite for a deploy: the hermetic suite above
+mocks every binding, so by construction it cannot catch a missing secret, an
+unbound binding, a var that a named wrangler environment didn't inherit, or a
+host whose stream behaves differently from the mock. All three bugs fixed on
+2026-07-13 were of exactly that kind — invisible to `npm test`, obvious here.
+
+It forges its own session JWTs from `FORUM_JWT_SECRET` (the same secret the
+Worker verifies with — read from the env or `.dev.vars`), so no Google OAuth
+round-trip is needed. Test identities are created through the public API and
+hard-deleted afterwards; it refuses to run against `holdclose.care` unless
+`LIVE_ALLOW_PROD=1`. Point it elsewhere with `LIVE_BASE_URL=<origin>`.
+
+If every authed test suddenly 401s, the deployed secret has drifted from your
+local one — re-set it with `wrangler secret put FORUM_JWT_SECRET --env dev`.
+
+### Vision model licence (scan-to-import)
+
+`POST /api/v1/extract` uses `@cf/meta/llama-3.2-11b-vision-instruct`, which is
+**licence-gated on Workers AI**. Until the Cloudflare ACCOUNT has accepted
+Meta's Llama 3.2 Community Licence, every call fails with `AiError 5016`
+("Prior to using this model, you must submit the prompt 'agree'") and the
+route returns `502 extract_unavailable` — i.e. scan-to-import is dead even
+though the code is correct. Accepting is a one-time, account-wide legal act
+(deliberately not automated): run the model once with the literal prompt
+`agree`, e.g. from the Workers AI dashboard playground for that model, or
+
+```bash
+# with a Cloudflare API token scoped "Workers AI: Read+Write"
+curl https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/run/@cf/meta/llama-3.2-11b-vision-instruct \
+  -H "Authorization: Bearer <CF_AI_API_TOKEN>" \
+  -d '{"prompt":"agree"}'
+```
+
+Then re-run `npm run test:live` — the extract test proves it end to end.
 
 ## Schema + migrations
 

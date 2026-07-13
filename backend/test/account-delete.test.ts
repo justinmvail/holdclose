@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   careDocs,
+  circleInvites,
   circleMembers,
   circles,
   comments,
@@ -411,5 +412,66 @@ describe('DELETE /api/v1/profiles/me', () => {
     expect(
       await env.DOC_BLOBS.head(`documents/${shared.id}/shared.jpg`),
     ).not.toBeNull();
+  });
+
+  it('a member who JOINED VIA AN INVITE can delete their account', async () => {
+    // Regression guard (live suite, 2026-07-13): this 500'd for every
+    // caregiver who joined a circle by link — i.e. everyone in a care circle
+    // except its creator. `circle_invites.used_by_profile_id` references
+    // profiles(id) with NO `ON DELETE` action (its siblings cascade), and
+    // deleteAccount only cleared invites the caller CREATED, never the one
+    // they REDEEMED — so the final `DELETE FROM profiles` tripped the FK.
+    //
+    // The existing tests missed it because the only invite-redeeming case
+    // above deletes the OWNER (whose profile nothing points at), never the
+    // redeemer. Deleting the JOINER is the path real caregivers take.
+    const db = drizzle(env.FORUM_DB);
+
+    const owner = await bootstrap('cb-del-inv-owner');
+    const circle = await createCircle('cb-del-inv-owner', 'Dad');
+    const joiner = await bootstrap('cb-del-inv-joiner');
+    const token = await inviteToken('cb-del-inv-owner', circle.id);
+    expect((await join('cb-del-inv-joiner', token)).status).toBe(200);
+
+    const res = await authedFetch('/api/v1/profiles/me', {
+      method: 'DELETE',
+      sub: 'cb-del-inv-joiner',
+    });
+    expect(res.status).toBe(200);
+
+    // The joiner is really gone...
+    expect(
+      await db.select().from(profiles).where(eq(profiles.id, joiner.id)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(circleMembers)
+        .where(eq(circleMembers.profileId, joiner.id)),
+    ).toHaveLength(0);
+
+    // ...the owner's circle is untouched...
+    const [survivingCircle] = await db
+      .select()
+      .from(circles)
+      .where(eq(circles.id, circle.id));
+    expect(survivingCircle.ownerProfileId).toBe(owner.id);
+
+    // ...and the invite row survives as the owner's audit trail, with the
+    // redeemer pointer released but `used_at` still set — releasing it must
+    // NOT re-open a consumed invite (single-use is claimed on used_at).
+    const [invite] = await db
+      .select()
+      .from(circleInvites)
+      .where(eq(circleInvites.token, token));
+    expect(invite).toBeDefined();
+    expect(invite.usedByProfileId).toBeNull();
+    expect(invite.usedAt).not.toBeNull();
+
+    // Prove it: a third caregiver still cannot redeem that consumed link.
+    await bootstrap('cb-del-inv-replayer');
+    const replay = await join('cb-del-inv-replayer', token);
+    expect(replay.status).toBe(410);
+    expect(await replay.json()).toEqual({ error: 'invite_used' });
   });
 });

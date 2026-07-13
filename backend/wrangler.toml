@@ -154,6 +154,15 @@ CHAT_GLOBAL_FLOOR_MICROS = "5000000"
 CHAT_PER_USER_BUDGET_MICROS = "100000"
 APPLE_BUNDLE_ID = "com.holdclose.holdclose"
 GOOGLE_PLAY_PACKAGE = "com.careblazers.careblazers"
+# Billing placeholders. Named wrangler envs do NOT inherit the top-level
+# [vars], so these have to be repeated here or the deploy warns on every run
+# and /billing/verify 500s with a confusing "server_misconfigured" rather than
+# an honest "not configured yet". Still empty — billing can only be wired once
+# the App Store / Play products + credentials exist (the private keys go in as
+# secrets, never here).
+APPLE_ISSUER_ID = ""
+APPLE_KEY_ID = ""
+GOOGLE_PLAY_SA_EMAIL = ""
 
 [[env.dev.d1_databases]]
 binding = "FORUM_DB"

@@ -240,7 +240,13 @@ export function chatRouter() {
     let emittedChars = 0;
     let buffer = '';
 
+    let usageLogged = false;
     const logUsage = async () => {
+      // Exactly once per request: [finish] and cancel() can both fire (a
+      // client that hangs up right as the model finishes), and double-billing
+      // a caregiver's quota would be worse than missing the edge case.
+      if (usageLogged) return;
+      usageLogged = true;
       const pt = sawUsage ? promptTokens : estimateTokens(system + user);
       const ct = sawUsage ? completionTokens : estimateTokens(' '.repeat(emittedChars));
       await db.insert(llmUsage).values({
@@ -253,15 +259,64 @@ export function chatRouter() {
       });
     };
 
+    // End the response: meter the call, emit our own terminator, close.
+    //
+    // Termination is the subtle part, and getting it wrong cost us the cost
+    // controls (live suite, 2026-07-13). The native `env.AI` binding does NOT
+    // end its stream the way the REST endpoint does: it sends the OpenAI-shaped
+    // chunks, then a `finish_reason: "stop"` delta, then a final usage chunk —
+    // and then goes SILENT FOREVER. No `[DONE]`, no close. Waiting on the
+    // reader's `done` therefore hung the Worker until the runtime killed it
+    // ("your Worker's code had hung"), and `logUsage()` — which lived in that
+    // unreachable branch — NEVER RAN. `llm_usage` stayed empty on the deploy,
+    // and BOTH the per-user daily token quota and the global daily spend cap
+    // are computed from that table, so the cost circuit-breaker was silently
+    // dead. So we finish on whichever end signal the host actually gives:
+    // `[DONE]`, the reader closing, or the model's own completion
+    // (`finish_reason` + the usage chunk that trails it).
+    let finished = false;
+    const finish = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+      if (finished) return;
+      finished = true;
+      // waitUntil keeps the insert alive past the response body closing.
+      c.executionCtx.waitUntil(logUsage());
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+      // The host's stream may still be open (see above) — drop it.
+      void reader.cancel();
+    };
+
+    // The model said it stopped (`finish_reason`), but the usage chunk that
+    // carries the real token counts arrives in the NEXT read. We wait for it
+    // — but only this long, because a host that goes silent must never hang
+    // the Worker again. On timeout we finish with estimated tokens (which
+    // round up, so an un-metered call can't slip under the caps for free).
+    const USAGE_GRACE_MS = 400;
+    let sawFinishReason = false;
+
+    /** Read the next upstream chunk. Once the model has signalled completion,
+     * never block indefinitely: race the read against the grace timer and
+     * report `done` if the host has nothing more to say. */
+    const readNext = async (): Promise<
+      ReadableStreamReadResult<Uint8Array>
+    > => {
+      if (!sawFinishReason) return reader.read();
+      return Promise.race([
+        reader.read(),
+        new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) =>
+          setTimeout(
+            () => resolve({ done: true, value: undefined }),
+            USAGE_GRACE_MS,
+          ),
+        ),
+      ]);
+    };
+
     const stream = new ReadableStream<Uint8Array>({
       async pull(controller) {
-        const { done, value } = await reader.read();
+        const { done, value } = await readNext();
         if (done) {
-          // Persist usage before closing; waitUntil keeps it alive past
-          // the response if the client disconnects early.
-          c.executionCtx.waitUntil(logUsage());
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
+          finish(controller);
           return;
         }
         buffer += decoder.decode(value, { stream: true });
@@ -271,13 +326,23 @@ export function chatRouter() {
           const trimmed = line.trim();
           if (!trimmed.startsWith('data:')) continue;
           const data = trimmed.slice(5).trim();
-          if (data === '' || data === '[DONE]') continue;
+          if (data === '') continue;
+          // The REST endpoint's end-of-stream sentinel. Authoritative — do
+          // NOT wait for the reader to close (see [finish]).
+          if (data === '[DONE]') {
+            finish(controller);
+            return;
+          }
           let chunk: {
             // Workers AI native shape: {"response":"…","usage":{…}}.
             response?: string;
-            // OpenAI-compatible shape (also handled, in case the model or a
-            // gateway emits it): {"choices":[{"delta":{"content":"…"}}]}.
-            choices?: { delta?: { content?: string } }[];
+            // OpenAI-compatible shape — what the AI binding and the
+            // OpenAI-compatible REST endpoint both actually emit:
+            // {"choices":[{"delta":{"content":"…"},"finish_reason":null}]}.
+            choices?: {
+              delta?: { content?: string };
+              finish_reason?: string | null;
+            }[];
             usage?: {
               prompt_tokens?: number;
               completion_tokens?: number;
@@ -287,6 +352,9 @@ export function chatRouter() {
             chunk = JSON.parse(data);
           } catch {
             continue;
+          }
+          if (chunk.choices?.some((ch) => ch.finish_reason)) {
+            sawFinishReason = true;
           }
           if (chunk.usage) {
             sawUsage = true;
@@ -301,10 +369,19 @@ export function chatRouter() {
               encoder.encode(`data: ${JSON.stringify({ text: delta })}\n\n`),
             );
           }
+          // The model stopped AND we have its real token counts: everything
+          // we need has arrived, so end now rather than waiting on a
+          // terminator the host may never send.
+          if (sawFinishReason && sawUsage) {
+            finish(controller);
+            return;
+          }
         }
       },
       cancel() {
         // Client hung up — still bill what we used, then drop upstream.
+        // logUsage is idempotent, so a cancel racing [finish] bills once.
+        finished = true;
         c.executionCtx.waitUntil(logUsage());
         void reader.cancel();
       },

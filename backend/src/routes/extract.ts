@@ -12,9 +12,23 @@ import type { AuthBindings, AuthVariables } from '../middleware/auth';
 // chat, this runs on Cloudflare Workers AI's OpenAI-compatible endpoint —
 // so the PHI image never leaves Cloudflare's network (where R2 already
 // stores the scan) and never goes to a separate AI vendor.
+// Minimal shape of the native Workers AI binding. Non-streaming here (a scan
+// is one structured JSON answer, not a typed-out conversation), so `run`
+// resolves to a plain result object rather than a ReadableStream.
+type WorkersAiBinding = {
+  run(model: string, options: Record<string, unknown>): Promise<unknown>;
+};
+
 export type ExtractBindings = AuthBindings & {
   FORUM_DB: D1Database;
-  CF_AI_API_TOKEN: string;
+  // Prefer the native `AI` binding (no runtime token — see `[env.dev.ai]` in
+  // wrangler.toml); the REST CF_AI_API_TOKEN path stays as the fallback for
+  // an environment configured with a token instead. Until 2026-07-13 this
+  // route REQUIRED the token, which is not set on the Cloudflare dev deploy —
+  // so every scan-to-import returned 500 server_misconfigured there while
+  // chat (already migrated to the binding) worked fine.
+  AI?: WorkersAiBinding;
+  CF_AI_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CF_AI_BASE_URL?: string;
   EXTRACT_MODEL?: string;
@@ -32,6 +46,14 @@ const DEFAULTS = {
   // edge models read messy label photos less reliably than a frontier
   // model; the human-in-the-loop review + uncertainty flags are the
   // mitigation. Llama 3.2 Vision handles the OpenAI image_url message shape.
+  //
+  // ⚠ ONE-TIME ACCOUNT GATE (hit live 2026-07-13): this model is licence-gated
+  // on Workers AI. Until the ACCOUNT accepts Meta's Llama 3.2 Community
+  // Licence — by running the model once with the literal prompt `agree` —
+  // every call fails with `AiError 5016` ("you must submit the prompt
+  // 'agree'"), which this route surfaces as a 502 extract_unavailable. That
+  // acceptance is a legal act for the operating company, so it is NOT
+  // automated here. See backend/README.md → "Vision model licence".
   model: '@cf/meta/llama-3.2-11b-vision-instruct',
   userDailyTokens: 300_000,
   maxImageChars: 16 * 1024 * 1024, // ~12 MB image → base64 inflates ~33%
@@ -50,6 +72,20 @@ const num = (v: string | undefined, fallback: number): number => {
 
 const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
 
+/** Decode a base64 scan into raw bytes for the AI binding. Returns null on
+ * malformed input (a client bug / a hostile payload), which the caller turns
+ * into a 400 rather than a 502 — the model never sees it. */
+function base64ToBytes(b64: string): Uint8Array | null {
+  try {
+    const binary = atob(b64);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 function startOfUtcDay(now: number): Date {
   return new Date(Math.floor(now / 86_400_000) * 86_400_000);
 }
@@ -64,7 +100,7 @@ export function extractRouter() {
     const userId = c.get('userId');
     const env = c.env;
 
-    if (!env.CF_AI_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID) {
+    if (!env.AI && (!env.CF_AI_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID)) {
       return c.json({ error: 'server_misconfigured' }, 500);
     }
 
@@ -118,45 +154,63 @@ export function extractRouter() {
       return c.json({ error: 'daily_limit' }, 429);
     }
 
-    // --- Call the vision model (OpenAI-compatible, non-streaming) --------
-    const baseUrl =
-      env.CF_AI_BASE_URL ??
-      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/v1`;
+    // --- Call the vision model (non-streaming) ---------------------------
     const model = env.EXTRACT_MODEL ?? DEFAULTS.model;
     const prompt = [system, user].filter(Boolean).join('\n\n');
 
     let text = '';
     try {
-      const upstream = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${env.CF_AI_API_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
+      if (env.AI) {
+        // Native binding. The Workers AI vision models take the image as a
+        // byte array (not a data: URL — that's the OpenAI-compatible REST
+        // shape below), alongside a flat prompt.
+        const bytes = base64ToBytes(imageBase64);
+        if (!bytes) {
+          return c.json({ error: 'bad_request' }, 400);
+        }
+        const result = (await env.AI.run(model, {
+          prompt,
+          image: Array.from(bytes),
           max_tokens: 1024,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
-                },
-              ],
-            },
-          ],
-        }),
-      });
-      if (!upstream.ok) {
-        return c.json({ error: 'extract_unavailable' }, 502);
+        })) as { response?: string; description?: string } | undefined;
+        // Instruct-tuned vision models answer under `response`; the plain
+        // image-to-text ones use `description`. Accept either.
+        text = result?.response ?? result?.description ?? '';
+      } else {
+        const baseUrl =
+          env.CF_AI_BASE_URL ??
+          `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/v1`;
+        const upstream = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${env.CF_AI_API_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 1024,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: prompt },
+                  {
+                    type: 'image_url',
+                    image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
+                  },
+                ],
+              },
+            ],
+          }),
+        });
+        if (!upstream.ok) {
+          return c.json({ error: 'extract_unavailable' }, 502);
+        }
+        const data = (await upstream.json()) as {
+          choices?: { message?: { content?: string } }[];
+        };
+        text = data.choices?.[0]?.message?.content ?? '';
       }
-      const data = (await upstream.json()) as {
-        choices?: { message?: { content?: string } }[];
-      };
-      text = data.choices?.[0]?.message?.content ?? '';
     } catch {
       return c.json({ error: 'extract_unavailable' }, 502);
     }

@@ -269,6 +269,24 @@ async function deleteAccount(
     .delete(circleInvites)
     .where(eq(circleInvites.createdByProfileId, profileId));
 
+  // ...AND release invites the caller REDEEMED. `used_by_profile_id` points
+  // at profiles(id) with NO `ON DELETE` action (unlike its sibling FKs,
+  // which cascade), so a surviving invite row that recorded THIS caller as
+  // its redeemer pins the profile row: the final DELETE below trips the FK
+  // and the whole deletion 500s. That is every caregiver who joined a circle
+  // by invite link — i.e. everyone in a care circle except its creator —
+  // and account deletion is a promise we ship (found by the live suite,
+  // 2026-07-13; the hermetic tests miss it because they add members directly
+  // instead of redeeming an invite). NULL the pointer rather than deleting
+  // the invite: the row is the circle owner's audit trail that the link was
+  // consumed, and clearing it must not re-open a used invite — `used_at`
+  // stays set, and that (not this column) is what the single-use claim in
+  // POST /circles/join tests.
+  await db
+    .update(circleInvites)
+    .set({ usedByProfileId: null })
+    .where(eq(circleInvites.usedByProfileId, profileId));
+
   const deletedMemberships = await db
     .delete(circleMembers)
     .where(eq(circleMembers.profileId, profileId))
