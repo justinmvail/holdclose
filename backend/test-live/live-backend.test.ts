@@ -135,6 +135,31 @@ afterAll(async () => {
   }
 });
 
+const BACKEND_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/// Run one SQL statement against the DEPLOYED D1.
+///
+/// For rows the public API can't reach: usage-ledger rows that trip the spend
+/// caps, and feedback rows (which survive account deletion — they're keyed by
+/// the JWT sub, not a profile FK).
+function d1(sql: string): void {
+  execFileSync(
+    'npx',
+    [
+      'wrangler',
+      'd1',
+      'execute',
+      'holdclose-forum-dev',
+      '--env',
+      'dev',
+      '--remote',
+      '--command',
+      sql,
+    ],
+    { cwd: BACKEND_DIR, stdio: 'pipe' },
+  );
+}
+
 describe('public surface', () => {
   it('GET /health is ok', async () => {
     const res = await api('/health');
@@ -682,27 +707,6 @@ describe('AI extract (scan-to-import vision path)', () => {
 /// ceiling. Every seeded row is namespaced `live-test-…` and deleted in
 /// afterEach, including on failure.
 describe('LLM cost controls (the circuit breakers)', () => {
-  const backendDir = join(dirname(fileURLToPath(import.meta.url)), '..');
-
-  /** Run one SQL statement against the DEPLOYED D1. */
-  function d1(sql: string): void {
-    execFileSync(
-      'npx',
-      [
-        'wrangler',
-        'd1',
-        'execute',
-        'holdclose-forum-dev',
-        '--env',
-        'dev',
-        '--remote',
-        '--command',
-        sql,
-      ],
-      { cwd: backendDir, stdio: 'pipe' },
-    );
-  }
-
   /** Seed a usage row for [userId], dated NOW so it lands in today's window. */
   function seedUsage(
     userId: string,
@@ -784,6 +788,62 @@ describe('LLM cost controls (the circuit breakers)', () => {
 
     expect(res.status).toBe(413);
     expect(await res.json()).toEqual({ error: 'prompt_too_large' });
+  });
+});
+
+/// The in-app Report button's destination, live.
+///
+/// This is the test that would have caught the outage: reports used to POST to
+/// the operator's laptop shim, which went dark on 2026-07-10 when the backend
+/// moved to Cloudflare and the Funnel was switched off — builds kept baking the
+/// dead URL, so tester reports vanished for three days with no signal at all.
+/// Now they land in the Worker's D1, and this asserts it against the real edge.
+describe('tester feedback (the Report button)', () => {
+  const reportId = `fb_${Date.now()}`;
+
+  it('a signed-in tester can file a report with a screenshot', async () => {
+    const res = await api('/api/v1/feedback', {
+      method: 'POST',
+      token: tokenA,
+      json: {
+        id: reportId,
+        category: 'bug',
+        message: `${RUN_ID}: live smoke-test report — safe to ignore.`,
+        route: '/setup',
+        tester_name: 'live-suite',
+        platform: 'ios',
+        os_version: 'Version 26.5.2',
+        demo_mode: false,
+        app_version: '0.1.0+30',
+        build_stamp: `${Date.now()}`,
+        created_at: new Date().toISOString(),
+        has_screenshot: true,
+        logs: 'live smoke-test log line',
+        screenshot_base64: TINY_PNG_BASE64,
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ id: reportId, screenshot: true });
+  });
+
+  it('the screenshot is NOT exposed through the public media route', async () => {
+    // A screenshot can show a loved one's care data. /media serves avatars and
+    // nothing else — this is the assertion that keeps it that way.
+    const res = await fetch(`${BASE_URL}/media/feedback/${reportId}.png`, {
+      headers: { 'User-Agent': USER_AGENT },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('a non-admin tester cannot read the triage queue (reports carry PHI)', async () => {
+    const res = await api('/api/v1/feedback', { token: tokenA });
+    expect(res.status).toBe(403);
+  });
+
+  afterAll(() => {
+    // Feedback rows are keyed by the JWT sub, not a profile FK, so account
+    // deletion does NOT cascade them — clean up explicitly.
+    d1(`DELETE FROM feedback WHERE id = '${reportId}'`);
   });
 });
 

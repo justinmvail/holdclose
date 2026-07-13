@@ -8,6 +8,7 @@ import { circlesRouter } from './routes/circles';
 import { commentsRouter } from './routes/comments';
 import { documentsRouter } from './routes/documents';
 import { extractRouter, type ExtractBindings } from './routes/extract';
+import { feedbackRouter } from './routes/feedback';
 import { joinRouter } from './routes/join';
 import { privacyRouter, termsRouter } from './routes/legal';
 import { mediaRouter } from './routes/media';
@@ -108,6 +109,11 @@ api.route('/chat', chatRouter());
 // truth.
 api.route('/billing', billingRouter());
 api.route('/extract', extractRouter());
+// In-app tester reports (the Report button). Behind the forum JWT: a report is
+// always tied to a real account, and reads are admin-gated inside the router
+// (reports carry other caregivers' PHI). Replaces the dead pipe to the
+// operator's laptop shim — see routes/feedback.ts.
+api.route('/feedback', feedbackRouter());
 api.route('/documents', documentsRouter());
 api.route('/votes', votesRouter());
 

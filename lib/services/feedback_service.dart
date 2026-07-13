@@ -9,7 +9,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/build_info.dart';
+import '../providers/forum_jwt_provider.dart' show forumSessionManagerProvider;
 import '../providers/llm_provider.dart' show shimBaseUrl, shimAuthHeaders;
+import 'forum_api_client.dart'
+    show forumApiBaseUrl, forumApiVersionPrefix, forumBackendConfigured;
 
 /// In-app alpha bug/feedback reporter (alpha testing).
 ///
@@ -17,9 +20,15 @@ import '../providers/llm_provider.dart' show shimBaseUrl, shimAuthHeaders;
 /// [AppSettings] — a schema migration for a throwaway alpha tool is risk
 /// the feature doesn't need. Reports queue as plain files in the app
 /// documents dir ([FeedbackOutbox]) so a report is NEVER lost when the
-/// laptop/shim is unreachable, then sync to the shim's `/feedback`
-/// endpoint ([FeedbackSender]) which appends them to a JSONL + screenshot
-/// folder on the operator's machine.
+/// network or the backend is unreachable, then deliver via [FeedbackSender].
+///
+/// **Destination (changed 2026-07-13):** reports now POST to the **Cloudflare
+/// Worker** (`POST /api/v1/feedback`) whenever a backend is baked in. They used
+/// to go to the operator's laptop shim, which died silently when the backend
+/// moved to Cloudflare and the laptop's Funnel was switched off — builds kept
+/// baking the dead URL, so tester reports vanished. The shim remains only as
+/// the local-dev fallback. The durable outbox means reports queued against the
+/// dead endpoint are NOT lost: they flush to the Worker on the next launch.
 
 /// Whether the in-app feedback UI is live — the report button, the
 /// screenshot overlay, and the raw error detail in chat. **Off by default**
@@ -303,14 +312,44 @@ class FeedbackOutbox {
   }
 }
 
-/// Posts a report to the shim. Returns true only on HTTP 200 so the
+/// Posts a report to the backend. Returns true only on HTTP 200 so the
 /// caller deletes it from the outbox; any other outcome (offline, 401,
 /// 5xx) leaves it queued for the next flush.
+///
+/// **Where reports go (changed 2026-07-13).** Historically this posted to the
+/// operator's laptop shim (`SHIM_URL/feedback`). That pipe died silently when
+/// the backend moved to Cloudflare and the laptop's LaunchAgents + Tailscale
+/// Funnel were switched off: builds kept baking the now-dead funnel URL, so
+/// every tester report vanished for three days. Reports now go to the **Worker**
+/// (`POST /api/v1/feedback`, session-JWT authed) whenever a backend is
+/// configured — no laptop in the loop, works for any tester anywhere. The shim
+/// path remains ONLY as the local-dev fallback for builds with no backend baked
+/// in (e.g. plain DEMO_MODE dogfooding against a laptop shim).
+///
+/// The payload is unchanged either way — the Worker accepts the same JSON the
+/// shim did — so the durable outbox can deliver reports queued by an older
+/// build without a migration.
 class FeedbackSender {
-  FeedbackSender({Dio? dio, this.endpoint = feedbackEndpoint}) : _dio = dio;
+  FeedbackSender({
+    Dio? dio,
+    String? endpoint,
+    Future<String> Function()? tokenLoader,
+  })  : _dio = dio,
+        _tokenLoader = tokenLoader,
+        endpoint = endpoint ??
+            (forumBackendConfigured
+                ? '$forumApiBaseUrl$forumApiVersionPrefix/feedback'
+                : feedbackEndpoint);
 
   final Dio? _dio;
   final String endpoint;
+
+  /// Supplies the forum session JWT when posting to the Worker. Null on the
+  /// shim fallback (which uses its own bearer token instead).
+  final Future<String> Function()? _tokenLoader;
+
+  /// True when reports go to the Worker rather than the dev shim.
+  bool get _usesForumBackend => _tokenLoader != null;
 
   Future<bool> send(FeedbackReport report, Uint8List? screenshot) async {
     // A bare Dio() has NO timeouts — a stalled connection would hang the
@@ -327,13 +366,32 @@ class FeedbackSender {
     if (screenshot != null) {
       body['screenshot_base64'] = base64Encode(screenshot);
     }
+
+    // Auth differs by destination: the Worker takes the caregiver's session
+    // JWT; the dev shim takes its own shared bearer token.
+    final Map<String, String> headers;
+    if (_usesForumBackend) {
+      try {
+        headers = <String, String>{
+          'Authorization': 'Bearer ${await _tokenLoader!()}'
+        };
+      } catch (_) {
+        // No usable session yet (signed out, or the token exchange failed).
+        // Leave the report QUEUED — it flushes on the next launch once a
+        // session exists. Never drop a tester's report over auth.
+        return false;
+      }
+    } else {
+      headers = shimAuthHeaders();
+    }
+
     try {
       final Response<dynamic> resp = await dio.post<dynamic>(
         endpoint,
         data: body,
         options: Options(
           contentType: Headers.jsonContentType,
-          headers: shimAuthHeaders(),
+          headers: headers,
           validateStatus: (int? s) => s != null && s < 500,
         ),
       );
@@ -399,8 +457,17 @@ final NotifierProvider<FeedbackTrigger, int> feedbackTriggerProvider =
 final Provider<FeedbackOutbox> feedbackOutboxProvider =
     Provider<FeedbackOutbox>((Ref ref) => FeedbackOutbox());
 
+/// Reports go to the Worker when one is baked in (the shipped/alpha path),
+/// authed with the caregiver's forum session JWT; otherwise to the local dev
+/// shim. See [FeedbackSender] for why this moved off the shim.
 final Provider<FeedbackSender> feedbackSenderProvider =
-    Provider<FeedbackSender>((Ref ref) => FeedbackSender());
+    Provider<FeedbackSender>(
+  (Ref ref) => FeedbackSender(
+    tokenLoader: forumBackendConfigured
+        ? ref.watch(forumSessionManagerProvider).currentToken
+        : null,
+  ),
+);
 
 final Provider<TesterNameStore> testerNameStoreProvider =
     Provider<TesterNameStore>((Ref ref) => const TesterNameStore());

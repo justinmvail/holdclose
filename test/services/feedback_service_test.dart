@@ -169,6 +169,39 @@ void main() {
       final FeedbackSender sender = FeedbackSender(dio: dio);
       expect(await sender.send(buildReport(), null), isFalse);
     });
+
+    test('posts to the configured endpoint with the session JWT', () async {
+      // Regression guard (2026-07-13): reports used to go to the operator's
+      // laptop shim. That endpoint died when the backend moved to Cloudflare
+      // and the laptop's Funnel was switched off — builds kept baking the dead
+      // URL, so every tester report vanished and nothing noticed, because
+      // nothing asserted where a report actually goes. This does.
+      final _StubAdapter adapter = _StubAdapter(200);
+      final FeedbackSender sender = FeedbackSender(
+        dio: Dio()..httpClientAdapter = adapter,
+        endpoint: 'https://worker.example/api/v1/feedback',
+        tokenLoader: () async => 'session-jwt-123',
+      );
+
+      expect(await sender.send(buildReport(), null), isTrue);
+      expect(adapter.lastUrl, 'https://worker.example/api/v1/feedback');
+      expect(adapter.lastHeaders!['Authorization'], 'Bearer session-jwt-123');
+    });
+
+    test('no session yet → the report stays QUEUED, never dropped', () async {
+      // A tester who hits a bug before/while signing in must not lose their
+      // report: a failed token load leaves it in the outbox for the next
+      // launch rather than deleting it.
+      final _StubAdapter adapter = _StubAdapter(200);
+      final FeedbackSender sender = FeedbackSender(
+        dio: Dio()..httpClientAdapter = adapter,
+        endpoint: 'https://worker.example/api/v1/feedback',
+        tokenLoader: () async => throw StateError('no session'),
+      );
+
+      expect(await sender.send(buildReport(), null), isFalse);
+      expect(adapter.lastUrl, isNull, reason: 'must not post without auth');
+    });
   });
 
   group('FeedbackController (queue then deliver)', () {
@@ -247,6 +280,8 @@ class _StubAdapter implements HttpClientAdapter {
 
   final int status;
   Map<String, dynamic>? lastBody;
+  String? lastUrl;
+  Map<String, dynamic>? lastHeaders;
 
   @override
   Future<ResponseBody> fetch(
@@ -254,6 +289,8 @@ class _StubAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    lastUrl = options.uri.toString();
+    lastHeaders = Map<String, dynamic>.from(options.headers);
     if (options.data is Map) {
       lastBody = Map<String, dynamic>.from(options.data as Map);
     }

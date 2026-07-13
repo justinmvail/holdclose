@@ -436,8 +436,59 @@ export const reportsRelations = relations(reports, ({ one }) => ({
   }),
 }));
 
+// In-app tester bug reports / ideas (the Report button).
+//
+// These used to POST to the local `claude_shim.py` on the operator's laptop,
+// which wrote them to a `feedback/` folder. That pipe DIED SILENTLY when the
+// backend moved to Cloudflare and the laptop's LaunchAgents + Tailscale Funnel
+// were disabled (2026-07-10): builds still baked the dead funnel URL, so every
+// report a tester filed went nowhere for three days. Reports now land here —
+// server-side, no laptop in the loop, and reachable by any tester anywhere.
+//
+// PHI-bearing by nature: `message`, `logs` (an on-device LogBuffer snapshot),
+// and the screenshot can all contain a loved one's care data. They live in the
+// same D1/R2 the care data already lives in, and the screenshot is stored in
+// FORUM_MEDIA under `feedback/` — a prefix the PUBLIC /media route refuses to
+// serve (it only serves `avatars/`). Reads are admin-only.
+export const feedback = sqliteTable(
+  'feedback',
+  {
+    // The app mints the id (`fb_<micros>`) so its durable on-device outbox can
+    // retry a delivery without creating duplicates — the insert is an upsert
+    // on this key.
+    id: text().primaryKey(),
+    // The JWT `sub` of the tester who filed it (the account spine).
+    userId: text('user_id').notNull(),
+    createdAt: timestampColumn('created_at').notNull(),
+    // 'bug' | 'idea' | 'confusing'.
+    category: text().notNull().default('bug'),
+    message: text().notNull(),
+    // The go_router location they were on, e.g. `/medical/medications`.
+    route: text().notNull().default(''),
+    // The handle they typed once and we remember (who found what).
+    testerName: text('tester_name').notNull().default(''),
+    platform: text().notNull().default(''),
+    osVersion: text('os_version').notNull().default(''),
+    demoMode: integer('demo_mode', { mode: 'boolean' }).notNull().default(false),
+    // Which BUILD they were on — matches Settings → About, so a report can be
+    // pinned to an exact binary.
+    appVersion: text('app_version').notNull().default(''),
+    buildStamp: text('build_stamp').notNull().default(''),
+    // Recent on-device logs captured at report time (may be empty).
+    logs: text().notNull().default(''),
+    // R2 key of the screenshot in FORUM_MEDIA, when one was attached.
+    screenshotKey: text('screenshot_key'),
+  },
+  (t) => [
+    // The triage queue: newest first.
+    index('feedback_created_idx').on(t.createdAt),
+  ],
+);
+
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
+export type Feedback = typeof feedback.$inferSelect;
+export type NewFeedback = typeof feedback.$inferInsert;
 export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
 export type Comment = typeof comments.$inferSelect;
