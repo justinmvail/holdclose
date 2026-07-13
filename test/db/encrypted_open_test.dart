@@ -200,6 +200,58 @@ void main() {
     });
   });
 
+  group('restoreQuarantinedIfUsable — undo a WRONG quarantine', () {
+    // Why this exists: a keychain-accessibility change (2026-07-13) made the
+    // existing DB key unreadable on iOS, so this module concluded the key was
+    // gone and quarantined a tester's ENTIRE CARE RECORD. The key was there all
+    // along. Quarantine is non-destructive precisely so that mistake is
+    // reversible — this is the reversal.
+
+    test('a quarantined DB our key CAN open is restored', () {
+      _writePlaintextDatabase('$dbPath.quarantined');
+      File('$dbPath.quarantined-wal').writeAsStringSync('wal');
+
+      restoreQuarantinedIfUsable(dbPath, 'deadbeef');
+
+      expect(File(dbPath).existsSync(), isTrue,
+          reason: 'the care record must come back');
+      expect(File('$dbPath.quarantined').existsSync(), isFalse);
+      expect(File('$dbPath-wal').existsSync(), isTrue,
+          reason: 'sidecars travel with the database');
+      // The rows survived the round trip.
+      final Database db = sqlite3.open(dbPath);
+      addTearDown(db.dispose);
+      expect(db.select('SELECT v FROM t').single['v'], 'keep me');
+    });
+
+    test('a LIVE database is never clobbered by a restore', () {
+      // Data written since the quarantine outranks the quarantined copy.
+      _writePlaintextDatabase(dbPath);
+      _writePlaintextDatabase('$dbPath.quarantined');
+
+      restoreQuarantinedIfUsable(dbPath, 'deadbeef');
+
+      expect(File('$dbPath.quarantined').existsSync(), isTrue,
+          reason: 'the quarantined copy must be left alone');
+    });
+
+    test('a quarantined DB our key CANNOT open is left where it is', () {
+      // Someone else's ciphertext, or a corrupt file — restoring it would just
+      // wedge the app again.
+      File('$dbPath.quarantined').writeAsBytesSync(_encryptedLookingBytes());
+
+      restoreQuarantinedIfUsable(dbPath, 'deadbeef');
+
+      expect(File(dbPath).existsSync(), isFalse);
+      expect(File('$dbPath.quarantined').existsSync(), isTrue);
+    });
+
+    test('no quarantine → no-op', () {
+      restoreQuarantinedIfUsable(dbPath, 'deadbeef');
+      expect(File(dbPath).existsSync(), isFalse);
+    });
+  });
+
   group('recoverIfUndecryptable — self-heal instead of wedging', () {
     test('a file the key cannot open is quarantined', () {
       File(dbPath).writeAsBytesSync(_encryptedLookingBytes());

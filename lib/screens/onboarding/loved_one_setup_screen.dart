@@ -10,6 +10,7 @@ import '../../models/patient.dart';
 import '../../providers/active_patient_provider.dart';
 import '../../providers/patient_configured_provider.dart';
 import '../../providers/storage_provider.dart';
+import '../../services/feedback_service.dart' show feedbackUiEnabled;
 import '../../services/sync_service.dart';
 import '../../theme.dart';
 import '../../widgets/form/format.dart';
@@ -225,8 +226,11 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
         unawaited(
           ref.read(syncControllerProvider).ensureCircleForActivePatient(),
         );
-      } catch (_) {
-        // Never block onboarding on sync — stay local-only.
+      } catch (e) {
+        // Never block onboarding on sync — stay local-only. But say so: a
+        // silent swallow here is how "my care circle never appeared" becomes
+        // undiagnosable.
+        debugPrint('loved-one setup: circle creation failed (local-only): $e');
       }
     }
 
@@ -256,14 +260,29 @@ class _LovedOneSetupScreenState extends ConsumerState<LovedOneSetupScreen> {
 
     if (!mounted) return;
     context.go('/');
-    } catch (e) {
-      // Never strand the form on "Saving…" — reset so the caregiver can
-      // retry, and surface what went wrong instead of a dead button.
+    } catch (e, st) {
+      // LOG IT. This catch used to swallow the exception whole: the caregiver
+      // saw "Couldn't save just now", and NOTHING — not the log buffer, not a
+      // bug report, not a crash trace — recorded WHY. A save that fails during
+      // onboarding is the worst possible thing to make undiagnosable: it is the
+      // first thing a caregiver does, and it blocks the entire app. debugPrint
+      // is teed into LogBuffer (main._captureLogs), so the cause now rides along
+      // with the next report.
+      debugPrint('loved-one setup: save failed: $e\n$st');
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Couldn't save just now — please try again."),
+        SnackBar(
+          // Dev/tester builds show the raw cause inline (the report button is
+          // on in exactly those builds); shipped builds keep the calm copy.
+          content: Text(
+            feedbackUiEnabled
+                ? "Couldn't save just now — please try again.\n\n$e"
+                : "Couldn't save just now — please try again.",
+          ),
+          duration: feedbackUiEnabled
+              ? const Duration(seconds: 12)
+              : const Duration(seconds: 4),
         ),
       );
     }

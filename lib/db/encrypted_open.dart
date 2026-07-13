@@ -81,20 +81,27 @@ const String _databaseFileName = 'holdclose.sqlite';
 const AndroidOptions _androidOptions =
     AndroidOptions(encryptedSharedPreferences: true);
 
-/// iOS keychain class for the DB key: `first_unlock_this_device`.
+/// ⚠ DO NOT set an iOS `accessibility` class on the DB key without a
+/// migration. It was tried (2026-07-13, `first_unlock_this_device`) and it
+/// BRICKED an install within hours — a data-loss bug, on the tester's phone:
 ///
-/// - *this_device*: the key never leaves this device (no iCloud-keychain
-///   sync, no restore onto another device). It matches the DB file, which is
-///   itself backup-excluded — a key without its file is useless, and a
-///   synced key is pure attack surface.
-/// - *after first unlock*: a background wake (sync, a notification handler)
-///   touching the DB after a reboot reads the key instead of erroring.
+/// `flutter_secure_storage`'s iOS `baseQuery` puts `kSecAttrAccessible` into
+/// the READ query, not just the write. A key already stored under the plugin's
+/// default class (`whenUnlocked`) therefore stops matching the moment you read
+/// with a different class — the key becomes INVISIBLE. Then:
+///   1. this module concludes there is no key,
+///   2. sees an encrypted DB it cannot open, and quarantines it (the caregiver's
+///      whole care record),
+///   3. tries to mint a replacement — and `SecItemAdd` fails with
+///      `errSecDuplicateItem`, because the OLD key is still there under the same
+///      account, merely unmatchable,
+///   4. so the read-back check throws, the DB never opens, and EVERY save fails.
+/// The caregiver lands on onboarding and cannot get past it.
 ///
-/// Only newly written keys carry this class; keys minted before this change
-/// keep the plugin default (`unlocked`), which stays readable — the class is
-/// applied on write, never required on read.
-const IOSOptions _iosOptions =
-    IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device);
+/// If a stricter class is ever genuinely wanted, it needs an explicit
+/// migration: read with the OLD options, delete, re-write with the new ones,
+/// and only then start reading with the new ones. Until someone does that
+/// carefully, the DB key uses the plugin defaults on iOS.
 
 /// Filename suffix of a quarantined (undecryptable) database. One quarantine
 /// generation is kept — a newer one replaces it.
@@ -162,6 +169,10 @@ QueryExecutor encryptedFileExecutor({FlutterSecureStorage? secureStorage}) {
         await obtainDatabaseKey(dbPath: dbPath, secureStorage: secureStorage);
 
     // Repair an existing plaintext install in place so upgraders keep data.
+    // Give back a database an earlier build quarantined by mistake, BEFORE any
+    // other step can create an empty one over the top of it.
+    restoreQuarantinedIfUsable(dbPath, key);
+
     await _migratePlaintextIfNeeded(dbPath, key);
 
     // Self-heal: if the file can't actually be opened with OUR key (wrong
@@ -267,16 +278,12 @@ Future<String> obtainDatabaseKey({
 ///     reach a mint) rather than encrypting data under an unrecoverable key.
 Future<String> _readOrCreateKey(
     FlutterSecureStorage? injected, String dbPath) async {
-  final FlutterSecureStorage storage = injected ??
-      const FlutterSecureStorage(
-        aOptions: _androidOptions,
-        iOptions: _iosOptions,
-      );
+  final FlutterSecureStorage storage =
+      injected ?? const FlutterSecureStorage(aOptions: _androidOptions);
 
   final String? existing = await storage.read(
     key: kDatabaseKeyStorageKey,
     aOptions: _androidOptions,
-    iOptions: _iosOptions,
   );
   if (existing != null && existing.isNotEmpty) return existing;
 
@@ -296,12 +303,10 @@ Future<String> _readOrCreateKey(
     key: kDatabaseKeyStorageKey,
     value: fresh,
     aOptions: _androidOptions,
-    iOptions: _iosOptions,
   );
   final String? readBack = await storage.read(
     key: kDatabaseKeyStorageKey,
     aOptions: _androidOptions,
-    iOptions: _iosOptions,
   );
   if (readBack != fresh) {
     throw StateError(
@@ -434,6 +439,40 @@ bool _keyOpensDatabase(String dbPath, String key) {
   } finally {
     db?.dispose();
   }
+}
+
+/// Undo a quarantine that should never have happened.
+///
+/// Quarantining is deliberately non-destructive — the file is renamed aside,
+/// not deleted — precisely so a WRONG quarantine can be undone. And one
+/// happened: a keychain-accessibility change (2026-07-13) made the existing DB
+/// key unreadable, so this module concluded the key was gone and moved a
+/// tester's entire care record to `holdclose.sqlite.quarantined`. The key was
+/// there all along.
+///
+/// So on every open: if there is NO live database but a quarantined one exists
+/// that OUR KEY CAN ACTUALLY OPEN, put it back. That is proof it was ours and
+/// that the quarantine was a false alarm.
+///
+/// Strictly guarded, because the failure mode of getting this wrong is worse
+/// than the bug it fixes:
+///  * only when no live DB exists (never clobber data written since);
+///  * only when the key genuinely decrypts the quarantined file;
+///  * the sidecars move with it.
+void restoreQuarantinedIfUsable(String dbPath, String key) {
+  final File live = File(dbPath);
+  final File quarantined = File('$dbPath$_quarantineSuffix');
+  if (live.existsSync() || !quarantined.existsSync()) return;
+  if (!_keyOpensDatabase(quarantined.path, key)) return;
+
+  for (final String suffix in const <String>['', '-wal', '-shm']) {
+    final File src = File('$dbPath$_quarantineSuffix$suffix');
+    if (src.existsSync()) src.renameSync('$dbPath$suffix');
+  }
+  _reportRecovery(
+    'restored a quarantined database our key CAN open — the quarantine was a '
+    'false alarm (care data recovered)',
+  );
 }
 
 /// Pre-open self-heal: verify [key] opens the file at [dbPath]; when it
