@@ -50,6 +50,33 @@ void main() {
           reason: 'open() must memoise a single connection');
     });
 
+    test('open() constructs its executor LAZILY — no throwaway executors',
+        () {
+      // Regression guard for the 2026-07 key-mint race: the old
+      // `openShared(encryptedFileExecutor())` shape evaluated the argument
+      // on EVERY call, and each discarded executor still ran the whole
+      // key-read/mint/migration init in a fire-and-forget future. On a
+      // first run those raced their key mints and could strand the DB
+      // encrypted under a key that a later mint overwrote ("file is not a
+      // database" on every launch after). open() must only invoke the
+      // executor factory when no shared instance exists yet.
+      int built = 0;
+      QueryExecutor buildExecutor() {
+        built++;
+        return NativeDatabase.memory();
+      }
+
+      final HoldcloseDatabase a =
+          HoldcloseDatabase.open(createExecutor: buildExecutor);
+      final HoldcloseDatabase b =
+          HoldcloseDatabase.open(createExecutor: buildExecutor);
+
+      expect(identical(a, b), isTrue);
+      expect(built, 1,
+          reason: 'a second open() must not build-and-discard an executor — '
+              'its init side effects are what raced the key mint');
+    });
+
     test('a provider disposing it is a no-op — the shared connection lives on',
         () async {
       final Directory tmp = Directory.systemTemp.createTempSync('cb_noopclose');

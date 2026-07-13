@@ -233,7 +233,15 @@ holdclose/                  # repo root (matches pubspec name:)
     The key is a strong random passphrase minted on first run and held in
     the OS keychain/keystore via `flutter_secure_storage` — never hardcoded.
     Existing plaintext installs are rekey-migrated in place on first launch
-    (`sqlcipher_export`) so upgraders keep their care data. Only the real
+    (`sqlcipher_export`) so upgraders keep their care data. Key lifecycle
+    (2026-07-13, after a first-run mint race stranded a DB): the key mint is
+    memoized process-wide + read-back-verified, a key is NEVER minted while
+    an encrypted DB exists, and an undecryptable DB is QUARANTINED
+    (`holdclose.sqlite.quarantined`, kept on disk) + rebuilt fresh — reported
+    via `databaseRecoveryObserver` — never deleted, never left to wedge the
+    app. `HoldcloseDatabase.open()` must construct its executor lazily
+    (only when no shared instance exists) — eager construction re-opens the
+    mint race. Only the real
     on-device file DB is encrypted; the in-memory test path
     (`NativeDatabase.memory()`) stays plaintext and the suite never loads
     SQLCipher. Android backups also stay OFF (`allowBackup="false"`) and iOS

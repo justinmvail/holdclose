@@ -93,7 +93,20 @@ class HoldcloseDatabase extends _$HoldcloseDatabase {
   /// care data). It returns a lazily-connected executor, so this stays a
   /// synchronous factory: the async key-read + migration + encrypted open run
   /// on the first query.
-  factory HoldcloseDatabase.open() => openShared(encryptedFileExecutor());
+  ///
+  /// [createExecutor] is a test seam; production always uses the default
+  /// [encryptedFileExecutor]. It is only INVOKED when no shared instance
+  /// exists yet, and that laziness is load-bearing: the previous
+  /// `openShared(encryptedFileExecutor())` shape evaluated the argument on
+  /// EVERY call, and each throwaway executor ran the whole key-read/migrate
+  /// init in a fire-and-forget future — on a first run those raced their
+  /// key mints, and the last keychain write could strand the freshly
+  /// created DB encrypted under a key nobody kept (the 2026-07 "file is not
+  /// a database" data loss).
+  factory HoldcloseDatabase.open({
+    QueryExecutor Function() createExecutor = encryptedFileExecutor,
+  }) =>
+      _sharedInstance ??= HoldcloseDatabase._shared(createExecutor());
 
   /// The memoisation behind [open], with an injectable [executor] so the
   /// singleton + no-op-close behaviour is testable without the platform

@@ -10,6 +10,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'db/encrypted_open.dart' show databaseRecoveryObserver;
 import 'models/settings.dart';
 import 'providers/active_patient_provider.dart';
 import 'providers/auth_provider.dart';
@@ -106,6 +107,17 @@ Future<void> main() async {
       onboardingInitialProvider.overrideWithValue(onboardingDone),
     ],
   );
+
+  // Destructive DB self-heal actions (quarantining an undecryptable
+  // database — see lib/db/encrypted_open.dart) are rare and serious: record
+  // them to the on-device crash log (rides along with the next feedback
+  // report) AND the opt-in crash aggregator, so a silent recovery is still
+  // visible to the operator. Wired BEFORE the first DB touch below
+  // (maybeResetForDemo runs storage queries).
+  databaseRecoveryObserver = (Object error, StackTrace stack) {
+    unawaited(CrashLog.instance.record('$error', stack));
+    unawaited(container.read(crashReporterProvider).recordError(error, stack));
+  };
 
   // BUILD_SPEC.md §9.3 + Task 26 — demo-mode reset-on-launch hook.
   // Runs before the first frame so the seed is in place by the time

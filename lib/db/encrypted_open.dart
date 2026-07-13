@@ -31,6 +31,18 @@
 ///   file to drift we detect that case on the main isolate and rekey-migrate
 ///   it in place via `sqlcipher_export` (see [_migratePlaintextIfNeeded]), so
 ///   an upgrading tester keeps their care data.
+///
+/// Key-lifecycle invariants (2026-07-13 hardening, after a real data-loss
+/// bug where racing first-run opens each minted their own key and the last
+/// keychain write stranded the file under a key nobody kept):
+/// - The key read/mint is memoized process-wide ([obtainDatabaseKey]) —
+///   concurrent opens share ONE future, so at most one mint ever runs.
+/// - A key is NEVER minted while an encrypted database exists; a fresh mint
+///   is read back from the keychain before anything is encrypted with it.
+/// - An undecryptable database is never deleted and never wedges the app:
+///   it is QUARANTINED (`holdclose.sqlite.quarantined`, kept one generation
+///   deep for support/forensics) and a fresh encrypted DB is built, reported
+///   through [databaseRecoveryObserver].
 library;
 
 import 'dart:async';
@@ -39,6 +51,7 @@ import 'dart:math';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -67,6 +80,25 @@ const String _databaseFileName = 'holdclose.sqlite';
 /// hardening the auth-token storage would use.
 const AndroidOptions _androidOptions =
     AndroidOptions(encryptedSharedPreferences: true);
+
+/// iOS keychain class for the DB key: `first_unlock_this_device`.
+///
+/// - *this_device*: the key never leaves this device (no iCloud-keychain
+///   sync, no restore onto another device). It matches the DB file, which is
+///   itself backup-excluded — a key without its file is useless, and a
+///   synced key is pure attack surface.
+/// - *after first unlock*: a background wake (sync, a notification handler)
+///   touching the DB after a reboot reads the key instead of erroring.
+///
+/// Only newly written keys carry this class; keys minted before this change
+/// keep the plugin default (`unlocked`), which stays readable — the class is
+/// applied on write, never required on read.
+const IOSOptions _iosOptions =
+    IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device);
+
+/// Filename suffix of a quarantined (undecryptable) database. One quarantine
+/// generation is kept — a newer one replaces it.
+const String _quarantineSuffix = '.quarantined';
 
 /// True only under `flutter test` (the harness exports `FLUTTER_TEST`).
 /// Mirrors the guard the billing/llm/crash providers use to keep native
@@ -126,10 +158,17 @@ QueryExecutor encryptedFileExecutor({FlutterSecureStorage? secureStorage}) {
 
     final Directory dir = await getApplicationDocumentsDirectory();
     final String dbPath = p.join(dir.path, _databaseFileName);
-    final String key = await _readOrCreateKey(secureStorage);
+    final String key =
+        await obtainDatabaseKey(dbPath: dbPath, secureStorage: secureStorage);
 
     // Repair an existing plaintext install in place so upgraders keep data.
     await _migratePlaintextIfNeeded(dbPath, key);
+
+    // Self-heal: if the file can't actually be opened with OUR key (wrong
+    // key after a historical mint race, or a corrupt file), quarantine it so
+    // the keyed open below builds a fresh encrypted DB instead of failing
+    // "file is not a database" on every query forever.
+    recoverIfUndecryptable(dbPath, key);
 
     return NativeDatabase.createBackgroundConnection(
       File(dbPath),
@@ -174,24 +213,102 @@ void installSqlCipherOverride() {
   open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
 }
 
-/// Read the stored DB passphrase, minting + persisting a fresh strong one on
-/// first run. The key is 32 random bytes (256 bits) hex-encoded — SQLCipher
-/// treats a quoted `PRAGMA key` string as a passphrase and runs it through
-/// PBKDF2, so this is ample entropy.
-Future<String> _readOrCreateKey(FlutterSecureStorage? injected) async {
-  final FlutterSecureStorage storage =
-      injected ?? const FlutterSecureStorage(aOptions: _androidOptions);
+/// Process-wide memo behind [obtainDatabaseKey]: every caller shares one
+/// read/mint, so concurrent opens can never each mint their own key.
+Future<String>? _cachedKey;
 
-  final String? existing =
-      await storage.read(key: kDatabaseKeyStorageKey, aOptions: _androidOptions);
+/// Drop the memoized key future so a test can exercise the key logic
+/// repeatedly. Production never calls this.
+@visibleForTesting
+void resetDatabaseKeyCache() {
+  _cachedKey = null;
+}
+
+/// The DB passphrase, memoized process-wide.
+///
+/// Concurrent callers await the SAME future, so exactly one keychain read —
+/// and at most one mint — is ever in flight. This is the first line of
+/// defense against the 2026-07 data-loss bug where racing first-run opens
+/// each minted a key, the file was encrypted under one, and the LAST
+/// keychain write stranded it under another (every later launch then died
+/// with "file is not a database"). A failed attempt clears the memo so the
+/// next open retries cleanly.
+///
+/// [secureStorage] and [dbPath] only take effect on the first call of a
+/// process (or after [resetDatabaseKeyCache]) — later calls join the memo.
+Future<String> obtainDatabaseKey({
+  required String dbPath,
+  FlutterSecureStorage? secureStorage,
+}) {
+  return _cachedKey ??= () async {
+    try {
+      return await _readOrCreateKey(secureStorage, dbPath);
+    } catch (_) {
+      _cachedKey = null;
+      rethrow;
+    }
+  }();
+}
+
+/// Read the stored DB passphrase, minting + persisting a fresh strong one
+/// when none exists. The key is 32 random bytes (256 bits) hex-encoded —
+/// SQLCipher treats a quoted `PRAGMA key` string as a passphrase and runs it
+/// through PBKDF2, so this is ample entropy.
+///
+/// Two invariants guard the mint (both born from the 2026-07 key-race bug —
+/// see [obtainDatabaseKey]):
+///  1. NEVER mint while an ENCRYPTED database exists. An encrypted file
+///     whose key can't be read is quarantined FIRST, so a mint only ever
+///     applies to a fresh install or a plaintext upgrader — it can never
+///     silently strand data. (A PLAINTEXT file with no key is the normal
+///     pre-encryption upgrade; minting is exactly right there.)
+///  2. A fresh mint is READ BACK before use — a keychain write that didn't
+///     persist fails the open (harmlessly, since only an empty install can
+///     reach a mint) rather than encrypting data under an unrecoverable key.
+Future<String> _readOrCreateKey(
+    FlutterSecureStorage? injected, String dbPath) async {
+  final FlutterSecureStorage storage = injected ??
+      const FlutterSecureStorage(
+        aOptions: _androidOptions,
+        iOptions: _iosOptions,
+      );
+
+  final String? existing = await storage.read(
+    key: kDatabaseKeyStorageKey,
+    aOptions: _androidOptions,
+    iOptions: _iosOptions,
+  );
   if (existing != null && existing.isNotEmpty) return existing;
+
+  // No key on file. An encrypted DB at [dbPath] is unrecoverable without
+  // one — quarantine it (kept on disk, see [_quarantineDatabase]) rather
+  // than minting "over" it.
+  final File dbFile = File(dbPath);
+  if (dbFile.existsSync() && !_isPlaintextDatabase(dbPath)) {
+    _quarantineDatabase(
+      dbPath,
+      reason: 'encrypted database present but no key in secure storage',
+    );
+  }
 
   final String fresh = _generatePassphrase();
   await storage.write(
     key: kDatabaseKeyStorageKey,
     value: fresh,
     aOptions: _androidOptions,
+    iOptions: _iosOptions,
   );
+  final String? readBack = await storage.read(
+    key: kDatabaseKeyStorageKey,
+    aOptions: _androidOptions,
+    iOptions: _iosOptions,
+  );
+  if (readBack != fresh) {
+    throw StateError(
+      'holdclose db key: keychain write did not persist — refusing to '
+      'encrypt with an unrecoverable key',
+    );
+  }
   return fresh;
 }
 
@@ -268,17 +385,100 @@ Future<void> _migratePlaintextIfNeeded(String dbPath, String key) async {
     // doesn't linger unencrypted on disk.
     backupFile.deleteSync();
   } catch (_) {
-    // Migration failed on a corrupt/partial legacy file. Fall back to a fresh
-    // encrypted DB (see doc comment): drop the unreadable original + temp so
-    // drift's onCreate builds a clean encrypted file and the seed/backfill
-    // repopulates. DOCUMENTED: older data may not carry over in this case.
+    // Migration failed on a corrupt/partial legacy file. Fall back to a
+    // fresh encrypted DB (see doc comment): QUARANTINE the unreadable
+    // original (+ its WAL/SHM side files — kept on disk for support, never
+    // deleted) and drop the temp, so drift's onCreate builds a clean
+    // encrypted file and the seed/backfill repopulates. DOCUMENTED: older
+    // data may not carry over in this case.
     plain?.dispose();
     if (tempFile.existsSync()) tempFile.deleteSync();
-    if (dbFile.existsSync()) dbFile.deleteSync();
-    // Best-effort: also clear WAL/SHM side files of the dead plaintext DB.
-    for (final String suffix in const <String>['-wal', '-shm']) {
-      final File side = File('$dbPath$suffix');
-      if (side.existsSync()) side.deleteSync();
+    _quarantineDatabase(
+      dbPath,
+      reason: 'plaintext-to-SQLCipher migration failed',
+    );
+  }
+}
+
+/// Move the database at [dbPath] (plus its `-wal`/`-shm` sidecars) aside to
+/// `<db>.quarantined` instead of deleting it.
+///
+/// Quarantining is the ONLY destructive move this module makes on an
+/// unreadable file: the bytes stay on disk (one generation deep — a newer
+/// quarantine replaces the last) for support/forensic recovery, while drift
+/// gets a clean path to build a fresh encrypted DB — the app recovers
+/// instead of failing every query forever. Each quarantine is reported
+/// through [databaseRecoveryObserver].
+void _quarantineDatabase(String dbPath, {required String reason}) {
+  for (final String suffix in const <String>['', '-wal', '-shm']) {
+    final File src = File('$dbPath$suffix');
+    final File dst = File('$dbPath$_quarantineSuffix$suffix');
+    if (dst.existsSync()) dst.deleteSync();
+    if (src.existsSync()) src.renameSync(dst.path);
+  }
+  _reportRecovery('quarantined undecryptable database: $reason');
+}
+
+/// True iff [key] actually opens the database at [dbPath] — the header
+/// decrypts and the schema page reads. Runs on the main isolate, which has
+/// the SQLCipher `open` override installed by [encryptedFileExecutor].
+bool _keyOpensDatabase(String dbPath, String key) {
+  Database? db;
+  try {
+    db = sqlite3.open(dbPath);
+    db.execute("PRAGMA key = '${_escapeKeyForPragma(key)}';");
+    db.select('SELECT count(*) FROM sqlite_master;');
+    return true;
+  } catch (_) {
+    return false;
+  } finally {
+    db?.dispose();
+  }
+}
+
+/// Pre-open self-heal: verify [key] opens the file at [dbPath]; when it
+/// doesn't (wrong key from a historical mint race, or a corrupt file),
+/// quarantine the file so drift's keyed open right after gets a fresh path
+/// instead of surfacing "file is not a database" on every query forever.
+/// No-op when the file doesn't exist. Costs one extra key derivation on the
+/// (lazy, once-per-launch) first DB query.
+void recoverIfUndecryptable(String dbPath, String key) {
+  if (!File(dbPath).existsSync()) return;
+  if (_keyOpensDatabase(dbPath, key)) return;
+  _quarantineDatabase(dbPath, reason: 'keyed open failed');
+}
+
+/// Describes a destructive recovery action this module took. Handed to
+/// [databaseRecoveryObserver] (never thrown) so crash aggregation groups
+/// recoveries apart from real crashes. [message] carries file/reason words
+/// only — never care data (the quarantined content stays on disk,
+/// encrypted).
+class DatabaseRecoveryException implements Exception {
+  DatabaseRecoveryException(this.message);
+
+  /// What was recovered and why.
+  final String message;
+
+  @override
+  String toString() => 'DatabaseRecoveryException: $message';
+}
+
+/// Observer for destructive recovery steps (quarantining an undecryptable
+/// DB). `main.dart` wires this to the on-device crash log + the opt-in
+/// crash aggregator BEFORE the first DB touch. When null (low-level tests),
+/// the breadcrumb still reaches the console/LogBuffer via [debugPrint].
+void Function(Object error, StackTrace stackTrace)? databaseRecoveryObserver;
+
+void _reportRecovery(String message) {
+  // debugPrint tees into LogBuffer (main._captureLogs), so the breadcrumb
+  // rides along with the next feedback report even with no observer wired.
+  debugPrint('db-recovery: $message');
+  final void Function(Object, StackTrace)? observer = databaseRecoveryObserver;
+  if (observer != null) {
+    try {
+      observer(DatabaseRecoveryException(message), StackTrace.current);
+    } catch (_) {
+      // Recovery reporting must never break recovery itself.
     }
   }
 }
