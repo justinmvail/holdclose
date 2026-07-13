@@ -216,6 +216,45 @@ void main() {
       if (await tmp.exists()) await tmp.delete(recursive: true);
     });
 
+    test('flushPending RETRIES until the session exists (2026-07-13 regression)',
+        () async {
+      // The bug this guards: the launch flush fired once, from the first
+      // post-frame callback — BEFORE the forum session JWT had been restored.
+      // The send failed (correctly leaving the report queued), and nothing
+      // retried for the rest of the session, so a real tester report sat
+      // undelivered on the phone while every other authed call worked.
+      await outbox.save(buildReport(id: 'fb_queued'), null);
+      final _AuthLagsSender sender = _AuthLagsSender(succeedFromAttempt: 3);
+      final FeedbackController controller =
+          FeedbackController(outbox: outbox, sender: sender);
+
+      // Injected sleep: assert the backoff without actually waiting on it.
+      final List<Duration> slept = <Duration>[];
+      final int delivered = await controller.flushPending(
+        sleep: (Duration d) async => slept.add(d),
+      );
+
+      expect(delivered, 1, reason: 'the report must land once auth is ready');
+      expect(sender.attempts, 3);
+      expect(await outbox.listPending(), isEmpty);
+      expect(slept, isNotEmpty, reason: 'it must back off between attempts');
+    });
+
+    test('flushPending on an empty outbox costs ONE check and no waiting',
+        () async {
+      final _AuthLagsSender sender = _AuthLagsSender(succeedFromAttempt: 1);
+      final FeedbackController controller =
+          FeedbackController(outbox: outbox, sender: sender);
+
+      final List<Duration> slept = <Duration>[];
+      expect(
+        await controller.flushPending(sleep: (Duration d) async => slept.add(d)),
+        0,
+      );
+      expect(sender.attempts, 0, reason: 'nothing queued → nothing to send');
+      expect(slept, isEmpty, reason: 'a normal launch must not schedule timers');
+    });
+
     test('submit delivers and clears the queue when the shim is up',
         () async {
       final FeedbackController c = FeedbackController(
@@ -275,6 +314,23 @@ void main() {
 
 /// Minimal dio adapter: returns a fixed status + a JSON body, and records
 /// the request body sent so the test can assert what the app posted.
+/// A sender that FAILS until [succeedFromAttempt] — models the real launch
+/// race: the forum session JWT is restored asynchronously, so the first flush
+/// after a cold start finds no token and cannot deliver.
+class _AuthLagsSender extends FeedbackSender {
+  _AuthLagsSender({required this.succeedFromAttempt})
+      : super(dio: Dio()..httpClientAdapter = _StubAdapter(200));
+
+  final int succeedFromAttempt;
+  int attempts = 0;
+
+  @override
+  Future<bool> send(FeedbackReport report, Uint8List? screenshot) async {
+    attempts++;
+    return attempts >= succeedFromAttempt;
+  }
+}
+
 class _StubAdapter implements HttpClientAdapter {
   _StubAdapter(this.status);
 

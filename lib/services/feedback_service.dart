@@ -435,6 +435,45 @@ class FeedbackController {
     }
     return sent;
   }
+
+  /// Backoff schedule for [flushPending]. The first attempt is immediate;
+  /// the rest cover the window in which a cold-started app is still
+  /// establishing its session.
+  static const List<Duration> flushRetryDelays = <Duration>[
+    Duration.zero,
+    Duration(seconds: 3),
+    Duration(seconds: 10),
+    Duration(seconds: 30),
+    Duration(seconds: 60),
+  ];
+
+  /// Launch-time delivery of anything queued, WITH RETRIES.
+  ///
+  /// A single attempt at launch is not enough, and that cost us a real report
+  /// (2026-07-13). The Worker requires the caregiver's session JWT, which is
+  /// restored/exchanged ASYNCHRONOUSLY after startup — so a flush fired from
+  /// the first post-frame callback usually finds no token yet, [send] returns
+  /// false (correctly leaving the report queued), and nothing retried it for
+  /// the rest of the session. The report just sat there while every other
+  /// authed call worked fine. The old shim path never hit this: it used a
+  /// static bearer token that existed from frame zero.
+  ///
+  /// So: retry on a short backoff until the outbox drains. Stops early the
+  /// moment nothing is pending, so a normal launch (empty outbox) costs one
+  /// cheap check and no timers. [sleep] is injectable for tests.
+  Future<int> flushPending({
+    Future<void> Function(Duration)? sleep,
+  }) async {
+    int delivered = 0;
+    for (final Duration delay in flushRetryDelays) {
+      if (delay > Duration.zero) {
+        await (sleep != null ? sleep(delay) : Future<void>.delayed(delay));
+      }
+      delivered += await flush();
+      if ((await outbox.listPending()).isEmpty) break;
+    }
+    return delivered;
+  }
 }
 
 /// Fired by the in-header report button to ask [FeedbackOverlay] — which

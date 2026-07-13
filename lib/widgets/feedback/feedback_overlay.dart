@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -70,9 +71,13 @@ class _FeedbackOverlayState extends ConsumerState<FeedbackOverlay> {
     if (widget.enabled) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        // Flush anything queued on a previous run (laptop/shim down or the
-        // tester was offline). Fire-and-forget.
-        ref.read(feedbackControllerProvider).flush();
+        // Deliver anything queued on a previous run (the backend was down, the
+        // tester was offline, or — the case that bit us — the report was filed
+        // against an endpoint that had moved). Fire-and-forget, and RETRYING:
+        // the session JWT the Worker requires is restored asynchronously, so a
+        // single attempt at frame zero usually fires before there's a token to
+        // send. See FeedbackController.flushPending.
+        unawaited(ref.read(feedbackControllerProvider).flushPending());
       });
     }
   }
