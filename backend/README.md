@@ -72,13 +72,17 @@ backend/
 
 ## Route surface
 
-`index.ts` mounts three things on the root Hono app:
+`index.ts` mounts these on the root Hono app:
 
 - `GET /health` → `{"status":"ok"}` — unauthenticated smoke check.
 - `/join/*` (root, NOT under `/api/v1`) — the public care-circle invite
   landing page. Exempt from the forum JWT: it's a shareable web page the
   invited caregiver opens from a text link, rendering the invite token
   and a `holdclose://join/<token>` deep link into the app.
+- `/terms`, `/privacy` — public legal pages, same posture.
+- `/media/*` — **public** avatar serving out of the `FORUM_MEDIA` R2 bucket
+  (see "Avatars" below). Unauthenticated on purpose: avatars render next to
+  forum posts, and the feed is read-anonymous.
 - `/api/v1/*` — the forum sub-app.
 
 Inside `/api/v1`, three routers mount **before** the global
@@ -92,6 +96,30 @@ Inside `/api/v1`, three routers mount **before** the global
 Everything mounted **after** `auth()` is **JWT-gated** (requires a valid
 `Authorization: Bearer <token>`): `/profiles`, `/circles`, `/reports`,
 `/sync`, `/chat`, `/billing`, `/documents`, `/votes`.
+
+### Avatars (`PUT /api/v1/profiles/avatar` + `GET /media/*`)
+
+A caregiver's profile photo. `PUT /profiles/avatar` takes RAW image bytes with
+a `Content-Type` (no multipart — the app already holds the file from the OS
+picker), stores it in `FORUM_MEDIA` under `avatars/<profileId>/<uuid>.<ext>`,
+and returns the updated profile with a fresh `avatar_url`. A new upload
+REPLACES the old object (and mints a new URL, so caches can't serve a stale
+face). Account deletion purges every avatar the profile owns — the image is
+served publicly, so it must not outlive the account.
+
+Constraints, both load-bearing:
+- **Raster types only** (`image/jpeg`, `image/png`, `image/webp`). This is a
+  security control, not a convenience: we serve the object back from our own
+  origin, so an SVG or HTML "avatar" would be an active document executing
+  there. Responses also carry `X-Content-Type-Options: nosniff`.
+- **2 MB cap.** The app downscales at pick time, so this is a backstop.
+
+`R2_PUBLIC_URL` must point at the **Worker's own `/media` route** (e.g.
+`https://<worker>/media`), which is what makes an avatar URL resolve without
+provisioning a public R2 bucket domain. Before 2026-07-13 it was a placeholder
+(`media.holdclose.local`) that resolved nowhere and there was no upload route at
+all — the bucket was bound but unused and the feature was dead end-to-end. If a
+CDN-fronted bucket is provisioned later, only this var changes.
 
 ### `/billing` — server-side IAP receipt verification + entitlements
 

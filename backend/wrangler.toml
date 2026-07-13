@@ -24,11 +24,20 @@ compatibility_flags = ["nodejs_compat"]
 crons = ["0 13 * * 1"]
 
 [vars]
-# Public origin of the R2 bucket fronting avatar / post-image uploads.
-# Profile avatar_url updates must start with this prefix so the API
-# can't be used to point at arbitrary off-platform images. Overridden
-# per environment via `wrangler deploy --var R2_PUBLIC_URL:...`.
-R2_PUBLIC_URL = "https://media.holdclose.local"
+# Public origin serving avatar objects out of FORUM_MEDIA. Profile avatar_url
+# values must start with this prefix, so the API can't be pointed at arbitrary
+# off-platform images.
+#
+# This is the WORKER'S OWN /media route (src/routes/media.ts), not an R2 bucket
+# domain: a public bucket needs a custom domain provisioned + DNS'd per
+# environment, and until 2026-07-13 this var sat at a placeholder
+# (`media.holdclose.local`) that resolved NOWHERE — so an avatar URL could
+# never have loaded even if one had been set. Serving through the Worker makes
+# avatars work on every deploy with zero extra infrastructure. If a
+# CDN-fronted bucket is provisioned later, ONLY this var changes.
+#
+# Set it per environment to that environment's own origin (see [env.dev.vars]).
+R2_PUBLIC_URL = "https://holdclose.care/media"
 
 # Allowed audience(s) for POST /api/v1/auth/google — the Google *Web* OAuth
 # client id (the app sets it as serverClientId so iOS+Android ID tokens both
@@ -138,7 +147,8 @@ bucket_name = "holdclose-doc-blobs"
 name = "holdclose-forum-dev"
 
 [env.dev.vars]
-R2_PUBLIC_URL = "https://media-dev.holdclose.local"
+# The dev Worker's own /media route — see the top-level R2_PUBLIC_URL comment.
+R2_PUBLIC_URL = "https://holdclose-forum-dev.jcsvonellc.workers.dev/media"
 GOOGLE_CLIENT_ID = "948989327057-a0o985t2648v1su957ltgohm45i138pb.apps.googleusercontent.com,948989327057-1m5kkffbqa06p87fprkigumfn3gk6fv3.apps.googleusercontent.com,948989327057-5soo39g145ajmlj1h8o4uc4fcmjnm8p8.apps.googleusercontent.com"
 RESEND_FROM_EMAIL = "watchdog@holdclose.local"
 RESEND_TO_EMAIL = "ops@holdclose.local"

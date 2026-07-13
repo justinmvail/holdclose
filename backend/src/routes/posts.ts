@@ -66,7 +66,7 @@ function hotScore(voteCount: number, createdAt: Date): number {
 // harmless default for the others (the feed re-fetches the real count).
 function postResponse(
   p: Post,
-  author?: Pick<Profile, 'username' | 'displayName'>,
+  author?: Pick<Profile, 'username' | 'displayName' | 'avatarUrl'>,
   commentCount = 0,
 ) {
   return {
@@ -74,6 +74,7 @@ function postResponse(
     author_id: p.authorId,
     author_username: author?.username ?? null,
     author_display_name: author?.displayName ?? null,
+    author_avatar_url: author?.avatarUrl ?? null,
     title: p.title,
     body: p.body,
     created_at: p.createdAt.toISOString(),
@@ -99,8 +100,8 @@ type Db = ReturnType<typeof drizzle>;
 async function loadAuthors(
   db: Db,
   authorIds: string[],
-): Promise<Map<string, Pick<Profile, 'username' | 'displayName'>>> {
-  const map = new Map<string, Pick<Profile, 'username' | 'displayName'>>();
+): Promise<Map<string, Pick<Profile, 'username' | 'displayName' | 'avatarUrl'>>> {
+  const map = new Map<string, Pick<Profile, 'username' | 'displayName' | 'avatarUrl'>>();
   const unique = [...new Set(authorIds)];
   if (unique.length === 0) {
     return map;
@@ -110,11 +111,16 @@ async function loadAuthors(
       id: profiles.id,
       username: profiles.username,
       displayName: profiles.displayName,
+      avatarUrl: profiles.avatarUrl,
     })
     .from(profiles)
     .where(inArray(profiles.id, unique));
   for (const row of rows) {
-    map.set(row.id, { username: row.username, displayName: row.displayName });
+    map.set(row.id, {
+      username: row.username,
+      displayName: row.displayName,
+      avatarUrl: row.avatarUrl,
+    });
   }
   return map;
 }

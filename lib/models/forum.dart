@@ -123,6 +123,9 @@ abstract class ForumPost with _$ForumPost {
     // Worker that predates these fields.
     @JsonKey(name: 'author_username') String? authorUsername,
     @JsonKey(name: 'author_display_name') String? authorDisplayName,
+    /// The author's profile photo, served from the backend's media origin.
+    /// Null when they haven't set one — the UI falls back to the initial.
+    @JsonKey(name: 'author_avatar_url') String? authorAvatarUrl,
     required String title,
     required String body,
     @JsonKey(name: 'created_at') required DateTime createdAt,
@@ -153,6 +156,9 @@ abstract class ForumComment with _$ForumComment {
     // author there) or a legacy Worker that predates these fields.
     @JsonKey(name: 'author_username') String? authorUsername,
     @JsonKey(name: 'author_display_name') String? authorDisplayName,
+    /// The author's profile photo, served from the backend's media origin.
+    /// Null when they haven't set one — the UI falls back to the initial.
+    @JsonKey(name: 'author_avatar_url') String? authorAvatarUrl,
     String? body,
     @JsonKey(name: 'created_at') required DateTime createdAt,
     @JsonKey(name: 'vote_count') required int voteCount,

@@ -556,6 +556,51 @@ class ForumApiClient implements EntitlementApi {
     return ForumPublicProfile.fromJson(_asJsonObject(r));
   }
 
+  /// Upload the caller's profile photo (`PUT /profiles/avatar`) and return the
+  /// updated profile, whose [ForumProfile.avatarUrl] points at the freshly
+  /// stored image on the backend's media origin.
+  ///
+  /// Raw bytes + a `Content-Type`, not multipart: the OS picker already handed
+  /// us a file, and the Worker whitelists the type (only `image/jpeg`,
+  /// `image/png`, `image/webp` — an SVG "avatar" would be an active document
+  /// on the serving origin). Oversized images raise a 413
+  /// [ForumApiException]; the caller downscales before sending, so that is a
+  /// backstop rather than an expected path.
+  ///
+  /// A new upload REPLACES the previous photo server-side (and mints a new
+  /// URL), so callers should refresh any cached profile rather than assume the
+  /// old [avatarUrl] still resolves.
+  Future<ForumProfile> uploadAvatar({
+    required List<int> bytes,
+    required String contentType,
+  }) async {
+    final String token = await _tokenLoader();
+    try {
+      final Response<dynamic> r = await _dio
+          .request<dynamic>(
+            '$_apiBase/profiles/avatar',
+            data: Stream<List<int>>.fromIterable(<List<int>>[bytes]),
+            options: Options(
+              method: 'PUT',
+              headers: <String, Object>{
+                'Authorization': 'Bearer $token',
+                Headers.contentLengthHeader: bytes.length,
+              },
+              contentType: contentType,
+              validateStatus: (int? _) => true,
+            ),
+          )
+          .then(_throwIfError);
+      return ForumProfile.fromJson(_asJsonObject(r));
+    } on DioException catch (e) {
+      throw ForumApiException(
+        statusCode: e.response?.statusCode ?? 0,
+        error: e.message ?? 'transport_error',
+        cause: e,
+      );
+    }
+  }
+
   /// Hard-delete the caller's account server-side (`DELETE /profiles/me`).
   /// Bearer-authed; the Worker removes the account and everything tied to it
   /// (forum rows, care-circle rows, synced docs, stored blobs). A non-2xx

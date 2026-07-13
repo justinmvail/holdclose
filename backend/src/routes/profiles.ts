@@ -20,11 +20,16 @@ import type { AuthBindings, AuthVariables } from '../middleware/auth';
 
 export type ProfilesBindings = AuthBindings & {
   FORUM_DB: D1Database;
-  // Public origin of the R2 bucket fronting avatar uploads (e.g.
-  // `https://media.holdclose.local`). avatar_url updates must start
-  // with this prefix so the API can't be used to point at arbitrary
-  // off-platform images.
+  // Public origin serving avatar objects out of FORUM_MEDIA — set to the
+  // Worker's own `/media` route (see `mediaRouter`), so an avatar URL
+  // resolves without provisioning a public R2 bucket domain. Every
+  // avatar_url the API accepts or mints must start with this prefix, so the
+  // profile can't be pointed at an arbitrary off-platform image.
   R2_PUBLIC_URL: string;
+  // Avatar images, namespaced per profile under `avatars/<profileId>/`.
+  // Written by PUT /profiles/avatar, read back through GET /media/*, and
+  // purged on account deletion.
+  FORUM_MEDIA: R2Bucket;
   // Document-scan blobs (emergency card / POA / ID images), namespaced
   // per circle under `documents/<circleId>/`. Account deletion purges the
   // blobs of every circle it tears down so no synced PHI outlives the
@@ -33,6 +38,26 @@ export type ProfilesBindings = AuthBindings & {
 };
 
 export type ProfilesVariables = AuthVariables;
+
+/// Avatar upload constraints.
+///
+/// The type whitelist is a SECURITY control, not a convenience: an avatar is
+/// served back from our own origin, so allowing `image/svg+xml` or `text/html`
+/// would let a caregiver upload an active document that executes in the
+/// browser of anyone who views their forum post. Only raster images.
+const AVATAR_CONTENT_TYPES = new Map<string, string>([
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+]);
+
+/// 2 MB. A profile photo the app has already downscaled is far under this;
+/// the cap stops payload-stuffing on an authed-but-cheap route.
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+
+/// R2 key prefix for a profile's avatars. Keys are UUID-named, so a new
+/// upload never collides with (or is cached over) the old one.
+const avatarPrefix = (profileId: string): string => `avatars/${profileId}/`;
 
 const DISPLAY_NAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
 const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
@@ -114,6 +139,30 @@ async function purgeCircleBlobs(
   return deleted;
 }
 
+/// Delete every avatar object a profile owns. Called on a new upload (so an
+/// old photo doesn't linger, and one profile can't hoard storage) and on
+/// account deletion (so a caregiver's face doesn't outlive their account —
+/// the avatar is served PUBLICLY, which makes this a privacy obligation, not
+/// just housekeeping).
+async function purgeAvatars(
+  media: R2Bucket,
+  profileId: string,
+): Promise<number> {
+  const prefix = avatarPrefix(profileId);
+  let deleted = 0;
+  let cursor: string | undefined;
+  do {
+    const listed = await media.list({ prefix, cursor });
+    const keys = listed.objects.map((o) => o.key);
+    if (keys.length > 0) {
+      await media.delete(keys);
+      deleted += keys.length;
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+  return deleted;
+}
+
 type DeletionSummary = {
   profiles: number;
   posts: number;
@@ -126,6 +175,7 @@ type DeletionSummary = {
   patients: number;
   care_docs: number;
   document_blobs: number;
+  avatars: number;
   llm_usage: number;
 };
 
@@ -136,6 +186,7 @@ type DeletionSummary = {
 async function deleteAccount(
   db: Db,
   blobs: R2Bucket,
+  media: R2Bucket,
   profileId: string,
   careblazersUserId: string,
 ): Promise<DeletionSummary> {
@@ -151,8 +202,15 @@ async function deleteAccount(
     patients: 0,
     care_docs: 0,
     document_blobs: 0,
+    avatars: 0,
     llm_usage: 0,
   };
+
+  // --- The caller's avatar --------------------------------------------
+  // Their photo is served PUBLICLY from our own origin, so it must not
+  // outlive the account that owns it. Purged before the forum rows so a
+  // half-failed deletion can never leave a live face behind a dead profile.
+  summary.avatars = await purgeAvatars(media, profileId);
 
   // --- Forum content the caller authored ------------------------------
   // Comments before posts: a comment on the caller's own post would
@@ -458,6 +516,80 @@ export const profilesRouter = () => {
     return c.json(meResponse(updated), 200);
   });
 
+  // Upload the caller's profile photo. Raw image bytes in the body (the app
+  // already has the file on disk from the OS picker, so a multipart envelope
+  // would buy nothing), `Content-Type` declaring the format.
+  //
+  // Why an upload ROUTE rather than the client PATCHing an avatar_url: the
+  // app has no way to write to R2, and PATCH only accepts URLs already on our
+  // media origin — so before this route existed, `avatar_url` could never be
+  // set to anything real. The FORUM_MEDIA bucket was bound and unused, and
+  // the avatar feature was dead end-to-end.
+  //
+  // The stored object is served back PUBLICLY by GET /media/* (avatars appear
+  // next to forum posts, which are themselves read-anonymous), which is why
+  // the content-type whitelist below is a security control: an SVG or HTML
+  // "avatar" would be an active document executing on our own origin.
+  router.put('/avatar', async (c) => {
+    const careblazersUserId = c.get('userId');
+    const db = drizzle(c.env.FORUM_DB);
+
+    const [profile] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.careblazersUserId, careblazersUserId));
+    if (!profile) {
+      return c.json({ error: 'profile_not_found' }, 404);
+    }
+
+    // Strip any parameters ("image/jpeg; charset=x" → "image/jpeg") so a
+    // decorated header can't sneak past the whitelist.
+    const rawType = c.req.header('Content-Type') ?? '';
+    const contentType = rawType.split(';')[0].trim().toLowerCase();
+    const extension = AVATAR_CONTENT_TYPES.get(contentType);
+    if (!extension) {
+      return c.json({ error: 'unsupported_media_type' }, 415);
+    }
+
+    const body = await c.req.arrayBuffer();
+    if (body.byteLength === 0) {
+      return c.json({ error: 'empty_body' }, 400);
+    }
+    if (body.byteLength > AVATAR_MAX_BYTES) {
+      return c.json({ error: 'payload_too_large' }, 413);
+    }
+
+    const origin = c.env.R2_PUBLIC_URL;
+    if (!origin) {
+      // No media origin configured = we'd mint an avatar_url that resolves
+      // nowhere. Fail loudly rather than store a broken pointer.
+      return c.json({ error: 'server_misconfigured' }, 500);
+    }
+
+    // Replace, don't accumulate: drop the caller's previous photo(s) first so
+    // one profile can't hoard storage and an old face doesn't linger. Doing
+    // this BEFORE the put keeps the new (UUID-named) key safe from the purge.
+    await purgeAvatars(c.env.FORUM_MEDIA, profile.id);
+
+    const key = `${avatarPrefix(profile.id)}${crypto.randomUUID()}.${extension}`;
+    await c.env.FORUM_MEDIA.put(key, body, {
+      httpMetadata: {
+        contentType,
+        // Keys are UUID-named, so an object is immutable: a new upload is a
+        // new key. Safe to cache hard — the URL changes when the photo does.
+        cacheControl: 'public, max-age=31536000, immutable',
+      },
+    });
+
+    const avatarUrl = `${origin.replace(/\/$/, '')}/${key}`;
+    const [updated] = await db
+      .update(profiles)
+      .set({ avatarUrl })
+      .where(eq(profiles.id, profile.id))
+      .returning();
+    return c.json(meResponse(updated), 200);
+  });
+
   // Full account deletion (privacy Principle 1 + Apple 5.1.1(v)): tears
   // down EVERYTHING tied to the caller and returns a summary of what was
   // removed. It is a hard delete, not a soft flag — nothing about this
@@ -495,6 +627,7 @@ export const profilesRouter = () => {
     const summary = await deleteAccount(
       db,
       c.env.DOC_BLOBS,
+      c.env.FORUM_MEDIA,
       profile.id,
       careblazersUserId,
     );

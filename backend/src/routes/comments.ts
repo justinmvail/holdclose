@@ -67,7 +67,7 @@ async function loadCommentCount(db: Db, postId: string): Promise<number> {
 
 function commentResponse(
   c: Comment,
-  author?: Pick<Profile, 'username' | 'displayName'>,
+  author?: Pick<Profile, 'username' | 'displayName' | 'avatarUrl'>,
 ) {
   if (c.hidden) {
     // Reddit-style placeholder: preserve tree shape (id, parent,
@@ -96,6 +96,7 @@ function commentResponse(
     author_id: c.authorId,
     author_username: author?.username ?? null,
     author_display_name: author?.displayName ?? null,
+    author_avatar_url: author?.avatarUrl ?? null,
     body: c.body,
     created_at: c.createdAt.toISOString(),
     vote_count: c.voteCount,
@@ -113,8 +114,8 @@ function commentResponse(
 async function loadAuthors(
   db: Db,
   authorIds: string[],
-): Promise<Map<string, Pick<Profile, 'username' | 'displayName'>>> {
-  const map = new Map<string, Pick<Profile, 'username' | 'displayName'>>();
+): Promise<Map<string, Pick<Profile, 'username' | 'displayName' | 'avatarUrl'>>> {
+  const map = new Map<string, Pick<Profile, 'username' | 'displayName' | 'avatarUrl'>>();
   const unique = [...new Set(authorIds)];
   if (unique.length === 0) {
     return map;
@@ -124,11 +125,16 @@ async function loadAuthors(
       id: profiles.id,
       username: profiles.username,
       displayName: profiles.displayName,
+      avatarUrl: profiles.avatarUrl,
     })
     .from(profiles)
     .where(inArray(profiles.id, unique));
   for (const row of rows) {
-    map.set(row.id, { username: row.username, displayName: row.displayName });
+    map.set(row.id, {
+      username: row.username,
+      displayName: row.displayName,
+      avatarUrl: row.avatarUrl,
+    });
   }
   return map;
 }

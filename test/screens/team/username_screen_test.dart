@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:holdclose/providers/photo_attacher_provider.dart';
 import 'package:holdclose/services/fake_forum_api_client.dart';
 import 'package:holdclose/services/forum_api_client.dart';
 import 'package:holdclose/screens/team/username_screen.dart';
@@ -45,18 +48,52 @@ GoRouter _router() => GoRouter(
       ],
     );
 
-Future<void> _pump(WidgetTester tester, ForumApiClient client) async {
+/// A [PhotoAttacher] that returns a caller-supplied path (or null to model
+/// the caregiver cancelling the OS picker).
+class _StubPhotoAttacher implements PhotoAttacher {
+  _StubPhotoAttacher(this.path);
+
+  final String? path;
+  int calls = 0;
+
+  @override
+  Future<String?> pickPhoto({
+    PhotoSource source = PhotoSource.library,
+    int maxSide = 2048,
+    int quality = 80,
+  }) async {
+    calls++;
+    return path;
+  }
+}
+
+Future<void> _pump(
+  WidgetTester tester,
+  ForumApiClient client, {
+  PhotoAttacher? photos,
+}) async {
   await tester.binding.setSurfaceSize(const Size(440, 1200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     ProviderScope(
       overrides: <Override>[
         forumApiClientProvider.overrideWithValue(client),
+        if (photos != null) photoAttacherProvider.overrideWithValue(photos),
       ],
       child: MaterialApp.router(routerConfig: _router()),
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// Write a real (tiny) file so the screen's `File(path).readAsBytes()` has
+/// something to read — the upload path is exercised for real, not stubbed out.
+File _tempPhoto() {
+  final Directory dir = Directory.systemTemp.createTempSync('hc_avatar_test');
+  addTearDown(() => dir.deleteSync(recursive: true));
+  final File file = File('${dir.path}/photo.jpg');
+  file.writeAsBytesSync(<int>[1, 2, 3, 4]);
+  return file;
 }
 
 void main() {
@@ -120,5 +157,55 @@ void main() {
     expect(after.available, isTrue,
         reason: 'the caller still owns the handle they just claimed');
     expect((await client.getMyProfile()).username, 'newname');
+  });
+
+  testWidgets('Add photo → picks → uploads → the avatar and label update',
+      (tester) async {
+    // The avatar feature was dead end-to-end until 2026-07-13 (no upload
+    // route, and R2_PUBLIC_URL pointed at a domain that resolved nowhere).
+    // This pins the app half: pick → real bytes → uploadAvatar → refresh.
+    final FakeForumApiClient client = FakeForumApiClient();
+    final _StubPhotoAttacher photos = _StubPhotoAttacher(_tempPhoto().path);
+    await _pump(tester, client, photos: photos);
+
+    expect((await client.getMyProfile()).avatarUrl, isNull);
+    expect(find.text('Add photo'), findsOneWidget);
+
+    // runAsync: the screen does REAL file IO (`File(path).readAsBytes()`),
+    // which never completes inside testWidgets' fake-async zone.
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(UsernameScreen.photoButtonKey));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    // Deliberately NOT pumpAndSettle: with an avatar_url set, ForumAvatar
+    // mounts an Image.network, and flutter_test's stub HttpClient leaves that
+    // request pending forever — pumpAndSettle would spin until it timed out.
+    // (The widget copes: loadingBuilder holds the initial until it resolves.)
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(photos.calls, 1);
+    // The photo actually landed on the profile...
+    expect((await client.getMyProfile()).avatarUrl, isNotNull);
+    // ...and the screen now offers to CHANGE it rather than add one.
+    expect(find.text('Change photo'), findsOneWidget);
+    expect(find.text('Add photo'), findsNothing);
+    expect(find.text('Your photo is updated.'), findsOneWidget);
+  });
+
+  testWidgets('cancelling the picker uploads nothing', (tester) async {
+    final FakeForumApiClient client = FakeForumApiClient();
+    final _StubPhotoAttacher photos = _StubPhotoAttacher(null); // cancelled
+    await _pump(tester, client, photos: photos);
+
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(UsernameScreen.photoButtonKey));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+
+    expect(photos.calls, 1);
+    expect((await client.getMyProfile()).avatarUrl, isNull);
+    expect(find.text('Add photo'), findsOneWidget);
   });
 }

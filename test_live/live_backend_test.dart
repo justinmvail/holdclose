@@ -46,8 +46,9 @@
 /// inference call and deletes the account it creates.
 library;
 
-import 'dart:convert' show jsonDecode;
+import 'dart:convert' show base64Decode, jsonDecode;
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:holdclose/models/chat.dart' show MessageRole;
 import 'package:holdclose/models/forum.dart'
@@ -65,6 +66,11 @@ const String _baseUrl = String.fromEnvironment('FORUM_API_URL');
 const String _liveJwt = String.fromEnvironment('LIVE_JWT');
 
 bool get _configured => _baseUrl.isNotEmpty && _liveJwt.isNotEmpty;
+
+/// A 1x1 PNG — a genuine raster image, small enough to be free to upload.
+final List<int> _tinyPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+);
 
 /// Guard: never let this suite point at production by accident.
 bool get _looksLikeProd => _baseUrl.contains('holdclose.care');
@@ -153,6 +159,33 @@ void main() {
           contains(medId),
           reason: 'the doc the app pushed must come back through syncPull',
         );
+      },
+      skip: _configured ? false : 'set FORUM_API_URL + LIVE_JWT',
+    );
+
+    test(
+      'the app can upload an avatar and the URL it gets back actually loads',
+      () async {
+        // The avatar feature was dead end-to-end until 2026-07-13: no upload
+        // route existed and R2_PUBLIC_URL pointed at a domain that resolved
+        // nowhere. The load-bearing assertion is the SECOND one — that the URL
+        // the app receives can actually be fetched, which is what the community
+        // feed does when it renders a face.
+        final ForumProfile updated = await api.uploadAvatar(
+          bytes: _tinyPng,
+          contentType: 'image/png',
+        );
+        expect(updated.avatarUrl, isNotNull);
+
+        // Fetch the ABSOLUTE url the API handed us, exactly as the feed's
+        // Image.network would — no auth header, no base-path assumptions.
+        final Response<List<int>> fetched = await Dio().get<List<int>>(
+          updated.avatarUrl!,
+          options: Options(responseType: ResponseType.bytes),
+        );
+        expect(fetched.statusCode, 200);
+        expect(fetched.headers.value('content-type'), 'image/png');
+        expect(fetched.data, _tinyPng);
       },
       skip: _configured ? false : 'set FORUM_API_URL + LIVE_JWT',
     );

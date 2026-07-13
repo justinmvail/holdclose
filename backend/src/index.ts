@@ -10,6 +10,7 @@ import { documentsRouter } from './routes/documents';
 import { extractRouter, type ExtractBindings } from './routes/extract';
 import { joinRouter } from './routes/join';
 import { privacyRouter, termsRouter } from './routes/legal';
+import { mediaRouter } from './routes/media';
 import { postsRouter } from './routes/posts';
 import { profilesRouter } from './routes/profiles';
 import { reportsRouter } from './routes/reports';
@@ -67,6 +68,13 @@ app.route('/join', joinRouter());
 // domain is attached to the Worker at deploy.
 app.route('/terms', termsRouter());
 app.route('/privacy', privacyRouter());
+
+// Public avatar serving out of FORUM_MEDIA. Worker-root + no auth, same
+// posture as /join and the legal pages: avatars render next to forum posts,
+// and the feed is read-anonymous. `R2_PUBLIC_URL` points here, which is what
+// lets an avatar URL resolve without provisioning a public R2 domain — see
+// routes/media.ts.
+app.route('/media', mediaRouter());
 
 const api = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 

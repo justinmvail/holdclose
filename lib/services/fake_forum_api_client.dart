@@ -57,6 +57,14 @@ class FakeForumApiClient extends ForumApiClient {
   /// Matches the Worker's `^[a-z0-9_]{3,20}$` rule.
   static final RegExp _usernamePattern = RegExp(r'^[a-z0-9_]{3,20}$');
 
+  /// The raster types the Worker's avatar route accepts. Mirrored here so a
+  /// demo/test caller sending an SVG fails the same way it would in prod.
+  static const Set<String> _avatarContentTypes = <String>{
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+  };
+
   /// The synthetic profile the demo signs in as. The fake auth
   /// provider's user maps to `careblazers_user_id = 'demo-user'`.
   static const String _demoUserHoldcloseId = 'demo-user';
@@ -233,6 +241,35 @@ class FakeForumApiClient extends ForumApiClient {
     );
     _profiles[current.careblazersUserId] = next;
     return next;
+  }
+
+  /// In-memory stand-in for the R2 upload: mints a stable fake media URL and
+  /// stores it on the profile, so demo/test callers exercise the same
+  /// "upload → new avatarUrl → refresh" flow the real client drives. Mirrors
+  /// the Worker's guarantee that a new upload mints a NEW url (the counter),
+  /// so a caller that caches the old one is caught here rather than in prod.
+  int _avatarUploads = 0;
+
+  @override
+  Future<ForumProfile> uploadAvatar({
+    required List<int> bytes,
+    required String contentType,
+  }) async {
+    if (bytes.isEmpty) {
+      throw ForumApiException(statusCode: 400, error: 'empty_body');
+    }
+    if (!_avatarContentTypes.contains(contentType)) {
+      throw ForumApiException(
+        statusCode: 415,
+        error: 'unsupported_media_type',
+      );
+    }
+    final ForumProfile current = _resolveMyProfile();
+    _avatarUploads++;
+    return updateMyProfile(
+      avatarUrl:
+          'https://demo.invalid/media/avatars/${current.id}/$_avatarUploads.jpg',
+    );
   }
 
   @override

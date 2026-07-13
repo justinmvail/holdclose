@@ -447,6 +447,78 @@ describe('document blobs (R2)', () => {
   });
 });
 
+/// Profile avatars against the REAL edge: upload → R2 → public serve.
+///
+/// Worth a live test specifically because this feature's failure mode was
+/// invisible to any hermetic suite: FORUM_MEDIA was bound but unused, no
+/// upload route existed, and `R2_PUBLIC_URL` pointed at a placeholder domain
+/// (`media.holdclose.local`) that resolved NOWHERE — so even a "correct"
+/// avatar_url could never have loaded in a real app. The load-bearing
+/// assertion here is that the URL the API mints actually FETCHES.
+describe('profile avatars (R2 + public serving)', () => {
+  const bytes = Uint8Array.from(atob(TINY_PNG_BASE64), (c) => c.charCodeAt(0));
+  let avatarUrl = '';
+
+  it('uploads the caregiver photo', async () => {
+    const res = await api('/api/v1/profiles/avatar', {
+      method: 'PUT',
+      token: tokenA,
+      body: bytes,
+      contentType: 'image/png',
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { avatar_url: string };
+    expect(body.avatar_url).toBeTruthy();
+    avatarUrl = body.avatar_url;
+  });
+
+  it('the minted avatar_url actually RESOLVES over the public internet', async () => {
+    // Not `api(...)`: fetch the absolute URL the API handed us, exactly as a
+    // phone rendering the community feed would — no session, no base-path
+    // assumptions. If R2_PUBLIC_URL is ever pointed at a domain that does not
+    // serve, this is the test that catches it.
+    const res = await fetch(avatarUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
+  });
+
+  it('an SVG "avatar" is refused — it would execute on our own origin', async () => {
+    const res = await api('/api/v1/profiles/avatar', {
+      method: 'PUT',
+      token: tokenA,
+      body: '<svg onload="alert(1)"/>',
+      contentType: 'image/svg+xml',
+    });
+    expect(res.status).toBe(415);
+  });
+
+  it('the photo rides along with the caregiver’s posts', async () => {
+    const created = await api('/api/v1/posts', {
+      method: 'POST',
+      token: tokenA,
+      json: {
+        title: `${RUN_ID}: a post with a face`,
+        body: 'Live smoke-test post — auto-deleted.',
+      },
+    });
+    expect(created.status).toBe(201);
+    const post = (await created.json()) as {
+      id: string;
+      author_avatar_url: string | null;
+    };
+    expect(post.author_avatar_url).toBe(avatarUrl);
+    await api(`/api/v1/posts/${post.id}`, { method: 'DELETE', token: tokenA });
+  });
+
+  // NOTE: the purge-on-account-deletion path is asserted in the account
+  // deletion block below (`deleted.avatars`), which runs last and tears this
+  // photo down — a caregiver's face must not outlive their account.
+});
+
 describe('community forum', () => {
   it('owner creates a post', async () => {
     const res = await api('/api/v1/posts', {
@@ -764,12 +836,19 @@ describe('account deletion (cleanup doubles as the test)', () => {
     tokenB = ''; // afterAll: nothing left to clean
   });
 
-  it('owner deletes their account, cascading the circle + care data', async () => {
+  it('owner deletes their account, cascading the circle + care data + their photo', async () => {
     const res = await api('/api/v1/profiles/me', {
       method: 'DELETE',
       token: tokenA,
     });
     expect(res.status).toBe(200);
+
+    // The avatar uploaded earlier is served PUBLICLY, so it must not outlive
+    // the account — the deletion reports it, and the URL must go dead.
+    const { deleted } = (await res.clone().json()) as {
+      deleted: Record<string, number>;
+    };
+    expect(deleted.avatars).toBe(1);
 
     // The circle must be unreachable afterwards.
     const sync = await api(`/api/v1/sync/${circleId}?since=0`, {

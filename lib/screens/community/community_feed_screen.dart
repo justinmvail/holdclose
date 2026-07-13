@@ -16,6 +16,7 @@ import '../../theme.dart';
 import '../../widgets/form/format.dart';
 import '../../widgets/network_error_view.dart';
 import '../../widgets/path_header.dart';
+import '../../widgets/forum_avatar.dart';
 import '../../widgets/segmented_subnav.dart';
 import 'learn_screen.dart';
 import 'support_screen.dart';
@@ -574,6 +575,7 @@ class _PostCard extends StatelessWidget {
               children: <Widget>[
                 _AuthorRow(
                   displayName: displayName,
+                  avatarUrl: post.authorAvatarUrl,
                   time: time,
                 ),
                 const SizedBox(height: 10),
@@ -611,17 +613,24 @@ class _PostCard extends StatelessWidget {
 }
 
 class _AuthorRow extends StatelessWidget {
-  const _AuthorRow({required this.displayName, required this.time});
+  const _AuthorRow({
+    required this.displayName,
+    required this.time,
+    this.avatarUrl,
+  });
 
   final String displayName;
   final String time;
+
+  /// The author's uploaded photo, when they have one. Null → initial circle.
+  final String? avatarUrl;
 
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     return Row(
       children: <Widget>[
-        _Avatar(displayName: displayName),
+        ForumAvatar(displayName: displayName, avatarUrl: avatarUrl),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -648,35 +657,6 @@ class _AuthorRow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.displayName});
-
-  final String displayName;
-
-  @override
-  Widget build(BuildContext context) {
-    final String initial = displayName.isEmpty
-        ? '?'
-        : displayName.substring(0, 1).toUpperCase();
-    return Container(
-      width: 36,
-      height: 36,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: context.hc.primary,
-        shape: BoxShape.circle,
-      ),
-      child: Text(
-        initial,
-        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: context.hc.background,
-              fontWeight: FontWeight.w700,
-            ),
-      ),
     );
   }
 }
