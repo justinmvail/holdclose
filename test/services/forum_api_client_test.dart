@@ -97,6 +97,48 @@ void main() {
       );
     });
 
+    test(
+        'a PLAIN 401 (no Token-Expired header) ALSO recovers — a rotated '
+        'signing secret must not wedge the session forever', () async {
+      // The 2026-07-13 outage. Rotating FORUM_JWT_SECRET on the Worker
+      // invalidated the SIGNATURE of every already-issued session token. The
+      // Worker rejects those with a plain 401 (no `Token-Expired` header — the
+      // token hasn't expired, it just doesn't verify). Recovery used to be
+      // gated on that header, so the client never re-authenticated: sync, chat
+      // and bug reports from the tester's phone silently 401'd for hours while
+      // the app looked healthy (all care data is local). A bad signature is
+      // exactly as recoverable as an expiry — re-exchange and carry on.
+      final _SequenceAdapter adapter = _SequenceAdapter(<_CannedResponse>[
+        _CannedResponse.json(
+          <String, Object?>{'error': 'unauthorized'},
+          statusCode: 401,
+        ),
+        _CannedResponse.json(profileJson()),
+      ]);
+      final List<String> servedTokens = <String>['token-from-old-secret', 'fresh-token'];
+      int tokenCalls = 0;
+      int recoveries = 0;
+      final ForumApiClient client = ForumApiClient(
+        tokenLoader: () async => servedTokens[tokenCalls++],
+        onTokenExpired: () async {
+          recoveries += 1;
+          return true;
+        },
+        dio: Dio()..httpClientAdapter = adapter,
+        baseUrl: 'https://forum-api.workers.dev',
+      );
+
+      final ForumProfile profile = await client.bootstrapProfile();
+
+      expect(profile.id, 'profile-1');
+      expect(recoveries, 1, reason: 'a plain 401 must trigger re-exchange');
+      expect(adapter.requests, hasLength(2));
+      expect(
+        adapter.requests.last.headers['Authorization'],
+        'Bearer fresh-token',
+      );
+    });
+
     test('failed recovery rethrows the original token-expired error '
         'without retrying', () async {
       final _SequenceAdapter adapter = _SequenceAdapter(<_CannedResponse>[

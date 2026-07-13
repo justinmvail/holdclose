@@ -47,6 +47,7 @@
 library;
 
 import 'dart:convert' show base64Decode, jsonDecode;
+import 'dart:typed_data' show Uint8List;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,6 +57,7 @@ import 'package:holdclose/models/forum.dart'
 import 'package:holdclose/services/api_chat_backend.dart';
 import 'package:holdclose/services/chat_service.dart'
     show ChatDelta, ChatDeltaError, ChatDeltaText, ChatTurn;
+import 'package:holdclose/services/feedback_service.dart';
 import 'package:holdclose/services/forum_api_client.dart';
 
 /// The deployed Worker origin. Same define the shipped app reads.
@@ -186,6 +188,36 @@ void main() {
         expect(fetched.statusCode, 200);
         expect(fetched.headers.value('content-type'), 'image/png');
         expect(fetched.data, _tinyPng);
+      },
+      skip: _configured ? false : 'set FORUM_API_URL + LIVE_JWT',
+    );
+
+    test(
+      "the app's REAL FeedbackSender delivers a report to the Worker",
+      () async {
+        // The Report button stopped delivering when the backend moved to
+        // Cloudflare (the shim it posted to went dark). This drives the app's
+        // ACTUAL FeedbackSender — same dio, same headers, same payload — at the
+        // deployed Worker, so "the client code works" stops being an assumption.
+        final FeedbackSender sender = FeedbackSender(
+          endpoint: '$_baseUrl/api/v1/feedback',
+          tokenLoader: () async => _liveJwt,
+        );
+        final FeedbackReport report = FeedbackReport.create(
+          category: FeedbackCategory.bug,
+          message: 'live-suite: FeedbackSender end-to-end probe',
+          route: '/setup',
+          testerName: 'live-suite',
+          hasScreenshot: true,
+          logs: 'probe log line',
+        );
+
+        final bool delivered = await sender.send(
+          report,
+          Uint8List.fromList(_tinyPng),
+        );
+        expect(delivered, isTrue,
+            reason: 'the app-side sender must reach the Worker');
       },
       skip: _configured ? false : 'set FORUM_API_URL + LIVE_JWT',
     );

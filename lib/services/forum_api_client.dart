@@ -1091,12 +1091,25 @@ class ForumApiClient implements EntitlementApi {
         ),
       ).then(_throwIfError);
     } on ForumApiException catch (e) {
-      // Expired session token: recover (drop + silent re-exchange) and
-      // retry the request exactly once. `retryOnExpiredToken: false` on
-      // the retry guarantees no loop when the fresh token is also bad.
+      // ANY 401 → recover (drop + silent re-exchange) and retry the request
+      // exactly once. `retryOnExpiredToken: false` on the retry guarantees no
+      // loop when the fresh token is also rejected.
+      //
+      // This used to trigger ONLY on `e.tokenExpired` — the `Token-Expired:
+      // true` header the Worker sets for a genuinely EXPIRED token. A token
+      // the Worker rejects for any OTHER reason returns a plain 401, and the
+      // client never re-authenticated: the session was wedged FOREVER, with no
+      // error surfaced and no way out but signing out and back in.
+      //
+      // That is not theoretical. Rotating FORUM_JWT_SECRET (2026-07-13)
+      // invalidated the signature on every already-issued session token. Every
+      // authed call from the tester's phone — sync, chat, and the bug reports
+      // we were hunting — silently 401'd for hours, while the app looked fine
+      // because the care data is local. A signature mismatch is exactly as
+      // recoverable as an expiry: re-exchange and carry on.
       if (!anonymous &&
           retryOnExpiredToken &&
-          e.tokenExpired &&
+          e.statusCode == 401 &&
           _onTokenExpired != null) {
         final bool recovered = await _onTokenExpired();
         if (recovered) {

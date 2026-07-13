@@ -225,6 +225,26 @@ holdclose/                  # repo root (matches pubspec name:)
   (`ensurePatient`) so dependent screens aren't empty. Non-demo builds
   never render the toggle and never reset. (The seeded loved one is
   diagnosis-agnostic — a post-stroke + hypertension demo persona.)
+- **Deployed-config changes are BREAKING client changes** (2026-07-13 incident,
+  cost a full day — full write-up + checklist in `docs/BACKEND_OPS.md`, read it
+  before touching a deployed secret):
+  - Rotating `FORUM_JWT_SECRET` invalidates the SIGNATURE of every session token
+    already in the field. Before changing any deployed secret, state what it
+    invalidates for existing clients and how they recover.
+  - **Any 401 must trigger a silent re-exchange + one retry — not just a
+    `Token-Expired` 401.** A rotated secret yields a PLAIN 401; gating recovery
+    on that header wedged a tester's phone permanently (every authed call 401'd
+    for hours; the app looked fine because care data is local). Pinned by tests
+    in `forum_api_client_test.dart` + `feedback_service_test.dart` — don't
+    re-narrow it. Any new caller that hits the Worker with raw dio (not through
+    `ForumApiClient`) must wire the same recovery.
+  - **Read STATUS, never `outcome`.** `wrangler tail`'s `outcome: "ok"` means
+    "the Worker didn't throw", NOT "the request succeeded" — a wall of 401s
+    reads as healthy. Use `tools/worker_tail.sh` (status-first, flags non-2xx).
+  - **The live suites cannot catch this**: they forge a fresh token every run,
+    so they are blind to "clients already in the field are broken". After a
+    deployed-config change, tail with status and confirm a REAL device that was
+    already signed in gets 2xx.
 - **Security invariants (2026-06-11 hardening — do not regress):**
   - The app NEVER holds a signing secret. Session JWTs are minted by
     the Worker in `POST /auth/google` after Google ID-token

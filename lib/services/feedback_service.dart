@@ -9,7 +9,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/build_info.dart';
-import '../providers/forum_jwt_provider.dart' show forumSessionManagerProvider;
+import '../providers/forum_jwt_provider.dart'
+    show ForumSessionManager, forumSessionManagerProvider;
 import '../providers/llm_provider.dart' show shimBaseUrl, shimAuthHeaders;
 import 'forum_api_client.dart'
     show forumApiBaseUrl, forumApiVersionPrefix, forumBackendConfigured;
@@ -334,8 +335,10 @@ class FeedbackSender {
     Dio? dio,
     String? endpoint,
     Future<String> Function()? tokenLoader,
+    Future<bool> Function()? onUnauthorized,
   })  : _dio = dio,
         _tokenLoader = tokenLoader,
+        _onUnauthorized = onUnauthorized,
         endpoint = endpoint ??
             (forumBackendConfigured
                 ? '$forumApiBaseUrl$forumApiVersionPrefix/feedback'
@@ -347,6 +350,12 @@ class FeedbackSender {
   /// Supplies the forum session JWT when posting to the Worker. Null on the
   /// shim fallback (which uses its own bearer token instead).
   final Future<String> Function()? _tokenLoader;
+
+  /// Drops the stored session and silently re-exchanges it. Invoked on a 401 —
+  /// a stale token (expired OR signed with a rotated secret) must not strand a
+  /// tester's report. Mirrors [ForumApiClient]'s recovery; this sender bypasses
+  /// that client (raw dio), so it needs its own hook.
+  final Future<bool> Function()? _onUnauthorized;
 
   /// True when reports go to the Worker rather than the dev shim.
   bool get _usesForumBackend => _tokenLoader != null;
@@ -386,7 +395,7 @@ class FeedbackSender {
     }
 
     try {
-      final Response<dynamic> resp = await dio.post<dynamic>(
+      Response<dynamic> resp = await dio.post<dynamic>(
         endpoint,
         data: body,
         options: Options(
@@ -395,6 +404,28 @@ class FeedbackSender {
           validateStatus: (int? s) => s != null && s < 500,
         ),
       );
+
+      // A 401 means the session token is stale — expired, or signed with a
+      // secret that has since been rotated (which is exactly what stranded a
+      // tester's report on 2026-07-13: every authed call 401'd for hours and
+      // nothing re-authenticated). Re-exchange once and retry, so a report is
+      // never lost to a token the app could have simply replaced.
+      if (resp.statusCode == 401 && _onUnauthorized != null) {
+        if (await _onUnauthorized()) {
+          resp = await dio.post<dynamic>(
+            endpoint,
+            data: body,
+            options: Options(
+              contentType: Headers.jsonContentType,
+              // The re-exchanged token, not the stale one.
+              headers: <String, String>{
+                'Authorization': 'Bearer ${await _tokenLoader!()}'
+              },
+              validateStatus: (int? s) => s != null && s < 500,
+            ),
+          );
+        }
+      }
       return resp.statusCode == 200;
     } catch (_) {
       return false;
@@ -501,11 +532,17 @@ final Provider<FeedbackOutbox> feedbackOutboxProvider =
 /// shim. See [FeedbackSender] for why this moved off the shim.
 final Provider<FeedbackSender> feedbackSenderProvider =
     Provider<FeedbackSender>(
-  (Ref ref) => FeedbackSender(
-    tokenLoader: forumBackendConfigured
-        ? ref.watch(forumSessionManagerProvider).currentToken
-        : null,
-  ),
+  (Ref ref) {
+    if (!forumBackendConfigured) return FeedbackSender();
+    final ForumSessionManager session =
+        ref.watch(forumSessionManagerProvider);
+    return FeedbackSender(
+      tokenLoader: session.currentToken,
+      // Same recovery the API client gets: a stale token (expired, or signed
+      // with a rotated secret) must not strand a report.
+      onUnauthorized: session.recoverFromExpiry,
+    );
+  },
 );
 
 final Provider<TesterNameStore> testerNameStoreProvider =

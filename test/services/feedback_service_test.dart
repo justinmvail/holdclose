@@ -188,6 +188,31 @@ void main() {
       expect(adapter.lastHeaders!['Authorization'], 'Bearer session-jwt-123');
     });
 
+    test('a 401 re-exchanges the session and retries — a rotated secret must '
+        'not strand a report', () async {
+      // The 2026-07-13 outage: FORUM_JWT_SECRET was rotated on the Worker, so
+      // the phone's stored token no longer verified. Every authed call 401'd,
+      // including this one, and nothing re-authenticated — the tester's bug
+      // report sat undelivered while the app looked fine.
+      final _SequenceAdapter adapter = _SequenceAdapter(<int>[401, 200]);
+      int recoveries = 0;
+      final List<String> tokens = <String>['stale', 'fresh'];
+      int calls = 0;
+      final FeedbackSender sender = FeedbackSender(
+        dio: Dio()..httpClientAdapter = adapter,
+        endpoint: 'https://worker.example/api/v1/feedback',
+        tokenLoader: () async => tokens[calls++],
+        onUnauthorized: () async {
+          recoveries += 1;
+          return true;
+        },
+      );
+
+      expect(await sender.send(buildReport(), null), isTrue);
+      expect(recoveries, 1);
+      expect(adapter.auths, <String>['Bearer stale', 'Bearer fresh']);
+    });
+
     test('no session yet → the report stays QUEUED, never dropped', () async {
       // A tester who hits a bug before/while signing in must not lose their
       // report: a failed token load leaves it in the outbox for the next
@@ -329,6 +354,37 @@ class _AuthLagsSender extends FeedbackSender {
     attempts++;
     return attempts >= succeedFromAttempt;
   }
+}
+
+/// Replays a fixed sequence of status codes, recording the Authorization
+/// header of each attempt — so a retry can be shown to carry the FRESH token.
+class _SequenceAdapter implements HttpClientAdapter {
+  _SequenceAdapter(this.statuses);
+
+  final List<int> statuses;
+  final List<String> auths = <String>[];
+  int _i = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    auths.add(options.headers['Authorization'] as String? ?? '');
+    final int status = statuses[_i < statuses.length ? _i : statuses.length - 1];
+    _i++;
+    return ResponseBody.fromBytes(
+      utf8.encode(jsonEncode(<String, String>{'ok': 'x'})),
+      status,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 class _StubAdapter implements HttpClientAdapter {
