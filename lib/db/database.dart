@@ -27,14 +27,18 @@ part 'database.g.dart';
 /// `care_tasks` (Phase 14.30), and the Care Team shift coverage board
 /// `care_shifts` (Phase 14.31).
 ///
-/// Construct with [HoldcloseDatabase.open] in production — it lazily
-/// opens an ENCRYPTED SQLite file (`holdclose.sqlite`) under the platform's
-/// app-documents directory. The file is encrypted at rest with SQLCipher; the
-/// key lives in the OS keychain/keystore (see `encrypted_open.dart` for the
-/// key management + the plaintext→cipher upgrade migration). Tests pass a
-/// `NativeDatabase.memory()` directly to the unnamed constructor so each test
-/// gets an isolated, UNENCRYPTED in-memory DB — the encryption path is
-/// production-only and never runs under `flutter test`.
+/// Construct with [HoldcloseDatabase.open] in production — it lazily opens the
+/// SQLite file (`holdclose.sqlite`) under the platform's app-documents
+/// directory.
+///
+/// The file is PLAINTEXT, and relies on the platform's own at-rest encryption
+/// (iOS Data Protection; Android file-based encryption) plus the backup
+/// exclusions already in place. App-level SQLCipher encryption was REMOVED on
+/// 2026-07-13 after it caused three data-loss events in a single day and
+/// prevented none — see the library doc in `encrypted_open.dart`, which also
+/// carries the one-time decrypt migration for installs that still have an
+/// encrypted file. Tests pass a `NativeDatabase.memory()` directly to the
+/// unnamed constructor so each test gets an isolated in-memory DB.
 @DriftDatabase(
   tables: <Type>[
     JournalEntriesTable,
@@ -87,24 +91,18 @@ class HoldcloseDatabase extends _$HoldcloseDatabase {
   /// (e.g. a chat/setup write racing the sync engine). Tests bypass this in
   /// favour of `NativeDatabase.memory()`.
   ///
-  /// The file is ENCRYPTED AT REST with SQLCipher — [encryptedFileExecutor]
-  /// mints/reads the key from the OS keychain/keystore and migrates any
-  /// existing plaintext install in place (so an upgrading tester keeps their
-  /// care data). It returns a lazily-connected executor, so this stays a
-  /// synchronous factory: the async key-read + migration + encrypted open run
-  /// on the first query.
+  /// [localFileExecutor] returns a lazily-connected executor, so this stays a
+  /// synchronous factory: the (one-time) legacy-decrypt migration and the file
+  /// open run on the first query.
   ///
-  /// [createExecutor] is a test seam; production always uses the default
-  /// [encryptedFileExecutor]. It is only INVOKED when no shared instance
-  /// exists yet, and that laziness is load-bearing: the previous
-  /// `openShared(encryptedFileExecutor())` shape evaluated the argument on
-  /// EVERY call, and each throwaway executor ran the whole key-read/migrate
-  /// init in a fire-and-forget future — on a first run those raced their
-  /// key mints, and the last keychain write could strand the freshly
-  /// created DB encrypted under a key nobody kept (the 2026-07 "file is not
-  /// a database" data loss).
+  /// [createExecutor] is a test seam; production always uses the default. It is
+  /// only INVOKED when no shared instance exists yet, and that laziness is
+  /// load-bearing: an earlier shape evaluated the argument on EVERY call, and
+  /// each throwaway executor ran the whole init in a fire-and-forget future —
+  /// on a first run those raced each other and stranded the database (the
+  /// 2026-07 "file is not a database" data loss).
   factory HoldcloseDatabase.open({
-    QueryExecutor Function() createExecutor = encryptedFileExecutor,
+    QueryExecutor Function() createExecutor = localFileExecutor,
   }) =>
       _sharedInstance ??= HoldcloseDatabase._shared(createExecutor());
 

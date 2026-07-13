@@ -261,29 +261,32 @@ holdclose/                  # repo root (matches pubspec name:)
     (`<current_data>` + fullwidth-bracket substitution in
     `chat_context_builder.dart`); treat any new prompt interpolation
     the same way.
-  - The local drift/SQLite DB is ENCRYPTED AT REST with **SQLCipher**
-    (`lib/db/encrypted_open.dart`, wired into `HoldcloseDatabase.open()`).
-    The key is a strong random passphrase minted on first run and held in
-    the OS keychain/keystore via `flutter_secure_storage` — never hardcoded.
-    Existing plaintext installs are rekey-migrated in place on first launch
-    (`sqlcipher_export`) so upgraders keep their care data. Key lifecycle
-    (2026-07-13, after a first-run mint race stranded a DB): the key mint is
-    memoized process-wide + read-back-verified, a key is NEVER minted while
-    an encrypted DB exists, and an undecryptable DB is QUARANTINED
-    (`holdclose.sqlite.quarantined`, kept on disk) + rebuilt fresh — reported
-    via `databaseRecoveryObserver` — never deleted, never left to wedge the
-    app. `HoldcloseDatabase.open()` must construct its executor lazily
-    (only when no shared instance exists) — eager construction re-opens the
-    mint race. Only the real
-    on-device file DB is encrypted; the in-memory test path
-    (`NativeDatabase.memory()`) stays plaintext and the suite never loads
-    SQLCipher. Android backups also stay OFF (`allowBackup="false"`) and iOS
-    files are backup-excluded (defense in depth on top of encryption).
-    Deps: `sqlcipher_flutter_libs` (0.6.x, pairs with `sqlite3: 2.x`) +
-    `sqlite3` (direct, for the pre-open rekey). NOTE for device builds: the
-    SQLCipher native lib supersedes the plain `sqlite3_flutter_libs` build —
-    validate on a real device (Keychain/Keystore + an existing-data upgrade)
-    since `flutter test` runs the in-memory path only.
+  - **The local DB is PLAINTEXT — app-level encryption was REMOVED (2026-07-13).
+    Do not add it back without reading why.** SQLCipher caused THREE data-loss
+    events in a single day on the one device carrying it, and prevented none:
+    (1) a first-run key-mint race stranded the DB under a key nobody kept;
+    (2) an iOS keychain `accessibility` change made the existing key
+    unreadable — `flutter_secure_storage` >=9.1 puts `kSecAttrAccessible` in
+    the READ query and Apple only honours it on first write — so the key
+    vanished, the care record was quarantined, and every save failed;
+    (3) the quarantine step DELETED the previous quarantine, so one more false
+    alarm would have destroyed the only surviving copy.
+    Both platforms ALREADY encrypt this file at rest (iOS Data Protection;
+    Android file-based encryption, mandatory since Android 10, FDE below —
+    our floor is API 26), the file is backup-excluded, and
+    `allowBackup="false"` is set. SQLCipher only added cover for a
+    rooted/jailbroken device while UNLOCKED — not worth three losses of a
+    caregiver's medication list.
+    `lib/db/encrypted_open.dart` now: (a) DECRYPTS a legacy encrypted DB to
+    plaintext once (SQLCipher libs are still linked ONLY for that — phase 2
+    removes them, and must not run until an install that HAD an encrypted DB
+    is seen to come through with its data), (b) never encrypts or mints a key
+    again, (c) NEVER destroys: an unreadable file is moved aside (additive
+    quarantines, never overwriting an earlier one, never deleted) and a
+    provably-wrong quarantine is restored. If encryption is ever wanted again,
+    use drift's supported stack (SQLite3MultipleCiphers on `sqlite3` 3.x, NOT
+    the obsolete `sqlcipher_flutter_libs`), keep the key lifecycle boring, and
+    NEVER change keychain options after release.
 - **Bottom tab bar is always exactly four items in this order —
   Home, Care, Chat, Community — never collapsed or conditionally
   hidden.** ("Medical" was renamed **Care**; the former "Team" tab folded
