@@ -1353,13 +1353,60 @@ class ChatService {
     for (final RegExpMatch m in pair.allMatches(raw)) {
       final String key = m.group(1)!;
       final String value = m.group(2) ?? m.group(3) ?? '';
-      out[key] = value
+      final String unescaped = value
           .replaceAll(r'\"', '"')
           .replaceAll(r'\n', '\n')
           .replaceAll(r'\\', r'\');
+      _hoistRunTogetherArgs(key, unescaped, out);
     }
     return out;
   }
+
+  /// Repair the model's most common marker mistake: stuffing a SECOND field
+  /// inside the first one's quotes.
+  ///
+  /// Seen on a real device (2026-07-13), from the deployed 70b model:
+  ///
+  ///   [action:add_medication name="Ibuprofen dosage=400 mg" route="oral" …]
+  ///
+  /// The parser then read name = `Ibuprofen dosage=400 mg` and NO dosage — so
+  /// the medication could not be added, the confirm card failed, and the
+  /// caregiver was told it hadn't worked with no idea why. Scripted-marker unit
+  /// tests can never catch this; only the live model produces it.
+  ///
+  /// So when a value contains an embedded `key=…` for a key we recognise, split
+  /// it back out: `Ibuprofen dosage=400 mg` → name=`Ibuprofen`, dosage=`400 mg`.
+  /// An explicit later pair always wins over a hoisted one, so a well-formed
+  /// marker is untouched.
+  static void _hoistRunTogetherArgs(
+    String key,
+    String value,
+    Map<String, String> out,
+  ) {
+    final RegExp embedded = RegExp(r'\s+([a-z_]+)\s*=\s*(.+)$');
+    final RegExpMatch? m = embedded.firstMatch(value);
+    if (m == null || !_knownActionArgKeys.contains(m.group(1))) {
+      // No embedded field (or a word that merely looks like one) — take it as
+      // written. An explicit pair parsed later overwrites any hoisted value.
+      out[key] = out.containsKey(key) && value.isEmpty ? out[key]! : value;
+      return;
+    }
+    out[key] = value.substring(0, m.start).trim();
+    // The tail may itself carry more run-together fields.
+    _hoistRunTogetherArgs(m.group(1)!, m.group(2)!.trim(), out);
+  }
+
+  /// Argument names any action may carry. Used ONLY to decide whether an
+  /// embedded `word=…` inside a quoted value is a mangled field or just prose
+  /// (so "notes=take with food" hoists, but a note that happens to read
+  /// "ratio=2:1" does not invent an arg).
+  static const Set<String> _knownActionArgKeys = <String>{
+    'name', 'new_name', 'dosage', 'route', 'prescriber', 'notes', 'windows',
+    'title', 'body', 'due_at', 'provider_name', 'starts_at',
+    'duration_minutes', 'location', 'agenda', 'situation', 'attempts',
+    'occurred_at', 'time', 'frequency', 'days', 'kind', 'weight_lbs',
+    'recorded_at', 'outcome', 'target', 'date',
+  };
 
 }
 

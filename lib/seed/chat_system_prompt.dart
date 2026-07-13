@@ -157,6 +157,12 @@ Available actions:
   7pm"); situation = a sentence or two in their words; attempts = what
   they tried, or "none yet".
 
+FORMAT RULE for every action (the model gets this wrong otherwise):
+each field is its OWN key="value" pair, separated by spaces. NEVER put two
+fields inside one set of quotes.
+  WRONG: [action:add_medication name="Ibuprofen dosage=400 mg"]
+  RIGHT: [action:add_medication name="Ibuprofen" dosage="400 mg"]
+
 - Add a medication the caregiver names — only to record one they (or
   their loved one's doctor) have already decided on:
   [action:add_medication name="Donepezil" dosage="10 mg" route="oral" prescriber="Dr. Ortega" notes="with breakfast" windows="morning,bedtime"]

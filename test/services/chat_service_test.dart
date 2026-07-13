@@ -157,6 +157,87 @@ void main() {
       expect(assistant.body, contains("I'm not sure which screen."));
     });
 
+    test('a marker with RUN-TOGETHER args is repaired — the live model stuffs '
+        'the dose inside the name (fb_1783984099688679)', () async {
+      // Captured verbatim from the tester's phone. The deployed 70b model wrote:
+      //   [action:add_medication name="Ibuprofen dosage=400 mg" route="oral" …]
+      // The parser read name = 'Ibuprofen dosage=400 mg' and NO dosage, so the
+      // medication could not be added, the confirm card failed, and the
+      // caregiver was told "add medication still isn't working". Scripted-marker
+      // tests never produce this — only the live model does.
+      Map<String, String>? captured;
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText('Confirm below and I\'ll add it.\n'
+              '[action:add_medication name="Ibuprofen dosage=400 mg" '
+              'route="oral" windows="morning,evening"]'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        actions: <String, ChatActionExecutor>{
+          'add_medication': (Map<String, String> args) async {
+            captured = args;
+            return const ChatActionOutcome();
+          },
+        },
+      );
+
+      await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'add ibuprofen')
+          .drain<void>();
+      final Message assistant = (await repo.loadMessages('convo-1')).last;
+      final String pending = assistant.citations.firstWhere(
+        (String c) => c.startsWith(ChatService.pendingActionCitationPrefix),
+      );
+      await svc.confirmPendingAction(
+        conversationId: 'convo-1',
+        messageId: assistant.id,
+        citation: pending,
+      );
+
+      expect(captured?['name'], 'Ibuprofen',
+          reason: 'the dose must be split back out of the name');
+      expect(captured?['dosage'], '400 mg');
+      expect(captured?['route'], 'oral');
+      expect(captured?['windows'], 'morning,evening');
+    });
+
+    test('a WELL-FORMED marker is parsed unchanged', () async {
+      Map<String, String>? captured;
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText('[action:add_medication name="Lisinopril" '
+              'dosage="10 mg" notes="take with food"]'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        actions: <String, ChatActionExecutor>{
+          'add_medication': (Map<String, String> args) async {
+            captured = args;
+            return const ChatActionOutcome();
+          },
+        },
+      );
+
+      await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'add it')
+          .drain<void>();
+      final Message assistant = (await repo.loadMessages('convo-1')).last;
+      await svc.confirmPendingAction(
+        conversationId: 'convo-1',
+        messageId: assistant.id,
+        citation: assistant.citations.firstWhere((String c) =>
+            c.startsWith(ChatService.pendingActionCitationPrefix)),
+      );
+
+      expect(captured?['name'], 'Lisinopril');
+      expect(captured?['dosage'], '10 mg');
+      expect(captured?['notes'], 'take with food',
+          reason: 'prose containing spaces must not be mangled by the repair');
+    });
+
     test('appends the user message to the repository first', () async {
       final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
         const ChatDeltaText('Hello, Careblazer.'),
