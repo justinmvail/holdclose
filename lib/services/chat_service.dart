@@ -488,6 +488,7 @@ class _ActionPass {
     this.pendingMarkers = const <String>[],
     this.hadFailure = false,
     this.failureNotices = const <String>[],
+    this.notices = const <String>[],
   });
 
   final List<_ActionResult> results;
@@ -504,12 +505,24 @@ class _ActionPass {
   /// only failure was a thrown exception (no reason to give).
   final List<String> failureNotices;
 
-  /// The line to append to the reply so its prose can't claim a write that
-  /// never happened. Null when nothing failed.
+  /// Disclosures from executors that DID perform, but not exactly as asked —
+  /// a dose window we had to create (with a time we assumed), a name that
+  /// matched nothing. Appended so a partial success can't read as a complete
+  /// one.
+  final List<String> notices;
+
+  /// The line(s) to append to the reply so its prose can't claim more than
+  /// actually happened — a write that failed, or one that only partly matched
+  /// what was asked. Null when there is nothing to disclose.
   String? get failureTrailer {
-    if (!hadFailure) return null;
-    if (failureNotices.isEmpty) return chatActionFailedMessage;
-    return failureNotices.join('\n\n');
+    final List<String> lines = <String>[
+      if (hadFailure)
+        ...(failureNotices.isEmpty
+            ? <String>[chatActionFailedMessage]
+            : failureNotices),
+      ...notices,
+    ];
+    return lines.isEmpty ? null : lines.join('\n\n');
   }
 
   /// Message citations for this pass: executed-action citations first,
@@ -1140,6 +1153,7 @@ class ChatService {
     final List<String> pendingMarkers = <String>[];
     final Set<String> seenMarkers = <String>{};
     final List<String> failureNotices = <String>[];
+    final List<String> noticeLines = <String>[];
     bool hadFailure = false;
     for (final RegExpMatch m in _actionPattern.allMatches(body)) {
       final String raw = m.group(0)!;
@@ -1165,6 +1179,11 @@ class ChatService {
           if (why != null) failureNotices.add(why);
           continue;
         }
+        // The action DID happen — but maybe not exactly as asked (a dose window
+        // we had to invent, a name that matched nothing). "Mostly did it" must
+        // not read as "did it", so the disclosure rides along with the reply.
+        final String? notice = outcome.notice;
+        if (notice != null) noticeLines.add(notice);
         final String? citation = outcome.citation;
         if (citation != null) {
           results.add(_ActionResult(citation: citation));
@@ -1182,6 +1201,7 @@ class ChatService {
       pendingMarkers: pendingMarkers,
       hadFailure: hadFailure,
       failureNotices: failureNotices,
+      notices: noticeLines,
     );
   }
 

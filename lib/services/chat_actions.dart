@@ -22,6 +22,8 @@ import '../providers/storage_provider.dart';
 import '../screens/appointment/appointment_list_screen.dart'
     show appointmentListProvider;
 import '../screens/medication/dose_log_screen.dart' show dosesTodayProvider;
+import '../screens/medication/dose_window_list_screen.dart'
+    show capitalizeWindowLabel;
 import '../screens/medication/medication_list_screen.dart'
     show medicationListProvider;
 import '../widgets/home/catch_me_up_card.dart' show catchMeUpEventsProvider;
@@ -58,13 +60,17 @@ typedef ChatActionExecutor = Future<ChatActionOutcome?> Function(
 /// claimed a write it never made, which is worse than failing loudly: it puts
 /// wrong information into a caregiver's mental model of their loved one's meds.
 class ChatActionOutcome {
-  /// The write happened. [citation] optionally surfaces a chip.
-  const ChatActionOutcome({this.citation}) : failure = null;
+  /// The write happened. [citation] optionally surfaces a chip; [notice] is an
+  /// optional caregiver-facing line about what was PARTIALLY done or assumed
+  /// (e.g. "I set Morning to 8:00 AM — change it in Dose windows").
+  const ChatActionOutcome({this.citation, this.notice}) : failure = null;
 
   /// The write did NOT happen. [failure] is a short, brand-voiced,
   /// user-facing reason ("I need the dose to add that medication") that
   /// [ChatService] appends to the reply so the prose's claim is corrected.
-  const ChatActionOutcome.failed(String this.failure) : citation = null;
+  const ChatActionOutcome.failed(String this.failure)
+      : citation = null,
+        notice = null;
 
   /// Optional `<entity>:<id>` citation stamped into the assistant message's
   /// citations (e.g. `journal:…`). Null when the action needs no chip.
@@ -72,6 +78,11 @@ class ChatActionOutcome {
 
   /// Non-null when the action did nothing; the caregiver-facing reason.
   final String? failure;
+
+  /// Non-null when the action DID happen but not exactly as asked — the part
+  /// that didn't, or an assumption we made. [ChatService] appends it to the
+  /// reply, because "mostly did it" must not read as "did it".
+  final String? notice;
 
   /// True only when the write actually landed.
   bool get performed => failure == null;
@@ -291,37 +302,155 @@ Future<ChatActionOutcome?> _addMedication(
   // the coach can set the whole schedule in one turn instead of just
   // opening the medication screen.
   final String? windows = _clean(args['windows']);
+  WindowAttachResult? scheduling;
   if (windows != null) {
-    await _attachMedicationWindows(ref, repo, med.id, windows, clock);
+    scheduling =
+        await _attachMedicationWindows(ref, repo, med.id, windows, clock);
   }
   _refreshMedications(ref);
-  return const ChatActionOutcome();
+
+  // Say what actually happened to the schedule. The medication itself landed —
+  // but "added it to your morning and evening windows" must not be claimed when
+  // those windows were invented (the times are assumptions the caregiver may
+  // want to change) or when a name matched nothing at all. Reported by a tester
+  // on 2026-07-13: "The time windows were not added" — they weren't, and the
+  // coach said they were.
+  return ChatActionOutcome(notice: _schedulingNotice(name, scheduling));
 }
 
+/// The caregiver-facing line about what happened to a medication's schedule,
+/// or null when there is nothing to disclose (everything matched windows they
+/// already had).
+String? _schedulingNotice(String medName, WindowAttachResult? r) {
+  if (r == null) return null;
+  final List<String> parts = <String>[];
+  if (r.created.isNotEmpty) {
+    parts.add(
+      'I set up ${_joinLabels(r.created)} for you — you can change the '
+      'times under Medications → Dose windows.',
+    );
+  }
+  if (r.unresolved.isNotEmpty) {
+    parts.add(
+      "I couldn't match ${_joinLabels(r.unresolved)} to a dose window, so "
+      "$medName isn't scheduled for that yet.",
+    );
+  }
+  return parts.isEmpty ? null : parts.join(' ');
+}
+
+/// "Morning (8:00 AM) and Evening (6:00 PM)".
+String _joinLabels(List<String> labels) {
+  if (labels.length == 1) return labels.single;
+  if (labels.length == 2) return '${labels.first} and ${labels.last}';
+  return '${labels.take(labels.length - 1).join(', ')} and ${labels.last}';
+}
+
+/// The dose windows a caregiver names in conversation, and the wall-clock
+/// anchor we give one when it has to be CREATED.
+///
+/// These are ordinary schedule labels, not dosing advice — the coach may set
+/// "Morning = 8:00 AM" the same way the caregiver would tap it in the Dose
+/// windows screen. It must SAY so (see [_attachMedicationWindows]'s notice) so
+/// the time is theirs to correct, and it must never invent a DOSE.
+const Map<String, ({int hour, int minute})?> _defaultWindowAnchors =
+    <String, ({int hour, int minute})?>{
+  'morning': (hour: 8, minute: 0),
+  'breakfast': (hour: 8, minute: 0),
+  'noon': (hour: 12, minute: 0),
+  'midday': (hour: 12, minute: 0),
+  'lunch': (hour: 12, minute: 0),
+  'afternoon': (hour: 15, minute: 0),
+  'evening': (hour: 18, minute: 0),
+  'dinner': (hour: 18, minute: 0),
+  'supper': (hour: 18, minute: 0),
+  'night': (hour: 21, minute: 0),
+  'bedtime': (hour: 21, minute: 0),
+  // "As needed" holds meds but never expands into scheduled doses.
+  'as needed': null,
+  'as-needed': null,
+  'prn': null,
+};
+
+/// What [_attachMedicationWindows] actually managed to do.
+typedef WindowAttachResult = ({
+  List<String> attached,
+  List<String> created,
+  List<String> unresolved,
+});
+
 /// Attach [medicationId] to each named dose window in [windowsCsv] (a
-/// comma-separated list like "morning, evening"). Names match the
-/// patient's window labels case-insensitively (exact, then substring);
-/// unknown names are skipped. Each match becomes an every-day
-/// [MedicationWindowEntry] the dose forecast then expands.
-Future<void> _attachMedicationWindows(
+/// comma-separated list like "morning, evening").
+///
+/// Names match the patient's existing window labels case-insensitively (exact,
+/// then substring). A name that matches NOTHING but is a recognised schedule
+/// word ("morning", "bedtime", …) is CREATED with a standard anchor time —
+/// because a caregiver with no windows yet (every new install has none: the
+/// seeded defaults were dropped at v15) could otherwise never schedule a
+/// medication through the coach at all. It just... quietly didn't, and the coach
+/// said it had (reported 2026-07-13: "The time windows were not added").
+///
+/// Returns what happened, so the caller can TELL the caregiver — a created
+/// window carries an assumed time they may want to change, and an unrecognised
+/// name was not scheduled at all. Never silently partial.
+Future<WindowAttachResult> _attachMedicationWindows(
   Ref ref,
   MedicationRepository repo,
   String medicationId,
   String windowsCsv,
   DateTime Function() clock,
 ) async {
+  final List<String> attachedLabels = <String>[];
+  final List<String> createdLabels = <String>[];
+  final List<String> unresolved = <String>[];
+
   final String? patientId = await _patientId(ref);
-  if (patientId == null) return;
-  final List<DoseWindow> available = await repo.windowsForPatient(patientId);
-  if (available.isEmpty) return;
+  if (patientId == null) {
+    return (attached: attachedLabels, created: createdLabels, unresolved: unresolved);
+  }
+  final List<DoseWindow> available =
+      List<DoseWindow>.from(await repo.windowsForPatient(patientId));
   final DateTime now = clock();
   final Set<String> attached = <String>{};
   for (final String raw in windowsCsv.split(',')) {
     final String req = raw.trim().toLowerCase();
     if (req.isEmpty) continue;
-    final DoseWindow? match = _resolveWindow(available, req);
-    if (match == null || attached.contains(match.id)) continue;
+
+    DoseWindow? match = _resolveWindow(available, req);
+
+    // No such window yet. If the caregiver used a schedule word we recognise,
+    // CREATE it — otherwise a brand-new install (which has NO windows at all)
+    // can never schedule anything through the coach, and today it just failed
+    // in silence.
+    if (match == null && _defaultWindowAnchors.containsKey(req)) {
+      final ({int hour, int minute})? anchor = _defaultWindowAnchors[req];
+      final DoseWindow created = DoseWindow(
+        id: _mintId('window', clock),
+        patientId: patientId,
+        label: capitalizeWindowLabel(req),
+        anchorTime: anchor == null
+            ? null
+            : TimeOfDay(hour: anchor.hour, minute: anchor.minute),
+        sortOrder: available.length,
+      );
+      await repo.upsertWindow(created);
+      available.add(created);
+      createdLabels.add(
+        anchor == null
+            ? created.label
+            : '${created.label} (${_formatAnchor(anchor)})',
+      );
+      match = created;
+    }
+
+    if (match == null) {
+      // A word we don't know — say so rather than pretend.
+      unresolved.add(raw.trim());
+      continue;
+    }
+    if (attached.contains(match.id)) continue;
     attached.add(match.id);
+    attachedLabels.add(match.label);
     await repo.upsertEntry(MedicationWindowEntry(
       id: _mintId('entry', clock),
       medicationId: medicationId,
@@ -330,6 +459,20 @@ Future<void> _attachMedicationWindows(
       startsOn: DateTime(now.year, now.month, now.day),
     ));
   }
+
+  return (
+    attached: attachedLabels,
+    created: createdLabels,
+    unresolved: unresolved,
+  );
+}
+
+/// "8:00 AM" — the caregiver-facing time on a window we created for them.
+String _formatAnchor(({int hour, int minute}) anchor) {
+  final int h = anchor.hour % 12 == 0 ? 12 : anchor.hour % 12;
+  final String m = anchor.minute.toString().padLeft(2, '0');
+  final String period = anchor.hour < 12 ? 'AM' : 'PM';
+  return '$h:$m $period';
 }
 
 /// Best window for a requested label: exact (case-insensitive) match

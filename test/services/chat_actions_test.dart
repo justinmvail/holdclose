@@ -117,6 +117,83 @@ void main() {
       expect(await repo.listMedications(), isEmpty);
     });
 
+    test('windows are CREATED when the caregiver has none — and the coach says '
+        'what times it assumed (fb: "The time windows were not added")',
+        () async {
+      // The report, verbatim: "The time windows were not added." They weren't:
+      // _attachMedicationWindows only MATCHED existing windows, and every new
+      // install has ZERO (the seeded defaults were dropped at v15). So it
+      // silently attached nothing while the coach said it had scheduled the
+      // medication. A caregiver could never schedule a med through chat at all.
+      final ChatActionOutcome? outcome =
+          await actions['add_medication']!(<String, String>{
+        'name': 'Ibuprofen',
+        'dosage': '400 mg',
+        'windows': 'morning, evening',
+      });
+
+      expect(outcome?.performed, isTrue);
+
+      // The windows now exist...
+      final List<DoseWindow> windows =
+          await repo.windowsForPatient(maryHenderson().id);
+      expect(
+        windows.map((DoseWindow w) => w.label),
+        containsAll(<String>['Morning', 'Evening']),
+      );
+      // ...and the medication is actually IN them.
+      final List<MedicationWindowEntry> entries =
+          await repo.entriesForMedication(
+              (await repo.listMedications()).single.id);
+      expect(entries, hasLength(2));
+
+      // ...and the coach DISCLOSES the times it assumed, so they can be fixed.
+      expect(outcome?.notice, contains('8:00 AM'));
+      expect(outcome?.notice, contains('6:00 PM'));
+      expect(outcome?.notice, contains('Dose windows'));
+    });
+
+    test('an existing window is reused, not duplicated, and needs no notice',
+        () async {
+      await repo.upsertWindow(DoseWindow(
+        id: 'w-morning',
+        patientId: maryHenderson().id,
+        label: 'Morning',
+        anchorTime: const TimeOfDay(hour: 7, minute: 30),
+        sortOrder: 0,
+      ));
+
+      final ChatActionOutcome? outcome =
+          await actions['add_medication']!(<String, String>{
+        'name': 'Lisinopril',
+        'dosage': '10 mg',
+        'windows': 'morning',
+      });
+
+      expect(outcome?.performed, isTrue);
+      final List<DoseWindow> windows =
+          await repo.windowsForPatient(maryHenderson().id);
+      expect(windows, hasLength(1), reason: 'the caregiver\'s own window, kept');
+      expect(windows.single.anchorTime?.hour, 7,
+          reason: 'their 7:30 time must not be overwritten');
+      expect(outcome?.notice, isNull,
+          reason: 'nothing was assumed — nothing to disclose');
+    });
+
+    test('a window word we do not recognise is reported, not silently dropped',
+        () async {
+      final ChatActionOutcome? outcome =
+          await actions['add_medication']!(<String, String>{
+        'name': 'Metformin',
+        'dosage': '500 mg',
+        'windows': 'whenever the moon is full',
+      });
+
+      expect(outcome?.performed, isTrue, reason: 'the medication still landed');
+      expect(outcome?.notice, contains("couldn't match"));
+      expect(await repo.windowsForPatient(maryHenderson().id), isEmpty);
+    });
+
     test('records a med the caregiver named, with route + prescriber',
         () async {
       final ChatActionOutcome? outcome =
