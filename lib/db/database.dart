@@ -2,7 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
-import 'encrypted_open.dart';
+import 'local_db.dart';
 import 'tables.dart';
 
 part 'database.g.dart';
@@ -102,9 +102,20 @@ class HoldcloseDatabase extends _$HoldcloseDatabase {
   /// on a first run those raced each other and stranded the database (the
   /// 2026-07 "file is not a database" data loss).
   factory HoldcloseDatabase.open({
-    QueryExecutor Function() createExecutor = localFileExecutor,
+    QueryExecutor Function()? createExecutor,
   }) =>
-      _sharedInstance ??= HoldcloseDatabase._shared(createExecutor());
+      _sharedInstance ??= HoldcloseDatabase._shared(
+        (createExecutor ??
+            () => localFileExecutor(
+                  // The repair that un-bricks a database copied without its
+                  // version stamp needs to know what version our schema IS.
+                  expectedSchemaVersion: _schemaVersion,
+                ))(),
+      );
+
+  /// The schema version, as a const so [open] can hand it to the file-level
+  /// repair before any drift machinery exists.
+  static const int _schemaVersion = 20;
 
   /// The memoisation behind [open], with an injectable [executor] so the
   /// singleton + no-op-close behaviour is testable without the platform
@@ -146,7 +157,7 @@ class HoldcloseDatabase extends _$HoldcloseDatabase {
       HoldcloseDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => _schemaVersion;
 
   /// One-shot repair for the rows v15 stranded (see the v20 migration
   /// step): window entries whose dose window no longer exists. Visible
@@ -312,30 +323,29 @@ class HoldcloseDatabase extends _$HoldcloseDatabase {
             // meaningless on another device). Existing rows get NULL keys
             // and keep working off their local paths; a key is filled in
             // best-effort on the next save / sync.
-            await m.addColumn(
-              emergencyCardsTable,
-              emergencyCardsTable.attachmentKey,
-            );
-            await m.addColumn(
-              powerOfAttorneyDocsTable,
-              powerOfAttorneyDocsTable.attachmentKey,
-            );
-            await m.addColumn(
-              powerOfAttorneyDocsTable,
-              powerOfAttorneyDocsTable.scanKey,
-            );
-            await m.addColumn(
-              identificationDocsTable,
-              identificationDocsTable.attachmentKey,
-            );
-            await m.addColumn(
-              identificationDocsTable,
-              identificationDocsTable.photoFrontKey,
-            );
-            await m.addColumn(
-              identificationDocsTable,
-              identificationDocsTable.photoBackKey,
-            );
+            //
+            // `addColumn` is used through [_addColumnIfMissing] — a bare
+            // `ALTER TABLE ADD COLUMN` throws "duplicate column name" if this
+            // step ever runs twice, and drift does NOT wrap migrations in a
+            // transaction and only stamps the new schema version AFTER they
+            // succeed. So one interrupted migration (a crash, an OOM kill, a
+            // user swiping the app away mid-launch) means every later launch
+            // re-runs this block, throws, and the database is bricked FOREVER:
+            // every write fails and reinstalling doesn't help, because the file
+            // outlives the app. That exact class of bug stranded a tester for a
+            // day (2026-07-13) — see docs/DB_FRAGILITY.md.
+            await _addColumnIfMissing(
+                m, emergencyCardsTable, emergencyCardsTable.attachmentKey);
+            await _addColumnIfMissing(m, powerOfAttorneyDocsTable,
+                powerOfAttorneyDocsTable.attachmentKey);
+            await _addColumnIfMissing(
+                m, powerOfAttorneyDocsTable, powerOfAttorneyDocsTable.scanKey);
+            await _addColumnIfMissing(m, identificationDocsTable,
+                identificationDocsTable.attachmentKey);
+            await _addColumnIfMissing(m, identificationDocsTable,
+                identificationDocsTable.photoFrontKey);
+            await _addColumnIfMissing(m, identificationDocsTable,
+                identificationDocsTable.photoBackKey);
           }
           if (from < 18) {
             // Local-first Care Circle: a read-cache of the backend circle
@@ -415,6 +425,32 @@ class HoldcloseDatabase extends _$HoldcloseDatabase {
           await customStatement('PRAGMA busy_timeout = 5000');
         },
       );
+
+  /// Add [column] to [table] only when it isn't there yet.
+  ///
+  /// EVERY migration step must be safe to run TWICE. Drift does not run
+  /// migrations in a transaction and only writes the new `user_version` AFTER
+  /// they all succeed, so an interrupted migration re-runs from the same
+  /// starting version on the next launch. A bare `ALTER TABLE ADD COLUMN` then
+  /// throws "duplicate column name", every write fails from then on, and the
+  /// database is bricked permanently — the file outlives an app reinstall, so
+  /// the caregiver cannot even escape by deleting the app.
+  ///
+  /// (`m.createTable` is already safe — drift emits `CREATE TABLE IF NOT
+  /// EXISTS` — and the v20 indices use `CREATE INDEX IF NOT EXISTS`. This
+  /// closes the last hole.)
+  Future<void> _addColumnIfMissing(
+    Migrator m,
+    TableInfo<Table, dynamic> table,
+    GeneratedColumn<Object> column,
+  ) async {
+    final List<QueryRow> info =
+        await customSelect('PRAGMA table_info(${table.actualTableName})').get();
+    final Set<String> existing =
+        info.map((QueryRow r) => r.read<String>('name')).toSet();
+    if (existing.contains(column.name)) return;
+    await m.addColumn(table, column);
+  }
 
   /// Truncate every table — backs `StorageProvider.reset()` for the
   /// demo-mode "Reset on launch" toggle (BUILD_SPEC.md §6.2 + §9.3).

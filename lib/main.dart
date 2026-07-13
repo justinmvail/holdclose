@@ -10,7 +10,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
-import 'db/encrypted_open.dart' show databaseRecoveryObserver;
+import 'db/local_db.dart' show databaseRecoveryObserver;
 import 'models/settings.dart';
 import 'providers/active_patient_provider.dart';
 import 'providers/auth_provider.dart';

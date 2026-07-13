@@ -1,7 +1,7 @@
 name: holdclose
 description: "In-the-moment coach for dementia caregivers."
 publish_to: 'none'
-version: 0.1.0+38
+version: 0.1.0+39
 
 environment:
   sdk: ^3.5.0
@@ -41,31 +41,17 @@ dependencies:
 
   # Storage
   drift: ^2.20.0
-  # NOTE: drift_flutter is deliberately NOT a dependency. It transitively
-  # pulls in `sqlite3_flutter_libs`, whose native plugin class collides at
-  # iOS compile time with `sqlcipher_flutter_libs` ("Sqlite3FlutterLibsPlugin
-  # has different definitions in different modules"). Since the DB is opened
-  # manually via lib/db/encrypted_open.dart (NativeDatabase + the sqlcipher
-  # `open` override) — driftDatabase() is no longer used — drift_flutter is
-  # unnecessary and its removal is what lets SQLCipher be the sole sqlite3.
+  # The native sqlite3 for iOS/Android. This is a PLAIN sqlite3 build — the app
+  # does NOT encrypt its database (see lib/db/local_db.dart for why, and
+  # CLAUDE.md's invariant). `sqlcipher_flutter_libs` was removed on 2026-07-13;
+  # it produced three data-loss events in a day and prevented none, and both
+  # platforms already encrypt app files at rest.
+  sqlite3_flutter_libs: ^0.5.0
   path_provider: ^2.1.0
   path: ^1.9.0
   flutter_secure_storage: ^9.2.0
-  # SQLCipher at-rest encryption of the local drift/SQLite file (the DB
-  # holds PHI). Ships a SQLCipher-compiled `libsqlite3` per platform and is
-  # the ONLY native sqlite3 in the binary (drift_flutter removed, above);
-  # it's selected via the sqlite3 `open` override in
-  # `lib/db/encrypted_open.dart`. Pinned to the 0.6.x line because it
-  # pairs with `sqlite3: 2.x` (the version drift 2.31 resolves); the
-  # 0.7.0+ releases are no-op shims for the `sqlite3: 3.x` era. See
-  # lib/db/encrypted_open.dart for the key-management + plaintext→cipher
-  # migration. BUILD_SPEC-worthy dep — noted here + in CLAUDE.md.
-  sqlcipher_flutter_libs: ^0.6.0
-  # Direct dep because encrypted_open.dart calls `package:sqlite3` itself
-  # (the `open` ffi-loader override + a raw main-isolate connection for the
-  # one-time plaintext→SQLCipher rekey). Pinned to 2.x to match the
-  # SQLCipher 0.6.x libs + the version drift 2.31 already resolves; 3.x is a
-  # separate migration (SQLite3MultipleCiphers) and out of scope here.
+  # Direct dep because lib/db/local_db.dart opens/probes the file itself
+  # (readability check before handing it to drift).
   sqlite3: ^2.4.0
 
   # Network

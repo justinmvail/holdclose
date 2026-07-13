@@ -261,32 +261,35 @@ holdclose/                  # repo root (matches pubspec name:)
     (`<current_data>` + fullwidth-bracket substitution in
     `chat_context_builder.dart`); treat any new prompt interpolation
     the same way.
-  - **The local DB is PLAINTEXT — app-level encryption was REMOVED (2026-07-13).
-    Do not add it back without reading why.** SQLCipher caused THREE data-loss
-    events in a single day on the one device carrying it, and prevented none:
-    (1) a first-run key-mint race stranded the DB under a key nobody kept;
-    (2) an iOS keychain `accessibility` change made the existing key
-    unreadable — `flutter_secure_storage` >=9.1 puts `kSecAttrAccessible` in
-    the READ query and Apple only honours it on first write — so the key
-    vanished, the care record was quarantined, and every save failed;
-    (3) the quarantine step DELETED the previous quarantine, so one more false
-    alarm would have destroyed the only surviving copy.
-    Both platforms ALREADY encrypt this file at rest (iOS Data Protection;
-    Android file-based encryption, mandatory since Android 10, FDE below —
-    our floor is API 26), the file is backup-excluded, and
-    `allowBackup="false"` is set. SQLCipher only added cover for a
-    rooted/jailbroken device while UNLOCKED — not worth three losses of a
-    caregiver's medication list.
-    `lib/db/encrypted_open.dart` now: (a) DECRYPTS a legacy encrypted DB to
-    plaintext once (SQLCipher libs are still linked ONLY for that — phase 2
-    removes them, and must not run until an install that HAD an encrypted DB
-    is seen to come through with its data), (b) never encrypts or mints a key
-    again, (c) NEVER destroys: an unreadable file is moved aside (additive
-    quarantines, never overwriting an earlier one, never deleted) and a
-    provably-wrong quarantine is restored. If encryption is ever wanted again,
-    use drift's supported stack (SQLite3MultipleCiphers on `sqlite3` 3.x, NOT
-    the obsolete `sqlcipher_flutter_libs`), keep the key lifecycle boring, and
-    NEVER change keychain options after release.
+  - **The local DB is PLAINTEXT. App-level encryption is GONE (2026-07-13) —
+    `sqlcipher_flutter_libs` removed, `lib/db/local_db.dart` opens a plain file.
+    Do not add encryption back without reading `docs/DB_FRAGILITY.md`.** It
+    caused FOUR ways to lose or brick a caregiver's data in one day and
+    prevented zero attacks. Both platforms already encrypt app files at rest
+    (iOS Data Protection; Android FBE, mandatory since Android 10 — our floor is
+    API 26); SQLCipher only covered a rooted/jailbroken device while UNLOCKED.
+  - **Every migration step must be SAFE TO RUN TWICE.** Drift does NOT run
+    migrations in a transaction and writes `user_version` only AFTER they all
+    succeed — so any interruption (crash, OOM kill, app swiped away mid-launch)
+    re-runs the same steps next launch. `m.createTable` is safe
+    (`CREATE TABLE IF NOT EXISTS`); `m.createIndex` and `m.addColumn` are NOT —
+    use `CREATE INDEX IF NOT EXISTS` and `_addColumnIfMissing`. A bare one throws
+    ("index already exists" / "duplicate column name"), every write fails from
+    then on, and the DB is bricked FOREVER — the file outlives an app reinstall,
+    so the caregiver cannot even escape by deleting the app. That exact bug
+    stranded a tester for a day. Pinned by `test/db/migration_resilience_test.dart`
+    (re-runs v1→v20 over an already-migrated file).
+  - **`user_version` is load-bearing and NOT carried by file copies**
+    (`sqlcipher_export`, `VACUUM INTO`, most copy tools). A populated DB stamped
+    0 makes drift call it "new" and `createAll()` over it. `stampSchemaVersionIfMissing`
+    repairs that on open; anything that copies the DB must preserve it.
+  - **NEVER delete a user's database file.** Unreadable → move aside
+    (quarantines are ADDITIVE — never overwrite an earlier one), and restore a
+    quarantine we can read. A file we can't read may be their only copy.
+  - **There is NO backup**: the DB is backup-excluded on iOS + `allowBackup=false`
+    on Android, so server sync is the ONLY copy — keep it healthy, and never hand
+    a build with `SEED=1` (`SEED_DEMO`) to anyone holding real data: it WIPES the
+    database on first launch.
 - **Bottom tab bar is always exactly four items in this order —
   Home, Care, Chat, Community — never collapsed or conditionally
   hidden.** ("Medical" was renamed **Care**; the former "Team" tab folded
