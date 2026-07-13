@@ -38,7 +38,8 @@ class ShimInsuranceCardScanner implements InsuranceCardScanner {
     final Map<String, dynamic>? map = await shimExtractJson(
       imagePath: imagePath,
       systemPrompt: insuranceCardExtractionSystemPrompt,
-      userPrompt: 'Extract the insurance details from this card.',
+      userPrompt:
+          'Extract the insurance details from this card.$scanJsonOnlyInstruction',
     );
     return insuranceFromMap(map);
   }
@@ -62,7 +63,8 @@ class ApiInsuranceCardScanner implements InsuranceCardScanner {
     final Map<String, dynamic>? map = await workerExtractJson(
       imagePath: imagePath,
       systemPrompt: insuranceCardExtractionSystemPrompt,
-      userPrompt: 'Extract the insurance details from this card.',
+      userPrompt:
+          'Extract the insurance details from this card.$scanJsonOnlyInstruction',
       baseUrl: baseUrl,
       tokenLoader: tokenLoader,
       dio: dio,

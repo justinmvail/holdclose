@@ -17,6 +17,20 @@ import 'forum_api_client.dart' show forumApiVersionPrefix;
 /// failure — a scan that can't be read degrades to null so the caller can
 /// fall back to manual entry.
 
+/// The line every image scanner appends to its user prompt.
+///
+/// The vision model IGNORES a "return only JSON" rule that lives in the system
+/// prompt — it answers in prose ("The medication listed on the label is
+/// Ibuprofen 400 MG Tablet."), the app finds no `{...}` to parse, and the scan
+/// silently produces nothing. Reported 2026-07-13: "We aren't getting image
+/// imports for medications." Reproduced against the deployed model, and the
+/// same instruction in the USER turn makes it comply.
+///
+/// Keep it in the user prompt. Do not "tidy" it back into the system prompt.
+const String scanJsonOnlyInstruction =
+    ' Return ONLY the JSON object described above — start your reply with { '
+    'and end with }. No prose, no explanation, no code fences.';
+
 /// Read a file's bytes and base64-encode them; null on any failure (an
 /// asset path from the fake-capture path isn't a real file, so a failed
 /// read simply means "no extraction").

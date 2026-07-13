@@ -54,7 +54,7 @@ class ShimAppointmentScanner implements AppointmentScanner {
     final Map<String, dynamic>? map = await shimExtractJson(
       imagePath: imagePath,
       systemPrompt: appointmentExtractionSystemPrompt,
-      userPrompt: 'Extract the appointment from this card.',
+      userPrompt: 'Extract the appointment from this card.$scanJsonOnlyInstruction',
     );
     return map == null ? null : AppointmentDraft.fromModelJson(map);
   }
@@ -81,7 +81,7 @@ class ApiAppointmentScanner implements AppointmentScanner {
     final Map<String, dynamic>? map = await workerExtractJson(
       imagePath: imagePath,
       systemPrompt: appointmentExtractionSystemPrompt,
-      userPrompt: 'Extract the appointment from this card.',
+      userPrompt: 'Extract the appointment from this card.$scanJsonOnlyInstruction',
       baseUrl: baseUrl,
       tokenLoader: tokenLoader,
       dio: dio,

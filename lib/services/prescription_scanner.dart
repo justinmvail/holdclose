@@ -8,6 +8,7 @@ import '../models/medication_draft.dart';
 import '../providers/llm_provider.dart'
     show buildShimDio, shimAuthHeaders, shimBaseUrl;
 import '../seed/prescription_extraction_prompt.dart';
+import 'document_scan_transport.dart' show scanJsonOnlyInstruction;
 import 'forum_api_client.dart' show forumApiVersionPrefix;
 
 /// Reads a photographed prescription label / medical document and
@@ -88,7 +89,7 @@ class ShimPrescriptionScanner implements PrescriptionScanner {
         endpoint,
         data: <String, dynamic>{
           'system': prescriptionExtractionSystemPrompt,
-          'user': 'Extract the medication from this label.',
+          'user': 'Extract the medication from this label.$scanJsonOnlyInstruction',
           'image_base64': base64Image,
         },
         options: Options(
@@ -150,7 +151,7 @@ class ApiPrescriptionScanner implements PrescriptionScanner {
         _endpoint,
         data: <String, dynamic>{
           'system': prescriptionExtractionSystemPrompt,
-          'user': 'Extract the medication from this label.',
+          'user': 'Extract the medication from this label.$scanJsonOnlyInstruction',
           'image_base64': base64Image,
         },
         options: Options(
