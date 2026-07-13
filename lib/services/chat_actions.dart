@@ -116,7 +116,7 @@ Map<String, ChatActionExecutor> buildChatActions(
     'add_medication': (Map<String, String> args) =>
         _addMedication(ref, clock, args),
     'update_medication': (Map<String, String> args) =>
-        _updateMedication(ref, args),
+        _updateMedication(ref, clock, args),
     'delete_medication': (Map<String, String> args) =>
         _deleteMedication(ref, args),
     'add_appointment': (Map<String, String> args) =>
@@ -410,6 +410,10 @@ Future<WindowAttachResult> _attachMedicationWindows(
   }
   final List<DoseWindow> available =
       List<DoseWindow>.from(await repo.windowsForPatient(patientId));
+  final Set<String> existingWindowIds =
+      (await repo.entriesForMedication(medicationId))
+          .map((MedicationWindowEntry e) => e.windowId)
+          .toSet();
   final DateTime now = clock();
   final Set<String> attached = <String>{};
   for (final String raw in windowsCsv.split(',')) {
@@ -451,6 +455,10 @@ Future<WindowAttachResult> _attachMedicationWindows(
     if (attached.contains(match.id)) continue;
     attached.add(match.id);
     attachedLabels.add(match.label);
+    // Already in this window (e.g. the caregiver asks twice)? Don't duplicate
+    // the schedule — a medication listed twice in one window would look like
+    // two doses.
+    if (existingWindowIds.contains(match.id)) continue;
     await repo.upsertEntry(MedicationWindowEntry(
       id: _mintId('entry', clock),
       medicationId: medicationId,
@@ -489,6 +497,7 @@ DoseWindow? _resolveWindow(List<DoseWindow> windows, String req) {
 
 Future<ChatActionOutcome?> _updateMedication(
   Ref ref,
+  DateTime Function() clock,
   Map<String, String> args,
 ) async {
   final MedicationRepository repo = ref.read(medicationRepositoryProvider);
@@ -506,8 +515,24 @@ Future<ChatActionOutcome?> _updateMedication(
     notes: _clean(args['notes']) ?? target.notes,
   );
   await repo.upsertMedication(updated);
+
+  // Schedule an EXISTING medication into dose windows.
+  //
+  // This was impossible until 2026-07-13: `windows` lived only on
+  // add_medication, so "put ibuprofen in my morning and evening windows" had no
+  // action that could carry it — and the coach cheerfully said it had done it.
+  // (Reported twice: "The time windows were not added", then "Still no
+  // timeframes added" after a fix that only covered the ADD path.)
+  final String? windows = _clean(args['windows']);
+  WindowAttachResult? scheduling;
+  if (windows != null) {
+    scheduling =
+        await _attachMedicationWindows(ref, repo, updated.id, windows, clock);
+  }
   _refreshMedications(ref);
-  return const ChatActionOutcome();
+  return ChatActionOutcome(
+    notice: _schedulingNotice(updated.name, scheduling),
+  );
 }
 
 Future<ChatActionOutcome?> _deleteMedication(

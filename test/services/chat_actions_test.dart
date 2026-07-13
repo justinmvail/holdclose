@@ -194,6 +194,57 @@ void main() {
       expect(await repo.windowsForPatient(maryHenderson().id), isEmpty);
     });
 
+    test('an EXISTING medication can be scheduled into windows '
+        '(fb: "Still no timeframes added")', () async {
+      // The second report, after a fix that only covered the ADD path:
+      // "Still no timeframes added". The caregiver already had Ibuprofen and
+      // asked to put it in morning + evening — but `windows` existed ONLY on
+      // add_medication, so no action could carry the request. Nothing happened,
+      // and the coach said it had. Verified on the device: 1 medication,
+      // 0 dose_windows, 0 entries.
+      await actions['add_medication']!(<String, String>{
+        'name': 'Ibuprofen',
+        'dosage': '400 mg',
+      });
+
+      final ChatActionOutcome? outcome =
+          await actions['update_medication']!(<String, String>{
+        'name': 'Ibuprofen',
+        'windows': 'morning, evening',
+      });
+
+      expect(outcome?.performed, isTrue);
+      final List<DoseWindow> windows =
+          await repo.windowsForPatient(maryHenderson().id);
+      expect(
+        windows.map((DoseWindow w) => w.label),
+        containsAll(<String>['Morning', 'Evening']),
+      );
+      final Medication med = (await repo.listMedications()).single;
+      expect(await repo.entriesForMedication(med.id), hasLength(2),
+          reason: 'the medication must actually BE in those windows');
+      expect(outcome?.notice, contains('8:00 AM'));
+    });
+
+    test('scheduling the same medication into the same window twice does not '
+        'duplicate it', () async {
+      await actions['add_medication']!(<String, String>{
+        'name': 'Ibuprofen',
+        'dosage': '400 mg',
+        'windows': 'morning',
+      });
+      // The caregiver asks again (or the model repeats itself).
+      await actions['update_medication']!(<String, String>{
+        'name': 'Ibuprofen',
+        'windows': 'morning',
+      });
+
+      final Medication med = (await repo.listMedications()).single;
+      expect(await repo.entriesForMedication(med.id), hasLength(1),
+          reason: 'a med listed twice in one window reads as two doses');
+      expect(await repo.windowsForPatient(maryHenderson().id), hasLength(1));
+    });
+
     test('records a med the caregiver named, with route + prescriber',
         () async {
       final ChatActionOutcome? outcome =

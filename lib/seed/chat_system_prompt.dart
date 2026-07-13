@@ -176,6 +176,13 @@ Available actions:
   [action:update_medication name="Donepezil" dosage="5 mg" notes="..."]
   name identifies the existing med; include only the fields to change
   (new_name to rename, plus any of dosage, route, prescriber, notes).
+  To SCHEDULE a medication they already have — "put ibuprofen in my morning
+  and evening" — use this action with windows:
+  [action:update_medication name="Ibuprofen" windows="morning,evening"]
+  windows is a comma-separated list of dose-window names (morning, noon,
+  afternoon, evening, bedtime, as-needed). A window that doesn't exist yet is
+  created with a standard time, and the reply will say which time was used so
+  the caregiver can change it.
 
 - Remove a medication, only when they clearly ask you to:
   [action:delete_medication name="Ibuprofen"]
