@@ -72,6 +72,22 @@ const num = (v: string | undefined, fallback: number): number => {
 
 const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
 
+/// The route's contract with the app is `{text: "<the model's raw text>"}` — a
+/// STRING the scanners parse themselves. Workers AI doesn't always cooperate:
+/// when the model returns well-formed JSON (exactly what our extraction prompts
+/// ask for) the binding pre-parses it into an object. Anything that isn't
+/// already a string is re-serialised, so the app sees the same shape whether
+/// the model answered in prose or in JSON.
+export function coerceToText(raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  if (raw === null || raw === undefined) return '';
+  try {
+    return JSON.stringify(raw);
+  } catch {
+    return String(raw);
+  }
+}
+
 /** Decode a base64 scan into raw bytes for the AI binding. Returns null on
  * malformed input (a client bug / a hostile payload), which the caller turns
  * into a 400 rather than a 502 — the model never sees it. */
@@ -172,10 +188,20 @@ export function extractRouter() {
           prompt,
           image: Array.from(bytes),
           max_tokens: 1024,
-        })) as { response?: string; description?: string } | undefined;
+        })) as { response?: unknown; description?: unknown } | undefined;
         // Instruct-tuned vision models answer under `response`; the plain
         // image-to-text ones use `description`. Accept either.
-        text = result?.response ?? result?.description ?? '';
+        //
+        // ...and NORMALISE IT TO TEXT. When the model actually obeys our
+        // extraction prompt and replies with clean JSON, the Workers AI
+        // binding hands `response` back ALREADY PARSED — an object, not a
+        // string. Passing that through unchanged breaks the app, whose
+        // scanners expect `{text: "<json string>"}` and parse it themselves:
+        // the BETTER the model behaves, the more surely the scan fails
+        // (2026-07-13 — the live suite caught it flapping between a prose
+        // string and a JSON object). Re-serialise so the contract holds
+        // either way.
+        text = coerceToText(result?.response ?? result?.description);
       } else {
         const baseUrl =
           env.CF_AI_BASE_URL ??

@@ -1,4 +1,6 @@
 import { SELF, env, fetchMock } from 'cloudflare:test';
+
+import { coerceToText } from '../src/routes/extract';
 import { sign } from 'hono/jwt';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -44,6 +46,30 @@ beforeEach(async () => {
 });
 afterEach(() => {
   fetchMock.assertNoPendingInterceptors();
+});
+
+describe('coerceToText — the {text: string} contract the app parses', () => {
+  it('re-serialises a PRE-PARSED JSON object back into text', () => {
+    // The bug the live suite caught (2026-07-13): when the vision model obeys
+    // our extraction prompt and answers with clean JSON, the Workers AI binding
+    // hands `response` back ALREADY PARSED — an object. Passing it through
+    // meant the app (whose scanners parse `text` themselves) broke on precisely
+    // the successful case: the better the model behaved, the more surely the
+    // scan failed.
+    expect(coerceToText({ name: 'Lisinopril', dosage: '10 mg' })).toBe(
+      '{"name":"Lisinopril","dosage":"10 mg"}',
+    );
+  });
+
+  it('passes a plain string through untouched', () => {
+    expect(coerceToText('{"name":"Lisinopril"}')).toBe('{"name":"Lisinopril"}');
+    expect(coerceToText('just prose')).toBe('just prose');
+  });
+
+  it('empties out a missing answer rather than stringifying null/undefined', () => {
+    expect(coerceToText(undefined)).toBe('');
+    expect(coerceToText(null)).toBe('');
+  });
 });
 
 describe('POST /api/v1/extract', () => {

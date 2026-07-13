@@ -661,19 +661,17 @@ describe('AI coach (Workers-AI binding)', () => {
 });
 
 describe('AI extract (scan-to-import vision path)', () => {
-  // FINDING (2026-07-13), two layers deep:
-  //  (a) FIXED — extract.ts required the REST CF_AI_API_TOKEN secret, which is
-  //      not set on env.dev, so it 500'd server_misconfigured while chat (long
-  //      since migrated to the native env.AI binding) worked. It now prefers
-  //      the binding, exactly like chat.
-  //  (b) STILL BLOCKED, and NOT a code bug: the vision model is LICENCE-GATED.
-  //      Workers AI rejects it with `AiError 5016` — "Prior to using this
-  //      model, you must submit the prompt 'agree'" — until the ACCOUNT accepts
-  //      Meta's Llama 3.2 Community Licence. That is a one-time legal act for
-  //      the operating company, so it is deliberately not automated. See
-  //      backend/README.md → "Vision model licence". Until it's accepted,
-  //      scan-to-import (Rx / appointment / insurance-card capture) is DOWN on
-  //      this backend and this test fails with 502 extract_unavailable.
+  // Scan-to-import (Rx / appointment / insurance-card capture), end to end.
+  // Two things had to be fixed to get here (2026-07-13):
+  //  (a) extract.ts required the REST CF_AI_API_TOKEN secret, which is not set
+  //      on env.dev, so it 500'd server_misconfigured while chat (already on
+  //      the native env.AI binding) worked. It now prefers the binding too.
+  //  (b) the vision model is LICENCE-GATED: Workers AI refused it with
+  //      `AiError 5016` until the ACCOUNT accepted Meta's Llama 3.2 Community
+  //      Licence by running the model once with the prompt `agree` (done
+  //      2026-07-13). If this test ever fails with 502 on a NEW Cloudflare
+  //      account, that acceptance is the first thing to check — see
+  //      backend/README.md → "Vision model licence".
   it('extracts from an image', async () => {
     const res = await api('/api/v1/extract', {
       method: 'POST',
@@ -684,12 +682,18 @@ describe('AI extract (scan-to-import vision path)', () => {
         image_base64: TINY_PNG_BASE64,
       },
     });
-    // Memory/docs say extract still rides the REST CF_AI_API_TOKEN path and
-    // hasn't been migrated to the env-scoped AI binding — if this fails
-    // with 500 server_misconfigured, that's the finding to address.
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { text?: string };
-    expect((body.text ?? '').length).toBeGreaterThan(0);
+    const raw = await res.text();
+    expect(res.status, raw.slice(0, 200)).toBe(200);
+    const body = JSON.parse(raw) as { text?: unknown };
+
+    // `text` must ALWAYS be a STRING — the app's scanners parse it themselves.
+    // When the model obeys the extraction prompt and replies with clean JSON,
+    // the Workers AI binding pre-parses it into an OBJECT; passing that through
+    // meant the better the model behaved, the more surely the scan broke. This
+    // assertion is the one that caught it (2026-07-13).
+    expect(typeof body.text, `text must be a string, got ${typeof body.text}`)
+      .toBe('string');
+    expect((body.text as string).length).toBeGreaterThan(0);
   });
 });
 
