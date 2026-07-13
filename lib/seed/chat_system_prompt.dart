@@ -160,7 +160,10 @@ Available actions:
 - Add a medication the caregiver names — only to record one they (or
   their loved one's doctor) have already decided on:
   [action:add_medication name="Donepezil" dosage="10 mg" route="oral" prescriber="Dr. Ortega" notes="with breakfast" windows="morning,bedtime"]
-  name and dosage are required and come straight from the caregiver;
+  name and dosage are BOTH REQUIRED and come straight from the caregiver.
+  If they haven't told you the dose, ASK for it and do NOT emit this action
+  yet — never guess a dose (that would be a dosing recommendation, which you
+  must never make), and never say you added a medication you didn't;
   route is oral/topical/injection/other (default oral); prescriber and
   notes only if they mention them. windows is optional — a comma-separated
   list of the dose-window names the caregiver says (e.g. morning, noon,

@@ -5,7 +5,7 @@ import 'package:holdclose/models/chat.dart';
 import 'package:holdclose/providers/link_launcher_provider.dart';
 import 'package:holdclose/providers/pending_chat_message_provider.dart';
 import 'package:holdclose/services/chat_actions.dart'
-    show ChatActionExecutor;
+    show ChatActionExecutor, ChatActionOutcome;
 import 'package:holdclose/providers/voice_capture_provider.dart';
 import 'package:holdclose/screens/chat/chat_screen.dart';
 import 'package:holdclose/screens/chat/conversation_list_screen.dart'
@@ -1298,7 +1298,7 @@ void main() {
         actions: <String, ChatActionExecutor>{
           'delete_medication': (Map<String, String> args) async {
             deletions.add(args['name'] ?? '');
-            return null;
+            return const ChatActionOutcome();  // scripted SUCCESS
           },
         },
       );
@@ -1326,7 +1326,7 @@ void main() {
         actions: <String, ChatActionExecutor>{
           'delete_medication': (Map<String, String> args) async {
             deletions.add(args['name'] ?? '');
-            return null;
+            return const ChatActionOutcome();  // scripted SUCCESS
           },
         },
       );

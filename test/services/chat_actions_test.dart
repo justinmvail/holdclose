@@ -83,6 +83,40 @@ void main() {
   });
 
   group('add_medication', () {
+    test('a med with NO DOSE is refused OUT LOUD, not silently skipped '
+        '(fb_1783968081885132)', () async {
+      // The tester's report, verbatim: "I asked chat to add ibuprofen to
+      // medications and it confirmed and navigated upon request. It wasn't
+      // added." The model emitted add_medication without a `dosage`; the
+      // executor bailed and returned null — which the service read as success,
+      // so the confirm card said done and no medication existed. A coach that
+      // claims a write it never made is worse than one that fails loudly: it
+      // corrupts the caregiver's picture of their loved one's medications.
+      //
+      // The dose must come FROM THE CAREGIVER — inventing one would be a dosing
+      // recommendation, which the coach must never make. So: ask, don't guess,
+      // and never pretend.
+      final ChatActionOutcome? outcome =
+          await actions['add_medication']!(<String, String>{
+        'name': 'Ibuprofen',
+      });
+
+      expect(outcome?.performed, isFalse,
+          reason: 'nothing was written — the outcome must say so');
+      expect(outcome?.failure, contains('Ibuprofen'));
+      expect(outcome?.failure, contains('dose'));
+      expect(await repo.listMedications(), isEmpty);
+    });
+
+    test('a med with no NAME is refused out loud too', () async {
+      final ChatActionOutcome? outcome =
+          await actions['add_medication']!(<String, String>{'dosage': '200 mg'});
+
+      expect(outcome?.performed, isFalse);
+      expect(outcome?.failure, isNotNull);
+      expect(await repo.listMedications(), isEmpty);
+    });
+
     test('records a med the caregiver named, with route + prescriber',
         () async {
       final ChatActionOutcome? outcome =
@@ -94,8 +128,12 @@ void main() {
         'notes': 'with breakfast',
       });
 
-      // Mutations are prose-confirmed — no citation chip.
-      expect(outcome, isNull);
+      // Mutations are prose-confirmed — no citation chip — but the outcome
+      // must still report that the write LANDED. (Before 2026-07-13 an
+      // executor returned null both on success and when it silently bailed,
+      // so a no-op was indistinguishable from a save.)
+      expect(outcome?.performed, isTrue);
+      expect(outcome?.citation, isNull);
       final List<Medication> meds = await repo.listMedications();
       expect(meds, hasLength(1));
       final Medication m = meds.single;

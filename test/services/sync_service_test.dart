@@ -81,6 +81,38 @@ DoseWindow _window(String id, {String patientId = 'p1'}) => DoseWindow(
       sortOrder: 0,
     );
 
+/// A backend that behaves normally EXCEPT for [deadCircleId], which it insists
+/// does not exist — exactly what the tester's phone saw: a circle created
+/// against the OLD laptop backend, then carried over to the Cloudflare Worker's
+/// database where it had never existed.
+class _CircleGoneClient extends FakeForumApiClient {
+  _CircleGoneClient(this.deadCircleId);
+
+  final String deadCircleId;
+  int pushAttemptsOnDeadCircle = 0;
+
+  @override
+  Future<SyncPushResult> syncPush(
+    String circleId, {
+    SyncPatientWrite? patient,
+    required List<SyncDocWrite> docs,
+  }) async {
+    if (circleId == deadCircleId) {
+      pushAttemptsOnDeadCircle++;
+      throw ForumApiException(statusCode: 404, error: 'not_found');
+    }
+    return super.syncPush(circleId, patient: patient, docs: docs);
+  }
+
+  @override
+  Future<SyncPullResult> syncPull(String circleId, {int since = 0}) async {
+    if (circleId == deadCircleId) {
+      throw ForumApiException(statusCode: 404, error: 'not_found');
+    }
+    return super.syncPull(circleId, since: since);
+  }
+}
+
 /// One self-contained sync "device": its own drift db + med repo +
 /// in-memory storage + state store, wired to a [ForumApiClient]. Mirrors
 /// the production `syncControllerProvider` wiring (the sink registration +
@@ -1604,6 +1636,51 @@ void main() {
       expect(
         (jsonDecode(med.payload) as Map<String, dynamic>)['name'],
         'Fresh Edit',
+      );
+    });
+  });
+
+  group('a circle the backend no longer has must not wedge sync forever '
+      '(fb_1783968081885132)', () {
+    setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
+    test('a 404 on the bound circle unbinds, re-bootstraps, and syncs again',
+        () async {
+      // The tester's logs were a wall of:
+      //   sync: push failed (batch left queued): ForumApiException(404, not_found)
+      //   sync: pull failed (will retry): ForumApiException(404, not_found)
+      // Their circle had been created against the OLD laptop backend; pointing
+      // the build at the Cloudflare Worker carried the id across to a database
+      // where it never existed. bootstrapCircle() short-circuits whenever ANY
+      // id is stored, so it never re-bound: every push and pull 404'd for the
+      // life of the install and their care data silently stopped syncing.
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'holdclose.sync.circle_id': 'dead-circle-from-old-backend',
+      });
+      final _CircleGoneClient client =
+          _CircleGoneClient('dead-circle-from-old-backend');
+      final _Device device = _Device(client);
+      addTearDown(device.dispose);
+      await device.storage.upsertPatient(_patient());
+      await device.medications.upsertMedication(_med('m1', 'Lisinopril'));
+
+      await device.controller.syncNow();
+
+      // It noticed the circle was gone...
+      expect(client.pushAttemptsOnDeadCircle, greaterThan(0));
+      // ...unbound the dead id and bound a real one instead.
+      final String? bound = await device.stateStore.getCircleId();
+      expect(bound, isNotNull);
+      expect(bound, isNot('dead-circle-from-old-backend'));
+
+      // ...and the local data (still queued in the outbox) reaches the new
+      // circle on the next tick — nothing was lost.
+      await device.controller.syncNow();
+      final SyncPullResult pulled = await client.syncPull(bound!, since: 0);
+      expect(
+        pulled.docs.map((SyncDoc d) => d.id),
+        contains('m1'),
+        reason: 'queued local rows must flow up to the re-bound circle',
       );
     });
   });

@@ -31,23 +31,50 @@ import 'provider_repository.dart';
 
 /// One tool the chat coach can invoke via an `[action:<name> …]` marker.
 ///
-/// Receives the parsed `key="value"` args and performs the write, returning
-/// an optional [ChatActionOutcome] (a citation to surface in the message,
-/// or null when the model's prose is confirmation enough). Throwing is safe
-/// — [ChatService] swallows it and still strips the marker, so a failed tool
-/// never derails the reply. Built per-build in [buildChatActions]; tests
-/// register scripted executors.
+/// Receives the parsed `key="value"` args and performs the write, returning a
+/// [ChatActionOutcome] that says whether the write ACTUALLY HAPPENED. Throwing
+/// is also safe — [ChatService] catches it, strips the marker, and appends an
+/// honest failure line — but an executor that simply couldn't proceed (a
+/// missing required arg, a name that matches nothing) must say so with
+/// [ChatActionOutcome.failed], NOT return quietly.
+///
+/// **Never return null.** It is still permitted for source compatibility, and
+/// [ChatService] treats it as a FAILURE, because that is the safe reading: the
+/// coach's prose has already told the caregiver the thing was done.
+///
+/// Built per-build in [buildChatActions]; tests register scripted executors.
 typedef ChatActionExecutor = Future<ChatActionOutcome?> Function(
   Map<String, String> args,
 );
 
-/// The result of a successfully-run [ChatActionExecutor].
+/// What an executor actually did.
+///
+/// The distinction is load-bearing, and its absence was a real bug (2026-07-13,
+/// reported by a tester): "I asked chat to add ibuprofen to medications and it
+/// confirmed and navigated upon request. It wasn't added." Every executor used
+/// to `return null` BOTH on success and when it bailed on a missing argument —
+/// the model had emitted `add_medication` with no `dosage`, the executor
+/// silently did nothing, and the confirm card reported success. The coach
+/// claimed a write it never made, which is worse than failing loudly: it puts
+/// wrong information into a caregiver's mental model of their loved one's meds.
 class ChatActionOutcome {
-  const ChatActionOutcome({this.citation});
+  /// The write happened. [citation] optionally surfaces a chip.
+  const ChatActionOutcome({this.citation}) : failure = null;
+
+  /// The write did NOT happen. [failure] is a short, brand-voiced,
+  /// user-facing reason ("I need the dose to add that medication") that
+  /// [ChatService] appends to the reply so the prose's claim is corrected.
+  const ChatActionOutcome.failed(String this.failure) : citation = null;
 
   /// Optional `<entity>:<id>` citation stamped into the assistant message's
   /// citations (e.g. `journal:…`). Null when the action needs no chip.
   final String? citation;
+
+  /// Non-null when the action did nothing; the caregiver-facing reason.
+  final String? failure;
+
+  /// True only when the write actually landed.
+  bool get performed => failure == null;
 }
 
 /// Mints `<prefix>-<ms>-<rand>` ids, matching the pattern every app form
@@ -63,9 +90,11 @@ String _mintId(String prefix, DateTime Function() clock) {
 /// performs the write (TASKS.md Phase 11.3, extended).
 ///
 /// Holds [ref] so a Settings override of any backend flows through without
-/// rebuilding the chat service. Every executor is defensive: missing/blank
-/// required args return null (the marker is still stripped, nothing is
-/// written) rather than throwing.
+/// rebuilding the chat service. Every executor is defensive, but never SILENT:
+/// when a required arg is missing (or a name matches nothing) it returns
+/// [ChatActionOutcome.failed] with a caregiver-facing reason, which
+/// [ChatService] appends to the reply — so the coach's prose can't claim a
+/// write that never happened.
 Map<String, ChatActionExecutor> buildChatActions(
   Ref ref, {
   required DateTime Function() clock,
@@ -205,7 +234,10 @@ Future<ChatActionOutcome?> _logJournal(
   Map<String, String> args,
 ) async {
   final String? situation = _clean(args['situation']);
-  if (situation == null) return null;
+  if (situation == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't save that note — I need a little more about what happened.");
+  }
   final String attempts = _clean(args['attempts']) ?? 'none yet';
   final DateTime occurredAt =
       resolveOccurredAt(args['occurred_at'], clock());
@@ -233,7 +265,18 @@ Future<ChatActionOutcome?> _addMedication(
   final String? dosage = _clean(args['dosage']);
   // Name + dosage are the two things the coach must transcribe; without
   // them there's nothing safe to record.
-  if (name == null || dosage == null) return null;
+  if (name == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't add that — I need the medication's name.");
+  }
+  // The dose is REQUIRED and must come from the caregiver: guessing one would
+  // be a dosing recommendation, which the coach must never make. Ask, don't
+  // silently skip — the reported bug (2026-07-13) was exactly this arriving
+  // without a dose, doing nothing, and still saying it was added.
+  if (dosage == null) {
+    return ChatActionOutcome.failed(
+        'I couldn\'t add $name yet — what dose is it? (For example, "200 mg".)');
+  }
   final MedicationRepository repo = ref.read(medicationRepositoryProvider);
   final med = Medication(
     id: _mintId('med', clock),
@@ -252,7 +295,7 @@ Future<ChatActionOutcome?> _addMedication(
     await _attachMedicationWindows(ref, repo, med.id, windows, clock);
   }
   _refreshMedications(ref);
-  return null;
+  return const ChatActionOutcome();
 }
 
 /// Attach [medicationId] to each named dose window in [windowsCsv] (a
@@ -308,7 +351,10 @@ Future<ChatActionOutcome?> _updateMedication(
   final MedicationRepository repo = ref.read(medicationRepositoryProvider);
   final List<Medication> meds = await repo.listMedications();
   final Medication? target = _resolveMedication(meds, args['name']);
-  if (target == null) return null;
+  if (target == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't find that medication on the list, so I didn't change anything.");
+  }
   final Medication updated = target.copyWith(
     name: _clean(args['new_name']) ?? target.name,
     dosage: _clean(args['dosage']) ?? target.dosage,
@@ -318,7 +364,7 @@ Future<ChatActionOutcome?> _updateMedication(
   );
   await repo.upsertMedication(updated);
   _refreshMedications(ref);
-  return null;
+  return const ChatActionOutcome();
 }
 
 Future<ChatActionOutcome?> _deleteMedication(
@@ -328,10 +374,13 @@ Future<ChatActionOutcome?> _deleteMedication(
   final MedicationRepository repo = ref.read(medicationRepositoryProvider);
   final List<Medication> meds = await repo.listMedications();
   final Medication? target = _resolveMedication(meds, args['name']);
-  if (target == null) return null;
+  if (target == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't find that medication on the list, so I didn't remove anything.");
+  }
   await repo.deleteMedication(target.id);
   _refreshMedications(ref);
-  return null;
+  return const ChatActionOutcome();
 }
 
 // ---------------------------------------------------------------------------
@@ -421,7 +470,14 @@ Future<ChatActionOutcome?> _addAppointment(
   final String? providerName = _clean(args['provider_name']);
   final DateTime? startsAt = _parseDateTime(args['starts_at']);
   // A visit needs who and when; without them there's nothing to schedule.
-  if (providerName == null || startsAt == null) return null;
+  if (providerName == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't schedule that — who is the visit with?");
+  }
+  if (startsAt == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't schedule that — what day and time is it?");
+  }
   final String providerId = await _resolveProviderId(ref, providerName, clock);
   final appt = Appointment(
     id: _mintId('appt', clock),
@@ -435,7 +491,7 @@ Future<ChatActionOutcome?> _addAppointment(
   );
   await ref.read(appointmentRepositoryProvider).upsertAppointment(appt);
   _refreshAppointments(ref);
-  return null;
+  return const ChatActionOutcome();
 }
 
 Future<ChatActionOutcome?> _updateAppointment(
@@ -444,7 +500,10 @@ Future<ChatActionOutcome?> _updateAppointment(
 ) async {
   final Appointment? target =
       await _resolveAppointment(ref, args['provider_name']);
-  if (target == null) return null;
+  if (target == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't find that appointment, so I didn't change anything.");
+  }
   final Appointment updated = target.copyWith(
     startsAt: _parseDateTime(args['starts_at']) ?? target.startsAt,
     durationMinutes:
@@ -454,7 +513,7 @@ Future<ChatActionOutcome?> _updateAppointment(
   );
   await ref.read(appointmentRepositoryProvider).upsertAppointment(updated);
   _refreshAppointments(ref);
-  return null;
+  return const ChatActionOutcome();
 }
 
 Future<ChatActionOutcome?> _cancelAppointment(
@@ -463,14 +522,17 @@ Future<ChatActionOutcome?> _cancelAppointment(
 ) async {
   final Appointment? target =
       await _resolveAppointment(ref, args['provider_name']);
-  if (target == null) return null;
+  if (target == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't find that appointment, so I didn't cancel anything.");
+  }
   // Cancel keeps the row (status flips) rather than hard-deleting, so the
   // visit stays in the history the way the app's own cancel flow does.
   await ref
       .read(appointmentRepositoryProvider)
       .upsertAppointment(target.copyWith(status: AppointmentStatus.canceled));
   _refreshAppointments(ref);
-  return null;
+  return const ChatActionOutcome();
 }
 
 // ---------------------------------------------------------------------------
@@ -498,9 +560,15 @@ Future<ChatActionOutcome?> _addTask(
   Map<String, String> args,
 ) async {
   final String? title = _clean(args['title']);
-  if (title == null) return null;
+  if (title == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't add that task — what should it be called?");
+  }
   final String? patientId = await _patientId(ref);
-  if (patientId == null) return null;
+  if (patientId == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't save that — set up your loved one's profile first.");
+  }
   final task = CareTask(
     id: _mintId('task', clock),
     title: title,
@@ -509,7 +577,7 @@ Future<ChatActionOutcome?> _addTask(
     dueAt: _parseDateTime(args['due_at']),
   );
   await ref.read(careTasksProvider.notifier).addTask(task);
-  return null;
+  return const ChatActionOutcome();
 }
 
 Future<ChatActionOutcome?> _completeTask(
@@ -519,14 +587,20 @@ Future<ChatActionOutcome?> _completeTask(
   // Scope the by-title lookup to the active loved one (multi-patient, Issue
   // #6) so "complete the pharmacy task" can't match another person's task.
   final String? patientId = await _patientId(ref);
-  if (patientId == null) return null;
+  if (patientId == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't save that — set up your loved one's profile first.");
+  }
   final List<CareTask> tasks = await ref
       .read(careTasksRepositoryProvider)
       .listTasksForPatient(patientId);
   final CareTask? target = _resolveTask(tasks, args['title']);
-  if (target == null) return null;
+  if (target == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't find that task, so I didn't mark anything done.");
+  }
   await ref.read(careTasksProvider.notifier).complete(target.id);
-  return null;
+  return const ChatActionOutcome();
 }
 
 Future<ChatActionOutcome?> _deleteTask(
@@ -536,14 +610,20 @@ Future<ChatActionOutcome?> _deleteTask(
   // Same active-patient scoping as _completeTask — a destructive lookup must
   // never resolve to a different loved one's task (multi-patient, Issue #6).
   final String? patientId = await _patientId(ref);
-  if (patientId == null) return null;
+  if (patientId == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't save that — set up your loved one's profile first.");
+  }
   final List<CareTask> tasks = await ref
       .read(careTasksRepositoryProvider)
       .listTasksForPatient(patientId);
   final CareTask? target = _resolveTask(tasks, args['title']);
-  if (target == null) return null;
+  if (target == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't find that task, so I didn't remove anything.");
+  }
   await ref.read(careTasksProvider.notifier).removeTask(target.id);
-  return null;
+  return const ChatActionOutcome();
 }
 
 // ---------------------------------------------------------------------------
@@ -619,9 +699,19 @@ Future<ChatActionOutcome?> _addRoutine(
   final TimeOfDay? time = _parseTimeOfDay(args['time']);
   // A routine needs a name and a wall-clock anchor; without them there's
   // nothing safe to put on the schedule.
-  if (title == null || time == null) return null;
+  if (title == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't add that routine — what should it be called?");
+  }
+  if (time == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't add that routine — what time of day is it?");
+  }
   final String? patientId = await _patientId(ref);
-  if (patientId == null) return null;
+  if (patientId == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't save that — set up your loved one's profile first.");
+  }
 
   final FrequencyKind frequency = _parseFrequency(args['frequency']);
   // Weekly routines carry the chosen days; daily / asNeeded leave the set
@@ -642,7 +732,7 @@ Future<ChatActionOutcome?> _addRoutine(
   );
   await ref.read(carePlanProvider.notifier).upsert(routine);
   _refreshRoutines(ref);
-  return null;
+  return const ChatActionOutcome();
 }
 
 // ---------------------------------------------------------------------------
@@ -683,9 +773,15 @@ Future<ChatActionOutcome?> _addHealthLog(
   final double? parsedWeight = double.tryParse(_clean(args['weight_lbs']) ?? '');
   final double? weightLbs =
       (parsedWeight != null && parsedWeight > 0) ? parsedWeight : null;
-  if (text == null && weightLbs == null) return null;
+  if (text == null && weightLbs == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't add that to the health log — what should I record?");
+  }
   final String? patientId = await _patientId(ref);
-  if (patientId == null) return null;
+  if (patientId == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't save that — set up your loved one's profile first.");
+  }
   // recorded_at reuses the journal's tolerant relative-time parsing so the
   // coach can say "this morning" the same way it logs a journal entry.
   final DateTime recordedAt =
@@ -704,7 +800,7 @@ Future<ChatActionOutcome?> _addHealthLog(
   );
   await ref.read(healthLogProvider.notifier).add(entry);
   _refreshHealthLog(ref);
-  return null;
+  return const ChatActionOutcome();
 }
 
 // ---------------------------------------------------------------------------
@@ -738,7 +834,10 @@ Future<ChatActionOutcome?> _logDose(
   final List<Medication> meds = await repo.listMedications();
   final Medication? med = _resolveMedication(meds, args['name']);
   // Without a medication on file we can't key the dose to anything.
-  if (med == null) return null;
+  if (med == null) {
+    return const ChatActionOutcome.failed(
+        "I couldn't find that medication on the list, so I didn't log a dose.");
+  }
   final DoseStatus status = _parseDoseStatus(args['outcome']);
   // The dose's wall-clock — an explicit "YYYY-MM-DD HH:MM", else the
   // tolerant relative parser ("just now", "this morning"), else now.
@@ -761,7 +860,7 @@ Future<ChatActionOutcome?> _logDose(
   ref.invalidate(patientDoseEventsProvider);
   ref.invalidate(patientTimelineEventsProvider);
   ref.invalidate(catchMeUpEventsProvider);
-  return null;
+  return const ChatActionOutcome();
 }
 
 // ---------------------------------------------------------------------------
@@ -819,14 +918,17 @@ Future<ChatActionOutcome?> _navigate(
 ) async {
   String? route =
       await routeForNavTarget(ref, args['target'], args['provider_name']);
-  if (route == null) return null;
+  if (route == null) {
+    return const ChatActionOutcome.failed(
+        "I'm not sure which screen you mean — you can open it from the tabs.");
+  }
   // A date on the calendar/schedule opens it on that day instead of today.
   if (route == '/team/calendar') {
     final DateTime? date = parseCalendarDate(args['date'], clock());
     if (date != null) route = '/team/calendar?date=${_isoDate(date)}';
   }
   ref.read(chatNavigateRequestProvider.notifier).request(route);
-  return null;
+  return const ChatActionOutcome();
 }
 
 String _isoDate(DateTime d) =>

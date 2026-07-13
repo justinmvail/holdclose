@@ -460,6 +460,7 @@ class SyncController {
       // breadcrumb rides debugPrint into LogBuffer so a feedback report
       // shows WHY "my circle isn't seeing my data".
       debugPrint('sync: push failed (batch left queued): $e');
+      await _recoverIfCircleGone(circleId, e);
     }
   }
 
@@ -556,6 +557,40 @@ class SyncController {
     } catch (e) {
       // Offline / backend unreachable — try again next tick.
       debugPrint('sync: pull failed (will retry): $e');
+      await _recoverIfCircleGone(circleId, e);
+    }
+  }
+
+  /// Unbind + re-bootstrap when the server says our circle DOESN'T EXIST.
+  ///
+  /// A stored circle id that the backend 404s is a DEAD END: `bootstrapCircle`
+  /// short-circuits whenever any id is stored, so every push and pull 404s for
+  /// the life of the install and the caregiver's care data silently stops
+  /// syncing. Found on a tester's phone (2026-07-13) whose logs were a wall of
+  /// `sync: push failed … ForumApiException(404, not_found)`: their circle had
+  /// been created against the OLD laptop backend, and pointing the build at the
+  /// Cloudflare Worker carried the now-meaningless id across — a different
+  /// database, where that circle never existed.
+  ///
+  /// Recovery is safe: dropping the binding makes the next bootstrap ADOPT a
+  /// circle the account already owns, or CREATE one for the local loved one.
+  /// Nothing local is deleted, and the outbox still holds every unpushed row,
+  /// so the data flows up to the new circle on the following tick.
+  Future<void> _recoverIfCircleGone(String circleId, Object error) async {
+    if (error is! ForumApiException) return;
+    if (error.statusCode != 404) return;
+    debugPrint(
+      'sync: circle $circleId no longer exists on the backend — unbinding and '
+      're-bootstrapping (data stays local + queued)',
+    );
+    try {
+      await _stateStore.setCircleId(null);
+      await _stateStore.setCursor(circleId, 0);
+      await bootstrapCircle();
+    } catch (e) {
+      // Never let recovery throw — local-only is the safe default and the
+      // next tick tries again.
+      debugPrint('sync: circle re-bootstrap failed: $e');
     }
   }
 

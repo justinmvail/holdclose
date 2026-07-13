@@ -91,6 +91,72 @@ void main() {
       await db.close();
     });
 
+    test('an action that DID NOTHING never reads as success — the confirm card '
+        'must report false (fb_1783968081885132)', () async {
+      // The tester's report: "I asked chat to add ibuprofen to medications and
+      // it confirmed and navigated upon request. It wasn't added." `ran` used
+      // to mean merely "the executor didn't throw", so an executor that quietly
+      // wrote nothing passed as success and the card said done. A coach that
+      // claims a write it never made corrupts the caregiver's picture of their
+      // loved one's medications.
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText(
+              'Adding it. [action:add_medication name="Ibuprofen"]'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        actions: <String, ChatActionExecutor>{
+          'add_medication': (Map<String, String> args) async =>
+              const ChatActionOutcome.failed('What dose is it?'),
+        },
+      );
+
+      await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'add ibuprofen')
+          .drain<void>();
+      final Message assistant = (await repo.loadMessages('convo-1')).last;
+      final String pending = assistant.citations.firstWhere(
+        (String c) =>
+            c.startsWith(ChatService.pendingActionCitationPrefix),
+      );
+
+      final bool ran = await svc.confirmPendingAction(
+        conversationId: 'convo-1',
+        messageId: assistant.id,
+        citation: pending,
+      );
+
+      expect(ran, isFalse,
+          reason: 'nothing was written — the card must not claim it was');
+    });
+
+    test('an INSTANT action that did nothing appends its REASON to the reply',
+        () async {
+      // A specific reason ("I'm not sure which screen you mean") lets the
+      // caregiver correct it in one reply, rather than a generic apology.
+      final ChatService svc = ChatService(
+        repository: repo,
+        backend: _ScriptedChatBackend(<ChatDelta>[
+          const ChatDeltaText('Taking you there. [action:navigate target="x"]'),
+        ]),
+        idFactory: _idFactory(),
+        clock: _fixedClock,
+        actions: <String, ChatActionExecutor>{
+          'navigate': (Map<String, String> args) async =>
+              const ChatActionOutcome.failed("I'm not sure which screen."),
+        },
+      );
+
+      await svc
+          .sendMessage(conversationId: 'convo-1', userText: 'open it')
+          .drain<void>();
+      final Message assistant = (await repo.loadMessages('convo-1')).last;
+
+      expect(assistant.body, contains("I'm not sure which screen."));
+    });
+
     test('appends the user message to the repository first', () async {
       final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
         const ChatDeltaText('Hello, Careblazer.'),
@@ -489,7 +555,7 @@ void main() {
         actions: <String, ChatActionExecutor>{
           'add_task': (Map<String, String> args) async {
             captured = args;
-            return null;
+            return const ChatActionOutcome();  // scripted SUCCESS
           },
         },
       );
@@ -525,7 +591,7 @@ void main() {
         actions: <String, ChatActionExecutor>{
           'log_journal': (Map<String, String> args) async {
             executions += 1;
-            return null;
+            return const ChatActionOutcome();  // scripted SUCCESS
           },
         },
       );
@@ -564,7 +630,7 @@ void main() {
           actions: <String, ChatActionExecutor>{
             'delete_medication': (Map<String, String> args) async {
               deletions.add(args['name'] ?? '');
-              return null;
+              return const ChatActionOutcome();  // scripted SUCCESS
             },
           },
         );
@@ -681,11 +747,11 @@ void main() {
           actions: <String, ChatActionExecutor>{
             'log_journal': (Map<String, String> args) async {
               journals.add(args['situation'] ?? '');
-              return null;
+              return const ChatActionOutcome();  // scripted SUCCESS
             },
             'delete_medication': (Map<String, String> args) async {
               deletions.add(args['name'] ?? '');
-              return null;
+              return const ChatActionOutcome();  // scripted SUCCESS
             },
           },
         );
@@ -721,7 +787,7 @@ void main() {
           actions: <String, ChatActionExecutor>{
             'update_medication': (Map<String, String> args) async {
               dosages.add(args['dosage'] ?? '');
-              return null;
+              return const ChatActionOutcome();  // scripted SUCCESS
             },
           },
         );
@@ -1546,7 +1612,7 @@ void main() {
         actions: <String, ChatActionExecutor>{
           'navigate': (Map<String, String> args) async {
             navigated = args;
-            return null;
+            return const ChatActionOutcome();  // scripted SUCCESS
           },
         },
         idFactory: _idFactory(),
@@ -1580,7 +1646,7 @@ void main() {
         actions: <String, ChatActionExecutor>{
           'log_journal': (Map<String, String> args) async {
             logged.add(args['situation'] ?? '');
-            return null;
+            return const ChatActionOutcome();  // scripted SUCCESS
           },
         },
         idFactory: _idFactory(),
@@ -1663,7 +1729,7 @@ void main() {
         actions: <String, ChatActionExecutor>{
           'delete_medication': (Map<String, String> args) async {
             deletions.add(args['name'] ?? '');
-            return null;
+            return const ChatActionOutcome();  // scripted SUCCESS
           },
         },
         idFactory: _idFactory(),

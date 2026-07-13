@@ -479,24 +479,38 @@ class _ActionResult {
 
 /// Outcome of one action pass over a finished reply: the citations of
 /// executed (instant) actions, the RAW markers of mutating actions parked
-/// for the caregiver's explicit in-app confirmation, and a flag when any
-/// instant executor THREW so the caller can surface an honest failure line
-/// instead of a silent "logged it" (the reply's prose would otherwise claim
-/// success while nothing saved).
+/// for the caregiver's explicit in-app confirmation, and — when an executor
+/// did NOT perform its write — the reasons, so the caller can correct prose
+/// that already claimed success.
 class _ActionPass {
   const _ActionPass({
     this.results = const <_ActionResult>[],
     this.pendingMarkers = const <String>[],
     this.hadFailure = false,
+    this.failureNotices = const <String>[],
   });
 
   final List<_ActionResult> results;
   final List<String> pendingMarkers;
 
-  /// True when an instant (non-confirmed) executor threw. The confirm-card
-  /// flow reports its own failures through [ChatService.confirmPendingAction],
-  /// so only instant executions feed this.
+  /// True when an instant (non-confirmed) executor threw OR reported that it
+  /// did nothing. The confirm-card flow reports its own failures through
+  /// [ChatService.confirmPendingAction], so only instant executions feed this.
   final bool hadFailure;
+
+  /// Caregiver-facing reasons from executors that DIDN'T perform their write
+  /// (e.g. "what dose is it?"). Preferred over the generic failure line — a
+  /// specific reason lets the caregiver fix it in one reply. Empty when the
+  /// only failure was a thrown exception (no reason to give).
+  final List<String> failureNotices;
+
+  /// The line to append to the reply so its prose can't claim a write that
+  /// never happened. Null when nothing failed.
+  String? get failureTrailer {
+    if (!hadFailure) return null;
+    if (failureNotices.isEmpty) return chatActionFailedMessage;
+    return failureNotices.join('\n\n');
+  }
 
   /// Message citations for this pass: executed-action citations first,
   /// then one `pending_action:` citation per unconfirmed marker.
@@ -737,10 +751,9 @@ class ChatService {
       String cleanBody = stripActionMarkers(rawBody);
       // An instant executor threw — the prose likely claimed success, so
       // append an honest line rather than let the reply lie about the save.
-      if (actionPass.hadFailure) {
-        cleanBody = cleanBody.isEmpty
-            ? chatActionFailedMessage
-            : '$cleanBody\n\n$chatActionFailedMessage';
+      final String? trailer = actionPass.failureTrailer;
+      if (trailer != null) {
+        cleanBody = cleanBody.isEmpty ? trailer : '$cleanBody\n\n$trailer';
       }
 
       assistant = assistant.copyWith(
@@ -927,10 +940,9 @@ class ChatService {
     // pending confirm card in the thread rather than committing hands-free.
     final _ActionPass actionPass = await _executeActions(rawBody);
     String body = stripActionMarkers(rawBody);
-    if (actionPass.hadFailure) {
-      body = body.isEmpty
-          ? chatActionFailedMessage
-          : '$body\n\n$chatActionFailedMessage';
+    final String? trailer = actionPass.failureTrailer;
+    if (trailer != null) {
+      body = body.isEmpty ? trailer : '$body\n\n$trailer';
     }
     await repository.appendMessage(Message(
       id: idFactory(),
@@ -1127,6 +1139,7 @@ class ChatService {
     final List<_ActionResult> results = <_ActionResult>[];
     final List<String> pendingMarkers = <String>[];
     final Set<String> seenMarkers = <String>{};
+    final List<String> failureNotices = <String>[];
     bool hadFailure = false;
     for (final RegExpMatch m in _actionPattern.allMatches(body)) {
       final String raw = m.group(0)!;
@@ -1141,7 +1154,18 @@ class ChatService {
       final Map<String, String> args = _parseActionArgs(m.group(2)!);
       try {
         final ChatActionOutcome? outcome = await executor(args);
-        final String? citation = outcome?.citation;
+        // An executor that DIDN'T perform its write must not pass as success.
+        // A null outcome counts as "did nothing" — the safe reading, since the
+        // prose has already told the caregiver it happened. (2026-07-13: an
+        // `add_medication` with no dose returned null, wrote nothing, and the
+        // coach still said it was added.)
+        if (outcome == null || !outcome.performed) {
+          hadFailure = true;
+          final String? why = outcome?.failure;
+          if (why != null) failureNotices.add(why);
+          continue;
+        }
+        final String? citation = outcome.citation;
         if (citation != null) {
           results.add(_ActionResult(citation: citation));
         }
@@ -1157,6 +1181,7 @@ class ChatService {
       results: results,
       pendingMarkers: pendingMarkers,
       hadFailure: hadFailure,
+      failureNotices: failureNotices,
     );
   }
 
@@ -1184,8 +1209,13 @@ class ChatService {
         try {
           final ChatActionOutcome? outcome =
               await executor(_parseActionArgs(m.group(2)!));
-          executedCitation = outcome?.citation;
-          ran = true;
+          // `ran` must mean the write LANDED — not merely "the executor didn't
+          // throw". It used to mean the latter, so a confirm card reported
+          // success for an executor that quietly did nothing: the tester
+          // confirmed "add ibuprofen", the card said done, and no medication
+          // was ever created (2026-07-13).
+          ran = outcome != null && outcome.performed;
+          executedCitation = ran ? outcome.citation : null;
         } catch (e, st) {
           // The confirm card reports ran=false to the UI (which shows an
           // honest "couldn't make that change" line); log the cause so the
