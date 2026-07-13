@@ -35,10 +35,15 @@
 #   AUTH=google BACKEND=cloudflare-dev tools/run_device.sh   # → Cloudflare edge deploy
 #   AUTH=google SEED=1 tools/run_device.sh    # ...plus a fresh seeded dataset
 #
-# NOTE: `flutter run` has no --build-number flag, so the epoch is carried by
-# the BUILD_STAMP dart-define (Settings → About). For a store artifact whose
-# CFBundleVersion also carries it, use tools/build_ipa.sh. Wireless installs
-# need the phone UNLOCKED + awake during the whole compile.
+# It BUILDS, INSTALLS, and EXITS — it does not attach to the running app. (It
+# used to `exec flutter run`, which never returns; see the note above the build
+# step.) CFBundleVersion comes from pubspec's `version:` build number, so BUMP
+# THAT when you want a distinguishable install; the epoch BUILD_STAMP shown in
+# Settings → About is carried by a dart-define. For a store artifact use
+# tools/build_ipa.sh.
+#
+# ⚠ The phone must be UNLOCKED and awake for the install (a wireless install to
+# a locked device fails).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -141,4 +146,40 @@ fi
 echo "→ Holdclose build ${BUILD_NUMBER}  (auth=${AUTH}${SEED:++seed}, ${GIT_BRANCH} @ ${GIT_SHA}, ${BUILD_TIME})"
 echo "  device=${DEVICE}"
 
-exec flutter run --release -d "$DEVICE" "${DEFINES[@]}"
+# BUILD, then INSTALL, then EXIT.
+#
+# This used to be `exec flutter run --release -d <device>`, which installs the
+# app and then STAYS ATTACHED to it forever — it never returns. Every invocation
+# left a live process behind: four of them were still running hours later, each
+# holding its shell open, so a build that had actually finished in ~2 minutes
+# looked like it was "still compiling" for the rest of the day (2026-07-13).
+# `flutter run` also swallows the install result behind its own attach/launch
+# machinery, which is where the misleading "Error running application" came from
+# even on a SUCCESSFUL install.
+#
+# So: build the .app, install it with devicectl, verify it landed, and return.
+flutter build ios --release "${DEFINES[@]}"
+
+APP="build/ios/iphoneos/Runner.app"
+if [[ ! -d "$APP" ]]; then
+  echo "error: build did not produce $APP" >&2
+  exit 1
+fi
+
+echo "→ installing to ${DEVICE} (the phone must be UNLOCKED)"
+if ! xcrun devicectl device install app --device "$DEVICE" "$APP"; then
+  echo "" >&2
+  echo "error: install failed. The usual cause is a LOCKED phone —" >&2
+  echo "       unlock it, keep it awake, and re-run." >&2
+  exit 1
+fi
+
+# Prove it actually landed (the version shown is CFBundleVersion, i.e. the
+# pubspec build number) rather than trusting the installer's output.
+echo "→ installed:"
+xcrun devicectl device info apps --device "$DEVICE" 2>/dev/null \
+  | grep -i holdclose || {
+      echo "warning: could not confirm the app on the device" >&2
+    }
+echo "→ done. Settings → About shows build stamp ${BUILD_NUMBER}."
+

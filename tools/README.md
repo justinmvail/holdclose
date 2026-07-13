@@ -30,7 +30,7 @@ builds.
 
 | Script | Purpose |
 |---|---|
-| **`run_device.sh`** | Build + `flutter run --release` to a device. Env-configured (below). The daily driver. |
+| **`run_device.sh`** | Build + install to a device, then EXIT. Env-configured (below). The daily driver. (It used to `flutter run`, which attaches to the app and never returns — leaving zombie processes and making a finished build look like it was still compiling.) |
 | **`build_ipa.sh`** | Release IPA for the store. Unlike `flutter run`, `flutter build` honours `--build-number`, so this bakes the epoch build number into the artifact's real CFBundleVersion / versionCode. |
 | **`claude_shim.py`** | Local LLM shim — shells out to your `claude` CLI so dev AI calls cost nothing. Routes: `/generate`, `/extract` (image+text scan), `/feedback`, `/phonemize`. See **The dev LLM shim** below for prereqs + env vars. |
 | **`seed_demo.sh`** | *(removed)* — now `AUTH=... SEED=1 tools/run_device.sh`. |
