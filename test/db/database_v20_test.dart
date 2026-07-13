@@ -7,6 +7,47 @@ import 'package:flutter_test/flutter_test.dart';
 /// (its DELETE assumed an FK cascade that never fired during migration —
 /// `PRAGMA foreign_keys = ON` runs in beforeOpen, AFTER onUpgrade).
 void main() {
+  test('the v20 upgrade step is IDEMPOTENT — re-running it over indices that '
+      'already exist must NOT throw (fb: "Couldn\'t save just now")', () async {
+    // The bug this pins, from a tester's phone (2026-07-13):
+    //
+    //   SqliteException(1): index journal_entries_created_idx already exists
+    //   Causing statement: CREATE INDEX journal_entries_created_idx ...
+    //
+    // Drift emits `CREATE TABLE IF NOT EXISTS` but a BARE `CREATE INDEX`. If a
+    // migration is interrupted after the indices are created but before the
+    // schema version is committed, the next launch re-runs this step, the
+    // CREATE INDEX blows up, and EVERY database write throws from then on —
+    // forever. The caregiver is stranded on onboarding with "Couldn't save
+    // just now", and reinstalling the app doesn't help because the file
+    // survives. It cost most of a day, hidden behind an unrelated encryption
+    // bug we were chasing at the time.
+    //
+    // A migration step must be safe to run TWICE. This runs it a second time
+    // against a database that already has every v20 index.
+    final HoldcloseDatabase db = HoldcloseDatabase.testInstance();
+    addTearDown(db.close);
+    // Materialise the schema (and therefore the indices).
+    await db.customSelect('SELECT 1').get();
+
+    // Re-run the exact upgrade step against the already-migrated database.
+    await expectLater(
+      db.customStatement(
+        'CREATE INDEX IF NOT EXISTS journal_entries_created_idx '
+        'ON journal_entries (created_at_ms)',
+      ),
+      completes,
+      reason: 'the migration must tolerate indices that are already there',
+    );
+
+    final Migrator m = Migrator(db);
+    await expectLater(
+      db.migration.onUpgrade(m, 19, 20),
+      completes,
+      reason: 'a re-run of the v20 upgrade must not throw',
+    );
+  });
+
   test('a fresh install carries the v20 secondary indices', () async {
     final HoldcloseDatabase db = HoldcloseDatabase.testInstance();
     addTearDown(db.close);

@@ -356,12 +356,39 @@ class HoldcloseDatabase extends _$HoldcloseDatabase {
             // scan over tables that grow for the life of the install.
             // Fresh installs get these from the @TableIndex annotations
             // at create time; this step backfills upgrades.
-            await m.createIndex(chatMessagesConversationIdx);
-            await m.createIndex(medicationWindowEntriesWindowIdx);
-            await m.createIndex(medicationWindowEntriesMedicationIdx);
-            await m.createIndex(doseLogsMedicationScheduledIdx);
-            await m.createIndex(journalEntriesCreatedIdx);
-            await m.createIndex(healthLogEntriesPatientRecordedIdx);
+            //
+            // IF NOT EXISTS is load-bearing — do NOT go back to
+            // `m.createIndex(...)`. Drift emits `CREATE TABLE IF NOT EXISTS`
+            // but a BARE `CREATE INDEX`, so if a migration is interrupted
+            // after the indices are created but before the schema version is
+            // committed, the next launch re-runs this step and dies on
+            //   "index journal_entries_created_idx already exists (code 1)"
+            // — FOREVER. Every DB write then throws, the app strands the
+            // caregiver on onboarding with "Couldn't save just now", and no
+            // amount of reinstalling the app fixes it because the file
+            // survives. That is not hypothetical: it happened on a tester's
+            // phone (2026-07-13) and cost most of a day, hidden behind an
+            // unrelated encryption bug we were chasing at the time.
+            //
+            // A migration step must be safe to run TWICE. Assume it will be.
+            for (final String ddl in const <String>[
+              'CREATE INDEX IF NOT EXISTS chat_messages_conversation_idx '
+                  'ON chat_messages (conversation_id)',
+              'CREATE INDEX IF NOT EXISTS medication_window_entries_window_idx '
+                  'ON medication_window_entries (window_id)',
+              'CREATE INDEX IF NOT EXISTS '
+                  'medication_window_entries_medication_idx '
+                  'ON medication_window_entries (medication_id)',
+              'CREATE INDEX IF NOT EXISTS dose_logs_medication_scheduled_idx '
+                  'ON dose_logs (medication_id, scheduled_for_ms)',
+              'CREATE INDEX IF NOT EXISTS journal_entries_created_idx '
+                  'ON journal_entries (created_at_ms)',
+              'CREATE INDEX IF NOT EXISTS '
+                  'health_log_entries_patient_recorded_idx '
+                  'ON health_log_entries (patient_id, recorded_at_ms)',
+            ]) {
+              await customStatement(ddl);
+            }
             // (b) Repair v15's orphans. v15 deleted the seeded windows
             // assuming "FK cascade wipes any medication entries linked
             // to those windows" — but `PRAGMA foreign_keys = ON` runs in
