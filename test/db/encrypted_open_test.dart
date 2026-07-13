@@ -279,15 +279,33 @@ void main() {
       expect(File('$dbPath.quarantined').existsSync(), isFalse);
     });
 
-    test('a repeat quarantine replaces the previous generation', () {
-      File(dbPath).writeAsBytesSync(_encryptedLookingBytes());
+    test('a repeat quarantine NEVER destroys the first one', () {
+      // The hazard this pins: the first cut deleted the previous quarantine
+      // before moving the new file in. Two false quarantines happened in ONE
+      // DAY (2026-07-13: a key race, then a keychain-accessibility change) —
+      // the second would have destroyed the only surviving copy of the
+      // caregiver's care record. Quarantine may MOVE a file aside; it may
+      // never DELETE care data.
+      File(dbPath).writeAsStringSync('FIRST GENERATION - the real care data');
       recoverIfUndecryptable(dbPath, 'deadbeef');
-      File(dbPath).writeAsBytesSync(_encryptedLookingBytes());
+      File(dbPath).writeAsStringSync('SECOND GENERATION');
 
       recoverIfUndecryptable(dbPath, 'deadbeef');
 
       expect(File(dbPath).existsSync(), isFalse);
-      expect(File('$dbPath.quarantined').existsSync(), isTrue);
+      // The first generation is intact, byte for byte.
+      expect(
+        File('$dbPath.quarantined').readAsStringSync(),
+        'FIRST GENERATION - the real care data',
+        reason: 'the original care record must survive a second quarantine',
+      );
+      // ...and the second landed alongside it, not on top of it.
+      final List<String> quarantines = tmp
+          .listSync()
+          .map((FileSystemEntity e) => e.path)
+          .where((String p) => p.contains('.quarantined'))
+          .toList();
+      expect(quarantines, hasLength(2));
     });
 
     test('each quarantine reports through databaseRecoveryObserver', () {

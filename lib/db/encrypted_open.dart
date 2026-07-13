@@ -415,13 +415,34 @@ Future<void> _migratePlaintextIfNeeded(String dbPath, String key) async {
 /// instead of failing every query forever. Each quarantine is reported
 /// through [databaseRecoveryObserver].
 void _quarantineDatabase(String dbPath, {required String reason}) {
+  // NEVER overwrite an existing quarantine. The first cut of this deleted the
+  // previous generation before moving the new file in — so a SECOND false
+  // quarantine would have destroyed the only surviving copy of the caregiver's
+  // care record. Both false quarantines happened in one day (2026-07-13: a key
+  // race, then a keychain-accessibility change), which is exactly the scenario
+  // that would have burned it.
+  //
+  // Quarantine exists to be non-destructive. It gets to MOVE a file aside; it
+  // does not get to DELETE care data, ever. Each quarantine is its own
+  // generation, so a wrong one can always be walked back.
+  final String stamp = DateTime.now().toUtc().toIso8601String()
+      .replaceAll(RegExp(r'[:.]'), '-');
+  final String base = _quarantineTargetBase(dbPath, stamp);
   for (final String suffix in const <String>['', '-wal', '-shm']) {
     final File src = File('$dbPath$suffix');
-    final File dst = File('$dbPath$_quarantineSuffix$suffix');
-    if (dst.existsSync()) dst.deleteSync();
-    if (src.existsSync()) src.renameSync(dst.path);
+    if (src.existsSync()) src.renameSync('$base$suffix');
   }
-  _reportRecovery('quarantined undecryptable database: $reason');
+  _reportRecovery('quarantined undecryptable database ($base): $reason');
+}
+
+/// The path a quarantine moves the database to. The FIRST quarantine takes the
+/// plain `<db>.quarantined` name — that is the one [restoreQuarantinedIfUsable]
+/// looks for, so the common "we were wrong, give it back" case stays simple.
+/// Any LATER quarantine gets a timestamped name instead of clobbering it.
+String _quarantineTargetBase(String dbPath, String stamp) {
+  final String plain = '$dbPath$_quarantineSuffix';
+  if (!File(plain).existsSync()) return plain;
+  return '$plain.$stamp';
 }
 
 /// True iff [key] actually opens the database at [dbPath] — the header
