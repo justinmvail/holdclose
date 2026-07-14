@@ -240,7 +240,9 @@ void main() {
           settings: AppSettings.defaults(),
           now: DateTime(2026, 5, 29, 14, 0),
         );
-        expect(container.read(ttsProvider), isA<BundledTTSProvider>());
+        expect(container.read(ttsProvider), isA<FallbackTTSProvider>()
+              .having((FallbackTTSProvider t) => t.primary, 'primary',
+                  isA<BundledTTSProvider>()));
       },
     );
 
@@ -264,7 +266,9 @@ void main() {
               .copyWith(allowAudioDuringQuietHours: true),
           now: DateTime(2026, 5, 29, 23, 30),
         );
-        expect(container.read(ttsProvider), isA<BundledTTSProvider>());
+        expect(container.read(ttsProvider), isA<FallbackTTSProvider>()
+              .having((FallbackTTSProvider t) => t.primary, 'primary',
+                  isA<BundledTTSProvider>()));
       },
     );
 
@@ -287,7 +291,8 @@ void main() {
       expect(
         impl is NoopTTSProvider ||
             impl is OSTTSProvider ||
-            impl is BundledTTSProvider,
+            impl is BundledTTSProvider ||
+            impl is FallbackTTSProvider,
         isTrue,
         reason: 'unexpected default impl: ${impl.runtimeType}',
       );
@@ -302,7 +307,9 @@ void main() {
             .copyWith(useBundledVoice: true, quietHoursEnabled: false),
         now: DateTime(2026, 5, 29, 14, 0),
       );
-      expect(container.read(ttsProvider), isA<BundledTTSProvider>());
+      expect(container.read(ttsProvider), isA<FallbackTTSProvider>()
+              .having((FallbackTTSProvider t) => t.primary, 'primary',
+                  isA<BundledTTSProvider>()));
     });
 
     test('factory chooses OSTTSProvider when bundled=false + not muted', () {
