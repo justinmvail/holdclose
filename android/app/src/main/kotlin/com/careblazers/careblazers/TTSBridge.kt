@@ -25,7 +25,7 @@ import org.json.JSONObject
 // BUILD_SPEC.md Phase 9.4 — `holdclose/tts` MethodChannel handler.
 //
 // Mirror of `ios/Runner/TTSBridge.swift`: loads the bundled Piper
-// voice (`en_US-amy-medium.onnx`), runs inference through ONNX
+// voice (`en_US-hfc_female-medium.onnx`), runs inference through ONNX
 // Runtime with the NNAPI execution provider enabled (CPU fallback on
 // older devices), and streams the resulting PCM to an AudioTrack in
 // streaming mode.
@@ -60,7 +60,7 @@ object TTSBridge {
                         return@setMethodCallHandler
                     }
                     val voiceId = call.argument<String>("voiceId")
-                        ?: "en_US-amy-medium"
+                        ?: "en_US-hfc_female-medium"
                     val speed = call.argument<Number>("speed")?.toDouble()
                         ?: 1.0
                     engine.speak(text, voiceId, speed) { error ->
@@ -100,7 +100,7 @@ class TTSEngine(private val appContext: Context) {
     /// bundled Amy entry; v1 ships one row.
     private val bundledVoices: List<Map<String, Any>> = listOf(
         mapOf(
-            "id" to "en_US-amy-medium",
+            "id" to "en_US-hfc_female-medium",
             "displayName" to "Amy (bundled)",
             "locale" to "en-US",
             "gender" to "female",
@@ -199,26 +199,30 @@ class TTSEngine(private val appContext: Context) {
         if (loadedVoiceId == voiceId && session != null) return
 
         val assets = appContext.assets
-        val modelBytes = readBundledAsset(assets, voiceId, "onnx")
+        val modelBytes = readBundledAsset(assets, voiceId, voiceId, "onnx")
             ?: throw TTSException.ModelMissing(voiceId)
-        val configBytes = readBundledAsset(assets, "$voiceId.onnx", "json")
+        val configBytes = readBundledAsset(assets, voiceId, "$voiceId.onnx", "json")
             ?: throw TTSException.ConfigMissing(voiceId)
 
         val env = OrtEnvironment.getEnvironment()
         val options = OrtSession.SessionOptions()
         options.setIntraOpNumThreads(1)
-        // NNAPI execution provider — routes inference to the device
-        // NPU/DSP on Android 8.1+ (API 27+). Older devices and
-        // emulators fall back to CPU transparently. Mirrors the
-        // CoreML EP path on iOS. Any failure here is non-fatal —
-        // OrtSession transparently runs on CPU.
-        try {
-            options.addNnapi()
-        } catch (e: OrtException) {
-            Log.w(TAG, "NNAPI EP unavailable — falling back to CPU", e)
-        } catch (e: UnsatisfiedLinkError) {
-            Log.w(TAG, "NNAPI native binding missing — falling back to CPU", e)
-        }
+        // NO NNAPI execution provider. Piper runs on ORT's default CPU backend.
+        //
+        // NNAPI is the Android analog of iOS's CoreML EP — and CoreML SEGFAULTED
+        // on every single utterance on a real iPhone (2026-07-14): EXC_BAD_ACCESS
+        // inside Apple's BNNS convolution kernel, three identical crash reports.
+        // The iOS code carried a comment insisting that crash "never [happens] on
+        // real hardware"; it had simply never run there.
+        //
+        // The try/catch below used to guard this call, which reads as safe — but
+        // the iOS failure was a SEGFAULT, not an exception. A native memory fault
+        // is not catchable; it kills the process. So the guard proves nothing, and
+        // vendor NPU drivers are exactly where that class of bug lives.
+        //
+        // Piper's convolutions on the CPU EP are ~1-3s per utterance and correct.
+        // If NNAPI is ever reconsidered, prove it on real hardware first — an
+        // emulator cannot see this, and neither can any hermetic test.
 
         val newSession = env.createSession(modelBytes, options)
         val config = VoiceConfig.parse(configBytes)
@@ -332,15 +336,23 @@ class TTSEngine(private val appContext: Context) {
 
     private fun readBundledAsset(
         assets: AssetManager,
+        voiceId: String,
         name: String,
         ext: String,
     ): ByteArray? {
-        // Flutter bundles project assets under `flutter_assets/`. Voice
-        // dir is `assets/tts/en_US-amy-medium/`; try the nested path
-        // first, then a flat fallback for hand-staged test fixtures.
+        // Flutter bundles project assets under `flutter_assets/`, one dir per
+        // voice: `assets/tts/<voiceId>/<voiceId>.onnx`.
+        //
+        // The directory used to be HARDCODED to `en_US-amy-medium` while the
+        // filename came from the voiceId — so the bridge could only ever load
+        // the single voice it was written against. Swapping the bundled voice to
+        // hfc_female (2026-07-14) made it look for
+        // `en_US-amy-medium/en_US-hfc_female-medium.onnx`, a path that cannot
+        // exist, and every utterance failed with ModelMissing. Derive the dir
+        // from the voiceId, like iOS does.
         val candidates = listOf(
-            "flutter_assets/assets/tts/en_US-amy-medium/$name.$ext",
-            "assets/tts/en_US-amy-medium/$name.$ext",
+            "flutter_assets/assets/tts/$voiceId/$name.$ext",
+            "assets/tts/$voiceId/$name.$ext",
             "$name.$ext",
         )
         for (path in candidates) {

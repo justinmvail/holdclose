@@ -54,8 +54,15 @@ echo "→ backend=${BACKEND}  build ${APP_NAME}+${BUILD_NUMBER}"
 
 # Same --dart-define set as tools/build_aab.sh. A device test that exercises a
 # different build than the one you ship is worth nothing.
+#
+# USE_REAL_CAPTURE is MANDATORY on Android. iOS auto-detects a physical device
+# (the simulator exports SIMULATOR_* env vars, a real phone does not), but
+# _isPhysicalDevice returns FALSE for Android unconditionally — so without this
+# flag the app silently uses the FAKE mic and camera. The mic button then does
+# nothing at all when tapped, and scan-to-import cannot open the camera.
 flutter build apk --release --target-platform android-arm64 \
   --dart-define=ALPHA_AUTH=true \
+  --dart-define=USE_REAL_CAPTURE=true \
   --dart-define=FEEDBACK=true \
   --dart-define=FORUM_API_URL="${FORUM_API_URL}" \
   --dart-define=GOOGLE_SERVER_CLIENT_ID="${GOOGLE_SERVER_CLIENT_ID}" \

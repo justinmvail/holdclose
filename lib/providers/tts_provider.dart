@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -341,5 +342,54 @@ TTSProvider voiceReplyTts(Ref ref) {
   return _engineFor(settings);
 }
 
-TTSProvider _engineFor(AppSettings settings) =>
-    settings.useBundledVoice ? BundledTTSProvider() : OSTTSProvider();
+TTSProvider _engineFor(AppSettings settings) => settings.useBundledVoice
+    ? FallbackTTSProvider(BundledTTSProvider(), OSTTSProvider())
+    : OSTTSProvider();
+
+/// Speaks through [primary]; if that throws, speaks through [fallback].
+///
+/// The bundled neural voice is a native stack — ONNX + espeak, two C libraries
+/// and a platform channel — and when any of it fails it fails as a
+/// `PlatformException` on a fire-and-forget future. Which is to say: SILENTLY.
+/// The caregiver taps the mic, the coach answers on screen, and no sound comes
+/// out. Nothing is logged, nothing is shown.
+///
+/// That is exactly how Android shipped today: the Kotlin bridge hardcoded the
+/// voice DIRECTORY to the old voice, so every utterance threw ModelMissing, and
+/// the app just... didn't speak. It took a logcat dive to see an error the app
+/// already had in its hands.
+///
+/// A degraded voice beats no voice. The OS synthesizer is always available.
+class FallbackTTSProvider implements TTSProvider {
+  FallbackTTSProvider(this.primary, this.fallback);
+
+  final TTSProvider primary;
+  final TTSProvider fallback;
+
+  @override
+  Future<void> speak(
+    String text, {
+    required String voiceId,
+    required double speed,
+  }) async {
+    try {
+      await primary.speak(text, voiceId: voiceId, speed: speed);
+    } catch (e) {
+      // Loud in the log, graceful in the ear.
+      debugPrint('bundled voice failed ($e) — falling back to the OS voice');
+      await fallback.speak(text, voiceId: '', speed: speed);
+    }
+  }
+
+  @override
+  Future<void> cancel() async {
+    // Either one could be mid-utterance; silence both.
+    await Future.wait<void>(<Future<void>>[
+      primary.cancel().catchError((_) {}),
+      fallback.cancel().catchError((_) {}),
+    ]);
+  }
+
+  @override
+  Future<List<TTSVoice>> availableVoices() => primary.availableVoices();
+}

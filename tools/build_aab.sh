@@ -72,6 +72,7 @@ BUILD_TARGET="appbundle"
 
 flutter build "$BUILD_TARGET" --release \
   --dart-define=ALPHA_AUTH=true \
+  --dart-define=USE_REAL_CAPTURE=true \
   --dart-define=FEEDBACK=true \
   --dart-define=FORUM_API_URL="${FORUM_API_URL}" \
   --dart-define=GOOGLE_SERVER_CLIENT_ID="${GOOGLE_SERVER_CLIENT_ID}" \
