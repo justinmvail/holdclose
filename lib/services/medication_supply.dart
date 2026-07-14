@@ -102,16 +102,84 @@ int? _leadingInt(String? s) {
 /// are treated as 20xx. Visible for tests.
 DateTime? parseUsLabelDate(String? s) {
   if (s == null) return null;
-  final Match? m =
-      RegExp(r'(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})').firstMatch(s.trim());
-  if (m == null) return null;
-  final int month = int.parse(m.group(1)!);
-  final int day = int.parse(m.group(2)!);
-  int year = int.parse(m.group(3)!);
-  if (year < 100) year += 2000;
+  final String text = s.trim();
+
+  // 8/3/2026, 08-03-26 …
+  final Match? numeric =
+      RegExp(r'(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})').firstMatch(text);
+  if (numeric != null) {
+    return _dateFrom(
+      month: int.parse(numeric.group(1)!),
+      day: int.parse(numeric.group(2)!),
+      year: int.parse(numeric.group(3)!),
+    );
+  }
+
+  // "August 3, 2026" / "Aug 3 2026" / "3 August 2026".
+  //
+  // Appointment cards print the month by NAME far more often than as digits,
+  // and this parser only accepted digits — so a scanned card produced an
+  // appointment with NO DATE, which is a useless appointment. Found by running
+  // the real scanner against the live model (2026-07-13): the model read
+  // "August 3, 2026" correctly and the app threw it away.
+  final Match? named = RegExp(
+    r'([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})',
+    caseSensitive: false,
+  ).firstMatch(text);
+  if (named != null) {
+    final int? month = _monthFromName(named.group(1)!);
+    if (month != null) {
+      return _dateFrom(
+        month: month,
+        day: int.parse(named.group(2)!),
+        year: int.parse(named.group(3)!),
+      );
+    }
+  }
+  final Match? dayFirst = RegExp(
+    r'(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})\.?,?\s+(\d{4})',
+    caseSensitive: false,
+  ).firstMatch(text);
+  if (dayFirst != null) {
+    final int? month = _monthFromName(dayFirst.group(2)!);
+    if (month != null) {
+      return _dateFrom(
+        month: month,
+        day: int.parse(dayFirst.group(1)!),
+        year: int.parse(dayFirst.group(3)!),
+      );
+    }
+  }
+  return null;
+}
+
+/// Build a date, rejecting impossible ones (2/30 must not roll into March).
+DateTime? _dateFrom({
+  required int month,
+  required int day,
+  required int year,
+}) {
+  int y = year;
+  if (y < 100) y += 2000;
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  final DateTime d = DateTime(year, month, day);
-  // Reject rollovers (e.g. 2/30 → Mar 2).
+  final DateTime d = DateTime(y, month, day);
   if (d.month != month || d.day != day) return null;
   return d;
+}
+
+/// Month number from a full or 3+ letter abbreviated English month name.
+int? _monthFromName(String raw) {
+  final String name = raw.toLowerCase();
+  const List<String> months = <String>[
+    'january', 'february', 'march', 'april', 'may', 'june',
+    'july', 'august', 'september', 'october', 'november', 'december',
+  ];
+  for (int i = 0; i < months.length; i++) {
+    if (months[i].startsWith(name) || name.startsWith(months[i].substring(0, 3))) {
+      // Guard the sept/sep ambiguity-free case: a 3-letter prefix is unique
+      // across English months.
+      if (months[i].startsWith(name.substring(0, 3))) return i + 1;
+    }
+  }
+  return null;
 }

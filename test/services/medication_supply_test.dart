@@ -17,6 +17,8 @@ Medication _med({String? quantity, String? refills, String? dateFilled}) =>
     );
 
 void main() {
+  _monthNameDates();
+
   group('parseUsLabelDate', () {
     test('parses M/D/YY, M/D/YYYY, and M-D-YY', () {
       expect(parseUsLabelDate('12/3/21'), DateTime(2021, 12, 3));
@@ -103,6 +105,33 @@ void main() {
       expect(s.refillsRemaining, isNull);
       expect(s.daysOfSupply, 60);
       expect(s.status, SupplyStatus.ok);
+    });
+  });
+}
+
+/// Month-name dates — added 2026-07-13 after running the real appointment
+/// scanner against the live model. Appointment cards print "August 3, 2026"
+/// far more often than "8/3/2026", and this parser only accepted digits: the
+/// model read the date correctly and the app THREW IT AWAY, producing an
+/// appointment with no date. A dateless appointment is a useless one.
+void _monthNameDates() {
+  group('parseUsLabelDate — month names (live-scan regression)', () {
+    test('"August 3, 2026" (what a real card prints)', () {
+      expect(parseUsLabelDate('August 3, 2026'), DateTime(2026, 8, 3));
+    });
+    test('abbreviations and ordinals', () {
+      expect(parseUsLabelDate('Aug 3 2026'), DateTime(2026, 8, 3));
+      expect(parseUsLabelDate('Sept. 15th, 2026'), DateTime(2026, 9, 15));
+      expect(parseUsLabelDate('3 August 2026'), DateTime(2026, 8, 3));
+    });
+    test('numeric dates still work', () {
+      expect(parseUsLabelDate('8/3/2026'), DateTime(2026, 8, 3));
+      expect(parseUsLabelDate('08-03-26'), DateTime(2026, 8, 3));
+    });
+    test('nonsense is still rejected', () {
+      expect(parseUsLabelDate('Smarch 40, 2026'), isNull);
+      expect(parseUsLabelDate('2/30/2026'), isNull);
+      expect(parseUsLabelDate('no date here'), isNull);
     });
   });
 }

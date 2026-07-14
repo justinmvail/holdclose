@@ -6,10 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 
 import '../models/appointment.dart';
 import '../models/care_plan_routine.dart';
+import '../models/care_task.dart';
 import '../models/health_log_entry.dart';
 import '../models/medication.dart';
 import '../models/patient.dart';
 import '../providers/care_plan_provider.dart' show carePlanRepositoryProvider;
+import '../providers/care_tasks_provider.dart'
+    show careTasksRepositoryProvider;
 import '../providers/health_log_provider.dart' show healthLogRepositoryProvider;
 import '../providers/storage_provider.dart';
 import 'appointment_repository.dart';
@@ -22,6 +25,10 @@ const int _maxMedications = 12;
 const int _maxWindows = 8;
 const int _maxAppointments = 5;
 const int _maxRoutines = 8;
+
+/// Open care tasks shown to the coach. Enough to act on; not enough to bloat
+/// the prompt.
+const int _maxTasks = 12;
 // Health log: the coach kept answering as if it couldn't see what the Health
 // Log screen shows (fb_1781115653912208) — the old cap was 4 AND it only
 // surfaced entries that had free-text notes, silently dropping every vitals
@@ -41,6 +48,7 @@ class ChatContextData {
     this.windowEntries = const <String, List<String>>{},
     this.appointments = const <ChatContextAppointment>[],
     this.routines = const <CarePlanRoutine>[],
+    this.openTasks = const <String>[],
     this.recentHealthNotes = const <String>[],
   });
 
@@ -64,6 +72,16 @@ class ChatContextData {
 
   /// Care routines, sorted by wall-clock time (as the repo returns them).
   final List<CarePlanRoutine> routines;
+
+  /// Titles of the care-team tasks still OPEN for the active loved one.
+  ///
+  /// The coach could `add_task`, `complete_task` and `delete_task` but could
+  /// not SEE the task list — so asked to tick one off it invented a plausible
+  /// title ("Pick up the new prescription" for a task actually called "Pick up
+  /// refill"), matched nothing, and did nothing. Found by driving every action
+  /// through the live model (2026-07-13). A tool the coach can write but not
+  /// read is a tool it cannot use.
+  final List<String> openTasks;
 
   /// A few of the most recent health-log notes, newest first, already
   /// flattened to "<kind>: <value>" strings.
@@ -137,6 +155,22 @@ Future<ChatContextData> _gatherChatContext(Ref ref) async {
     // Leave meds / windows empty; the formatter degrades gracefully.
   }
 
+  List<String> openTasks = const <String>[];
+  try {
+    final String? patientId = patient?.id;
+    if (patientId != null) {
+      final List<CareTask> tasks = await ref
+          .read(careTasksRepositoryProvider)
+          .listTasksForPatient(patientId);
+      openTasks = <String>[
+        for (final CareTask t in tasks)
+          if (t.completedAt == null) t.title,
+      ];
+    }
+  } catch (_) {
+    // Leave empty; the formatter degrades gracefully.
+  }
+
   List<ChatContextAppointment> appointments = const <ChatContextAppointment>[];
   try {
     final AppointmentRepository repo = ref.read(appointmentRepositoryProvider);
@@ -186,6 +220,7 @@ Future<ChatContextData> _gatherChatContext(Ref ref) async {
     windowEntries: windowEntries,
     appointments: appointments,
     routines: routines,
+    openTasks: openTasks,
     recentHealthNotes: healthNotes,
   );
 }
@@ -298,6 +333,16 @@ String formatChatContext(ChatContextData data) {
     ];
     final int extra = data.routines.length - shown.length;
     sb.writeln('Routines: ${parts.join('; ')}'
+        '${extra > 0 ? '; +$extra more' : ''}.');
+  }
+
+  // Open care-team tasks. The coach needs the EXACT titles to complete or
+  // remove one — without them it guesses, matches nothing, and silently does
+  // nothing.
+  if (data.openTasks.isNotEmpty) {
+    final List<String> shown = data.openTasks.take(_maxTasks).toList();
+    final int extra = data.openTasks.length - shown.length;
+    sb.writeln('Open tasks: ${shown.join('; ')}'
         '${extra > 0 ? '; +$extra more' : ''}.');
   }
 
