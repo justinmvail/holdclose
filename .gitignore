@@ -100,3 +100,4 @@ integration_test/failures/
 # Local dev secrets sourced by tools/run_device.sh (AUTH=google) (never commit)
 tools/dev_defines.sh
 demo_video/
+backend/.prod.vars

@@ -137,7 +137,24 @@ afterAll(async () => {
 
 const BACKEND_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/// Run one SQL statement against the DEPLOYED D1.
+/// The D1 that backs the Worker at LIVE_BASE_URL.
+///
+/// This USED to be hardcoded to `holdclose-forum-dev --env dev`, which made the
+/// suite quietly untrue anywhere else: pointed at production, it seeded the
+/// spend-cap ledger into the DEV database while the PROD Worker read the PROD
+/// one, so the caps never tripped and the circuit-breaker tests "failed" for a
+/// reason that had nothing to do with the backend under test (2026-07-14).
+///
+/// The database has to follow the Worker. Derive it from the target origin, and
+/// let an env var override for a Worker whose name doesn't match this pattern.
+const LIVE_DB =
+  process.env.LIVE_D1_NAME ??
+  (BASE_URL.includes('holdclose-forum-dev')
+    ? 'holdclose-forum-dev'
+    : 'holdclose-forum');
+const LIVE_DB_ENV = process.env.LIVE_D1_ENV ?? (LIVE_DB.endsWith('-dev') ? 'dev' : '');
+
+/// Run one SQL statement against the DEPLOYED D1 that [LIVE_BASE_URL] talks to.
 ///
 /// For rows the public API can't reach: usage-ledger rows that trip the spend
 /// caps, and feedback rows (which survive account deletion — they're keyed by
@@ -149,9 +166,8 @@ function d1(sql: string): void {
       'wrangler',
       'd1',
       'execute',
-      'holdclose-forum-dev',
-      '--env',
-      'dev',
+      LIVE_DB,
+      ...(LIVE_DB_ENV ? ['--env', LIVE_DB_ENV] : []),
       '--remote',
       '--command',
       sql,

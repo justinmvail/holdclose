@@ -37,7 +37,10 @@ crons = ["0 13 * * 1"]
 # CDN-fronted bucket is provisioned later, ONLY this var changes.
 #
 # Set it per environment to that environment's own origin (see [env.dev.vars]).
-R2_PUBLIC_URL = "https://holdclose.care/media"
+# holdclose.care has NO DNS yet (verified 2026-07-14: it does not resolve).
+# Point at the Worker's own origin — the same thing dev does — so avatars
+# actually load. Change this ONE var if/when the custom domain is live.
+R2_PUBLIC_URL = "https://holdclose-forum.jcsvonellc.workers.dev/media"
 
 # Allowed audience(s) for POST /api/v1/auth/google — the Google *Web* OAuth
 # client id (the app sets it as serverClientId so iOS+Android ID tokens both
@@ -109,12 +112,17 @@ APPLE_BUNDLE_ID = "com.holdclose.holdclose"       # the app bundle id (JWT `bid`
 # Google — Play Developer API (purchases.subscriptionsv2.get / products.get,
 # via a service-account JWT→OAuth exchange):
 GOOGLE_PLAY_SA_EMAIL = ""                         # the Play service-account email
-GOOGLE_PLAY_PACKAGE = "com.careblazers.careblazers"  # the Android package (deliberate careblazers keep)
+GOOGLE_PLAY_PACKAGE = "com.holdclose.holdclose"    # MUST match applicationId in
+                                                   # android/app/build.gradle.kts. The old
+                                                   # value here was the Kotlin *namespace*
+                                                   # (com.careblazers.careblazers), which is a
+                                                   # deliberate keep but is NOT the Play package.
+                                                   # Play receipt verification would have 404'd.
 
 [[d1_databases]]
 binding = "FORUM_DB"
 database_name = "holdclose-forum"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "a6d58fb1-60ae-4bd5-a474-141d77b7cc33"
 migrations_dir = "drizzle"
 
 [[r2_buckets]]
@@ -128,6 +136,68 @@ bucket_name = "holdclose-forum-media"
 # required for alpha; create it before remote deploy:
 #   wrangler r2 bucket create holdclose-doc-blobs
 [[r2_buckets]]
+binding = "DOC_BLOBS"
+bucket_name = "holdclose-doc-blobs"
+
+# --- production environment -------------------------------------------
+# Deployed 2026-07-14 as `holdclose-forum` in the jcsvonellc account. Deploy
+# with `wrangler deploy --env prod`; migrate with
+# `wrangler d1 migrations apply FORUM_DB --env prod --remote`.
+#
+# A NAMED env (not the top-level config) for the same reason dev is: the
+# vitest harness loads the top-level config, and a top-level [ai] binding
+# crashes miniflare outright ("wrapped binding module can't be resolved").
+#
+# Named wrangler envs DO NOT INHERIT the top-level [vars] or bindings — every
+# one has to be repeated here. A var you forget is not an error at deploy; it
+# is a 500 in production. (CLAUDE.md's deployed-config invariant, learned the
+# hard way on 2026-07-13.)
+[env.prod]
+name = "holdclose-forum"
+
+[env.prod.vars]
+# The prod Worker's own /media route. NOT holdclose.care — that domain has no
+# DNS (verified 2026-07-14), so avatars pointed at it would be dead links.
+R2_PUBLIC_URL = "https://holdclose-forum.jcsvonellc.workers.dev/media"
+GOOGLE_CLIENT_ID = "948989327057-a0o985t2648v1su957ltgohm45i138pb.apps.googleusercontent.com,948989327057-1m5kkffbqa06p87fprkigumfn3gk6fv3.apps.googleusercontent.com,948989327057-5soo39g145ajmlj1h8o4uc4fcmjnm8p8.apps.googleusercontent.com"
+RESEND_FROM_EMAIL = "watchdog@holdclose.local"
+RESEND_TO_EMAIL = "ops@holdclose.local"
+CLOUDFLARE_ACCOUNT_ID = "1d05533f4440827e2768c13a6c80c5ea"
+CLOUDFLARE_D1_DATABASE_ID = "a6d58fb1-60ae-4bd5-a474-141d77b7cc33"
+CLOUDFLARE_R2_BUCKET_NAME = "holdclose-forum-media"
+CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+EXTRACT_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
+CHAT_MAX_INPUT_CHARS = "48000"
+CHAT_MAX_OUTPUT_TOKENS = "1024"
+CHAT_USER_DAILY_TOKENS = "300000"
+CHAT_GLOBAL_FLOOR_MICROS = "5000000"
+CHAT_PER_USER_BUDGET_MICROS = "100000"
+APPLE_BUNDLE_ID = "com.holdclose.holdclose"
+GOOGLE_PLAY_PACKAGE = "com.holdclose.holdclose"
+# Billing stays unconfigured until the store products + credentials exist;
+# /billing/verify answers 500 server_misconfigured until then.
+APPLE_ISSUER_ID = ""
+APPLE_KEY_ID = ""
+GOOGLE_PLAY_SA_EMAIL = ""
+
+[[env.prod.d1_databases]]
+binding = "FORUM_DB"
+database_name = "holdclose-forum"
+database_id = "a6d58fb1-60ae-4bd5-a474-141d77b7cc33"
+migrations_dir = "drizzle"
+
+# Weekly metrics watchdog (Mondays 13:00 UTC).
+[env.prod.triggers]
+crons = ["0 13 * * 1"]
+
+[env.prod.ai]
+binding = "AI"
+
+[[env.prod.r2_buckets]]
+binding = "FORUM_MEDIA"
+bucket_name = "holdclose-forum-media"
+
+[[env.prod.r2_buckets]]
 binding = "DOC_BLOBS"
 bucket_name = "holdclose-doc-blobs"
 
@@ -163,7 +233,7 @@ CHAT_USER_DAILY_TOKENS = "300000"
 CHAT_GLOBAL_FLOOR_MICROS = "5000000"
 CHAT_PER_USER_BUDGET_MICROS = "100000"
 APPLE_BUNDLE_ID = "com.holdclose.holdclose"
-GOOGLE_PLAY_PACKAGE = "com.careblazers.careblazers"
+GOOGLE_PLAY_PACKAGE = "com.holdclose.holdclose"  # the Play applicationId, NOT the Kotlin namespace
 # Billing placeholders. Named wrangler envs do NOT inherit the top-level
 # [vars], so these have to be repeated here or the deploy warns on every run
 # and /billing/verify 500s with a confusing "server_misconfigured" rather than
