@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -342,63 +341,19 @@ TTSProvider voiceReplyTts(Ref ref) {
   return _engineFor(settings);
 }
 
-TTSProvider _engineFor(AppSettings settings) => settings.useBundledVoice
-    ? FallbackTTSProvider(BundledTTSProvider(), OSTTSProvider())
-    : OSTTSProvider();
-
-/// Speaks through [primary]; if that throws, speaks through [fallback].
+/// Pick the speech engine — ONCE, from the settings, no runtime fallback.
 ///
-/// The bundled neural voice is a native stack — ONNX + espeak, two C libraries
-/// and a platform channel — and when any of it fails it fails as a
-/// `PlatformException` on a fire-and-forget future. Which is to say: SILENTLY.
-/// The caregiver taps the mic, the coach answers on screen, and no sound comes
-/// out. Nothing is logged, nothing is shown.
+/// There is deliberately NO real-time fallback from the bundled voice to the OS
+/// voice. A short-lived FallbackTTSProvider tried that (2026-07-14) and it was a
+/// mistake: the bundled voice and the OS synthesizer are INDEPENDENT audio
+/// outputs, so when the bundled voice threw mid-utterance the fallback started
+/// reading the whole reply through the OS voice ON TOP of the bundled sentences
+/// still draining — two different voices at once. Switching engines while a
+/// caregiver is listening is never the right call.
 ///
-/// That is exactly how Android shipped today: the Kotlin bridge hardcoded the
-/// voice DIRECTORY to the old voice, so every utterance threw ModelMissing, and
-/// the app just... didn't speak. It took a logcat dive to see an error the app
-/// already had in its hands.
-///
-/// A degraded voice beats no voice. The OS synthesizer is always available.
-class FallbackTTSProvider implements TTSProvider {
-  FallbackTTSProvider(this.primary, this.fallback);
-
-  final TTSProvider primary;
-  final TTSProvider fallback;
-
-  @override
-  Future<void> speak(
-    String text, {
-    required String voiceId,
-    required double speed,
-  }) async {
-    try {
-      await primary.speak(text, voiceId: voiceId, speed: speed);
-    } catch (e) {
-      // CRUCIAL: silence the primary before the fallback speaks.
-      //
-      // With chunked playback the bundled voice can throw AFTER it has already
-      // put a sentence or two into the speaker (e.g. an error on sentence three).
-      // Without this cancel, the OS fallback would start reading the WHOLE reply
-      // while the bundled voice's earlier sentences are still draining — two
-      // different voices talking over each other (2026-07-14). Stop the bundled
-      // tail first, THEN fall back, so the caregiver hears one voice.
-      await primary.cancel().catchError((_) {});
-      // Loud in the log, graceful in the ear.
-      debugPrint('bundled voice failed ($e) — falling back to the OS voice');
-      await fallback.speak(text, voiceId: '', speed: speed);
-    }
-  }
-
-  @override
-  Future<void> cancel() async {
-    // Either one could be mid-utterance; silence both.
-    await Future.wait<void>(<Future<void>>[
-      primary.cancel().catchError((_) {}),
-      fallback.cancel().catchError((_) {}),
-    ]);
-  }
-
-  @override
-  Future<List<TTSVoice>> availableVoices() => primary.availableVoices();
-}
+/// The engine is a launch-time decision (re-resolved only when the caregiver
+/// changes the Settings toggle). If the bundled voice fails, it fails loudly and
+/// stays silent — a wrong voice mid-sentence is worse than none. Making the
+/// bundled path reliable is the fix; papering over it in real time is not.
+TTSProvider _engineFor(AppSettings settings) =>
+    settings.useBundledVoice ? BundledTTSProvider() : OSTTSProvider();

@@ -144,8 +144,6 @@ Future<_RecordingTTS> _pumpAndSend(
 }
 
 void main() {
-  _fallbackTests();
-
   group('the coach reads its reply aloud when the caregiver asked it to', () {
     testWidgets('a completed reply is spoken once', (WidgetTester tester) async {
       final _RecordingTTS tts = await _pumpAndSend(
@@ -244,69 +242,6 @@ void main() {
             threeAm),
         isFalse,
       );
-    });
-  });
-}
-
-/// A bundled voice that always fails, like Android's did all day: the Kotlin
-/// bridge looked for the model in a hardcoded directory belonging to the OLD
-/// voice, so every utterance threw ModelMissing.
-class _BrokenTTS implements TTSProvider {
-  bool cancelled = false;
-
-  @override
-  Future<void> speak(String text,
-          {required String voiceId, required double speed}) async =>
-      throw Exception('ModelMissing: en_US-hfc_female-medium.onnx');
-
-  @override
-  Future<void> cancel() async => cancelled = true;
-
-  @override
-  Future<List<TTSVoice>> availableVoices() async => const <TTSVoice>[];
-}
-
-void _fallbackTests() {
-  group('a broken bundled voice falls back to the OS voice, not to silence', () {
-    test('speak() reaches the fallback when the primary throws', () async {
-      final _RecordingTTS os = _RecordingTTS();
-      final FallbackTTSProvider tts = FallbackTTSProvider(_BrokenTTS(), os);
-
-      await tts.speak('Opening the calendar.', voiceId: '', speed: 1.0);
-
-      expect(os.spoken, <String>['Opening the calendar.'],
-          reason: 'the caregiver hears SOMETHING. A native stack that fails on '
-              'a fire-and-forget future fails silently — the coach answers on '
-              'screen and no sound comes out, with nothing logged.');
-    });
-
-    test('a working bundled voice is left alone', () async {
-      final _RecordingTTS bundled = _RecordingTTS();
-      final _RecordingTTS os = _RecordingTTS();
-
-      await FallbackTTSProvider(bundled, os)
-          .speak('Hello.', voiceId: '', speed: 1.0);
-
-      expect(bundled.spoken, <String>['Hello.']);
-      expect(os.spoken, isEmpty, reason: 'no double-speaking');
-    });
-
-    test('the bundled voice is SILENCED before the OS fallback speaks',
-        () async {
-      // The "two voices at once" bug (2026-07-14): with chunked playback the
-      // bundled voice can throw AFTER a sentence or two are already in the
-      // speaker. If the fallback started reading the whole reply without first
-      // stopping the bundled tail, both voices would talk over each other.
-      final _BrokenTTS bundled = _BrokenTTS();
-      final _RecordingTTS os = _RecordingTTS();
-
-      await FallbackTTSProvider(bundled, os)
-          .speak('A long reply.', voiceId: '', speed: 1.0);
-
-      expect(bundled.cancelled, isTrue,
-          reason: 'the partially-playing bundled voice must be cancelled '
-              'BEFORE the OS voice starts, or they overlap');
-      expect(os.spoken, <String>['A long reply.']);
     });
   });
 }

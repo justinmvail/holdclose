@@ -380,9 +380,7 @@ void main() {
 
         container.read(settingsProvider);
         await Future<void>.delayed(Duration.zero);
-        expect(container.read(ttsProvider), isA<FallbackTTSProvider>()
-              .having((FallbackTTSProvider t) => t.primary, 'primary',
-                  isA<BundledTTSProvider>()),
+        expect(container.read(ttsProvider), isA<BundledTTSProvider>(),
             reason: 'default audio=true must resolve to the bundled '
                 'neural-TTS path (Phase 9.5)');
 

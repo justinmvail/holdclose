@@ -195,9 +195,7 @@ void main() {
 
       // Drain hydrate so default-true is in state.
       await Future<void>.delayed(Duration.zero);
-      expect(container.read(ttsProvider), isA<FallbackTTSProvider>()
-              .having((FallbackTTSProvider t) => t.primary, 'primary',
-                  isA<BundledTTSProvider>()),
+      expect(container.read(ttsProvider), isA<BundledTTSProvider>(),
           reason: 'default-on settings should resolve to the bundled '
               'neural-TTS path (Phase 9.5)');
 
@@ -214,9 +212,7 @@ void main() {
       final DateTime midday = DateTime(2026, 5, 29, 14, 0);
       final ProviderContainer container = wiredContainer(now: midday);
       await Future<void>.delayed(Duration.zero);
-      expect(container.read(ttsProvider), isA<FallbackTTSProvider>()
-              .having((FallbackTTSProvider t) => t.primary, 'primary',
-                  isA<BundledTTSProvider>()));
+      expect(container.read(ttsProvider), isA<BundledTTSProvider>());
 
       await container
           .read(settingsProvider.notifier)
