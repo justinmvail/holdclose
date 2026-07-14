@@ -1,10 +1,15 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../models/settings.dart';
 import '../providers/community_feed_provider.dart';
 import '../providers/community_subnav_provider.dart';
+import '../providers/settings_provider.dart';
+import '../providers/tts_provider.dart';
 import '../providers/voice_capture_provider.dart';
 import '../screens/chat/conversation_list_screen.dart';
 import '../services/chat_service.dart';
@@ -336,12 +341,31 @@ class _CenterVoiceButtonState extends ConsumerState<_CenterVoiceButton> {
     _reset();
   }
 
+  /// Read [text] back through the voice-mode engine. Fire-and-forget: the
+  /// utterance must never gate the overlay dismissal or the navigation, or a
+  /// long reply would pin the caregiver in place while it finishes.
+  void _speak(String text) {
+    final String spoken = speechText(text);
+    if (spoken.isEmpty) return;
+    final AppSettings settings = ref.read(settingsProvider);
+    unawaited(
+      ref.read(voiceReplyTtsProvider).speak(
+            spoken,
+            voiceId: settings.voiceId ?? '',
+            speed: settings.speed,
+          ),
+    );
+  }
+
   Future<void> _capture() async {
     if (_busy) {
       // A second tap while listening means "never mind".
       _cancel();
       return;
     }
+    // Talking over the previous answer would make both unintelligible — and
+    // tapping the mic IS the interruption ("stop, listen to me instead").
+    unawaited(ref.read(voiceReplyTtsProvider).cancel());
     setState(() => _busy = true);
     _cancelled = false;
     _showOverlay();
@@ -396,12 +420,17 @@ class _CenterVoiceButtonState extends ConsumerState<_CenterVoiceButton> {
 
     switch (outcome) {
       case VoiceIntentAction(:final String summary):
-        // The coach did it — flash the confirmation, then dismiss. Stay put.
+        // The coach did it — say so, flash the confirmation, then dismiss.
+        // Voice in, voice out: they spoke, so they get an answer they can
+        // hear without looking at the phone (hands are often full).
         _data.value = _MicOverlayData(_MicPhase.done, summary);
+        _speak(summary);
         await Future<void>.delayed(const Duration(milliseconds: 2600));
         _reset();
-      case VoiceIntentChat(:final String conversationId):
-        // It's a conversation — open the thread (answer already in it).
+      case VoiceIntentChat(:final String conversationId, :final String spokenReply):
+        // It's a conversation — open the thread (answer already in it) and
+        // read that same answer aloud.
+        _speak(spokenReply);
         _reset();
         if (mounted) context.go('/chat/$conversationId');
     }

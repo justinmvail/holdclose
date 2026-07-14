@@ -6,8 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/chat.dart';
+import '../../models/settings.dart';
 import '../../providers/link_launcher_provider.dart';
 import '../../providers/pending_chat_message_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../providers/tts_provider.dart';
 import '../../providers/voice_capture_provider.dart';
 import '../../services/chat_actions.dart' show chatNavigateRequestProvider;
 import '../../services/chat_repository.dart';
@@ -153,6 +156,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   bool _sending = false;
   bool _hydrated = false;
 
+  /// Assistant messages already read aloud. `_onMessageDelta` fires on every
+  /// streamed snapshot INCLUDING the final one, and the screen rebuilds for
+  /// unrelated reasons — without this the same reply would be spoken twice.
+  final Set<String> _spoken = <String>{};
+
+  /// The engine the last utterance went to, held so [dispose] can silence it.
+  /// `dispose()` may NOT touch `ref` — riverpod throws once the element is
+  /// unmounted — so the handle has to be captured while we're still alive.
+  TTSProvider? _speaker;
+
   /// The text of the most recent user turn dispatched this session. Held so
   /// the inline "Try again" affordance under a failed assistant bubble can
   /// re-send it verbatim without the caregiver retyping (#19).
@@ -282,6 +295,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     WidgetsBinding.instance.removeObserver(this);
     _sendSubscription?.cancel();
     _streamingBodyController?.close();
+    // Leaving the thread stops the voice with it — a reply that keeps talking
+    // after the caregiver has navigated away is the app shouting from another
+    // room, and there is no visible control to silence it.
+    unawaited(_speaker?.cancel());
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -400,9 +417,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         // the trailing tokens before the bubble swaps to the static
         // MessageBody (which renders citation chips).
         _streamingBodyController?.add(ChatService.displayBody(m.body));
+        _speakIfEnabled(m);
       }
     });
     _scrollToBottom();
+  }
+
+  /// Read a COMPLETED reply aloud, if the caregiver asked for that in Settings
+  /// ("Read replies aloud"). Only the finished body is spoken — speaking the
+  /// partial deltas would stutter the same sentence over and over.
+  ///
+  /// The mic flow speaks on its own path (`voiceReplyTtsProvider`) and does not
+  /// consult the toggle; this is the typed path, which does.
+  void _speakIfEnabled(Message m) {
+    if (!_spoken.add(m.id)) return;
+    final String text = speechText(ChatService.displayBody(m.body));
+    if (text.isEmpty) return;
+    final AppSettings settings = ref.read(settingsProvider);
+    final TTSProvider tts = ref.read(ttsProvider);
+    _speaker = tts;
+    unawaited(
+      tts.speak(
+        text,
+        voiceId: settings.voiceId ?? '',
+        speed: settings.speed,
+      ),
+    );
   }
 
   void _scrollToBottom() {

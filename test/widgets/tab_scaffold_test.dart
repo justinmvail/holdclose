@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:holdclose/db/database.dart';
 import 'package:holdclose/models/chat.dart';
+import 'package:holdclose/models/settings.dart';
 import 'package:holdclose/providers/home_conversation_provider.dart';
+import 'package:holdclose/providers/settings_provider.dart';
+import 'package:holdclose/providers/tts_provider.dart';
 import 'package:holdclose/providers/voice_capture_provider.dart';
 import 'package:holdclose/routing/router.dart';
 import 'package:holdclose/screens/chat/chat_screen.dart';
@@ -486,8 +489,142 @@ void main() {
         expect(await p.repo.listConversations(), isEmpty);
       },
     );
+
+    // Voice in, voice out. The mic shipped mute: the app transcribed the
+    // caregiver, answered in text, and said nothing — while Settings promised
+    // "Plays the coach's replies through your phone voice". Nothing in the app
+    // called speak() at all.
+    testWidgets(
+      'the coach READS ITS ANSWER BACK — even with "Read replies aloud" off',
+      (WidgetTester tester) async {
+        final _RecordingTTS tts = _RecordingTTS();
+        await _pumpRouter(
+          tester,
+          extraOverrides: <Override>[
+            voiceCaptureProvider.overrideWithValue(
+              const _FakeVoiceCapture('why is she pacing at night'),
+            ),
+            chatServiceProvider.overrideWith(
+              (Ref ref) => ChatService(
+                repository: ref.watch(chatRepositoryProvider),
+                backend: const _ScriptedChatBackend('A gentle idea.'),
+                idFactory: _seqIds(<String>['voice-convo-1', 'u1', 'a1']),
+                clock: () => DateTime.utc(2026, 5, 30, 12),
+              ),
+            ),
+            ..._speakingOverrides(tts, readScriptsAloud: false),
+          ],
+        );
+
+        await tester.tap(find.byKey(TabScaffold.centerVoiceButtonKey));
+        for (int i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+
+        expect(tts.spoken, <String>['A gentle idea.'],
+            reason: 'they SPOKE to it — a silent answer reads as a broken mic, '
+                'not as a respected preference. The toggle governs typed '
+                'replies only.');
+      },
+    );
+
+    testWidgets(
+      'a hands-free action is confirmed OUT LOUD, not just on screen',
+      (WidgetTester tester) async {
+        final _RecordingTTS tts = _RecordingTTS();
+        await _pumpRouter(
+          tester,
+          extraOverrides: <Override>[
+            voiceCaptureProvider.overrideWithValue(
+              const _FakeVoiceCapture('take me to the calendar'),
+            ),
+            chatServiceProvider.overrideWith(
+              (Ref ref) => ChatService(
+                repository: ref.watch(chatRepositoryProvider),
+                backend: const _ScriptedChatBackend(
+                  'Opening the calendar. [action:navigate route="/team/calendar"]',
+                ),
+                idFactory: _seqIds(<String>['x1']),
+                clock: () => DateTime.utc(2026, 5, 30, 12),
+                actions: <String, ChatActionExecutor>{
+                  'navigate': (Map<String, String> args) async =>
+                      const ChatActionOutcome(),
+                },
+              ),
+            ),
+            ..._speakingOverrides(tts, readScriptsAloud: true),
+          ],
+        );
+
+        await tester.tap(find.byKey(TabScaffold.centerVoiceButtonKey));
+        for (int i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+
+        // Hands full is WHY the mic exists — the confirmation has to be
+        // audible, and it must not read the machine marker aloud.
+        expect(tts.spoken.single, 'Opening the calendar.');
+
+        // Let the confirmation overlay's dismissal timer run out, so the
+        // widget tree isn't torn down with it still pending.
+        await tester.pump(const Duration(milliseconds: 2700));
+        await tester.pumpAndSettle();
+      },
+    );
   });
 }
+
+/// Records utterances instead of reaching a platform channel.
+class _RecordingTTS implements TTSProvider {
+  final List<String> spoken = <String>[];
+
+  @override
+  Future<void> speak(
+    String text, {
+    required String voiceId,
+    required double speed,
+  }) async =>
+      spoken.add(text);
+
+  @override
+  Future<void> cancel() async {}
+
+  @override
+  Future<List<TTSVoice>> availableVoices() async => const <TTSVoice>[];
+}
+
+class _FixedSettings extends Settings {
+  _FixedSettings(this._settings);
+  final AppSettings _settings;
+
+  @override
+  AppSettings build() => _settings;
+}
+
+/// main.dart's wiring — settings feed the TTS selector — with the ENGINE
+/// swapped for a recorder. The production mute rule ([shouldMuteVoiceReply])
+/// still decides, so these tests can't accidentally prove the mic speaks by
+/// overriding away the thing that would have silenced it.
+List<Override> _speakingOverrides(
+  _RecordingTTS tts, {
+  required bool readScriptsAloud,
+}) =>
+    <Override>[
+      settingsProvider.overrideWith(
+        () => _FixedSettings(
+          AppSettings.defaults().copyWith(readScriptsAloud: readScriptsAloud),
+        ),
+      ),
+      ttsSettingsProvider.overrideWith((Ref ref) => ref.watch(settingsProvider)),
+      voiceReplyTtsProvider.overrideWith(
+        (Ref ref) => shouldMuteVoiceReply(
+          ref.watch(ttsSettingsProvider),
+          DateTime(2026, 5, 30, 12),
+        )
+            ? const NoopTTSProvider()
+            : tts,
+      ),
+    ];
 
 /// A sequential id factory — returns the given ids in order, then repeats
 /// the last. Lets a test pin the conversation + message ids

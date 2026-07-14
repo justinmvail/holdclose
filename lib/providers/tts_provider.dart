@@ -241,6 +241,21 @@ bool isQuietHoursActive(
 /// Riverpod container.
 bool shouldMuteTts(AppSettings settings, DateTime now) {
   if (!settings.readScriptsAloud) return true;
+  return _quietHoursMute(settings, now);
+}
+
+/// Whether a VOICE-MODE reply should mute — [voiceReplyTtsProvider]'s rule.
+///
+/// Deliberately does NOT consult [AppSettings.readScriptsAloud]. The caregiver
+/// tapped the mic and SPOKE; a spoken answer is the interaction itself, not an
+/// audio preference, and a mic that answers in silence reads as broken. The
+/// toggle governs only the replies they DIDN'T ask for out loud (typed chat).
+///
+/// Quiet hours still win — a 3am voice question must not wake the house.
+bool shouldMuteVoiceReply(AppSettings settings, DateTime now) =>
+    _quietHoursMute(settings, now);
+
+bool _quietHoursMute(AppSettings settings, DateTime now) {
   if (!settings.quietHoursEnabled) return false;
   if (settings.allowAudioDuringQuietHours) return false;
   return isQuietHoursActive(
@@ -248,6 +263,22 @@ bool shouldMuteTts(AppSettings settings, DateTime now) {
     startHour: settings.quietHoursStartHour,
     endHour: settings.quietHoursEndHour,
   );
+}
+
+/// Strip the coach's reply down to something worth HEARING.
+///
+/// The body is written for the eye: markdown emphasis, `#` headings, bullet
+/// glyphs, code fences. A synthesizer reads those literally ("star star take
+/// star star"), so they're removed rather than spoken. Blank lines collapse to
+/// a single break so the utterance doesn't stall.
+String speechText(String body) {
+  final String stripped = body
+      .replaceAll(RegExp(r'```[\s\S]*?```'), ' ')
+      .replaceAll(RegExp(r'[*_`#>]'), '')
+      .replaceAll(RegExp(r'^\s*[-•]\s*', multiLine: true), '')
+      .replaceAll(RegExp(r'\n{2,}'), '\n')
+      .replaceAll(RegExp(r'[ \t]{2,}'), ' ');
+  return stripped.trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -291,8 +322,24 @@ TTSProvider tts(Ref ref) {
   if (shouldMuteTts(settings, now)) {
     return const NoopTTSProvider();
   }
-  if (settings.useBundledVoice) {
-    return BundledTTSProvider();
-  }
-  return OSTTSProvider();
+  return _engineFor(settings);
 }
+
+/// The engine the hands-free MIC flow speaks its reply through.
+///
+/// Same engines, one different rule: it ignores the "Read replies aloud"
+/// toggle (see [shouldMuteVoiceReply]) because the caregiver spoke to it. Quiet
+/// hours still mute.
+@Riverpod(keepAlive: true)
+TTSProvider voiceReplyTts(Ref ref) {
+  final AppSettings settings = ref.watch(ttsSettingsProvider);
+  final DateTime now = ref.watch(ttsClockProvider)();
+  ref.watch(quietHoursActiveProvider);
+  if (shouldMuteVoiceReply(settings, now)) {
+    return const NoopTTSProvider();
+  }
+  return _engineFor(settings);
+}
+
+TTSProvider _engineFor(AppSettings settings) =>
+    settings.useBundledVoice ? BundledTTSProvider() : OSTTSProvider();

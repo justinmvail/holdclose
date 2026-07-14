@@ -551,8 +551,16 @@ class VoiceIntentAction extends VoiceIntentOutcome {
 /// The spoken request was a conversation. The turn + the coach's reply are
 /// already persisted under [conversationId]; the UI opens `/chat/<id>`.
 class VoiceIntentChat extends VoiceIntentOutcome {
-  const VoiceIntentChat({required this.conversationId});
+  const VoiceIntentChat({
+    required this.conversationId,
+    this.spokenReply = '',
+  });
   final String conversationId;
+
+  /// The reply body, already stripped of action markers — what the mic flow
+  /// reads back aloud. Carried on the outcome so the UI speaks the SAME text
+  /// it persisted, without a second model call or a re-read of the thread.
+  final String spokenReply;
 }
 
 /// Multi-turn caregiving chat orchestrator (TASKS.md Phase 11.3).
@@ -966,7 +974,10 @@ class ChatService {
       createdAt: now,
       streamingDone: true,
     ));
-    return VoiceIntentChat(conversationId: conversationId);
+    return VoiceIntentChat(
+      conversationId: conversationId,
+      spokenReply: body,
+    );
   }
 
   /// A short thread title from the spoken transcript (first ~40 chars).
