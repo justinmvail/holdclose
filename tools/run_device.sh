@@ -91,7 +91,10 @@ case "$AUTH" in
       cloudflare|cloudflare-dev)
         FORUM_API_URL="https://holdclose-forum-dev.jcsvonellc.workers.dev" ;;
       cloudflare-prod)
-        FORUM_API_URL="https://holdclose.care" ;;  # once DNS points at the prod Worker
+        # The prod Worker's own origin. NOT holdclose.care — that domain has no
+        # DNS (verified 2026-07-14), so a build pointed at it cannot reach any
+        # backend at all. Change this when the custom domain is actually live.
+        FORUM_API_URL="https://holdclose-forum.jcsvonellc.workers.dev" ;;
       *)
         echo "error: unknown BACKEND='$BACKEND'" \
              "(use: local | cloudflare-dev | cloudflare-prod)." >&2
