@@ -249,29 +249,33 @@ final class TTSEngine {
         let env = try ORTEnv(loggingLevel: .warning)
         let options = try ORTSessionOptions()
         try options.setIntraOpNumThreads(1)
-        // CoreML execution provider — routes inference to the Neural
-        // Engine on A14+. Simulator + older devices fall back to CPU,
-        // which adds ~1–3 s of latency per utterance (documented in
-        // TTS_BUNDLED.md). MLProgram + ANE-only flags follow the
-        // onnxruntime 1.18 ObjC API.
+        // NO CoreML execution provider. Piper runs on ORT's default CPU EP,
+        // everywhere — device and simulator alike.
         //
-        // Simulator carve-out: CoreML on the iOS Simulator uses
-        // Apple's BNNS CPU path (no Neural Engine), and that path has
-        // a known SIGFPE bug in certain Piper convolution kernels —
-        // observable in the 2026-05-29 careblazers demo run, where the
-        // app crashes mid-inference deep inside Espresso's
-        // convolution_kernel::__launch. The crash happens reliably on
-        // the simulator and never on real hardware. Skip the CoreML
-        // EP on simulator builds; ORTSession transparently runs the
-        // graph on the default CPU EP instead.
-        #if !targetEnvironment(simulator)
-        let coreml = ORTCoreMLExecutionProviderOptions()
-        coreml.useCPUOnly = false
-        coreml.enableOnSubgraphs = true
-        coreml.onlyEnableForDevicesWithANE = false
-        try? options.appendCoreMLExecutionProvider(with: coreml)
-        #endif
-
+        // The CoreML EP SEGFAULTS ON REAL HARDWARE (2026-07-14). Three
+        // identical crash reports off an iPhone 12 Pro Max, every one of them:
+        //
+        //   EXC_BAD_ACCESS (SIGSEGV) at KERN_INVALID_ADDRESS
+        //     libBNNS  BNNSFilterApplyBatch
+        //     Espresso Espresso::BNNSEngine::convolution_kernel::__launch
+        //     CoreML   -[MLNeuralNetworkEngine executePlan:error:]
+        //
+        // The code here used to carry the OPPOSITE claim — that this crash
+        // "happens reliably on the simulator and never on real hardware" — and
+        // skipped the EP only for simulator builds. That was never true; it was
+        // just never tested, because `speak()` had no callers until the coach's
+        // voice was wired up (2026-07-13). The very first real utterance on a
+        // real phone killed the process, every single time.
+        //
+        // Note what the stack says: even on device, CoreML dispatched this graph
+        // to Espresso's *BNNS* (CPU) kernels — not the Neural Engine — so the EP
+        // was buying us the crash without buying the acceleration it was added
+        // for. Piper's convolutions are simply not safe on that path.
+        //
+        // Cost of the CPU EP: ~1–3 s per utterance. Correct and slow beats fast
+        // and dead. If the EP is ever reconsidered, it must be proven by running
+        // integration_test/tts_bundled_smoke_test.dart ON A CABLED DEVICE — the
+        // simulator cannot see this bug, because it never had the EP compiled in.
         let session = try ORTSession(env: env,
                                      modelPath: modelPath,
                                      sessionOptions: options)
