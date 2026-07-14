@@ -6,7 +6,7 @@ import onnxruntime_objc
 // BUILD_SPEC.md Phase 9.3 — `holdclose/tts` MethodChannel handler.
 //
 // Replaces the AppDelegate stub: loads the bundled Piper voice
-// (`en_US-amy-medium.onnx`), runs inference through ONNX Runtime
+// (`en_US-hfc_female-medium.onnx`), runs inference through ONNX Runtime
 // with the CoreML execution provider enabled (Neural Engine on
 // A14+), and streams the resulting PCM to an AVAudioEngine
 // player node.
@@ -41,7 +41,7 @@ enum TTSBridge {
                                         details: nil))
                     return
                 }
-                let voiceId = args["voiceId"] as? String ?? "en_US-amy-medium"
+                let voiceId = args["voiceId"] as? String ?? "en_US-hfc_female-medium"
                 let speed = (args["speed"] as? NSNumber)?.doubleValue ?? 1.0
                 engine.speak(text: text, voiceId: voiceId, speed: speed) { error in
                     if let error = error {
@@ -72,12 +72,13 @@ enum TTSBridge {
 /// state mid-flight.
 final class TTSEngine {
 
-    /// Active voice catalog. Phase 9.5 widens this from the single
-    /// bundled Amy entry; v1 ships one row.
+    /// Active voice catalog. One bundled row: the Piper voice chosen by
+    /// listening test on 2026-07-14 (hfc_female beat amy, kristin, and both
+    /// "high" models, which cost ~4x the inference for no audible gain).
     private static let bundledVoices: [[String: Any]] = [
         [
-            "id": "en_US-amy-medium",
-            "displayName": "Amy (bundled)",
+            "id": "en_US-hfc_female-medium",
+            "displayName": "Bundled voice",
             "locale": "en-US",
             "gender": "female",
         ]
@@ -524,17 +525,68 @@ final class EspeakNGPhonemizer: Phonemizer {
         return EspeakNGPhonemizer.idsForTokens(tokens, config: config)
     }
 
-    /// Resolve `text` to a phoneme-token list. Each token is a single
-    /// Unicode scalar — matches the granularity of the `phoneme_id_map`
-    /// keys (verified against `en_US-amy-medium.onnx.json`: all 154
-    /// keys are one scalar each).
+    /// Punctuation Piper's tokenizer understands. These are REAL phonemes to the
+    /// model — `phoneme_id_map` carries an id for each — and they are how it
+    /// learns to pause at a comma, stop at a period, and lift the pitch at a
+    /// question mark.
+    private static let clauseTerminators: Set<Character> =
+        [",", ".", "?", "!", ";", ":"]
+
+    /// Resolve `text` to a phoneme-token list, PRESERVING clause punctuation.
+    ///
+    /// espeak's IPA output silently drops every punctuation mark — it uses them
+    /// to shape its own internal prosody and then emits only the sounds,
+    /// separating clauses with a newline:
+    ///
+    ///   "She took it, then rested. Did she eat?"
+    ///     → "ʃiː tˈʊk ɪt\nðˈɛn ɹˈɛstᵻd\ndˈɪd ʃiː ˈiːt\n"
+    ///
+    /// Feeding that to Piper hands the model one undifferentiated stream with no
+    /// clause boundaries and no sentence type, so it cannot pause where a person
+    /// pauses and every question lands flat. Piper's own phonemizer re-attaches
+    /// the terminators; ours did not, which is why the voice read everything in
+    /// one breath.
+    ///
+    /// So: phonemize each clause on its own, then append the ORIGINAL terminator
+    /// that ended it (plus a word gap), rebuilding the punctuation espeak ate.
     private func phonemize(_ text: String) -> [String] {
         #if CAREBLAZERS_HAS_ESPEAK_NG
-        if useEspeak, let ipa = espeakIPA(text), !ipa.isEmpty {
-            return ipa
+        if useEspeak {
+            var tokens: [String] = []
+            for (clause, terminator) in EspeakNGPhonemizer.splitClauses(text) {
+                guard let ipa = espeakIPA(clause), !ipa.isEmpty else { continue }
+                tokens.append(contentsOf: ipa)
+                if let terminator = terminator {
+                    tokens.append(String(terminator))
+                    tokens.append(" ")
+                }
+            }
+            if !tokens.isEmpty { return tokens }
         }
         #endif
         return text.unicodeScalars.map { String($0) }
+    }
+
+    /// Break [text] into `(clause, terminator)` pairs, keeping the punctuation
+    /// that ended each clause. A trailing clause with no punctuation comes back
+    /// with a nil terminator.
+    ///
+    /// `internal` so a unit test can pin the split without linking espeak.
+    static func splitClauses(_ text: String) -> [(String, Character?)] {
+        var out: [(String, Character?)] = []
+        var current = ""
+        for ch in text {
+            if clauseTerminators.contains(ch) {
+                let clause = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !clause.isEmpty { out.append((clause, ch)) }
+                current = ""
+            } else {
+                current.append(ch)
+            }
+        }
+        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tail.isEmpty { out.append((tail, nil)) }
+        return out
     }
 
     /// Wrap a token sequence with BOS (`^`), pad (`_`) between tokens,

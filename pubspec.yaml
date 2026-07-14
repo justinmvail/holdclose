@@ -1,7 +1,7 @@
 name: holdclose
 description: "In-the-moment coach for dementia caregivers."
 publish_to: 'none'
-version: 0.1.0+49
+version: 0.1.0+51
 
 environment:
   sdk: ^3.5.0
@@ -206,10 +206,14 @@ flutter:
     - assets/images/
     - assets/seed/
     # Bundled Piper voice (Phase 9 — neural TTS). The .onnx is the
-    # 22 kHz medium-quality `amy` voice (~60 MB); the .onnx.json is
-    # the espeak phoneme + inference config consumed by the iOS /
-    # Android bridges. See BUILD_SPEC.md §1 — Bundled assets.
-    - assets/tts/en_US-amy-medium/
+    # 22 kHz medium-quality `hfc_female` voice (~60 MB); the .onnx.json
+    # is the espeak phoneme + inference config consumed by the iOS /
+    # Android bridges. Chosen over amy/kristin/lessac-high/ljspeech-high
+    # in a blind listen of the same sentence through the real pipeline
+    # (2026-07-14) — clearly the most natural, and the "high" voices cost
+    # ~4x the inference for no gain a caregiver would notice. See
+    # BUILD_SPEC.md §1 — Bundled assets.
+    - assets/tts/en_US-hfc_female-medium/
     # espeak-ng runtime data (Phase 10.1 — text-to-phoneme). Language
     # rules, phoneme tables, voicedata that `espeak_Initialize`
     # consults at session start. Mirrored from

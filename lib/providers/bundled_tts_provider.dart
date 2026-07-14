@@ -41,12 +41,12 @@ class BundledTTSProvider implements TTSProvider {
   /// callers still get the same "await-to-completion" semantics as
   /// [OSTTSProvider.speak] in production, where the native side won't
   /// resolve until the utterance finishes.
-  /// Default Piper voice bundled under `assets/tts/<id>/` — Amy
-  /// (en_US-amy-medium). Used when the caller passes an empty
+  /// Default Piper voice bundled under `assets/tts/<id>/` —
+  /// en_US-hfc_female-medium. Used when the caller passes an empty
   /// `voiceId` (the common case — settings.voiceId is null until the
   /// operator picks a non-default voice). Without this default the
   /// native bridge looks for `.onnx` (no name prefix) and fails.
-  static const String _defaultVoiceId = 'en_US-amy-medium';
+  static const String _defaultVoiceId = 'en_US-hfc_female-medium';
 
   @override
   Future<void> speak(
@@ -102,7 +102,7 @@ class BundledTTSProvider implements TTSProvider {
   /// The native bridge resolves the call once its `ORTSession` (iOS)
   /// or `OrtSession` (Android) is healthy; it throws
   /// [PlatformException] with code `ONNX_LOAD_FAILED` when ONNX
-  /// Runtime refuses to load `en_US-amy-medium.onnx` (rare — missing
+  /// Runtime refuses to load `en_US-hfc_female-medium.onnx` (rare — missing
   /// CoreML symbol on a very old iOS, NNAPI version mismatch on an
   /// exotic AOSP fork) and [MissingPluginException] when the bridge
   /// hasn't registered yet (e.g., the Phase 9.2 stub build).

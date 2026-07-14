@@ -36,7 +36,7 @@ void main() {
     final BundledTTSProvider tts = BundledTTSProvider();
 
     // The production call, byte for byte: `voiceId: ''` is what the app passes
-    // until a caregiver picks a voice, and it resolves to en_US-amy-medium.
+    // until a caregiver picks a voice, and it resolves to en_US-hfc_female-medium.
     await tts.speak('Opening the calendar.', voiceId: '', speed: 1.0);
     await tester.pump(const Duration(seconds: 2));
 

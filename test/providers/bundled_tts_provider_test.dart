@@ -70,7 +70,7 @@ void main() {
       // settings.voiceId == null (the common case) used to forward as
       // "" to the native side, which then looked for ".onnx" with no
       // name prefix and threw modelMissing. The Dart side now resolves
-      // empty to the v1 bundled voice (en_US-amy-medium) before the
+      // empty to the v1 bundled voice (en_US-hfc_female-medium) before the
       // channel invoke, so the native bridge always sees a valid id.
       // When Phase 9.5's catalog expands to multiple voices the default
       // moves to `Settings.preferredBundledVoiceId`.
@@ -78,7 +78,7 @@ void main() {
       await tts.speak('plain', voiceId: '', speed: 1.0);
       final Map<dynamic, dynamic> args =
           calls.single.arguments as Map<dynamic, dynamic>;
-      expect(args['voiceId'], 'en_US-amy-medium');
+      expect(args['voiceId'], 'en_US-hfc_female-medium');
     });
 
     test('cancel forwards a bare cancel call with no arguments', () async {
