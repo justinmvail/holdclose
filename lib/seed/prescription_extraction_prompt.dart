@@ -31,8 +31,8 @@ empty. The caregiver may scan a second photo to fill the gaps.
 Return ONLY a single JSON object — no prose, no explanation, no code
 fences — with exactly these keys:
 {
-  "name": "medication name as printed",
-  "dosage": "strength or amount as printed, e.g. 2 mg or 1 tablet",
+  "name": "the DRUG NAME ONLY - no strength, no form. A label printed IBUPROFEN 400 MG TABLET has name Ibuprofen",
+  "dosage": "the STRENGTH only, e.g. 400 mg or 10 mg (not the form: no 'tablet')",
   "route": "one of: oral, topical, injection, other (empty if unclear)",
   "prescriber": "prescribing clinician if printed, else empty",
   "notes": "directions / how-to-take text as printed, else empty",

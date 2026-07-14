@@ -96,6 +96,64 @@ class MedicationDraft {
   /// unknown keys are ignored, missing keys stay null, non-string values
   /// are dropped, and a malformed payload yields an empty draft. Never
   /// throws — an unreadable scan must degrade to manual entry, not crash.
+  /// Pull the drug NAME out of what a label actually prints.
+  ///
+  /// Pharmacy labels read "IBUPROFEN 400 MG TABLET", and the vision model
+  /// copies that verbatim into `name` — so the import review showed a
+  /// medication called "IBUPROFEN 400 MG TABLET" with a dose of "400 MG
+  /// TABLET". Reported 2026-07-13: "Medication didn't import correctly."
+  ///
+  /// Strip the strength and the dose form, and title-case the SHOUTING that
+  /// every label is printed in, so the draft reads like something a caregiver
+  /// would have typed: "Ibuprofen".
+  static String? _cleanMedicationName(String? raw) {
+    if (raw == null) return null;
+    String name = raw.trim();
+    // Cut everything from the first strength token ("400 mg", "10mcg", "5 ml").
+    final RegExpMatch? strength = RegExp(
+      r'\s+\d+(?:\.\d+)?\s*(mg|mcg|g|ml|mL|units?|iu|%)\b',
+      caseSensitive: false,
+    ).firstMatch(name);
+    if (strength != null) name = name.substring(0, strength.start);
+    // Drop a trailing dose form.
+    name = name.replaceAll(
+      RegExp(
+        r'\s+(tablets?|tabs?|capsules?|caps?|pills?|solution|suspension|'
+        r'cream|ointment|patch(?:es)?|drops?|inhaler|injection|syrup)\b\.?$',
+        caseSensitive: false,
+      ),
+      '',
+    );
+    name = name.trim();
+    if (name.isEmpty) return null;
+    // Labels SHOUT. Present it the way the caregiver would have typed it.
+    if (name == name.toUpperCase()) {
+      name = name
+          .split(RegExp(r'\s+'))
+          .map((String w) => w.isEmpty
+              ? w
+              : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+          .join(' ');
+    }
+    return name;
+  }
+
+  /// "400 MG TABLET" → "400 mg". Keep the strength; drop the form and the
+  /// shouting. Anything without a recognisable strength is passed through as
+  /// printed (e.g. "1 tablet").
+  static String? _cleanDosage(String? raw) {
+    if (raw == null) return null;
+    final RegExpMatch? m = RegExp(
+      r'(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|mL|units?|iu|%)\b',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (m == null) return raw.trim().isEmpty ? null : raw.trim();
+    final String unit = m.group(2)!.toLowerCase() == 'ml'
+        ? 'mL'
+        : m.group(2)!.toLowerCase();
+    return '${m.group(1)} $unit';
+  }
+
   factory MedicationDraft.fromModelJson(Map<String, dynamic> json) {
     String? str(Object? v) {
       if (v is String) {
@@ -106,8 +164,8 @@ class MedicationDraft {
     }
 
     return MedicationDraft(
-      name: str(json['name']),
-      dosage: str(json['dosage']),
+      name: _cleanMedicationName(str(json['name'])),
+      dosage: _cleanDosage(str(json['dosage']) ?? str(json['strength'])),
       route: parseRoute(str(json['route'])),
       prescriber: str(json['prescriber']),
       // Accept a few synonyms the model might use for the free-text

@@ -36,8 +36,12 @@ void main() {
     print('RX: name=${d?.name} dosage=${d?.dosage} route=${d?.route} '
         'prescriber=${d?.prescriber} notes=${d?.notes}');
     expect(d, isNotNull, reason: 'the scan produced nothing');
-    expect(d!.name?.toLowerCase(), contains('ibuprofen'));
-    expect(d.dosage, contains('400'));
+    // "Medication didn't import correctly" (2026-07-13): the label prints
+    // IBUPROFEN 400 MG TABLET and the model copies it verbatim, so the draft
+    // offered that as the NAME. The caregiver must get the drug, not the line.
+    expect(d!.name, 'Ibuprofen',
+        reason: 'the name must be the drug alone — no strength, no form');
+    expect(d.dosage, '400 mg', reason: 'the dose must be the strength alone');
   }, skip: skip);
 
   test('appointment card → appointment draft', () async {
