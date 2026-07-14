@@ -40,6 +40,8 @@ Pod::Spec.new do |s|
   s.source           = { :path => '.' }
   s.platform         = :ios, '16.0'
   s.requires_arc     = false
+  # speechPlayer is C++; the rest of espeak is C.
+  s.libraries        = 'c++'
 
   # Public umbrella header lives at src/include/espeak-ng/{espeak_ng,
   # speak_lib,encoding}.h — those are the three Swift bridges against.
@@ -54,6 +56,16 @@ Pod::Spec.new do |s|
   s.source_files = [
     'src/libespeak-ng/*.{c,h}',
     'src/include/espeak-ng/*.h',
+    # ucd-tools — espeak's Unicode character-database helpers. `translate.c`
+    # includes <ucd/ucd.h>, so the library does not compile without these.
+    'src/ucd-tools/src/*.{c,h}',
+    'src/ucd-tools/src/include/ucd/*.h',
+    # speechPlayer — sPlayer.c calls speechPlayer_initialize/queueFrame/
+    # synthesize/terminate unconditionally (the USE_SPEECHPLAYER flag does not
+    # gate the call sites), so its C++ sources must be compiled and linked, not
+    # just its headers.
+    'src/speechPlayer/src/*.{cpp,h}',
+    'src/speechPlayer/include/*.h',
   ]
 
   # espeak-ng's runtime data (language rules, phoneme tables,
@@ -65,9 +77,17 @@ Pod::Spec.new do |s|
   # `espeak_Initialize` time. Mirror copy lives under
   # `assets/tts/espeak-ng-data/` (Flutter assets) for Phase 10.3 +
   # Android parity; iOS reads from the pod-bundled copy.
-  s.resource_bundles = {
-    'espeak-ng' => ['Resources/espeak-ng-data/**/*']
-  }
+  # NOT `resource_bundles`. CocoaPods FLATTENS a resource bundle's contents into
+  # the bundle root, and espeak-ng's data is a TREE: espeak_Initialize() is given
+  # a parent directory and looks for `espeak-ng-data/` inside it, then reads
+  # `lang/<family>/<lang>` and `voices/` subdirectories from there. Flattened,
+  # those subtrees vanish and espeak silently fails to initialise — at which
+  # point TTSBridge falls back to a character-by-character phonemizer and the
+  # coach speaks gibberish (2026-07-14; it shipped exactly that way).
+  #
+  # `s.resources` with a DIRECTORY path copies the folder into Runner.app with
+  # its structure intact, so Bundle.main.bundlePath is the parent espeak wants.
+  s.resources = ['Resources/espeak-ng-data']
 
   # espeak-ng's build needs a USE_ASYNC=0 (we drive playback ourselves
   # via AVAudioEngine — espeak's internal threading would fight the
@@ -96,7 +116,7 @@ Pod::Spec.new do |s|
   # header search path so the compiler resolves intra-pod `#include`s.
   s.preserve_paths = ['src/include/espeak-ng/*.h', 'src/libespeak-ng/*.h']
   s.xcconfig = {
-    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/src/include" "${PODS_TARGET_SRCROOT}/src/libespeak-ng"',
+    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}/src/include" "${PODS_TARGET_SRCROOT}/src/libespeak-ng" "${PODS_TARGET_SRCROOT}/src/ucd-tools/src/include" "${PODS_TARGET_SRCROOT}/src/speechPlayer/include"',
     # arm64 simulator slice — onnxruntime-objc ships both arches; the
     # espeak-ng build needs to match so a sim build of Runner doesn't
     # drop the espeak library at link time.

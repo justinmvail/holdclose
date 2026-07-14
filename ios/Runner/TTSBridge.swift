@@ -144,25 +144,64 @@ final class TTSEngine {
         return espeak_SetVoiceByName("en-us") == EE_OK
     }
 
-    /// CocoaPods drops the resource bundle at
-    /// `Runner.app/espeak-ng.bundle/`, with `espeak-ng-data/` inside.
-    /// `espeak_Initialize` wants the directory that *contains*
-    /// `espeak-ng-data` — so we return the `.bundle` path itself.
-    /// Fallback: the Flutter-asset mirror (`assets/tts/espeak-ng-data/`)
-    /// that Android 10.3 will consume, in case the Pod resource bundle
-    /// doesn't resolve in some packaging mode.
+    /// The directory that CONTAINS `espeak-ng-data/` — what `espeak_Initialize`
+    /// takes. The Pod copies that folder into `Runner.app` (see the podspec's
+    /// `s.resources`), so `Bundle.main.bundlePath` is normally the answer.
+    ///
+    /// Every candidate is VERIFIED before it's returned: a directory only counts
+    /// if `espeak-ng-data/phontab` actually exists inside it. The previous
+    /// version returned the first path that merely EXISTED — and the path it
+    /// found (`Runner.app/espeak-ng.bundle`) held nothing but an `Info.plist`,
+    /// because CocoaPods' `resource_bundles` had flattened the real data into a
+    /// bundle nested inside the framework. espeak_Initialize duly failed, the
+    /// phonemizer fell back to spelling words out letter-by-letter, and the
+    /// coach's voice shipped as fluent gibberish (2026-07-14).
+    ///
+    /// Trusting a path because it resolves is how that happened. Check the file.
     private static func locateEspeakDataParent() -> String? {
-        let bundle = Bundle.main
-        if let url = bundle.url(forResource: "espeak-ng", withExtension: "bundle") {
-            return url.path
-        }
-        if let assetPath = bundle.path(
-            forResource: "espeak-ng-data",
-            ofType: nil,
-            inDirectory: "Frameworks/App.framework/flutter_assets/assets/tts") {
-            return (assetPath as NSString).deletingLastPathComponent
+        let candidates: [String?] = [
+            // The Pod's `s.resources` copy. The pod builds as a framework, so
+            // the folder lands at Frameworks/espeak_ng.framework/espeak-ng-data.
+            // This is the ONLY complete copy — see below.
+            Bundle.main.privateFrameworksURL?
+                .appendingPathComponent("espeak_ng.framework").path,
+            // Runner.app itself, for a non-framework (static) pod build.
+            Bundle.main.bundlePath,
+            // The Flutter-asset mirror. Deliberately LAST: Flutter's asset globs
+            // do not recurse, so this copy has the top-level files but NOT the
+            // `lang/` and `voices/` subtrees. espeak would initialise off it and
+            // then fail to load the en-US voice — gibberish with extra steps.
+            // The verification below rejects it; it stays only as a safety net
+            // in case the pubspec ever enumerates the subdirectories.
+            Bundle.main.path(
+                forResource: "flutter_assets/assets/tts",
+                ofType: nil,
+                inDirectory: "Frameworks/App.framework"),
+            // Legacy: the CocoaPods resource-BUNDLE layout (flattened).
+            Bundle.main.url(forResource: "espeak-ng", withExtension: "bundle")?.path,
+        ]
+        for case let parent? in candidates where hasEspeakData(parent) {
+            return parent
         }
         return nil
+    }
+
+    /// True when `<parent>/espeak-ng-data/` holds BOTH the phoneme table
+    /// (`phontab`) and the en-US language data (`lang/gmw/en`).
+    ///
+    /// Checking one file is not enough, and checking the directory is worse than
+    /// nothing. Two real packaging failures hid behind exactly those checks:
+    /// a `Runner.app/espeak-ng.bundle` containing only an `Info.plist`, and a
+    /// Flutter-asset mirror carrying `phontab` but no `lang/` subtree. Both
+    /// resolve as paths. Both leave espeak unable to speak English. The bridge's
+    /// fallback for "espeak isn't ready" is silent — it just spells words out
+    /// letter by letter — so a wrong answer here does not raise; it babbles.
+    private static func hasEspeakData(_ parent: String) -> Bool {
+        let data = (parent as NSString).appendingPathComponent("espeak-ng-data")
+        let fm = FileManager.default
+        let phontab = (data as NSString).appendingPathComponent("phontab")
+        let enVoice = (data as NSString).appendingPathComponent("lang/gmw/en")
+        return fm.fileExists(atPath: phontab) && fm.fileExists(atPath: enVoice)
     }
     #endif
 
