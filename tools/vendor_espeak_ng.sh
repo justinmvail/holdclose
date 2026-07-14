@@ -188,13 +188,34 @@ cp -R "${SCRATCH}/src/src/ucd-tools"    "${ANDROID_DIR}/ucd-tools"
 cp -R "${SCRATCH}/src/src/speechPlayer" "${ANDROID_DIR}/speechPlayer"
 write_config_h "${ANDROID_DIR}/libespeak-ng"
 
-echo "[vendor] mirroring runtime data → ${ASSETS_DIR}"
+# ---------------------------------------------------------------------------
+# The Flutter-asset mirror — ENGLISH ONLY.
+#
+# Android's bridge loads espeak's data from here (iOS uses the Pod copy). Two
+# things forced a pruned mirror:
+#
+#   * SIZE. The full data set is 24 MB of rules for 100+ languages we do not
+#     speak. English-only is 1.2 MB and produces BYTE-IDENTICAL phonemes
+#     (verified against the full set, 2026-07-14). On Play, where the base
+#     module has a 150 MB ceiling, 23 MB is not a rounding error.
+#   * Flutter's asset globs DO NOT RECURSE. Every subdirectory has to be
+#     declared in pubspec.yaml by hand, and the full tree has 37 of them. The
+#     pruned tree has 3, which is a list a human can keep correct.
+#
+# en-US is NOT optional: with only `lang/gmw/en` present, espeak silently falls
+# back to BRITISH English (dˈɒktə, non-rhotic) and feeds those phonemes to an
+# American voice model. No error, just a subtly wrong accent.
+# ---------------------------------------------------------------------------
+echo "[vendor] mirroring runtime data (English only) → ${ASSETS_DIR}"
 rm -rf "${ASSETS_DIR}"
-mkdir -p "${ASSETS_DIR}"
-# Mirror the ASSEMBLED directory (git tree + compiled data), NOT the raw git
-# checkout — Android's bridge loads this copy, and the git tree alone is the
-# gibberish-producing one.
-cp -R "${VENDOR_DIR}/Resources/espeak-ng-data/." "${ASSETS_DIR}/"
+mkdir -p "${ASSETS_DIR}/lang/gmw" "${ASSETS_DIR}/voices/!v"
+SRC="${VENDOR_DIR}/Resources/espeak-ng-data"
+for f in phontab phonindex phondata intonations en_dict; do
+  cp "${SRC}/${f}" "${ASSETS_DIR}/${f}"
+done
+cp "${SRC}/lang/gmw/en"    "${ASSETS_DIR}/lang/gmw/en"
+cp "${SRC}/lang/gmw/en-US" "${ASSETS_DIR}/lang/gmw/en-US"
+cp -R "${SRC}/voices/!v/." "${ASSETS_DIR}/voices/!v/"
 # The README is the only tracked file in here (the data itself is gitignored).
 git -C "${REPO_ROOT}" checkout -- "assets/tts/espeak-ng-data/README.md" 2>/dev/null || true
 

@@ -214,10 +214,16 @@ flutter:
     # ~4x the inference for no gain a caregiver would notice. See
     # BUILD_SPEC.md §1 — Bundled assets.
     - assets/tts/en_US-hfc_female-medium/
-    # espeak-ng runtime data (Phase 10.1 — text-to-phoneme). Language
-    # rules, phoneme tables, voicedata that `espeak_Initialize`
-    # consults at session start. Mirrored from
-    # `ios/Vendored/espeak-ng/Resources/espeak-ng-data/` by
-    # `tools/vendor_espeak_ng.sh`; Android (Phase 10.3) consumes it
-    # from this Flutter-asset path via AssetManager.
+    # espeak-ng runtime data (text-to-phoneme), ENGLISH ONLY — 1.2 MB, and
+    # byte-identical phonemes to the full 24 MB set (verified 2026-07-14).
+    # ANDROID's bridge loads espeak from these assets (iOS reads the CocoaPods
+    # framework copy), and Flutter's asset globs DO NOT RECURSE — so every
+    # subdirectory must be listed by hand. Miss one and espeak still
+    # "initialises", then fails to load the voice and the coach speaks by
+    # spelling words out letter by letter. There is no error; it just babbles.
+    # `lang/gmw/en-US` is load-bearing: without it espeak silently falls back to
+    # BRITISH English and feeds those phonemes to an American voice model.
     - assets/tts/espeak-ng-data/
+    - assets/tts/espeak-ng-data/lang/
+    - assets/tts/espeak-ng-data/lang/gmw/
+    - assets/tts/espeak-ng-data/voices/!v/

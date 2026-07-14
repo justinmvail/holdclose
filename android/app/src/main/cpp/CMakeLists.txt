@@ -20,6 +20,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ESPEAK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/espeak-ng")
 file(GLOB ESPEAK_SOURCES CONFIGURE_DEPENDS "${ESPEAK_DIR}/libespeak-ng/*.c")
 
+# espeak does not build from libespeak-ng/ alone. Two sibling trees are
+# mandatory, and both were missing here — the iOS podspec hit the identical wall
+# on 2026-07-14:
+#   * ucd-tools    — common.c/soundicon.c/translate.c `#include <ucd/ucd.h>`
+#   * speechPlayer — sPlayer.c calls speechPlayer_* unconditionally (the
+#                    USE_SPEECHPLAYER flag does NOT gate the call sites), so its
+#                    C++ sources must LINK, not merely be on the include path.
+# tools/vendor_espeak_ng.sh copies both (and writes the config.h stand-in).
+file(GLOB UCD_SOURCES CONFIGURE_DEPENDS "${ESPEAK_DIR}/ucd-tools/src/*.c")
+file(GLOB SPEECHPLAYER_SOURCES CONFIGURE_DEPENDS
+     "${ESPEAK_DIR}/speechPlayer/src/*.cpp")
+list(APPEND ESPEAK_SOURCES ${UCD_SOURCES} ${SPEECHPLAYER_SOURCES})
+
 if(ESPEAK_SOURCES)
     message(STATUS "careblazers: espeak-ng sources present — JNI bridge will link the real library")
     # Same flag set Home Assistant's iOS voice library uses, mirrored
@@ -38,6 +51,8 @@ if(ESPEAK_SOURCES)
     include_directories(
         "${ESPEAK_DIR}/include"
         "${ESPEAK_DIR}/libespeak-ng"
+        "${ESPEAK_DIR}/ucd-tools/src/include"
+        "${ESPEAK_DIR}/speechPlayer/include"
     )
 else()
     message(STATUS "careblazers: espeak-ng sources absent — JNI bridge will signal unavailable until tools/vendor_espeak_ng.sh runs")
