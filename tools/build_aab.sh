@@ -12,6 +12,8 @@
 #
 #   tools/build_aab.sh                      # → prod backend (default)
 #   BACKEND=cloudflare-dev tools/build_aab.sh   # → the dev Worker
+#   APK=1 tools/build_aab.sh                # → an installable APK instead
+#                                             (adb install; Play needs the AAB)
 #
 # Requires android/key.properties + android/upload-keystore.jks (both gitignored
 # — the app never holds a signing secret in source). Without them Gradle falls
@@ -63,7 +65,12 @@ BUILD_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
 echo "→ backend=${BACKEND}  FORUM_API_URL=${FORUM_API_URL}"
 echo "→ build ${APP_NAME}+${BUILD_NUMBER}  (${GIT_BRANCH} @ ${GIT_SHA})"
 
-flutter build appbundle --release \
+# Play takes an AAB; a phone takes an APK. Same defines either way — a device
+# test is worthless if it exercises a different build than the one you ship.
+BUILD_TARGET="appbundle"
+[[ "${APK:-0}" == "1" ]] && BUILD_TARGET="apk"
+
+flutter build "$BUILD_TARGET" --release \
   --dart-define=ALPHA_AUTH=true \
   --dart-define=FEEDBACK=true \
   --dart-define=FORUM_API_URL="${FORUM_API_URL}" \
@@ -74,7 +81,11 @@ flutter build appbundle --release \
   --dart-define=GIT_BRANCH="${GIT_BRANCH}" \
   --dart-define=BUILD_TIME="${BUILD_TIME}"
 
-AAB="build/app/outputs/bundle/release/app-release.aab"
+if [[ "$BUILD_TARGET" == "apk" ]]; then
+  AAB="build/app/outputs/flutter-apk/app-release.apk"
+else
+  AAB="build/app/outputs/bundle/release/app-release.aab"
+fi
 
 # A debug-signed bundle is the failure this script exists to prevent, and Play
 # only tells you about it AFTER the upload. Check it here.
@@ -86,4 +97,8 @@ fi
 
 echo "→ $AAB"
 echo "→ signed: ${OWNER#Owner: }"
-echo "→ upload at: Play Console → Test and release → Internal testing"
+if [[ "$BUILD_TARGET" == "apk" ]]; then
+  echo "→ install:   adb install -r $AAB"
+else
+  echo "→ upload at: Play Console → Test and release → Internal testing"
+fi
