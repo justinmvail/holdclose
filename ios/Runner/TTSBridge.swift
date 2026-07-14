@@ -7,9 +7,10 @@ import onnxruntime_objc
 //
 // Replaces the AppDelegate stub: loads the bundled Piper voice
 // (`en_US-hfc_female-medium.onnx`), runs inference through ONNX Runtime
-// with the CoreML execution provider enabled (Neural Engine on
-// A14+), and streams the resulting PCM to an AVAudioEngine
-// player node.
+// on the CPU EP (the CoreML provider segfaulted on device — see
+// `ensureLoaded`), synthesizes one sentence at a time, and streams each
+// sentence's PCM onto an AVAudioPlayerNode so playback starts after the
+// first sentence instead of the whole reply.
 //
 // The Dart contract (see `lib/providers/bundled_tts_provider.dart`):
 //   - speak({text, voiceId, speed})    → Future<void>
@@ -229,6 +230,21 @@ final class TTSEngine {
         }
     }
 
+    /// Speak [text] SENTENCE BY SENTENCE, starting playback as soon as the FIRST
+    /// sentence is rendered.
+    ///
+    /// The old shape synthesized the entire reply and only then played a single
+    /// word, so the caregiver's wait grew with the length of the answer: a
+    /// three-sentence reply paid for three sentences of inference before making
+    /// any sound. On CPU (the only safe backend — see the CoreML note in
+    /// `ensureLoaded`) that is ~1s per sentence on an A14 and noticeably worse on
+    /// mid-range Android hardware.
+    ///
+    /// Now each sentence is rendered and queued on the player node as it becomes
+    /// ready. AVAudioPlayerNode plays queued buffers gaplessly on the audio
+    /// thread, so sentence 2 renders WHILE sentence 1 is speaking. Time-to-first-
+    /// word stops depending on reply length, and by the time the first sentence
+    /// finishes the next one is usually already waiting.
     func speak(text: String,
                voiceId: String,
                speed: Double,
@@ -243,24 +259,109 @@ final class TTSEngine {
                       let cfg = self.voiceConfig else {
                     throw TTSError.notLoaded
                 }
-                let phonemeIds = phonemizer.phonemeIds(for: text, config: cfg)
-                let pcm = try self.synthesize(phonemeIds: phonemeIds,
-                                              speed: speed,
-                                              session: session,
-                                              config: cfg)
-                guard myGeneration == self.generation else {
-                    // A cancel landed between phonemizing and rendering;
-                    // skip playback and resolve quietly.
+
+                let sentences = TTSEngine.splitSentences(text)
+                guard !sentences.isEmpty else {
                     DispatchQueue.main.async { completion(nil) }
                     return
                 }
-                try self.play(samples: pcm, completion: { err in
-                    DispatchQueue.main.async { completion(err) }
-                })
+
+                // Configure the audio session + engine ONCE per utterance, up
+                // front — not per sentence. Doing it inside the per-sentence
+                // enqueue meant re-activating the shared AVAudioSession on every
+                // sentence, which is needless churn and an intermittent throw
+                // source: a mid-utterance failure would drop to the OS fallback,
+                // which then read the whole reply OVER the sentences already
+                // playing (the "two voices at once" bug, 2026-07-14).
+                let audioSession = AVAudioSession.sharedInstance()
+                try audioSession.setCategory(.playback, mode: .spokenAudio, options: [])
+                try audioSession.setActive(true, options: [])
+                if !self.audioEngine.isRunning {
+                    try self.audioEngine.start()
+                }
+
+                // A new utterance interrupts the previous one. stop() resets the
+                // node's render state; play() then starts the fresh queue.
+                self.playerNode.stop()
+                var started = false
+
+                for (index, sentence) in sentences.enumerated() {
+                    // Bail the moment a cancel (or a newer utterance) lands —
+                    // mid-render, not just before playback.
+                    guard myGeneration == self.generation else {
+                        DispatchQueue.main.async { completion(nil) }
+                        return
+                    }
+
+                    let ids = phonemizer.phonemeIds(for: sentence, config: cfg)
+                    if ids.isEmpty { continue }
+                    var pcm = try self.synthesize(phonemeIds: ids,
+                                                  speed: speed,
+                                                  session: session,
+                                                  config: cfg)
+
+                    // A real breath between sentences. The model ends a sentence
+                    // abruptly, and a caregiver half-listening while doing three
+                    // other things needs the beat to keep up.
+                    let isLast = index == sentences.count - 1
+                    if !isLast {
+                        pcm.append(contentsOf: TTSEngine.silence(
+                            seconds: TTSEngine.sentencePauseSeconds))
+                    }
+
+                    guard myGeneration == self.generation else {
+                        DispatchQueue.main.async { completion(nil) }
+                        return
+                    }
+
+                    try self.enqueue(samples: pcm,
+                                     isLast: isLast,
+                                     completion: completion)
+
+                    if !started {
+                        // Sound begins HERE — after one sentence, not the whole
+                        // reply.
+                        self.playerNode.play()
+                        started = true
+                    }
+                }
+
+                if !started {
+                    // Nothing was speakable (e.g. punctuation only).
+                    DispatchQueue.main.async { completion(nil) }
+                }
             } catch {
                 DispatchQueue.main.async { completion(error) }
             }
         }
+    }
+
+    /// Split [text] into sentences, KEEPING the terminator on each — the
+    /// phonemizer needs it to shape the pause and the intonation (a question
+    /// without its `?` lands flat).
+    ///
+    /// `internal` so a unit test can pin the split without an audio engine.
+    static func splitSentences(_ text: String) -> [String] {
+        var out: [String] = []
+        var current = ""
+        for ch in text {
+            current.append(ch)
+            if ch == "." || ch == "!" || ch == "?" || ch == "\n" {
+                let s = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !s.isEmpty { out.append(s) }
+                current = ""
+            }
+        }
+        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tail.isEmpty { out.append(tail) }
+        return out
+    }
+
+    /// The gap between spoken sentences.
+    static let sentencePauseSeconds: Double = 0.35
+
+    static func silence(seconds: Double) -> [Float] {
+        [Float](repeating: 0, count: Int(sampleRate * seconds))
     }
 
     // MARK: Loading
@@ -400,20 +501,24 @@ final class TTSEngine {
 
     // MARK: Playback
 
-    private func play(samples: [Float],
-                      completion: @escaping (Error?) -> Void) throws {
+    /// Queue ONE sentence onto the player node. The node is already running (or
+    /// about to be started by the caller), so buffers scheduled here play
+    /// gaplessly, back to back, while later sentences are still rendering.
+    ///
+    /// The caller owns `playerNode.stop()` (once, before the first sentence) and
+    /// `playerNode.play()` (once, after the first sentence is queued). Doing the
+    /// old stop→schedule→play dance per BUFFER would reset the render state
+    /// mid-utterance and drop everything already queued.
+    private func enqueue(samples: [Float],
+                         isLast: Bool,
+                         completion: @escaping (Error?) -> Void) throws {
         guard !samples.isEmpty else {
-            completion(nil)
+            if isLast { DispatchQueue.main.async { completion(nil) } }
             return
         }
 
-        // The shared AVAudioSession needs `.playback` so utterances
-        // override the silent switch — same policy `flutter_tts` uses
-        // for OSTTSProvider.
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playback, mode: .spokenAudio, options: [])
-        try audioSession.setActive(true, options: [])
-
+        // Audio session + engine are already configured by speak(), once per
+        // utterance. This method only builds and schedules the buffer.
         let format = TTSEngine.outputFormat
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
                                             frameCapacity: AVAudioFrameCount(samples.count)) else {
@@ -426,23 +531,17 @@ final class TTSEngine {
             }
         }
 
-        if !audioEngine.isRunning {
-            try audioEngine.start()
-        }
-        // After the first buffer completes, AVAudioPlayerNode stays
-        // in "playing" state but with no audio rendering. Calling
-        // play() on a playing node is a no-op and the new
-        // scheduleBuffer never engages. The canonical Apple pattern
-        // for sequential playbacks is stop → scheduleBuffer → play,
-        // which resets the node's internal rendering state without
-        // re-attaching the audio graph. Without this, every speak()
-        // after the first silently does nothing — surfaced on the
-        // 2026-05-29 simulator demo as "I can only play it once."
-        playerNode.stop()
         playerNode.scheduleBuffer(buffer, at: nil, options: []) {
-            completion(nil)
+            // Resolve the Dart future when the LAST sentence finishes — the
+            // contract callers rely on ("await speak() means the utterance is
+            // done"). Resolve UNCONDITIONALLY: if a newer utterance superseded
+            // this one, its stop() flushed this buffer and we still owe this
+            // call's future a resolution, or `await primary.speak` hangs forever
+            // (and, inside the fallback wrapper, the OS voice never gets its
+            // turn).
+            guard isLast else { return }
+            DispatchQueue.main.async { completion(nil) }
         }
-        playerNode.play()
     }
 }
 

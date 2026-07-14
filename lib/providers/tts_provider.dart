@@ -375,6 +375,15 @@ class FallbackTTSProvider implements TTSProvider {
     try {
       await primary.speak(text, voiceId: voiceId, speed: speed);
     } catch (e) {
+      // CRUCIAL: silence the primary before the fallback speaks.
+      //
+      // With chunked playback the bundled voice can throw AFTER it has already
+      // put a sentence or two into the speaker (e.g. an error on sentence three).
+      // Without this cancel, the OS fallback would start reading the WHOLE reply
+      // while the bundled voice's earlier sentences are still draining — two
+      // different voices talking over each other (2026-07-14). Stop the bundled
+      // tail first, THEN fall back, so the caregiver hears one voice.
+      await primary.cancel().catchError((_) {});
       // Loud in the log, graceful in the ear.
       debugPrint('bundled voice failed ($e) — falling back to the OS voice');
       await fallback.speak(text, voiceId: '', speed: speed);

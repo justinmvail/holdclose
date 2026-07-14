@@ -111,6 +111,16 @@ class TTSEngine(private val appContext: Context) {
         Thread(runnable, "careblazers.tts.work").apply { isDaemon = true }
     }
 
+    /// Playback runs on its OWN thread. `AudioTrack.write(..., WRITE_BLOCKING)`
+    /// blocks until the hardware has drained enough of the buffer to accept more
+    /// — so if synthesis and playback shared a thread, sentence 2 could not
+    /// render until sentence 1 had almost finished SPEAKING, and the voice would
+    /// stall between every sentence. Two threads let sentence 2 render while
+    /// sentence 1 is still in the speaker.
+    private val playExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "careblazers.tts.play").apply { isDaemon = true }
+    }
+
     private var ortEnv: OrtEnvironment? = null
     private var session: OrtSession? = null
     private var voiceConfig: VoiceConfig? = null
@@ -160,6 +170,14 @@ class TTSEngine(private val appContext: Context) {
         }
     }
 
+    /// Speak [text] SENTENCE BY SENTENCE, starting playback as soon as the FIRST
+    /// sentence is rendered.
+    ///
+    /// The old shape synthesized the whole reply before making any sound, so the
+    /// wait grew with the length of the answer — worst here, because this runs on
+    /// the CPU EP (NNAPI is the Android analog of the CoreML provider that
+    /// segfaulted every iPhone utterance; see ensureLoaded). Sentence-at-a-time
+    /// means time-to-first-word no longer depends on how much the coach has to say.
     fun speak(
         text: String,
         voiceId: String,
@@ -177,21 +195,63 @@ class TTSEngine(private val appContext: Context) {
                 if (cfg == null || ph == null || sess == null) {
                     throw TTSException.NotLoaded
                 }
-                val phonemeIds = ph.phonemeIds(text, cfg)
-                val pcm = synthesize(phonemeIds, speed, sess, cfg)
-                if (myGeneration != generation) {
-                    // A cancel landed between phonemizing and rendering;
-                    // skip playback and resolve quietly.
+
+                val sentences = splitSentences(text)
+                if (sentences.isEmpty()) {
                     completion(null)
                     return@execute
                 }
-                play(myGeneration, pcm)
-                completion(null)
+
+                // Open the track before the first write; a new utterance replaces
+                // whatever was playing.
+                playExecutor.execute { openTrack(myGeneration) }
+
+                sentences.forEachIndexed { index, sentence ->
+                    if (myGeneration != generation) return@execute
+                    val ids = ph.phonemeIds(sentence, cfg)
+                    if (ids.isEmpty()) return@forEachIndexed
+                    val pcm = synthesize(ids, speed, sess, cfg)
+
+                    // A real breath between sentences — the model ends one
+                    // abruptly, and a distracted caregiver needs the beat.
+                    val isLast = index == sentences.size - 1
+                    val withPause = if (isLast) pcm else pcm + silence(SENTENCE_PAUSE_SECONDS)
+
+                    // Hand off to the play thread and go render the next sentence
+                    // immediately; the writes block over THERE, not here.
+                    playExecutor.execute { writeChunk(myGeneration, withPause) }
+                }
+
+                playExecutor.execute {
+                    closeTrack(myGeneration)
+                    completion(null)
+                }
             } catch (t: Throwable) {
                 completion(t)
             }
         }
     }
+
+    /// Split into sentences, KEEPING each terminator — the phonemizer needs it to
+    /// shape the pause and the intonation (a question without its `?` lands flat).
+    private fun splitSentences(text: String): List<String> {
+        val out = mutableListOf<String>()
+        val current = StringBuilder()
+        for (ch in text) {
+            current.append(ch)
+            if (ch == '.' || ch == '!' || ch == '?' || ch == '\n') {
+                val s = current.toString().trim()
+                if (s.isNotEmpty()) out.add(s)
+                current.clear()
+            }
+        }
+        val tail = current.toString().trim()
+        if (tail.isNotEmpty()) out.add(tail)
+        return out
+    }
+
+    private fun silence(seconds: Double): FloatArray =
+        FloatArray((SAMPLE_RATE_HZ * seconds).toInt())
 
     // MARK: Loading
 
@@ -460,15 +520,19 @@ class TTSEngine(private val appContext: Context) {
     /// 22 050 Hz mono 16-bit, matching the Piper Amy output rate.
     /// Chunked writes let `cancel()` preempt mid-utterance by tearing
     /// down the active track between chunks.
-    private fun play(myGeneration: Long, samples: FloatArray) {
-        if (samples.isEmpty()) return
-
-        val sampleRate = SAMPLE_RATE_HZ
+    /// Open a fresh AudioTrack for one utterance. Runs on the PLAY thread.
+    private fun openTrack(myGeneration: Long) {
+        if (myGeneration != generation) return
         val minBuffer = AudioTrack.getMinBufferSize(
-            sampleRate,
+            SAMPLE_RATE_HZ,
             AudioFormat.CHANNEL_OUT_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(CHUNK_FRAMES * Short.SIZE_BYTES)
+
+        // Roomier than the minimum: the buffer has to absorb a whole sentence's
+        // tail while the next one is still rendering, or the speaker runs dry
+        // between sentences and the voice stutters.
+        val bufferBytes = minBuffer * 4
 
         val track = AudioTrack.Builder()
             .setAudioAttributes(
@@ -479,24 +543,26 @@ class TTSEngine(private val appContext: Context) {
             )
             .setAudioFormat(
                 AudioFormat.Builder()
-                    .setSampleRate(sampleRate)
+                    .setSampleRate(SAMPLE_RATE_HZ)
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                     .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .build(),
             )
             .setTransferMode(AudioTrack.MODE_STREAM)
-            .setBufferSizeInBytes(minBuffer)
+            .setBufferSizeInBytes(bufferBytes)
             .build()
 
-        audioTrack?.let { existing ->
-            try {
-                existing.stop()
-                existing.release()
-            } catch (_: IllegalStateException) {
-                // already torn down
-            }
-        }
+        releaseTrack()
         audioTrack = track
+        track.play()
+    }
+
+    /// Write one rendered sentence. Runs on the PLAY thread, where blocking is
+    /// exactly what we want — it paces us to the speaker while the WORK thread
+    /// renders ahead.
+    private fun writeChunk(myGeneration: Long, samples: FloatArray) {
+        if (myGeneration != generation || samples.isEmpty()) return
+        val track = audioTrack ?: return
 
         val pcm16 = ShortArray(samples.size)
         for (i in samples.indices) {
@@ -504,36 +570,40 @@ class TTSEngine(private val appContext: Context) {
             pcm16[i] = (clamped * Short.MAX_VALUE.toFloat()).toInt().toShort()
         }
 
-        track.play()
         var offset = 0
         while (offset < pcm16.size) {
-            if (myGeneration != generation) {
-                // cancel() landed mid-playback; bail.
-                break
-            }
+            if (myGeneration != generation) return // cancel() landed mid-sentence
             val remaining = pcm16.size - offset
             val chunk = if (remaining < CHUNK_FRAMES) remaining else CHUNK_FRAMES
-            val written = track.write(
-                pcm16,
-                offset,
-                chunk,
-                AudioTrack.WRITE_BLOCKING,
-            )
-            if (written <= 0) break
+            val written = track.write(pcm16, offset, chunk, AudioTrack.WRITE_BLOCKING)
+            if (written <= 0) return
             offset += written
         }
-        // STREAM mode keeps draining after the last write returns;
-        // `stop()` schedules a graceful tail-flush. Skipped if cancel
-        // already tore the track down.
-        if (audioTrack === track) {
-            try {
-                track.stop()
-            } catch (e: IllegalStateException) {
-                Log.w(TAG, "play: AudioTrack stop after underrun", e)
-            }
-            track.release()
-            audioTrack = null
+    }
+
+    /// Drain and tear down after the last sentence. Runs on the PLAY thread.
+    private fun closeTrack(myGeneration: Long) {
+        if (myGeneration != generation) return
+        val track = audioTrack ?: return
+        // STREAM mode keeps draining after the last write returns; stop()
+        // schedules a graceful tail-flush so the final word is not clipped.
+        try {
+            track.stop()
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "closeTrack: AudioTrack stop after underrun", e)
         }
+        releaseTrack()
+    }
+
+    private fun releaseTrack() {
+        audioTrack?.let { existing ->
+            try {
+                existing.release()
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "releaseTrack: already torn down", e)
+            }
+        }
+        audioTrack = null
     }
 
     companion object {
@@ -541,6 +611,10 @@ class TTSEngine(private val appContext: Context) {
         // PCM at this rate directly — the float32 → int16 conversion
         // is the only host-side resampling we do.
         const val SAMPLE_RATE_HZ: Int = 22050
+
+        /// The gap between spoken sentences. Mirrors TTSEngine.sentencePauseSeconds
+        /// on iOS — the two platforms must breathe the same way.
+        const val SENTENCE_PAUSE_SECONDS: Double = 0.35
 
         // ~46 ms of audio per write; small enough that `cancel()`
         // preempts mid-utterance with a barely-perceptible tail.

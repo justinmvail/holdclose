@@ -252,13 +252,15 @@ void main() {
 /// bridge looked for the model in a hardcoded directory belonging to the OLD
 /// voice, so every utterance threw ModelMissing.
 class _BrokenTTS implements TTSProvider {
+  bool cancelled = false;
+
   @override
   Future<void> speak(String text,
           {required String voiceId, required double speed}) async =>
       throw Exception('ModelMissing: en_US-hfc_female-medium.onnx');
 
   @override
-  Future<void> cancel() async {}
+  Future<void> cancel() async => cancelled = true;
 
   @override
   Future<List<TTSVoice>> availableVoices() async => const <TTSVoice>[];
@@ -287,6 +289,24 @@ void _fallbackTests() {
 
       expect(bundled.spoken, <String>['Hello.']);
       expect(os.spoken, isEmpty, reason: 'no double-speaking');
+    });
+
+    test('the bundled voice is SILENCED before the OS fallback speaks',
+        () async {
+      // The "two voices at once" bug (2026-07-14): with chunked playback the
+      // bundled voice can throw AFTER a sentence or two are already in the
+      // speaker. If the fallback started reading the whole reply without first
+      // stopping the bundled tail, both voices would talk over each other.
+      final _BrokenTTS bundled = _BrokenTTS();
+      final _RecordingTTS os = _RecordingTTS();
+
+      await FallbackTTSProvider(bundled, os)
+          .speak('A long reply.', voiceId: '', speed: 1.0);
+
+      expect(bundled.cancelled, isTrue,
+          reason: 'the partially-playing bundled voice must be cancelled '
+              'BEFORE the OS voice starts, or they overlap');
+      expect(os.spoken, <String>['A long reply.']);
     });
   });
 }
