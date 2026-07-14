@@ -123,4 +123,29 @@ Pod::Spec.new do |s|
     'VALID_ARCHS' => 'arm64 arm64-simulator x86_64',
     'ENABLE_BITCODE' => 'NO',
   }
+
+  # The CONSUMER (Runner) also needs the include dir on its header search path.
+  # espeak's umbrella header does `#include <espeak-ng/speak_lib.h>` — a
+  # hyphenated path that does not exist inside the built framework (whose module
+  # is `espeak_ng` and whose headers are flattened). Without this, Runner's
+  # bridging header cannot resolve espeak at all, `CAREBLAZERS_HAS_ESPEAK_NG`
+  # silently becomes 0, every espeak call site compiles out, and the coach's
+  # voice degrades to spelling words letter by letter — which is precisely how
+  # it shipped on 2026-07-14.
+  s.user_target_xcconfig = {
+    'HEADER_SEARCH_PATHS' => '"${PODS_ROOT}/../Vendored/espeak-ng/src/include"',
+
+    # TTSBridge.swift gates its espeak call sites with
+    # `#if CAREBLAZERS_HAS_ESPEAK_NG`. That is a SWIFT compilation condition —
+    # and Swift does NOT see C preprocessor macros from the bridging header. The
+    # `#define CAREBLAZERS_HAS_ESPEAK_NG 1` there is invisible to it; an unknown
+    # Swift condition is simply FALSE.
+    #
+    # So every espeak call site in Swift was compiled out of EVERY build ever
+    # made, no matter what the bridging header said, and the phonemizer always
+    # fell back to spelling words letter by letter. The bridging header must
+    # still define the C macro (the #if guards in the Objective-C/C world rely
+    # on it); this is the Swift half of the same switch, and both have to be on.
+    'SWIFT_ACTIVE_COMPILATION_CONDITIONS' => '$(inherited) CAREBLAZERS_HAS_ESPEAK_NG',
+  }
 end
