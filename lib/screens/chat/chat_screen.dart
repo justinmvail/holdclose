@@ -88,6 +88,10 @@ class ChatScreen extends ConsumerStatefulWidget {
   static Key messageBubbleKey(String messageId) =>
       Key('chat-screen-bubble-$messageId');
 
+  /// Per-message replay ("read aloud again") button key.
+  static Key replayKey(String messageId) =>
+      Key('chat-screen-replay-$messageId');
+
   /// SnackBar copy shown after a long-press copies a bubble's text to the
   /// clipboard. Exposed so the widget test can assert it surfaced.
   static const String copiedSnackText = 'Copied';
@@ -468,6 +472,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
+  /// Read a coach message aloud on demand — the replay button on the bubble
+  /// (fb_1784071829881657). An explicit request, so it goes through
+  /// [voiceReplyTtsProvider] and ignores the "Read replies aloud" toggle (quiet
+  /// hours still mute). Cancels any current utterance first so a replay never
+  /// stacks on top of an in-progress read.
+  void _replay(Message m) {
+    final String text = speechText(ChatService.displayBody(m.body));
+    if (text.isEmpty) return;
+    final AppSettings settings = ref.read(settingsProvider);
+    final TTSProvider tts = ref.read(voiceReplyTtsProvider);
+    unawaited(tts.cancel());
+    _speaker = tts;
+    unawaited(
+      tts.speak(text, voiceId: settings.voiceId ?? '', speed: settings.speed),
+    );
+  }
+
   void _scrollToBottom() {
     // Defer until the next frame — the new bubble hasn't laid out
     // yet, so `maxScrollExtent` is still the pre-insert value.
@@ -478,6 +499,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
+      // A lazy list realises the last bubble — and its late-laid-out replay
+      // button — only as the scroll approaches it, so maxScrollExtent keeps
+      // GROWING after the animation target was captured. Without a re-pin,
+      // re-entering a thread lands ~24px short and the last reply's replay
+      // button sits below the fold. Re-pin over the next few frames until the
+      // extent stops moving; the jumps are no-ops once already at the bottom.
+      _repinToBottom(3);
+    });
+  }
+
+  void _repinToBottom(int framesLeft) {
+    if (framesLeft <= 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      final double max = _scroll.position.maxScrollExtent;
+      if (_scroll.position.pixels < max - 0.5) _scroll.jumpTo(max);
+      _repinToBottom(framesLeft - 1);
     });
   }
 
@@ -583,6 +621,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           // race) and on every non-final bubble.
                           onRetry:
                               (!_sending && isLast) ? _retryLast : null,
+                          onReplay: () => _replay(m),
                           onPendingDecision: (String citation,
                                   {required bool confirmed}) =>
                               _resolvePendingAction(
@@ -760,6 +799,7 @@ class _MessageRow extends StatelessWidget {
     required this.streamingBodyStream,
     required this.isStreaming,
     this.onRetry,
+    this.onReplay,
     this.onPendingDecision,
   });
 
@@ -771,6 +811,9 @@ class _MessageRow extends StatelessWidget {
   /// allowed (no stream in flight); the bubble itself decides whether to
   /// show the affordance based on [chatBodyHasError].
   final VoidCallback? onRetry;
+
+  /// Read this coach message aloud again (the bubble's replay button).
+  final VoidCallback? onReplay;
 
   /// Resolve a pending destructive-action confirm card on this message
   /// (confirmed = run it, false = keep things as they are).
@@ -808,6 +851,7 @@ class _MessageRow extends StatelessWidget {
         streamingBodyStream: streamingBodyStream,
         isStreaming: isStreaming,
         onRetry: onRetry,
+        onReplay: onReplay,
         onPendingDecision: onPendingDecision,
         textStyle: textTheme.bodyLarge?.copyWith(
           color: context.hc.primary,
@@ -898,6 +942,7 @@ class _AssistantBubble extends StatelessWidget {
     required this.isStreaming,
     required this.textStyle,
     this.onRetry,
+    this.onReplay,
     this.onPendingDecision,
   });
 
@@ -910,6 +955,9 @@ class _AssistantBubble extends StatelessWidget {
   /// row only when this is a finalised, errored bubble and a retry is
   /// currently allowed.
   final VoidCallback? onRetry;
+
+  /// Read this message aloud again (the small replay button under the body).
+  final VoidCallback? onReplay;
 
   /// Resolve a pending destructive-action confirm card (run / keep).
   final void Function(String citation, {required bool confirmed})?
@@ -973,6 +1021,36 @@ class _AssistantBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             body,
+            // Replay — read this message aloud again (fb_1784071829881657).
+            // Only on a finalised, non-error reply that actually has words to
+            // speak; a caregiver who missed it (or wants it repeated) taps once.
+            if (!isStreaming &&
+                onReplay != null &&
+                !chatBodyHasError(message.body) &&
+                speechText(shownBody).isNotEmpty) ...<Widget>[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Semantics(
+                  button: true,
+                  label: 'Read aloud again.',
+                  child: IconButton(
+                    key: ChatScreen.replayKey(message.id),
+                    onPressed: onReplay,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    color: context.hc.primary.withValues(alpha: 0.55),
+                    iconSize: 20,
+                    tooltip: 'Read aloud again',
+                    icon: const Icon(Icons.volume_up_outlined),
+                  ),
+                ),
+              ),
+            ],
             // Pending destructive actions (delete / cancel) the coach
             // proposed: each renders a confirm card and runs ONLY on an
             // explicit "Confirm" tap. Suppressed mid-stream (citations

@@ -118,6 +118,14 @@ Future<_RecordingTTS> _pumpAndSend(
               ? const NoopTTSProvider()
               : tts,
         ),
+        // The mic/replay path — records into the SAME spy, so a replay tap is
+        // observable regardless of the "Read replies aloud" toggle.
+        voiceReplyTtsProvider.overrideWith(
+          (Ref ref) =>
+              shouldMuteVoiceReply(ref.watch(ttsSettingsProvider), _fixedNow())
+                  ? const NoopTTSProvider()
+                  : tts,
+        ),
       ],
       child: MaterialApp.router(
         theme: ThemeData(scaffoldBackgroundColor: holdcloseColors.background),
@@ -195,6 +203,34 @@ void main() {
       expect(tts.cancels, greaterThan(0),
           reason: 'a reply that keeps talking after you navigate away is the '
               'app shouting from another room, with no way to silence it');
+    });
+  });
+
+  group('the replay button re-reads a message on demand', () {
+    testWidgets('tapping replay speaks the message — even with the toggle off',
+        (WidgetTester tester) async {
+      // fb_1784071829881657: a caregiver who missed the reply wants to hear it
+      // again. Toggle OFF so the auto-read stays silent and the ONLY utterance
+      // is the deliberate replay tap.
+      final _RecordingTTS tts = await _pumpAndSend(
+        tester,
+        reply: 'Try dimming the lights an hour before dusk.',
+        readAloud: false,
+      );
+      expect(tts.spoken, isEmpty, reason: 'no auto-read with the toggle off');
+
+      final Finder replay = find.byWidgetPredicate((Widget w) =>
+          w is IconButton &&
+          w.icon is Icon &&
+          (w.icon as Icon).icon == Icons.volume_up_outlined);
+      expect(replay, findsOneWidget, reason: 'the finalised reply offers replay');
+
+      await tester.tap(replay);
+      await tester.pumpAndSettle();
+
+      expect(tts.spoken,
+          <String>['Try dimming the lights an hour before dusk.'],
+          reason: 'replay reads the message aloud regardless of the toggle');
     });
   });
 
