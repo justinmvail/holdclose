@@ -21,16 +21,21 @@
     <!-- Dose + appointment reminders (flutter_local_notifications, Phase
          12.8). Without these the scheduled alarms NEVER fire on Android:
          the plugin needs POST_NOTIFICATIONS to display on API 33+, an
-         exact-alarm permission because we schedule with
-         AndroidScheduleMode.exactAllowWhileIdle, and RECEIVE_BOOT_COMPLETED
-         so the boot receiver below re-arms pending reminders after a
-         reboot (Android drops all alarms on power-cycle otherwise).
-         We use USE_EXACT_ALARM (no runtime prompt) because the app targets
-         API 33+ and reminders are the app's core value; SCHEDULE_EXACT_ALARM
-         is kept as the fallback permission the plugin can request at runtime
-         on OEMs/policy configs that gate USE_EXACT_ALARM. -->
+         exact-alarm permission to schedule reminders on time, and
+         RECEIVE_BOOT_COMPLETED so the boot receiver below re-arms pending
+         reminders after a reboot (Android drops all alarms on power-cycle).
+
+         We declare only SCHEDULE_EXACT_ALARM, NOT USE_EXACT_ALARM. Play
+         policy restricts USE_EXACT_ALARM (the auto-granted, no-prompt one)
+         to alarm-clock and calendar apps; Holdclose is a caregiving app, so
+         it's ineligible and Play rejects it across all tracks. A reminder
+         app IS allowed to use SCHEDULE_EXACT_ALARM — but on Android 14+ it
+         is not auto-granted, so exact scheduling can be disallowed at
+         runtime. LocalNotificationsProvider handles that by querying
+         canScheduleExactNotifications() and falling back to an INEXACT
+         (Doze-batched, but still firing) alarm when exact isn't permitted,
+         so a reminder is never silently dropped. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Backups are OFF (2026-06-11): the app-data dir holds the loved

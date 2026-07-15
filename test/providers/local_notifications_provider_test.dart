@@ -20,6 +20,7 @@ class _FakePlugin implements FlutterLocalNotificationsPlugin {
   final List<int> scheduled = <int>[];
   final List<int> cancelled = <int>[];
   bool cancelAllCalled = false;
+  AndroidScheduleMode? lastScheduleMode;
 
   @override
   Future<bool?> initialize(
@@ -48,6 +49,7 @@ class _FakePlugin implements FlutterLocalNotificationsPlugin {
         message: 'TypeToken must be created with a type argument',
       );
     }
+    lastScheduleMode = androidScheduleMode;
     scheduled.add(id);
   }
 
@@ -75,8 +77,12 @@ class _FakePlugin implements FlutterLocalNotificationsPlugin {
     return <PendingNotificationRequest>[];
   }
 
+  // Only unstubbed call left is resolvePlatformSpecificImplementation (the
+  // default schedule path uses it to decide exact-vs-inexact). Its return is
+  // nullable, and a headless test has no platform impl, so null is correct —
+  // the provider then treats it as "not Android", where the mode is moot.
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => null;
 }
 
 ScheduledNotification _notification({int id = 1}) => ScheduledNotification(
@@ -97,10 +103,14 @@ void main() {
     tz.setLocalLocation(tz.getLocation('UTC'));
   });
 
-  LocalNotificationsProvider build(_FakePlugin plugin) =>
+  LocalNotificationsProvider build(
+    _FakePlugin plugin, {
+    Future<bool> Function()? canScheduleExactAlarms,
+  }) =>
       LocalNotificationsProvider(
         plugin: plugin,
         initializeTimezones: (_) {},
+        canScheduleExactAlarms: canScheduleExactAlarms,
       );
 
   test('schedule forwards to the plugin on the happy path', () async {
@@ -112,6 +122,37 @@ void main() {
 
     expect(plugin.scheduled, <int>[42]);
   });
+
+  test('schedules an EXACT alarm when the OS permits it', () async {
+    final _FakePlugin plugin = _FakePlugin();
+    final LocalNotificationsProvider provider =
+        build(plugin, canScheduleExactAlarms: () async => true);
+    addTearDown(provider.dispose);
+
+    await provider.schedule(_notification());
+
+    expect(plugin.lastScheduleMode, AndroidScheduleMode.exactAllowWhileIdle);
+  });
+
+  test(
+    'falls back to an INEXACT alarm when exact is not permitted '
+    '(Android 14+ without SCHEDULE_EXACT_ALARM) so the reminder still fires',
+    () async {
+      final _FakePlugin plugin = _FakePlugin();
+      final LocalNotificationsProvider provider =
+          build(plugin, canScheduleExactAlarms: () async => false);
+      addTearDown(provider.dispose);
+
+      await provider.schedule(_notification());
+
+      // The reminder is still scheduled — just Doze-batched, never dropped.
+      expect(plugin.scheduled, isNotEmpty);
+      expect(
+        plugin.lastScheduleMode,
+        AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    },
+  );
 
   test('a scheduling failure is surfaced on scheduleFailures, not swallowed',
       () async {

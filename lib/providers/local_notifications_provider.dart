@@ -23,11 +23,18 @@ class LocalNotificationsProvider implements NotificationsProvider {
   LocalNotificationsProvider({
     FlutterLocalNotificationsPlugin? plugin,
     void Function(String tzName)? initializeTimezones,
+    Future<bool> Function()? canScheduleExactAlarms,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
-        _initTimezones = initializeTimezones ?? _defaultInitTimezones;
+        _initTimezones = initializeTimezones ?? _defaultInitTimezones,
+        _canScheduleExactAlarmsOverride = canScheduleExactAlarms;
 
   final FlutterLocalNotificationsPlugin _plugin;
   final void Function(String) _initTimezones;
+
+  /// Test seam for "may this build schedule an exact alarm?" — production
+  /// leaves it null and the answer is resolved from the Android plugin
+  /// ([_canScheduleExact]).
+  final Future<bool> Function()? _canScheduleExactAlarmsOverride;
   bool _initialized = false;
   final StreamController<String> _taps = StreamController<String>.broadcast();
 
@@ -156,7 +163,7 @@ class LocalNotificationsProvider implements NotificationsProvider {
         scheduledTz,
         details,
         payload: notification.deepLink,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        androidScheduleMode: await _resolveScheduleMode(),
         // The 17.x plugin still requires this parameter even though
         // `zonedSchedule` always uses TZ-aware interpretation on
         // modern iOS — the named arg is mandatory by signature.
@@ -171,6 +178,38 @@ class LocalNotificationsProvider implements NotificationsProvider {
         notificationId: notification.id,
       );
     }
+  }
+
+  /// Pick the Android alarm scheduling mode.
+  ///
+  /// We prefer EXACT timing for dose + appointment reminders — a medication
+  /// window is only useful if it fires on time. But the app is not an alarm-
+  /// clock or calendar app, so it may NOT declare `USE_EXACT_ALARM` (Play
+  /// policy restricts that to those two categories). It keeps
+  /// `SCHEDULE_EXACT_ALARM`, which a reminder app is allowed to use — but on
+  /// Android 14+ that is NOT auto-granted, so exact scheduling can be
+  /// disallowed at runtime. When it is, scheduling an exact alarm throws and
+  /// the reminder would silently never fire. So: use exact when the OS
+  /// permits it, and fall back to INEXACT (still fires, just Doze-batched)
+  /// otherwise. On iOS/macOS the mode is ignored by the OS layer.
+  Future<AndroidScheduleMode> _resolveScheduleMode() async {
+    final bool canExact = await _canScheduleExact();
+    return canExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+  }
+
+  Future<bool> _canScheduleExact() async {
+    final Future<bool> Function()? override = _canScheduleExactAlarmsOverride;
+    if (override != null) return override();
+    final AndroidFlutterLocalNotificationsPlugin? android = _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    // Not Android (iOS/macOS): the schedule mode is ignored there, so the
+    // answer is moot — report true so we pass the "exact" mode the plugin
+    // signature wants.
+    if (android == null) return true;
+    return await android.canScheduleExactNotifications() ?? false;
   }
 
   /// Log a swallowed platform failure loudly (with stack) and emit it on
