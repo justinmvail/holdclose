@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../models/settings.dart';
 import '../providers/community_feed_provider.dart';
 import '../providers/community_subnav_provider.dart';
+import '../providers/pending_spoken_reply_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/tts_provider.dart';
 import '../providers/voice_capture_provider.dart';
@@ -428,9 +429,17 @@ class _CenterVoiceButtonState extends ConsumerState<_CenterVoiceButton> {
         await Future<void>.delayed(const Duration(milliseconds: 2600));
         _reset();
       case VoiceIntentChat(:final String conversationId, :final String spokenReply):
-        // It's a conversation — open the thread (answer already in it) and
-        // read that same answer aloud.
-        _speak(spokenReply);
+        // It's a conversation — open the thread (answer already in it). Hand the
+        // reply to the DESTINATION screen to read aloud, rather than speaking it
+        // here and navigating: the mic's engine and the chat's share one native
+        // synthesizer, so navigating (which disposes the screen we came from, and
+        // that dispose cancels the shared engine) would cut our own playback off
+        // mid-sentence (fb_1784071911425993). One owner, no cutoff.
+        if (spokenReply.trim().isNotEmpty) {
+          ref
+              .read(pendingSpokenReplyProvider.notifier)
+              .set(conversationId, spokenReply);
+        }
         _reset();
         if (mounted) context.go('/chat/$conversationId');
     }

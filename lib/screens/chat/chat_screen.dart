@@ -9,6 +9,7 @@ import '../../models/chat.dart';
 import '../../models/settings.dart';
 import '../../providers/link_launcher_provider.dart';
 import '../../providers/pending_chat_message_provider.dart';
+import '../../providers/pending_spoken_reply_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/tts_provider.dart';
 import '../../providers/voice_capture_provider.dart';
@@ -274,6 +275,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
     _scrollToBottom();
     _consumePendingMessage();
+    _consumePendingSpokenReply();
+  }
+
+  /// Read aloud a reply the hands-free mic parked for THIS thread. The mic
+  /// navigates here instead of speaking itself, so that a single screen owns the
+  /// utterance and navigation can't cut it off (fb_1784071911425993). Uses
+  /// [voiceReplyTtsProvider] — the caregiver spoke, so this ignores the "Read
+  /// replies aloud" toggle (quiet hours still mute). One-shot: `take` clears it,
+  /// so a rebuild never re-speaks.
+  void _consumePendingSpokenReply() {
+    final String? reply = ref
+        .read(pendingSpokenReplyProvider.notifier)
+        .take(widget.conversationId);
+    if (reply == null) return;
+    final String text = speechText(ChatService.displayBody(reply));
+    if (text.isEmpty) return;
+    final AppSettings settings = ref.read(settingsProvider);
+    final TTSProvider tts = ref.read(voiceReplyTtsProvider);
+    _speaker = tts;
+    unawaited(
+      tts.speak(text, voiceId: settings.voiceId ?? '', speed: settings.speed),
+    );
   }
 
   /// Auto-send a message parked for THIS conversation by the bottom-bar
