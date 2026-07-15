@@ -155,6 +155,28 @@ void main() {
   const String needs = 'needs FORUM_API_URL + LIVE_JWT';
 
   group('medications', () {
+
+    // fb_1784065457170237 ("Medication added but windows not applied"): a med
+    // that mentions WHEN it's taken must land with dose-window entries, whether
+    // the caregiver names the windows or uses natural frequency phrasing. Each
+    // phrase implies at least one dose time, so it must produce >= 1 entry.
+    for (final ({String phrase, int minEntries}) c in <({String phrase, int minEntries})>[
+      (phrase: 'Add omeprazole 50 mg twice daily', minEntries: 2),
+      (phrase: 'Add omeprazole 50 mg at bedtime', minEntries: 1),
+      (phrase: 'Add omeprazole 50 mg once a day in the morning', minEntries: 1),
+      (phrase: 'Add omeprazole 50 mg, one in the morning and one at night',
+          minEntries: 2),
+    ]) {
+      test('windows applied for: "${c.phrase}"', () async {
+        final List<String> markers = await say(c.phrase);
+        final List<Medication> list = await meds.listMedications();
+        expect(list, isNotEmpty, reason: 'model wrote: $markers');
+        final int entries =
+            (await meds.entriesForMedication(list.first.id)).length;
+        expect(entries, greaterThanOrEqualTo(c.minEntries),
+            reason: 'a timed medication must be scheduled — model wrote: $markers');
+      }, skip: skip ? needs : false);
+    }
     test('add_medication', () async {
       final List<String> markers =
           await say('Add ibuprofen 400 mg, morning and evening.');
