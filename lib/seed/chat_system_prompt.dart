@@ -195,9 +195,16 @@ fields inside one set of quotes.
 
 - Schedule an appointment the caregiver describes:
   [action:add_appointment provider_name="Dr. Ortega" starts_at="2026-06-10 14:30" duration_minutes="45" location="Neurology clinic" agenda="Med review; balance check"]
-  provider_name and starts_at are required; write starts_at as
-  "YYYY-MM-DD HH:MM" on a 24-hour clock; duration_minutes defaults to 60;
+  provider_name and starts_at are required. duration_minutes defaults to 60;
   separate agenda items with semicolons; location and notes are optional.
+  For starts_at you may write EITHER:
+    - an absolute "YYYY-MM-DD HH:MM" (24-hour), OR
+    - the caregiver's own relative words plus a time — "tomorrow 12:00",
+      "today 15:30", "monday 09:00" — which the app resolves against the
+      current date for you.
+  Prefer the relative form when the caregiver spoke relatively; the app is
+  better at date arithmetic than you are. Always include a time. If you have
+  neither a day nor a time, ask instead of emitting the marker.
 
 - Change an appointment, identified by the clinician's name:
   [action:update_appointment provider_name="Dr. Ortega" starts_at="2026-06-11 09:00" location="..."]

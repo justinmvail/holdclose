@@ -768,7 +768,7 @@ class ChatService {
       if (errored) return;
 
       final String rawBody = buffer.toString();
-      final _ActionPass actionPass = await _executeActions(rawBody);
+      final _ActionPass actionPass = await _executeActions(rawBody, userText: userText);
       String cleanBody = stripActionMarkers(rawBody);
       // An instant executor threw — the prose likely claimed success, so
       // append an honest line rather than let the reply lie about the save.
@@ -912,7 +912,7 @@ class ChatService {
     // complete hands-free.
     final bool hasMutating = knownNames.any(_isMutatingAction);
     if (knownNames.isNotEmpty && !hasMutating) {
-      await _executeActions(rawBody);
+      await _executeActions(rawBody, userText: transcript);
       final String confirmation = stripActionMarkers(rawBody);
       return VoiceIntentAction(
         summary: confirmation.isNotEmpty ? confirmation : 'Done.',
@@ -959,7 +959,7 @@ class ChatService {
     // A conversation reply rarely carries an action, but run any INSTANT
     // (navigation) one it does; every mutating tag surfaces here as a
     // pending confirm card in the thread rather than committing hands-free.
-    final _ActionPass actionPass = await _executeActions(rawBody);
+    final _ActionPass actionPass = await _executeActions(rawBody, userText: transcript);
     String body = stripActionMarkers(rawBody);
     final String? trailer = actionPass.failureTrailer;
     if (trailer != null) {
@@ -1159,7 +1159,36 @@ class ChatService {
   /// twice must not double-write). A throwing instant executor no longer
   /// vanishes silently — it flips [_ActionPass.hadFailure] so the caller can
   /// tell the caregiver the save failed instead of letting the prose lie.
-  Future<_ActionPass> _executeActions(String body) async {
+  /// Repair a mangled `starts_at` on an appointment marker before it is parked.
+  ///
+  /// The 70b model reliably identifies WHEN a caregiver wants a visit but botches
+  /// the date string it writes ("2026-0712:00", day dropped). The caregiver's own
+  /// words carry the real intent, so: if the marker's date won't resolve but their
+  /// message does ("tomorrow at noon"), rewrite starts_at to the resolved absolute
+  /// date. Only touches appointment markers; leaves a good date alone.
+  String _repairAppointmentDate(String name, String raw, String? userText) {
+    if (name != 'add_appointment' && name != 'update_appointment') return raw;
+    final Map<String, String> args =
+        _parseActionArgs(_actionPattern.firstMatch(raw)!.group(2)!);
+    // Already resolvable? Leave it.
+    if (resolveDateTimeIso(args['starts_at'], clock) != null) return raw;
+    // Fall back to the caregiver's message.
+    final String? fixed = resolveDateTimeIso(userText, clock);
+    if (fixed == null) return raw; // nothing better to offer
+    final String current = args['starts_at'] ?? '';
+    if (current.isEmpty) {
+      // Insert a starts_at right after the action name.
+      return raw.replaceFirst(
+          RegExp(r'\[action:(add|update)_appointment'),
+          '[action:$name starts_at="$fixed"');
+    }
+    // Replace the existing (bad) value.
+    return raw.replaceFirst(
+        RegExp('starts_at\\s*=\\s*"?${RegExp.escape(current)}"?'),
+        'starts_at="$fixed"');
+  }
+
+  Future<_ActionPass> _executeActions(String body, {String? userText}) async {
     final List<_ActionResult> results = <_ActionResult>[];
     final List<String> pendingMarkers = <String>[];
     final Set<String> seenMarkers = <String>{};
@@ -1173,7 +1202,11 @@ class ChatService {
       final ChatActionExecutor? executor = actions[name];
       if (executor == null) continue; // unknown / unwired tool — skip
       if (_isMutatingAction(name)) {
-        pendingMarkers.add(raw);
+        // The model mangles appointment dates it has to compute ("2026-0712:00").
+        // A mutating action PARKS as a citation and runs on confirm, where the
+        // caregiver's message is long gone — so repair the date NOW, from their
+        // own words ("tomorrow at noon"), before the marker is stored.
+        pendingMarkers.add(_repairAppointmentDate(name, raw, userText));
         continue;
       }
       final Map<String, String> args = _parseActionArgs(m.group(2)!);

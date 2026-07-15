@@ -429,6 +429,61 @@ void main() {
     });
   });
 
+  group('add_appointment — relative dates (resolved in Dart)', () {
+    // _fixedClock is Thursday 2026-06-04 09:00. The 70b model mangles absolute
+    // dates it has to compute ("2026-0712:00"), so it passes relative WORDS and
+    // the app does the arithmetic deterministically (2026-07-14).
+    Future<Appointment> schedule(String startsAt) async {
+      await actions['add_appointment']!(<String, String>{
+        'provider_name': 'Dr. Ortega',
+        'starts_at': startsAt,
+      });
+      final List<Appointment> appts = await apptRepo.listAppointments();
+      return appts.last;
+    }
+
+    test('"tomorrow 12:00" → the next day at noon', () async {
+      expect((await schedule('tomorrow 12:00')).startsAt,
+          DateTime(2026, 6, 5, 12, 0));
+    });
+
+    test('"tomorrow at noon" → noon keyword', () async {
+      expect((await schedule('tomorrow at noon')).startsAt,
+          DateTime(2026, 6, 5, 12, 0));
+    });
+
+    test('"today 3:30 pm" → same day, 12-hour meridiem', () async {
+      expect((await schedule('today 3:30 pm')).startsAt,
+          DateTime(2026, 6, 4, 15, 30));
+    });
+
+    test('"day after tomorrow 9am"', () async {
+      expect((await schedule('day after tomorrow 9am')).startsAt,
+          DateTime(2026, 6, 6, 9, 0));
+    });
+
+    test('a weekday name rolls forward to its NEXT occurrence', () async {
+      // Thursday 06-04 → "monday" is 06-08.
+      expect((await schedule('monday 09:00')).startsAt,
+          DateTime(2026, 6, 8, 9, 0));
+    });
+
+    test('an absolute ISO date still works', () async {
+      expect((await schedule('2026-08-03 14:30')).startsAt,
+          DateTime(2026, 8, 3, 14, 30));
+    });
+
+    test('a relative day with NO time does not guess — visit is refused',
+        () async {
+      final ChatActionOutcome? out =
+          await actions['add_appointment']!(<String, String>{
+        'provider_name': 'Dr. Ortega',
+        'starts_at': 'sometime tomorrow',
+      });
+      expect(out?.performed, isFalse);
+    });
+  });
+
   group('add_appointment', () {
     test('schedules a visit, creating the named clinician when new',
         () async {

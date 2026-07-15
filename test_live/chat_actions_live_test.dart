@@ -221,6 +221,22 @@ void main() {
       expect(list, hasLength(1), reason: 'model wrote: $markers');
     }, skip: skip ? needs : false);
 
+    test('add_appointment with a RELATIVE date ("tomorrow at noon")', () async {
+      // The 2026-07-14 regression: the model mangles a computed date
+      // ("2026-0712:00"), so ChatService re-resolves it from the caregiver's own
+      // words before parking the confirm card. _clock = 2026-07-13 → "tomorrow"
+      // is 07-14. Whatever the model writes, the appointment must land on 07-14.
+      final List<String> markers =
+          await say('Add an appointment tomorrow at noon for Dr. Ortega.');
+
+      final List<Appointment> list = await appts.listAppointments();
+      expect(list, hasLength(1),
+          reason: 'a relative date must still schedule — model wrote: $markers');
+      expect(list.single.startsAt.day, 14,
+          reason: '"tomorrow" from 07-13 is 07-14 — model wrote: $markers');
+      expect(list.single.startsAt.hour, 12, reason: 'model wrote: $markers');
+    }, skip: skip ? needs : false);
+
     test('cancel_appointment', () async {
       await providers.upsertProvider(const appt.Provider(
         id: 'p-ortega',

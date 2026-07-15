@@ -42,6 +42,7 @@ const int _maxHealthLog = 25;
 /// function the unit tests can exercise with seeded data and no DB.
 class ChatContextData {
   const ChatContextData({
+    this.now,
     this.patient,
     this.medications = const <Medication>[],
     this.windows = const <DoseWindow>[],
@@ -51,6 +52,13 @@ class ChatContextData {
     this.openTasks = const <String>[],
     this.recentHealthNotes = const <String>[],
   });
+
+  /// The current local date+time, so the coach can resolve RELATIVE dates
+  /// ("tomorrow at noon", "next Monday") into the concrete `YYYY-MM-DD HH:MM`
+  /// its scheduling actions require. Without it the model had no anchor: asked
+  /// to "add an appointment tomorrow at noon" it narrated "Confirm below" but
+  /// emitted NO action marker, so nothing was ever scheduled (2026-07-14).
+  final DateTime? now;
 
   /// The active loved one, or null when none is on file yet.
   final Patient? patient;
@@ -110,9 +118,12 @@ class ChatContextAppointment {
 /// the whole thing collapses to an empty [ChatContextData] on a wider
 /// failure. Fetched fresh per turn by the chat service so the snapshot
 /// reflects a med the coach just added.
-Future<ChatContextData> gatherChatContext(Ref ref) async {
+Future<ChatContextData> gatherChatContext(
+  Ref ref, {
+  DateTime Function()? clock,
+}) async {
   try {
-    return await _gatherChatContext(ref);
+    return await _gatherChatContext(ref, clock ?? DateTime.now);
   } catch (_) {
     // A wider failure (e.g. a provider that can't even be created in this
     // build) collapses the whole snapshot to empty rather than failing the
@@ -121,7 +132,9 @@ Future<ChatContextData> gatherChatContext(Ref ref) async {
   }
 }
 
-Future<ChatContextData> _gatherChatContext(Ref ref) async {
+Future<ChatContextData> _gatherChatContext(
+    Ref ref, DateTime Function() clock) async {
+  final DateTime now = clock();
   Patient? patient;
   try {
     patient = await ref.read(storageProvider).getPatient();
@@ -214,6 +227,7 @@ Future<ChatContextData> _gatherChatContext(Ref ref) async {
   }
 
   return ChatContextData(
+    now: now,
     patient: patient,
     medications: meds,
     windows: windows,
@@ -255,6 +269,24 @@ String formatChatContext(ChatContextData data) {
   final StringBuffer sb = StringBuffer();
   sb.writeln('CURRENT DATA (read-only — the loved one and care details '
       'on file right now; use this to answer questions about them):');
+
+  // The current date+time, so relative phrases in scheduling requests
+  // ("tomorrow at noon", "next Monday") can be resolved to the concrete
+  // date the appointment/reminder actions require.
+  final DateTime? now = data.now;
+  if (now != null) {
+    final DateTime tomorrow = now.add(const Duration(days: 1));
+    // Pre-compute the concrete dates instead of asking the model to do date
+    // arithmetic — llama-3.3-70b gets "tomorrow" → YYYY-MM-DD wrong about half
+    // the time (it dropped the day, writing "2026-0712:00"). Handing it the
+    // resolved dates to COPY removes the arithmetic that was failing.
+    sb.writeln('Right now it is ${_weekday(now)}, ${_isoDate(now)}, '
+        '${_formatTimeOfDay(TimeOfDay(hour: now.hour, minute: now.minute))}. '
+        'Today = ${_isoDate(now)}. Tomorrow = ${_isoDate(tomorrow)} '
+        '(${_weekday(tomorrow)}). Resolve any date the caregiver says against '
+        'these and write it as EXACTLY YYYY-MM-DD with a two-digit day, on a '
+        '24-hour clock.');
+  }
 
   final Patient? p = data.patient;
   if (p != null) {
@@ -383,6 +415,20 @@ String _describeHealthEntry(HealthLogEntry e) {
   if (note.isNotEmpty) parts.add(note);
   final String body = parts.isEmpty ? '(no details)' : parts.join(', ');
   return '${_formatDate(e.recordedAt)} ${e.kind.name} — $body';
+}
+
+/// "2026-07-14" — the format the scheduling actions require.
+String _isoDate(DateTime dt) =>
+    '${dt.year.toString().padLeft(4, '0')}-'
+    '${dt.month.toString().padLeft(2, '0')}-'
+    '${dt.day.toString().padLeft(2, '0')}';
+
+/// "Tuesday" — full weekday name (DateTime.weekday is 1=Mon..7=Sun).
+String _weekday(DateTime dt) {
+  const List<String> days = <String>[
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ];
+  return days[(dt.weekday - 1).clamp(0, 6)];
 }
 
 /// "Jun 20" — compact month + day for a health-log entry's date.

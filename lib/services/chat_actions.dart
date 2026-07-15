@@ -122,7 +122,7 @@ Map<String, ChatActionExecutor> buildChatActions(
     'add_appointment': (Map<String, String> args) =>
         _addAppointment(ref, clock, args),
     'update_appointment': (Map<String, String> args) =>
-        _updateAppointment(ref, args),
+        _updateAppointment(ref, clock, args),
     'cancel_appointment': (Map<String, String> args) =>
         _cancelAppointment(ref, args),
     'add_task': (Map<String, String> args) => _addTask(ref, clock, args),
@@ -558,12 +558,93 @@ Future<ChatActionOutcome?> _deleteMedication(
 /// Parse a `YYYY-MM-DD HH:MM` (or ISO-8601) string into a local
 /// [DateTime]. Tolerates the space separator the prompt uses. Null when
 /// it can't be parsed — the caller treats that as "not enough to act".
-DateTime? _parseDateTime(String? raw) {
+/// Resolve [raw] to an absolute `YYYY-MM-DDTHH:MM` string, or null.
+///
+/// Public so [ChatService] can repair an appointment marker whose date the
+/// model mangled ("2026-0712:00") by re-resolving from the CAREGIVER'S OWN
+/// WORDS ("tomorrow at noon") — which is where the real intent lives, and which
+/// this parser reads reliably.
+String? resolveDateTimeIso(String? raw, DateTime Function() clock) {
+  final DateTime? dt = _parseDateTime(raw, clock);
+  if (dt == null) return null;
+  // "2026-07-14T12:00" — minute precision, no seconds/zone.
+  return '${dt.year.toString().padLeft(4, '0')}-'
+      '${dt.month.toString().padLeft(2, '0')}-'
+      '${dt.day.toString().padLeft(2, '0')}T'
+      '${dt.hour.toString().padLeft(2, '0')}:'
+      '${dt.minute.toString().padLeft(2, '0')}';
+}
+
+/// Parse a date-time the coach emitted, resolving RELATIVE forms against
+/// [clock].
+///
+/// The deployed 70b model is reliable at ABSOLUTE dates ("2026-08-03 2:30 pm")
+/// but mangles a date it has to COMPUTE — asked for "tomorrow at noon" it wrote
+/// `starts_at="2026-0712:00"`, dropping the day, about half the time (2026-07-14).
+/// So we let it pass the relative WORDS through ("tomorrow 12:00", "monday 9:00")
+/// and do the arithmetic here, deterministically. Absolute ISO still works.
+DateTime? _parseDateTime(String? raw, [DateTime Function()? clock]) {
   final String s = (raw ?? '').trim();
   if (s.isEmpty) return null;
-  return DateTime.tryParse(s.contains(' ') && !s.contains('T')
-      ? s.replaceFirst(' ', 'T')
-      : s);
+
+  // Absolute ISO first — "2026-08-03 14:30" / "2026-08-03T14:30".
+  final DateTime? iso = DateTime.tryParse(
+      s.contains(' ') && !s.contains('T') ? s.replaceFirst(' ', 'T') : s);
+  if (iso != null) return iso;
+
+  // Relative — resolve the day word + a time against the clock.
+  final DateTime now = (clock ?? DateTime.now)();
+  final String lower = s.toLowerCase();
+
+  final ({int hour, int minute})? time = _parseClockTime(lower);
+  if (time == null) return null; // no usable time → don't guess
+
+  DateTime? day;
+  if (lower.contains('day after tomorrow')) {
+    day = now.add(const Duration(days: 2));
+  } else if (lower.contains('tomorrow')) {
+    day = now.add(const Duration(days: 1));
+  } else if (lower.contains('today') || lower.contains('tonight')) {
+    day = now;
+  } else {
+    const List<String> names = <String>[
+      'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+      'saturday', 'sunday',
+    ];
+    for (int i = 0; i < names.length; i++) {
+      if (lower.contains(names[i])) {
+        // The NEXT occurrence of that weekday (today if it matches and the time
+        // hasn't passed is close enough — caregivers rarely mean "today" when
+        // they name a weekday, so roll forward at least one day).
+        int delta = (i + 1 - now.weekday) % 7;
+        if (delta <= 0) delta += 7;
+        day = now.add(Duration(days: delta));
+        break;
+      }
+    }
+  }
+  if (day == null) return null;
+  return DateTime(day.year, day.month, day.day, time.hour, time.minute);
+}
+
+/// Pull a clock time out of [lower] (already lowercased): "noon", "midnight",
+/// "14:30", "2:30 pm", "9am". Returns null when there's no time to be found.
+({int hour, int minute})? _parseClockTime(String lower) {
+  if (lower.contains('noon')) return (hour: 12, minute: 0);
+  if (lower.contains('midnight')) return (hour: 0, minute: 0);
+
+  // "2:30 pm", "9 am", "14:30", "9".
+  final RegExpMatch? m = RegExp(
+    r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)?',
+  ).firstMatch(lower);
+  if (m == null) return null;
+  int hour = int.parse(m.group(1)!);
+  final int minute = int.tryParse(m.group(2) ?? '') ?? 0;
+  final String? mer = m.group(3);
+  if (mer == 'pm' && hour < 12) hour += 12;
+  if (mer == 'am' && hour == 12) hour = 0;
+  if (hour > 23 || minute > 59) return null;
+  return (hour: hour, minute: minute);
 }
 
 void _refreshAppointments(Ref ref) {
@@ -636,7 +717,7 @@ Future<ChatActionOutcome?> _addAppointment(
   Map<String, String> args,
 ) async {
   final String? providerName = _clean(args['provider_name']);
-  final DateTime? startsAt = _parseDateTime(args['starts_at']);
+  final DateTime? startsAt = _parseDateTime(args['starts_at'], clock);
   // A visit needs who and when; without them there's nothing to schedule.
   if (providerName == null) {
     return const ChatActionOutcome.failed(
@@ -664,6 +745,7 @@ Future<ChatActionOutcome?> _addAppointment(
 
 Future<ChatActionOutcome?> _updateAppointment(
   Ref ref,
+  DateTime Function() clock,
   Map<String, String> args,
 ) async {
   final Appointment? target =
@@ -673,7 +755,7 @@ Future<ChatActionOutcome?> _updateAppointment(
         "I couldn't find that appointment, so I didn't change anything.");
   }
   final Appointment updated = target.copyWith(
-    startsAt: _parseDateTime(args['starts_at']) ?? target.startsAt,
+    startsAt: _parseDateTime(args['starts_at'], clock) ?? target.startsAt,
     durationMinutes:
         int.tryParse(args['duration_minutes'] ?? '') ?? target.durationMinutes,
     location: _clean(args['location']) ?? target.location,
@@ -742,7 +824,7 @@ Future<ChatActionOutcome?> _addTask(
     title: title,
     patientId: patientId,
     body: _clean(args['body']),
-    dueAt: _parseDateTime(args['due_at']),
+    dueAt: _parseDateTime(args['due_at'], clock),
   );
   await ref.read(careTasksProvider.notifier).addTask(task);
   return const ChatActionOutcome();
