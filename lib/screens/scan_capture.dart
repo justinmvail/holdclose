@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/photo_attacher_provider.dart';
 import '../theme.dart';
+import '../services/log_buffer.dart';
 
 /// Generic scan capture shared by the AI document-scan features
 /// (prescriptions, appointment cards, …): offer camera vs. library,
@@ -60,7 +61,8 @@ Future<T?> captureScanDraft<T>(
   T? result;
   try {
     result = await extract(path);
-  } catch (_) {
+  } catch (e) {
+    logNonFatal('scan.generic', e);
     result = null;
   }
 

@@ -38,6 +38,7 @@ import 'forum_api_client.dart';
 import 'medication_repository.dart';
 import 'provider_repository.dart';
 import 'sync_sink.dart';
+import 'log_buffer.dart';
 
 part 'sync_service.g.dart';
 
@@ -374,8 +375,9 @@ class SyncController {
           ),
           docs: const <SyncDocWrite>[],
         );
-      } catch (_) {
+      } catch (e) {
         // Best-effort; the docs still drain below.
+        logNonFatal('sync.pushBatch', e);
       }
     }
 
@@ -534,7 +536,8 @@ class SyncController {
       for (final SyncDoc doc in ordered) {
         try {
           await _applyDoc(doc);
-        } catch (_) {
+        } catch (e) {
+          logNonFatal('sync.applyDoc', e);
           failed.add(doc);
         }
       }
@@ -622,8 +625,11 @@ class SyncController {
       if (running == null) break;
       try {
         await running;
-      } catch (_) {
-        // The prior cycle's failure is its own concern.
+      } catch (e) {
+        // The prior cycle's failure is its own concern — but it left no trace,
+        // and a silently-failing sync is how the 2026-07-13 circle wedge stayed
+        // invisible.
+        logNonFatal('sync.priorCycle', e);
       }
     }
     final Future<void> run = () async {
@@ -678,7 +684,8 @@ class SyncController {
           await _stateStore.setCursor(first.id, 0);
           return;
         }
-      } catch (_) {
+      } catch (e) {
+        logNonFatal('sync.bootstrapList', e);
         // Backend unreachable/unconfigured — fall through to local-only.
         // Don't attempt circle creation when we couldn't even list, to
         // avoid spuriously minting a duplicate circle on a flaky network.

@@ -44,3 +44,29 @@ class LogBuffer {
   @visibleForTesting
   int get length => _lines.length;
 }
+
+/// Record a caught, non-fatal error so it leaves a trace.
+///
+/// The app tees [debugPrint] into [LogBuffer], which rides along with "report a
+/// problem". A bare `catch (_) {}` throws that trace away — and a large share of
+/// the 2026-07 bug reports ("scan isn't working", "couldn't add the
+/// appointment", the gibberish voice) were slow to fix precisely because the
+/// error was swallowed and had to be reproduced blind. When a failure is
+/// genuinely non-fatal (the caregiver still gets a graceful result or a "try
+/// again"), route the caught error through here instead of dropping it: the user
+/// experience is unchanged, but the next report — and the live console — now
+/// carry WHY it happened.
+///
+/// [where] is a short, greppable site tag ("scan.prescription", "search.npi").
+/// Pass [stack] only when the site is deep enough that the tag alone won't
+/// locate it; a one-line `where: error` is usually enough and keeps the buffer
+/// readable.
+void logNonFatal(String where, Object error, [StackTrace? stack]) {
+  debugPrint('[non-fatal] $where: $error');
+  if (stack != null) {
+    // Just the top frames — enough to place it, without flooding the 300-line
+    // buffer with a full trace.
+    final List<String> frames = stack.toString().split('\n');
+    debugPrint(frames.take(3).join('\n'));
+  }
+}

@@ -12,6 +12,7 @@ import '../../services/circle_invite_link.dart';
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
+import '../../services/log_buffer.dart';
 
 /// QR payload scheme for a circle invite (care-circle connect,
 /// 2026-06-06). The token is wrapped so [CircleScanScreen] can validate
@@ -72,7 +73,8 @@ class _CircleQrScreenState extends ConsumerState<CircleQrScreen> {
   Future<void> _bindCircle(String circleId) async {
     try {
       await ref.read(syncStateStoreProvider).setCircleId(circleId);
-    } catch (_) {
+    } catch (e) {
+      logNonFatal('circle.qrBootstrap', e);
       // Non-fatal — bootstrap re-resolves the active circle on next launch.
     }
   }
@@ -112,7 +114,8 @@ class _CircleQrScreenState extends ConsumerState<CircleQrScreen> {
       await ref
           .read(sharerProvider)
           .share('Join my care circle on Holdclose: $link');
-    } on ForumApiException catch (_) {
+    } on ForumApiException catch (e) {
+      logNonFatal('circle.qrInviteLink', e);
       messenger.showSnackBar(
         const SnackBar(
           content: Text(

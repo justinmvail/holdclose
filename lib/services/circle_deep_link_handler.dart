@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import 'circle_invite_link.dart';
 import 'forum_api_client.dart';
 import 'sync_service.dart';
+import 'log_buffer.dart';
 
 /// Outcome of processing an incoming care-circle invite link, so the UI
 /// layer (app.dart's listener) can show the right SnackBar / navigation
@@ -126,7 +127,8 @@ class CircleDeepLinkHandler {
       // stub it without standing up the whole SyncController graph.
       try {
         unawaited(_ref.read(circleAdoptProvider)(circle));
-      } catch (_) {
+      } catch (e) {
+        logNonFatal('circle.deepLinkJoinBootstrap', e);
         // Join already succeeded; sync retries on the next tick.
       }
       return CircleJoinSucceeded(circle);

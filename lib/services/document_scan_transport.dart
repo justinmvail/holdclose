@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../providers/llm_provider.dart'
     show buildShimDio, shimAuthHeaders, shimBaseUrl;
 import 'forum_api_client.dart' show forumApiVersionPrefix;
+import 'log_buffer.dart';
 
 /// Shared, entity-agnostic transport for the AI document-scan features
 /// (prescription labels, appointment cards, …). Every scanner reads an
@@ -54,8 +55,11 @@ Map<String, dynamic>? jsonMapFromText(String text) {
   try {
     final dynamic obj = json.decode(text.substring(start, end + 1));
     if (obj is Map<String, dynamic>) return obj;
-  } catch (_) {
-    // Not valid JSON — fall through to null (manual entry).
+  } catch (e) {
+    // Not valid JSON — fall through to null (manual entry). The model
+    // returning prose instead of JSON is EXACTLY the 2026-07-13 scan bug, and
+    // it was invisible because this parse failure was silent. Trace it.
+    logNonFatal('scan.jsonParse', e);
   }
   return null;
 }

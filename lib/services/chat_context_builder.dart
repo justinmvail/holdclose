@@ -17,6 +17,7 @@ import '../providers/health_log_provider.dart' show healthLogRepositoryProvider;
 import '../providers/storage_provider.dart';
 import 'appointment_repository.dart';
 import 'medication_repository.dart';
+import 'log_buffer.dart';
 
 /// Caps on how much of each section the snapshot lists, so the injected
 /// block stays compact (a budget, not a dump) however much data the
@@ -124,10 +125,12 @@ Future<ChatContextData> gatherChatContext(
 }) async {
   try {
     return await _gatherChatContext(ref, clock ?? DateTime.now);
-  } catch (_) {
+  } catch (e) {
     // A wider failure (e.g. a provider that can't even be created in this
     // build) collapses the whole snapshot to empty rather than failing the
     // chat turn — the chat service also guards this, this is belt-and-braces.
+    // A coach that silently lost ALL its grounding is worth knowing about.
+    logNonFatal('chatContext.gather', e);
     return const ChatContextData();
   }
 }
@@ -138,7 +141,8 @@ Future<ChatContextData> _gatherChatContext(
   Patient? patient;
   try {
     patient = await ref.read(storageProvider).getPatient();
-  } catch (_) {
+  } catch (e) {
+    logNonFatal('chatContext.patient', e);
     patient = null;
   }
 
@@ -164,8 +168,11 @@ Future<ChatContextData> _gatherChatContext(
         if (names.isNotEmpty) windowEntries[w.id] = names;
       }
     }
-  } catch (_) {
-    // Leave meds / windows empty; the formatter degrades gracefully.
+  } catch (e) {
+    // Leave meds / windows empty; the formatter degrades gracefully — but a
+    // coach that silently can't see the medication list is the exact
+    // "writes but can't read" failure, so leave a trace.
+    logNonFatal('chatContext.medications', e);
   }
 
   List<String> openTasks = const <String>[];
@@ -180,8 +187,8 @@ Future<ChatContextData> _gatherChatContext(
           if (t.completedAt == null) t.title,
       ];
     }
-  } catch (_) {
-    // Leave empty; the formatter degrades gracefully.
+  } catch (e) {
+    logNonFatal('chatContext.tasks', e);
   }
 
   List<ChatContextAppointment> appointments = const <ChatContextAppointment>[];
@@ -199,14 +206,16 @@ Future<ChatContextData> _gatherChatContext(
           location: a.location.trim().isEmpty ? null : a.location.trim(),
         ),
     ];
-  } catch (_) {
+  } catch (e) {
+    logNonFatal('chatContext.appointments', e);
     appointments = const <ChatContextAppointment>[];
   }
 
   List<CarePlanRoutine> routines = const <CarePlanRoutine>[];
   try {
     routines = await ref.read(carePlanRepositoryProvider).listAll();
-  } catch (_) {
+  } catch (e) {
+    logNonFatal('chatContext.routines', e);
     routines = const <CarePlanRoutine>[];
   }
 
@@ -222,7 +231,8 @@ Future<ChatContextData> _gatherChatContext(
       // Every entry, with its full reading — NOT just notes-bearing ones.
       for (final HealthLogEntry e in sorted) _describeHealthEntry(e),
     ];
-  } catch (_) {
+  } catch (e) {
+    logNonFatal('chatContext.healthNotes', e);
     healthNotes = const <String>[];
   }
 

@@ -10,6 +10,7 @@ import '../../services/forum_api_client.dart';
 import '../../services/sync_service.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
+import '../../services/log_buffer.dart';
 
 /// "Scan to add" screen (care-circle connect, 2026-06-06) at
 /// `/team/circle/scan`.
@@ -114,7 +115,8 @@ class _CircleScanScreenState extends ConsumerState<CircleScanScreen> {
       // errors and bootstrap retries on the next launch/tick).
       try {
         unawaited(ref.read(syncControllerProvider).adoptJoinedCircle(circle));
-      } catch (_) {
+      } catch (e) {
+        logNonFatal('circle.scanJoinBootstrap', e);
         // Join already succeeded server-side; sync retries on next tick.
       }
       if (!mounted) return;

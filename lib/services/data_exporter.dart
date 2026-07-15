@@ -40,6 +40,7 @@ import '../services/appointment_repository.dart';
 import '../services/chat_repository.dart';
 import '../services/medication_repository.dart';
 import '../services/provider_repository.dart';
+import 'log_buffer.dart';
 
 part 'data_exporter.g.dart';
 
@@ -560,8 +561,9 @@ List<Map<String, dynamic>> _toJsonList<T>(
   for (final T item in items) {
     try {
       out.add(toJson(item));
-    } catch (_) {
+    } catch (e) {
       // Skip the unserialisable row; the rest of the section still exports.
+      logNonFatal('export.row', e);
     }
   }
   return out;

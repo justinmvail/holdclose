@@ -5,6 +5,7 @@ import '../../providers/billing_provider.dart';
 import '../../services/billing_service.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
+import '../../services/log_buffer.dart';
 
 /// The subscription paywall (`/premium`).
 ///
@@ -58,7 +59,8 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     bool started = false;
     try {
       started = await ref.read(billingServiceProvider).buy(plan);
-    } catch (_) {
+    } catch (e) {
+      logNonFatal('billing.buy', e);
       started = false;
     }
     if (!mounted) return;
@@ -77,8 +79,10 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     setState(() => _busy = true);
     try {
       await ref.read(billingServiceProvider).restorePurchases();
-    } catch (_) {
-      // Swallow — surface a neutral result below.
+    } catch (e) {
+      // A neutral "checked for purchases" result surfaces below regardless;
+      // the trace is what tells us a restore actually errored.
+      logNonFatal('billing.restore', e);
     }
     if (!mounted) return;
     setState(() => _busy = false);

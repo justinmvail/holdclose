@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:holdclose/models/appointment.dart' show ProviderRole;
 import 'package:holdclose/models/appointment_draft.dart';
@@ -31,6 +32,22 @@ void main() {
     test('jsonMapFromText null on no object / malformed', () {
       expect(jsonMapFromText('no json here'), isNull);
       expect(jsonMapFromText('{nope: bad}'), isNull);
+    });
+
+    test('a malformed-JSON parse leaves a breadcrumb (not a silent null)', () {
+      // The 2026-07-13 scan bug: the vision model answered in PROSE, the parse
+      // failed, and this returned null SILENTLY — so a tester's "scan isn't
+      // working" report carried no clue. It must now log why.
+      final List<String> lines = <String>[];
+      final DebugPrintCallback original = debugPrint;
+      debugPrint = (String? m, {int? wrapWidth}) => lines.add(m ?? '');
+      try {
+        // A `{...}` span that is NOT valid JSON — reaches json.decode and throws.
+        expect(jsonMapFromText('here: {this is not, valid: json}'), isNull);
+      } finally {
+        debugPrint = original;
+      }
+      expect(lines.join('\n'), contains('scan.jsonParse'));
     });
 
     test('jsonMapFromResponseBody reads {text:...} map and raw string', () {

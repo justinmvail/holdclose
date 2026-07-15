@@ -138,7 +138,8 @@ Future<void> main() async {
   try {
     preloadedPatientConfigured =
         await container.read(storageProvider).getPatient() != null;
-  } catch (_) {
+  } catch (e) {
+    logNonFatal('boot.preloadPatient', e);
     preloadedPatientConfigured = null; // resolve async, as before
   }
 

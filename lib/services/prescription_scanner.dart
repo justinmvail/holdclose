@@ -10,6 +10,7 @@ import '../providers/llm_provider.dart'
 import '../seed/prescription_extraction_prompt.dart';
 import 'document_scan_transport.dart' show scanJsonOnlyInstruction;
 import 'forum_api_client.dart' show forumApiVersionPrefix;
+import 'log_buffer.dart';
 
 /// Reads a photographed prescription label / medical document and
 /// proposes a structured [MedicationDraft] for the caregiver to review.
@@ -206,8 +207,10 @@ MedicationDraft? draftFromReplyText(String text) {
     if (obj is Map<String, dynamic>) {
       return MedicationDraft.fromModelJson(obj);
     }
-  } catch (_) {
-    // Not valid JSON — fall through to null (manual entry).
+  } catch (e) {
+    // Not valid JSON — fall through to null (manual entry). A silent parse
+    // failure here hid the 2026-07-13 scan bug; trace it.
+    logNonFatal('scan.prescriptionParse', e);
   }
   return null;
 }

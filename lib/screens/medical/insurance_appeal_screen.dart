@@ -9,6 +9,7 @@ import '../../theme.dart';
 import '../../widgets/form/labelled_field.dart';
 import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
+import '../../services/log_buffer.dart';
 
 /// AI insurance-appeal helper (`/insurance-appeal`). The caregiver describes
 /// what was denied and why; a grounded coach drafts an appeal letter they can
@@ -61,7 +62,8 @@ class _InsuranceAppealScreenState
     String careContext = '';
     try {
       careContext = await ref.read(careContextTextProvider.future);
-    } catch (_) {
+    } catch (e) {
+      logNonFatal('insuranceAppeal.careContext', e);
       careContext = '';
     }
     String? letter;
@@ -72,7 +74,8 @@ class _InsuranceAppealScreenState
         carrier: widget.carrier,
         careContext: careContext,
       );
-    } catch (_) {
+    } catch (e) {
+      logNonFatal('insuranceAppeal.draft', e);
       letter = null;
     }
     if (!mounted) return;

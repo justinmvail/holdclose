@@ -24,6 +24,7 @@ import '../../widgets/form_validation.dart';
 import '../../widgets/path_header.dart';
 import 'appointment_detail_screen.dart';
 import 'appointment_list_screen.dart';
+import '../../services/log_buffer.dart';
 
 part 'appointment_form_screen.g.dart';
 
@@ -624,7 +625,8 @@ class _AppointmentFormScreenState
     String careContext = '';
     try {
       careContext = await ref.read(careContextTextProvider.future);
-    } catch (_) {
+    } catch (e) {
+      logNonFatal('visitPrep.careContext', e);
       careContext = '';
     }
     final List<String> already = <String>[
@@ -638,7 +640,8 @@ class _AppointmentFormScreenState
         careContext: careContext,
         reason: already.isEmpty ? null : already.join('; '),
       );
-    } catch (_) {
+    } catch (e) {
+      logNonFatal('visitPrep.suggest', e);
       questions = null;
     }
     if (!mounted) return;

@@ -13,6 +13,7 @@ import '../../theme.dart';
 import '../../widgets/form/id_factory.dart';
 import '../../widgets/form/labelled_field.dart';
 import '../../widgets/path_header.dart';
+import '../../services/log_buffer.dart';
 
 /// Find a clinician via the free NPI Registry, then save a match to the
 /// caregiver's providers (so it's pickable when booking an appointment).
@@ -90,7 +91,8 @@ class _FindProviderScreenState extends ConsumerState<FindProviderScreen> {
         state: stateCode,
         enumerationType: _providerType == 'ALL' ? null : _providerType,
       );
-    } catch (_) {
+    } catch (e) {
+      logNonFatal('search.npi', e);
       results = null;
     }
     if (!mounted) return;

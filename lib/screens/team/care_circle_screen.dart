@@ -13,6 +13,7 @@ import '../../services/circle_invite_link.dart';
 import '../../services/forum_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/path_header.dart';
+import '../../services/log_buffer.dart';
 
 /// Share seam for the "Invite by link" action — pulled out as a top-level
 /// hook so widget tests stub the OS share sheet (which would otherwise
@@ -230,7 +231,8 @@ class _ConnectActions extends ConsumerWidget {
       await shareCircleInvite(
         'Join my care circle on Holdclose: $link',
       );
-    } on ForumApiException catch (_) {
+    } on ForumApiException catch (e) {
+      logNonFatal('circle.inviteLink', e);
       messenger.showSnackBar(
         const SnackBar(
           content: Text(
@@ -244,7 +246,8 @@ class _ConnectActions extends ConsumerWidget {
   Future<void> _bindCircle(WidgetRef ref, String circleId) async {
     try {
       await ref.read(syncStateStoreProvider).setCircleId(circleId);
-    } catch (_) {
+    } catch (e) {
+      logNonFatal('circle.bind', e);
       // Non-fatal — bootstrap re-resolves the active circle next launch.
     }
   }
@@ -386,7 +389,8 @@ class _AddByUsernameSheetState extends ConsumerState<_AddByUsernameSheet> {
   Future<void> _bindCircle(String circleId) async {
     try {
       await ref.read(syncStateStoreProvider).setCircleId(circleId);
-    } catch (_) {
+    } catch (e) {
+      logNonFatal('circle.bind', e);
       // Non-fatal — bootstrap re-resolves the active circle next launch.
     }
   }

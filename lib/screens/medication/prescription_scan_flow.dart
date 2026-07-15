@@ -8,6 +8,7 @@ import '../../providers/photo_attacher_provider.dart';
 import '../../providers/prescription_scanner_provider.dart';
 import '../../services/prescription_scanner.dart';
 import '../../theme.dart';
+import '../../services/log_buffer.dart';
 
 /// Shared orchestration for the AI prescription scan: choose camera vs.
 /// library, capture a small vision-optimized image, run the scanner, and
@@ -70,7 +71,11 @@ Future<MedicationDraft?> capturePrescriptionDraft(
   MedicationDraft? draft;
   try {
     draft = await scanner.extractFromImage(imagePath: path);
-  } catch (_) {
+  } catch (e) {
+    // Caregiver still gets the "couldn't read it" hint below — but the WHY
+    // (licence gate, network, a 500, a parse miss) rode into the void until a
+    // report could reproduce it. Keep the trace.
+    logNonFatal('scan.prescription', e);
     draft = null;
   }
 

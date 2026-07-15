@@ -34,6 +34,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'forum_api_client.dart' show EntitlementApi, ServerEntitlement;
+import 'log_buffer.dart';
 
 // ---------------------------------------------------------------------------
 // Product IDs
@@ -442,8 +443,9 @@ class StoreBillingService implements BillingService {
     try {
       final ServerEntitlement e = await api.getEntitlement();
       await _applyServerEntitlement(e);
-    } catch (_) {
+    } catch (e) {
       // Keep the cached/last-known server value — do not self-grant/-revoke.
+      logNonFatal('billing.getEntitlement', e);
     }
   }
 
@@ -490,8 +492,9 @@ class StoreBillingService implements BillingService {
         receipt: receipt,
       );
       await _applyServerEntitlement(e);
-    } catch (_) {
+    } catch (e) {
       // Verification unreachable/failed — hold the cached server value.
+      logNonFatal('billing.verify', e);
     }
   }
 
