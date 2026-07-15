@@ -196,8 +196,8 @@ class TTSEngine(private val appContext: Context) {
                     throw TTSException.NotLoaded
                 }
 
-                val sentences = splitSentences(text)
-                if (sentences.isEmpty()) {
+                val clauses = splitClauses(text)
+                if (clauses.isEmpty()) {
                     completion(null)
                     return@execute
                 }
@@ -206,18 +206,18 @@ class TTSEngine(private val appContext: Context) {
                 // whatever was playing.
                 playExecutor.execute { openTrack(myGeneration) }
 
-                sentences.forEachIndexed { index, sentence ->
+                clauses.forEachIndexed { index, clause ->
                     if (myGeneration != generation) return@execute
-                    val ids = ph.phonemeIds(sentence, cfg)
+                    val ids = ph.phonemeIds(clause.text, cfg)
                     if (ids.isEmpty()) return@forEachIndexed
                     val pcm = synthesize(ids, speed, sess, cfg)
 
-                    // A real breath between sentences — the model ends one
-                    // abruptly, and a distracted caregiver needs the beat.
-                    val isLast = index == sentences.size - 1
-                    val withPause = if (isLast) pcm else pcm + silence(SENTENCE_PAUSE_SECONDS)
+                    // A real breath after each clause — longer after a sentence
+                    // than after a comma (fb_1784072513832173).
+                    val isLast = index == clauses.size - 1
+                    val withPause = if (isLast) pcm else pcm + silence(clause.pause)
 
-                    // Hand off to the play thread and go render the next sentence
+                    // Hand off to the play thread and go render the next clause
                     // immediately; the writes block over THERE, not here.
                     playExecutor.execute { writeChunk(myGeneration, withPause) }
                 }
@@ -232,21 +232,29 @@ class TTSEngine(private val appContext: Context) {
         }
     }
 
-    /// Split into sentences, KEEPING each terminator — the phonemizer needs it to
-    /// shape the pause and the intonation (a question without its `?` lands flat).
-    private fun splitSentences(text: String): List<String> {
-        val out = mutableListOf<String>()
+    /// One spoken clause + the silence to leave after it.
+    private data class Clause(val text: String, val pause: Double)
+
+    /// Split into clauses at sentence-enders AND commas, KEEPING each terminator
+    /// (the phonemizer needs it to shape intonation — a question without its `?`
+    /// lands flat), and tagging each with a longer pause after a sentence than
+    /// after a comma (fb_1784072513832173).
+    private fun splitClauses(text: String): List<Clause> {
+        val out = mutableListOf<Clause>()
         val current = StringBuilder()
+        fun flush(pause: Double) {
+            val s = current.toString().trim()
+            if (s.isNotEmpty()) out.add(Clause(s, pause))
+            current.clear()
+        }
         for (ch in text) {
             current.append(ch)
-            if (ch == '.' || ch == '!' || ch == '?' || ch == '\n') {
-                val s = current.toString().trim()
-                if (s.isNotEmpty()) out.add(s)
-                current.clear()
+            when (ch) {
+                '.', '!', '?', '\n' -> flush(SENTENCE_PAUSE_SECONDS)
+                ',', ';', ':' -> flush(COMMA_PAUSE_SECONDS)
             }
         }
-        val tail = current.toString().trim()
-        if (tail.isNotEmpty()) out.add(tail)
+        flush(SENTENCE_PAUSE_SECONDS) // trailing clause; its pause is unused (last)
         return out
     }
 
@@ -612,9 +620,12 @@ class TTSEngine(private val appContext: Context) {
         // is the only host-side resampling we do.
         const val SAMPLE_RATE_HZ: Int = 22050
 
-        /// The gap between spoken sentences. Mirrors TTSEngine.sentencePauseSeconds
-        /// on iOS — the two platforms must breathe the same way.
-        const val SENTENCE_PAUSE_SECONDS: Double = 0.35
+        /// Pause after a comma/semicolon/colon vs after a sentence. Must match
+        /// TTSEngine.commaPauseSeconds / sentencePauseSeconds on iOS — the two
+        /// platforms breathe the same way (tuned per fb_1784072513832173: commas
+        /// as long as sentences used to be, sentences slightly longer).
+        const val COMMA_PAUSE_SECONDS: Double = 0.35
+        const val SENTENCE_PAUSE_SECONDS: Double = 0.5
 
         // ~46 ms of audio per write; small enough that `cancel()`
         // preempts mid-utterance with a barely-perceptible tail.

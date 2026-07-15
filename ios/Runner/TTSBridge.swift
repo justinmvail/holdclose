@@ -260,8 +260,8 @@ final class TTSEngine {
                     throw TTSError.notLoaded
                 }
 
-                let sentences = TTSEngine.splitSentences(text)
-                guard !sentences.isEmpty else {
+                let clauses = TTSEngine.splitClauses(text)
+                guard !clauses.isEmpty else {
                     DispatchQueue.main.async { completion(nil) }
                     return
                 }
@@ -285,7 +285,7 @@ final class TTSEngine {
                 self.playerNode.stop()
                 var started = false
 
-                for (index, sentence) in sentences.enumerated() {
+                for (index, clause) in clauses.enumerated() {
                     // Bail the moment a cancel (or a newer utterance) lands —
                     // mid-render, not just before playback.
                     guard myGeneration == self.generation else {
@@ -293,20 +293,22 @@ final class TTSEngine {
                         return
                     }
 
-                    let ids = phonemizer.phonemeIds(for: sentence, config: cfg)
+                    let ids = phonemizer.phonemeIds(for: clause.text, config: cfg)
                     if ids.isEmpty { continue }
                     var pcm = try self.synthesize(phonemeIds: ids,
                                                   speed: speed,
                                                   session: session,
                                                   config: cfg)
 
-                    // A real breath between sentences. The model ends a sentence
-                    // abruptly, and a caregiver half-listening while doing three
-                    // other things needs the beat to keep up.
-                    let isLast = index == sentences.count - 1
+                    // A real breath after each clause — LONGER after a sentence
+                    // than after a comma. The model ends a phrase abruptly, and a
+                    // caregiver half-listening while doing three other things
+                    // needs the beat to keep up (tuned per fb_1784072513832173:
+                    // commas as long as periods used to be, periods longer).
+                    let isLast = index == clauses.count - 1
                     if !isLast {
                         pcm.append(contentsOf: TTSEngine.silence(
-                            seconds: TTSEngine.sentencePauseSeconds))
+                            seconds: clause.pause))
                     }
 
                     guard myGeneration == self.generation else {
@@ -336,29 +338,44 @@ final class TTSEngine {
         }
     }
 
-    /// Split [text] into sentences, KEEPING the terminator on each — the
-    /// phonemizer needs it to shape the pause and the intonation (a question
-    /// without its `?` lands flat).
+    /// One spoken clause + the silence to leave after it.
+    struct Clause {
+        let text: String
+        let pause: Double
+    }
+
+    /// Split [text] into clauses at BOTH sentence-enders and commas, KEEPING the
+    /// terminator on each (the phonemizer needs it to shape intonation — a
+    /// question without its `?` lands flat), and tagging each with how long to
+    /// pause after it: longer after a sentence than after a comma.
     ///
     /// `internal` so a unit test can pin the split without an audio engine.
-    static func splitSentences(_ text: String) -> [String] {
-        var out: [String] = []
+    static func splitClauses(_ text: String) -> [Clause] {
+        var out: [Clause] = []
         var current = ""
+        func flush(_ pause: Double) {
+            let s = current.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !s.isEmpty { out.append(Clause(text: s, pause: pause)) }
+            current = ""
+        }
         for ch in text {
             current.append(ch)
             if ch == "." || ch == "!" || ch == "?" || ch == "\n" {
-                let s = current.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !s.isEmpty { out.append(s) }
-                current = ""
+                flush(sentencePauseSeconds)
+            } else if ch == "," || ch == ";" || ch == ":" {
+                flush(commaPauseSeconds)
             }
         }
-        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !tail.isEmpty { out.append(tail) }
+        flush(sentencePauseSeconds) // trailing clause; pause unused (it's last)
         return out
     }
 
-    /// The gap between spoken sentences.
-    static let sentencePauseSeconds: Double = 0.35
+    /// Pause after a comma / semicolon / colon — as long as a SENTENCE pause used
+    /// to be (0.35s). Pause after a sentence — slightly longer. Tuned to a
+    /// caregiver's ear (fb_1784072513832173). Kept in lockstep with Android's
+    /// COMMA_PAUSE_SECONDS / SENTENCE_PAUSE_SECONDS.
+    static let commaPauseSeconds: Double = 0.35
+    static let sentencePauseSeconds: Double = 0.5
 
     static func silence(seconds: Double) -> [Float] {
         [Float](repeating: 0, count: Int(sampleRate * seconds))
