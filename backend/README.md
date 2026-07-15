@@ -377,3 +377,44 @@ Tests (`test/watchdog.test.ts`) exercise the threshold table, the
 email body, the D1 query, the orchestrator (with mocked analytics +
 mailer), and the Cloudflare + Resend HTTP clients (with a fake
 `fetch`).
+
+## Real-time error alerts (`src/alerts/index.ts`)
+
+The weekly watchdog watches **capacity**; this watches **breakage**. Any
+unhandled error that reaches the Hono error boundary (`handleAppError` /
+`app.onError`) — a 5xx — fires a best-effort operator email in the same
+request, and a failed weekly cron self-alerts too. It reuses the watchdog's
+`ResendMailer`.
+
+- **Best-effort:** `alertOnError` never throws. If alerting isn't configured
+  (no `RESEND_API_KEY`), or the send fails, it logs and returns `false` — the
+  500 still returns normally. Deploying before the secret is set is safe;
+  alerting is simply off until the key lands.
+- **De-duplicated:** a bad deploy can throw on every request. `claimAlertSlot`
+  collapses repeats of the same signature (method + error type + first message
+  line — deliberately **not** the path, so `/posts/1` and `/posts/2` group) to
+  one email per `ALERT_DEDUP_WINDOW_MS` (15 min), via an atomic D1 upsert into
+  a self-bootstrapping `alert_dedup` table (no migration needed).
+- **Config:** same `RESEND_*` vars as the watchdog, plus `ENVIRONMENT`
+  (`prod`/`dev`) for the subject line. `RESEND_FROM_EMAIL` defaults to Resend's
+  sandbox sender `onboarding@resend.dev`, which needs **no domain
+  verification** but only delivers to the Resend account's own address
+  (`RESEND_TO_EMAIL`). To alert other addresses, verify a domain in Resend and
+  switch the from-address.
+
+Setup (one secret; everything else is in `wrangler.toml`):
+
+```bash
+wrangler secret put RESEND_API_KEY --env prod   # from resend.com → API Keys
+wrangler deploy --env prod
+```
+
+**Dead-man's switch (outside the Worker):** in-Worker code can't report that
+the Worker is entirely down or that the cron silently didn't fire. Point a
+free external monitor (Better Stack / UptimeRobot / healthchecks.io) at
+`GET /health` (`https://holdclose-forum.jcsvonellc.workers.dev/health`, returns
+`{"status":"ok"}`) every 1–3 minutes so a total outage still pages you.
+
+Tests: `test/alerts.test.ts` (signature grouping, dedup window open/closed,
+independent signatures, unconfigured-is-silent, mailer-failure-is-swallowed)
+and `test/onError.test.ts` (the boundary still returns a generic 500).

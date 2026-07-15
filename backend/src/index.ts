@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 
+import { alertOnError, buildErrorAlert, type AlertEnv } from './alerts';
 import { auth, type AuthBindings, type AuthVariables } from './middleware/auth';
 import { authRouter } from './routes/auth';
 import { billingRouter, type BillingBindings } from './routes/billing';
@@ -33,6 +35,14 @@ export type Bindings = AuthBindings &
   // Allowed Google OAuth audience(s) for POST /api/v1/auth/google. Single
   // value = the Web client id; may be a comma-separated list.
   GOOGLE_CLIENT_ID: string;
+  // Operator alerting (Resend). Present in production as [vars] +
+  // the RESEND_API_KEY secret; absent in tests, which keeps alerting silent
+  // there. Shared with the weekly watchdog's WatchdogEnv.
+  RESEND_API_KEY: string;
+  RESEND_FROM_EMAIL: string;
+  RESEND_TO_EMAIL: string;
+  // Deploy label ("prod"/"dev") for alert subject lines. Optional.
+  ENVIRONMENT?: string;
 };
 
 export type Variables = AuthVariables;
@@ -49,7 +59,42 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // route's validation gap as the throw vector.
 export function handleAppError(err: Error, c: Context): Response {
   console.error('unhandled error', err);
+  dispatchErrorAlert(err, c);
   return c.json({ error: 'internal' }, 500);
+}
+
+// Fire a best-effort operator alert for a genuine server error. Fully
+// self-contained: it never throws (so it can't stop the 500 from returning)
+// and it stays silent unless alerting is configured (RESEND_* present). A
+// thrown HTTPException with a client (<500) status is an intentional error
+// response, not an outage — don't alert on those.
+function dispatchErrorAlert(err: unknown, c: Context): void {
+  try {
+    if (err instanceof HTTPException && err.status < 500) return;
+    const env = c.env as Partial<AlertEnv> | undefined;
+    if (!env?.RESEND_API_KEY || !env.FORUM_DB) return;
+
+    // c.executionCtx throws when there's no execution context (e.g. a bare
+    // app.request() in a unit test) — fall back to a detached promise.
+    let exec: ExecutionContext | undefined;
+    try {
+      exec = c.executionCtx;
+    } catch {
+      exec = undefined;
+    }
+
+    const alert = buildErrorAlert({
+      method: c.req.method,
+      path: c.req.path,
+      err,
+      environment: (env as { ENVIRONMENT?: string }).ENVIRONMENT,
+    });
+    const sending = alertOnError(env as AlertEnv, alert);
+    if (exec) exec.waitUntil(sending);
+    else void sending.catch(() => {});
+  } catch {
+    // Alerting must never interfere with returning the 500.
+  }
 }
 
 app.onError(handleAppError);
@@ -129,6 +174,23 @@ export default {
     // The watchdog can take a few seconds (GraphQL + Resend round
     // trips); waitUntil keeps the scheduled invocation alive past
     // the synchronous return so Workers doesn't kill it mid-flight.
-    ctx.waitUntil(handleScheduled(env));
+    //
+    // A bare waitUntil(handleScheduled(env)) used to SWALLOW any failure as an
+    // unhandled rejection — so a broken watchdog (bad analytics token, Resend
+    // outage) would fail silently, exactly the blind spot this whole change
+    // closes. Catch it: log, and fire a self-alert so the operator learns the
+    // watchdog itself is down.
+    ctx.waitUntil(
+      handleScheduled(env).catch((e) => {
+        console.error('watchdog run failed', e);
+        return alertOnError(env, {
+          signature: 'watchdog:run-failure',
+          subject: '[Holdclose] Weekly watchdog FAILED to run',
+          text:
+            'The weekly capacity watchdog threw while running:\n\n' +
+            (e instanceof Error ? (e.stack ?? e.message) : String(e)),
+        });
+      }),
+    );
   },
 };

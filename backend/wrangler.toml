@@ -51,11 +51,19 @@ R2_PUBLIC_URL = "https://holdclose-forum.jcsvonellc.workers.dev/media"
 # `.dev.vars`.
 GOOGLE_CLIENT_ID = "948989327057-a0o985t2648v1su957ltgohm45i138pb.apps.googleusercontent.com,948989327057-1m5kkffbqa06p87fprkigumfn3gk6fv3.apps.googleusercontent.com,948989327057-5soo39g145ajmlj1h8o4uc4fcmjnm8p8.apps.googleusercontent.com"
 
-# Watchdog wiring (Phase 13.13). Non-secret values live here; secrets
-# (CLOUDFLARE_API_TOKEN, RESEND_API_KEY) are set via `wrangler secret
-# put`. See backend/README.md → "Watchdog setup".
-RESEND_FROM_EMAIL = "watchdog@holdclose.local"
-RESEND_TO_EMAIL = "ops@holdclose.local"
+# Alerting wiring (Resend) — used by BOTH the weekly capacity watchdog
+# (Phase 13.13) and the real-time 5xx/cron error alerts (src/alerts). The
+# RESEND_API_KEY secret is set via `wrangler secret put RESEND_API_KEY
+# --env <env>`; until it's set, all alerting is silently off (never crashes).
+#
+# RESEND_FROM_EMAIL uses Resend's shared sandbox sender, which works with just
+# an API key and NO domain verification — but Resend only delivers a sandbox
+# send to the account's OWN email, so RESEND_TO_EMAIL must be the Resend
+# signup address. To alert other addresses, verify holdclose.care in Resend
+# and switch the from-address to e.g. alerts@holdclose.care.
+ENVIRONMENT = "local"
+RESEND_FROM_EMAIL = "onboarding@resend.dev"
+RESEND_TO_EMAIL = "jcsvonellc@gmail.com"
 CLOUDFLARE_ACCOUNT_ID = ""
 CLOUDFLARE_D1_DATABASE_ID = ""
 CLOUDFLARE_R2_BUCKET_NAME = "holdclose-forum-media"
@@ -156,12 +164,13 @@ bucket_name = "holdclose-doc-blobs"
 name = "holdclose-forum"
 
 [env.prod.vars]
+ENVIRONMENT = "prod"
 # The prod Worker's own /media route. NOT holdclose.care — that domain has no
 # DNS (verified 2026-07-14), so avatars pointed at it would be dead links.
 R2_PUBLIC_URL = "https://holdclose-forum.jcsvonellc.workers.dev/media"
 GOOGLE_CLIENT_ID = "948989327057-a0o985t2648v1su957ltgohm45i138pb.apps.googleusercontent.com,948989327057-1m5kkffbqa06p87fprkigumfn3gk6fv3.apps.googleusercontent.com,948989327057-5soo39g145ajmlj1h8o4uc4fcmjnm8p8.apps.googleusercontent.com"
-RESEND_FROM_EMAIL = "watchdog@holdclose.local"
-RESEND_TO_EMAIL = "ops@holdclose.local"
+RESEND_FROM_EMAIL = "onboarding@resend.dev"
+RESEND_TO_EMAIL = "jcsvonellc@gmail.com"
 CLOUDFLARE_ACCOUNT_ID = "1d05533f4440827e2768c13a6c80c5ea"
 CLOUDFLARE_D1_DATABASE_ID = "a6d58fb1-60ae-4bd5-a474-141d77b7cc33"
 CLOUDFLARE_R2_BUCKET_NAME = "holdclose-forum-media"
@@ -217,11 +226,12 @@ bucket_name = "holdclose-doc-blobs"
 name = "holdclose-forum-dev"
 
 [env.dev.vars]
+ENVIRONMENT = "dev"
 # The dev Worker's own /media route — see the top-level R2_PUBLIC_URL comment.
 R2_PUBLIC_URL = "https://holdclose-forum-dev.jcsvonellc.workers.dev/media"
 GOOGLE_CLIENT_ID = "948989327057-a0o985t2648v1su957ltgohm45i138pb.apps.googleusercontent.com,948989327057-1m5kkffbqa06p87fprkigumfn3gk6fv3.apps.googleusercontent.com,948989327057-5soo39g145ajmlj1h8o4uc4fcmjnm8p8.apps.googleusercontent.com"
-RESEND_FROM_EMAIL = "watchdog@holdclose.local"
-RESEND_TO_EMAIL = "ops@holdclose.local"
+RESEND_FROM_EMAIL = "onboarding@resend.dev"
+RESEND_TO_EMAIL = "jcsvonellc@gmail.com"
 CLOUDFLARE_ACCOUNT_ID = "1d05533f4440827e2768c13a6c80c5ea"
 CLOUDFLARE_D1_DATABASE_ID = "aff9f3a7-5d3e-4bf6-86e9-df3735d4e62a"
 CLOUDFLARE_R2_BUCKET_NAME = "holdclose-forum-media-dev"
