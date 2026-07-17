@@ -35,7 +35,7 @@ COMPETES Reauthorization Act. Last site modification: 06/10/2026.
 - **Scope boundary (webinar 1, slide 16):** out of scope = solutions solely for caregivers of children **without** disabilities, and **institutional/nursing-home settings**. Holdclose (caregivers of older adults + people with disabilities, in home/community) is **clearly in scope**. In-home hospice IS in scope.
 - **No numeric scoring weights are published** for either track — judging is category-based (confirmed on both judging pages).
 - **Security-by-Design, not certifications:** the FAQ explicitly says no HITRUST/SOC 2 required for Phase 1 — a "Security-by-Design narrative" suffices. Good: matches what we have.
-- **Existing-AI eligibility table (FAQ):** "Developer Build-Out — leveraging a commercial base model (LLM) for new tools" is **explicitly ELIGIBLE** (provided you have rights to the works). This directly blesses Holdclose's gpt-oss-120b-via-Cerebras architecture. Only "off-the-shelf scaling with no technical changes" is ineligible.
+- **Existing-AI eligibility table (FAQ):** "Developer Build-Out — leveraging a commercial base model (LLM) for new tools" is **explicitly ELIGIBLE** (provided you have rights to the works). This directly blesses Holdclose's architecture (an open-weight model on Cloudflare Workers AI). Only "off-the-shelf scaling with no technical changes" is ineligible.
 - **Optional applicant Slack workspace** exists (email CaregiverAI@acl.hhs.gov to join); participation is explicitly **not** factored into judging.
 - **Prize-challenge admin:** no budget required, no restrictions on fund use, no post-award reporting, Phase 2 participation optional (FAQ). Confirms the eligibility framing is light-touch.
 

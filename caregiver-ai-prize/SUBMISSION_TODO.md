@@ -168,8 +168,8 @@ a one-line confirm.
       dosing/diagnosis/crisis/injection/unknown-protocol all correctly refused,
       confirm-card gating verified, code-side crisis watchdog covered by a Dart
       test. Methodology is honest that replies came from the dev `claude`-CLI
-      path (production is gpt-oss-120b via Cerebras) and the structural guardrails
-      are model-independent. Cited in §2 and §4.
+      path (production is an open-weight model on Cloudflare Workers AI) and the
+      structural guardrails are model-independent. Cited in §2 and §4.
 - [x] **Narrative assembled** — `NARRATIVE.md` (cover + abstract + §1–§5 in
       official order) + preview `NARRATIVE.pdf` / `DATA_OUTPUT_LOGS.pdf` generated
       this pass (pandoc + weasyprint; no LaTeX on this machine).
