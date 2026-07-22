@@ -17,6 +17,14 @@ enrolling the publishing organization and completing store review, which is
 Phase-2 operational work rather than engineering. This materially de-risks Phases
 2 and 3: the build is done; the work ahead is validation, refinement, and reach.
 
+**A platform, not a one-off.** Holdclose is one of **two products built on the same
+tested spine**. Its sibling, **Care Rounds** (our Track 2 entry — *AI Tools for
+Extending the Caregiver Workforce*), reuses the same coach architecture, care
+database, sync, and responsible-AI guardrails, re-pointed from the family caregiver
+to the paid direct-care workforce. Two shipping products on one proven backend is a
+maturity signal a single prototype cannot make, and it de-risks Phase 2 further:
+the platform already extends across both sides of the care relationship.
+
 ## Implementation, Testing & Evaluation Strategy
 
 - **Now–July 2026:** structured caregiver feedback sessions (existing

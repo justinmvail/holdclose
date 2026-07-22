@@ -281,6 +281,14 @@ enrolling the publishing organization and completing store review, which is
 Phase-2 operational work rather than engineering. This materially de-risks Phases
 2 and 3: the build is done; the work ahead is validation, refinement, and reach.
 
+**A platform, not a one-off.** Holdclose is one of **two products built on the same
+tested spine**. Its sibling, **Care Rounds** (our Track 2 entry — *AI Tools for
+Extending the Caregiver Workforce*), reuses the same coach architecture, care
+database, sync, and responsible-AI guardrails, re-pointed from the family caregiver
+to the paid direct-care workforce. Two shipping products on one proven backend is a
+maturity signal a single prototype cannot make, and it de-risks Phase 2 further:
+the platform already extends across both sides of the care relationship.
+
 ### Implementation, Testing & Evaluation Strategy
 
 - **Now–July 2026:** structured caregiver feedback sessions (existing
@@ -489,6 +497,13 @@ in structured July 2026 sessions with additional caregivers.
 - **Provider-shareable care summary** — a care-summary PDF export and NPI-based
   "Find a provider" search already ship today, bridging the caregiver to the
   clinical side.
+- **Sibling product + cross-product connection (planned).** Holdclose shares a
+  care-data spine with **Care Rounds** (our Track 2 entry, for the paid direct-care
+  workforce). A planned connection would let the two work together on one shared
+  care circle — e.g. a **family-scheduled appointment in Holdclose surfacing
+  read-only to the assigned paid worker in Care Rounds** — so the family and the
+  professionals see the same care picture. Described honestly as planned Phase-2
+  interoperability, not a present capability, but a concrete, credible path.
 - **Roadmap (planned, not current):** direct interoperability with health
   records / EMRs and assistive/home devices — described honestly as future work,
   not a present capability.

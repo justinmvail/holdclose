@@ -71,6 +71,13 @@ in structured July 2026 sessions with additional caregivers.
 - **Provider-shareable care summary** — a care-summary PDF export and NPI-based
   "Find a provider" search already ship today, bridging the caregiver to the
   clinical side.
+- **Sibling product + cross-product connection (planned).** Holdclose shares a
+  care-data spine with **Care Rounds** (our Track 2 entry, for the paid direct-care
+  workforce). A planned connection would let the two work together on one shared
+  care circle — e.g. a **family-scheduled appointment in Holdclose surfacing
+  read-only to the assigned paid worker in Care Rounds** — so the family and the
+  professionals see the same care picture. Described honestly as planned Phase-2
+  interoperability, not a present capability, but a concrete, credible path.
 - **Roadmap (planned, not current):** direct interoperability with health
   records / EMRs and assistive/home devices — described honestly as future work,
   not a present capability.
