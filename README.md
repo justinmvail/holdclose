@@ -12,7 +12,7 @@ hard moments.
 It's built for **any** care situation: aging parents, a disabled family member,
 post-surgery recovery, dementia. Not one diagnosis.
 
-🌐 **[holdclose.care](https://holdclose.care)** · iOS + Android · in active testing
+🌐 **[junocode.studio/holdclose](https://junocode.studio/holdclose/)** · iOS + Android · in active testing
 
 > **Entry in the ACL / HHS Caregiver AI Prize Challenge — Track 1 (AI for
 > family caregivers).** **Dementia caregiving is a first-class use case:** the
@@ -93,6 +93,19 @@ encrypted at rest by the OS; care-circle sync is authenticated and TLS-encrypted
 
 Quality is enforced by a large automated suite — **~2,000 unit, widget, and
 golden tests** plus a backend suite — run on every change.
+
+## Serverless on Cloudflare — built to stay affordable
+
+The entire backend is **serverless on Cloudflare**: Workers for edge compute,
+D1 (SQLite) for data, R2 for files, and **Workers AI** for the coach — an
+**open-weight model running on Cloudflare's serverless GPU platform**.
+Serverless means there are no idle servers to pay for (compute scales to zero
+when no one is using it), and the AI is billed **per request** rather than as a
+dedicated GPU or a per-seat model-vendor contract. That keeps the cost of
+running the app **per caregiver extremely low** — which is what makes an
+affordable, and for many families free, caregiving tool genuinely sustainable
+instead of a launch-day promise. It also keeps the AI on **our own cloud**, so a
+loved one's care data never reaches a separate AI vendor.
 
 ## Development
 
