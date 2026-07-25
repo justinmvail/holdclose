@@ -88,12 +88,12 @@ if [[ "${DO_ANDROID}" -eq 1 ]]; then
   pushd "${REPO_ROOT}/android" >/dev/null
   ./gradlew :app:connectedDebugAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.class=\
-com.careblazers.careblazers.TTSBridgeInstrumentedTest#regenerateAudioQualitySamples
+com.holdclose.holdclose.TTSBridgeInstrumentedTest#regenerateAudioQualitySamples
   popd >/dev/null
 
   # External app files dir; instrumented test writes here. Path shape:
-  # /sdcard/Android/data/com.careblazers.careblazers/files/tts_samples/<voice>/
-  REMOTE_BASE="/sdcard/Android/data/com.careblazers.careblazers/files/tts_samples/${VOICE_ID}"
+  # /sdcard/Android/data/com.holdclose.holdclose/files/tts_samples/<voice>/
+  REMOTE_BASE="/sdcard/Android/data/com.holdclose.holdclose/files/tts_samples/${VOICE_ID}"
   for slug in "${SCRIPT_SLUGS[@]}"; do
     remote="${REMOTE_BASE}/${slug}.wav"
     if ! adb shell "[ -f ${remote} ]"; then

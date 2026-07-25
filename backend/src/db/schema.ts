@@ -26,10 +26,10 @@ export const profiles = sqliteTable(
     avatarUrl: text('avatar_url'),
     joinedAt: timestampColumn('joined_at').notNull(),
     role: text().notNull().default('user'),
-    careblazersUserId: text('careblazers_user_id').notNull(),
+    holdcloseUserId: text('holdclose_user_id').notNull(),
   },
   (t) => [
-    uniqueIndex('profiles_careblazers_user_id_unique').on(t.careblazersUserId),
+    uniqueIndex('profiles_holdclose_user_id_unique').on(t.holdcloseUserId),
     uniqueIndex('profiles_username_unique').on(t.username),
   ],
 );
@@ -303,7 +303,7 @@ export type LlmUsage = typeof llmUsage.$inferSelect;
 
 // Server-side subscription entitlement — the AUTHORITATIVE record of whether
 // a user has premium, one row per user keyed by the forum JWT `sub` (the
-// `careblazers_user_id`). The device NEVER decides its own entitlement: it
+// `holdclose_user_id`). The device NEVER decides its own entitlement: it
 // posts a store receipt (Apple JWS / Google purchaseToken) to
 // POST /billing/verify, the Worker validates it against the platform store
 // API, and this row is upserted. GET /billing/entitlement then reads this row
@@ -313,7 +313,7 @@ export type LlmUsage = typeof llmUsage.$inferSelect;
 export const entitlements = sqliteTable(
   'entitlements',
   {
-    // The forum JWT sub / careblazers_user_id. One entitlement per user.
+    // The forum JWT sub / holdclose_user_id. One entitlement per user.
     userId: text('user_id').primaryKey(),
     platform: text().notNull(),
     productId: text('product_id').notNull(),

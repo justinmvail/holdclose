@@ -185,7 +185,7 @@ keep working — which looks alive but isn't. `CF_AI_API_TOKEN` (a Cloudflare AP
 only to exercise `POST /api/v1/chat`.
 
 > **Dev-Mac note:** on the operator's Mac the worker already runs on 8787
-> as the `com.careblazers.worker` LaunchAgent (LIVE tester backend,
+> as the worker LaunchAgent (LIVE tester backend,
 > Funnel-exposed on :8443 — see `tools/README.md` → "Always-on dev
 > backend"). Run scratch instances with
 > `npx wrangler dev --port <other> --inspector-port <other> --persist-to <scratch-dir>`
@@ -289,7 +289,7 @@ wrangler secret put GOOGLE_PLAY_SA_PRIVATE_KEY # the Play service-account privat
 #     APPLE_KEY_ID          — the .p8 key id
 #     APPLE_BUNDLE_ID       — the app bundle id (com.holdclose.holdclose)
 #     GOOGLE_PLAY_SA_EMAIL  — the Play service-account email
-#     GOOGLE_PLAY_PACKAGE   — the Android package (com.careblazers.careblazers)
+#     GOOGLE_PLAY_PACKAGE   — the Android package (com.holdclose.holdclose)
 
 # Non-secret vars live in wrangler.toml [vars]; override per environment
 # at deploy time:

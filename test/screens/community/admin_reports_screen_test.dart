@@ -25,7 +25,7 @@ ForumReport _report(
 
 ForumProfile _profile(String role) => ForumProfile(
       id: 'me',
-      careblazersUserId: 'cb-1',
+      holdcloseUserId: 'cb-1',
       displayName: 'Me',
       joinedAt: _fixedNow.subtract(const Duration(days: 30)),
       role: role,

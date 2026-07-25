@@ -32,7 +32,7 @@ async function seedProfile(overrides: Partial<typeof profiles.$inferInsert> = {}
     .insert(profiles)
     .values({
       displayName: 'Caregiver_ab12cd',
-      careblazersUserId: `cb-${crypto.randomUUID()}`,
+      holdcloseUserId: `cb-${crypto.randomUUID()}`,
       ...overrides,
     })
     .returning();
@@ -91,13 +91,13 @@ describe('forum schema round-trip', () => {
         .from(profiles)
         .where(eq(profiles.id, profile.id));
       expect(readBack.displayName).toBe('Caregiver_ab12cd');
-      expect(readBack.careblazersUserId).toBe(profile.careblazersUserId);
+      expect(readBack.holdcloseUserId).toBe(profile.holdcloseUserId);
     });
 
-    it('rejects a duplicate careblazers_user_id', async () => {
+    it('rejects a duplicate holdclose_user_id', async () => {
       const first = await seedProfile();
       await expect(
-        seedProfile({ careblazersUserId: first.careblazersUserId }),
+        seedProfile({ holdcloseUserId: first.holdcloseUserId }),
       ).rejects.toThrow();
     });
   });
@@ -268,7 +268,7 @@ describe('forum schema round-trip', () => {
     it('defaults status to pending and resolved_at to null', async () => {
       const reporter = await seedProfile();
       const author = await seedProfile({
-        careblazersUserId: `cb-${crypto.randomUUID()}`,
+        holdcloseUserId: `cb-${crypto.randomUUID()}`,
       });
       const post = await seedPost(author.id);
 
@@ -289,7 +289,7 @@ describe('forum schema round-trip', () => {
     it('rejects an unknown status', async () => {
       const reporter = await seedProfile();
       const author = await seedProfile({
-        careblazersUserId: `cb-${crypto.randomUUID()}`,
+        holdcloseUserId: `cb-${crypto.randomUUID()}`,
       });
       const post = await seedPost(author.id);
 

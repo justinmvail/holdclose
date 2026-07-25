@@ -39,14 +39,14 @@ abstract class ForumCrisisResources with _$ForumCrisisResources {
 
 /// The signed-in caregiver's own forum profile (BUILD_SPEC.md §13 /
 /// Phase 13.4). Returned by `POST /profiles/bootstrap`, `GET
-/// /profiles/me`, and `PATCH /profiles/me`. [careblazersUserId] is the
+/// /profiles/me`, and `PATCH /profiles/me`. [holdcloseUserId] is the
 /// foreign key back into the app's auth identity; [role] is `'user'`
 /// for everyone except the solo admin.
 @freezed
 abstract class ForumProfile with _$ForumProfile {
   const factory ForumProfile({
     required String id,
-    @JsonKey(name: 'careblazers_user_id') required String careblazersUserId,
+    @JsonKey(name: 'holdclose_user_id') required String holdcloseUserId,
     @JsonKey(name: 'display_name') required String displayName,
     @JsonKey(name: 'avatar_url') String? avatarUrl,
     @JsonKey(name: 'joined_at') required DateTime joinedAt,

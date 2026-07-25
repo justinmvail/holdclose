@@ -49,7 +49,7 @@ void main() {
   group('expired-token recovery — 401 + Token-Expired retries ONCE', () {
     Map<String, Object?> profileJson() => <String, Object?>{
           'id': 'profile-1',
-          'careblazers_user_id': 'user-1',
+          'holdclose_user_id': 'user-1',
           'display_name': 'Caregiver_abc123',
           'avatar_url': null,
           'joined_at': '2026-05-30T12:00:00.000Z',
@@ -235,7 +235,7 @@ void main() {
       final _RecordingAdapter adapter =
           _RecordingAdapter.json(<String, Object?>{
         'id': 'profile-1',
-        'careblazers_user_id': 'user-1',
+        'holdclose_user_id': 'user-1',
         'display_name': 'Caregiver_abc123',
         'avatar_url': null,
         'joined_at': '2026-05-30T12:00:00.000Z',
@@ -314,7 +314,7 @@ void main() {
       final _RecordingAdapter authedAdapter =
           _RecordingAdapter.json(<String, Object?>{
         'id': 'profile-1',
-        'careblazers_user_id': 'user-1',
+        'holdclose_user_id': 'user-1',
         'display_name': 'Caregiver_abc123',
         'avatar_url': null,
         'joined_at': '2026-05-30T12:00:00.000Z',
@@ -434,7 +434,7 @@ void main() {
       final _RecordingAdapter adapter =
           _RecordingAdapter.json(<String, Object?>{
         'id': 'profile-1',
-        'careblazers_user_id': 'user-1',
+        'holdclose_user_id': 'user-1',
         'display_name': 'NewName',
         'avatar_url': null,
         'joined_at': '2026-05-30T12:00:00.000Z',
@@ -741,7 +741,7 @@ void main() {
       final _RecordingAdapter adapter =
           _RecordingAdapter.json(<String, Object?>{
         'id': 'profile-1',
-        'careblazers_user_id': 'user-1',
+        'holdclose_user_id': 'user-1',
         'display_name': 'Caregiver',
         'avatar_url': null,
         'joined_at': '2026-05-30T12:00:00.000Z',

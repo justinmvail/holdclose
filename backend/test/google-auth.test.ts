@@ -332,7 +332,7 @@ describe('POST /api/v1/auth/google', () => {
     const rows = await drizzle(env.FORUM_DB)
       .select()
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, 'google-sub-new'));
+      .where(eq(profiles.holdcloseUserId, 'google-sub-new'));
     expect(rows).toHaveLength(1);
     expect(rows[0].displayName).toBe('New Caregiver');
   });
@@ -431,7 +431,7 @@ describe('POST /api/v1/auth/google', () => {
     const rows = await drizzle(env.FORUM_DB)
       .select()
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, 'google-sub-noname'));
+      .where(eq(profiles.holdcloseUserId, 'google-sub-noname'));
     expect(rows[0].displayName).toMatch(/^Caregiver_[0-9a-f]{6}$/);
   });
 
@@ -443,7 +443,7 @@ describe('POST /api/v1/auth/google', () => {
       .values({
         displayName: 'Existing_Name',
         username: 'existing_handle',
-        careblazersUserId: 'google-sub-existing',
+        holdcloseUserId: 'google-sub-existing',
       });
 
     const token = await signToken(pair.privateKey, {
@@ -466,7 +466,7 @@ describe('POST /api/v1/auth/google', () => {
     const rows = await drizzle(env.FORUM_DB)
       .select()
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, 'google-sub-existing'));
+      .where(eq(profiles.holdcloseUserId, 'google-sub-existing'));
     expect(rows).toHaveLength(1);
     // Display name preserved — not overwritten by the token's name.
     expect(rows[0].displayName).toBe('Existing_Name');

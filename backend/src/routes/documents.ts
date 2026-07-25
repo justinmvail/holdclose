@@ -36,12 +36,12 @@ const ALLOWED_CONTENT_TYPES = new Set([
 
 async function loadProfileByUserId(
   db: Db,
-  careblazersUserId: string,
+  holdcloseUserId: string,
 ): Promise<Profile | undefined> {
   const [row] = await db
     .select()
     .from(profiles)
-    .where(eq(profiles.careblazersUserId, careblazersUserId));
+    .where(eq(profiles.holdcloseUserId, holdcloseUserId));
   return row;
 }
 

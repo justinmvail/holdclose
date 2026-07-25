@@ -31,8 +31,8 @@ export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 // Deterministic 6-hex-char hash of the user id — the same default-name shape
 // minted by the profiles bootstrap, reused here for parity.
-async function defaultDisplayName(careblazersUserId: string): Promise<string> {
-  const bytes = new TextEncoder().encode(careblazersUserId);
+async function defaultDisplayName(holdcloseUserId: string): Promise<string> {
+  const bytes = new TextEncoder().encode(holdcloseUserId);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const hex = Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -89,7 +89,7 @@ export const authRouter = (jwksFetcher?: JwksFetcher) => {
     const [existing] = await db
       .select()
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, userId));
+      .where(eq(profiles.holdcloseUserId, userId));
 
     let username: string | null;
     if (existing) {
@@ -102,7 +102,7 @@ export const authRouter = (jwksFetcher?: JwksFetcher) => {
           : await defaultDisplayName(userId);
       const [created] = await db
         .insert(profiles)
-        .values({ displayName, careblazersUserId: userId })
+        .values({ displayName, holdcloseUserId: userId })
         .returning();
       username = created.username ?? null;
     }

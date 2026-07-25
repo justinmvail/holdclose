@@ -91,10 +91,10 @@ const containsProfanity = (name: string): boolean => {
   return PROFANITY_WORDLIST.some((word) => lower.includes(word));
 };
 
-// Deterministic 6-hex-char hash of the careblazers_user_id so a retried
+// Deterministic 6-hex-char hash of the holdclose_user_id so a retried
 // bootstrap call produces the same default name.
-async function defaultDisplayName(careblazersUserId: string): Promise<string> {
-  const bytes = new TextEncoder().encode(careblazersUserId);
+async function defaultDisplayName(holdcloseUserId: string): Promise<string> {
+  const bytes = new TextEncoder().encode(holdcloseUserId);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const hex = Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -105,7 +105,7 @@ async function defaultDisplayName(careblazersUserId: string): Promise<string> {
 function meResponse(profile: Profile) {
   return {
     id: profile.id,
-    careblazers_user_id: profile.careblazersUserId,
+    holdclose_user_id: profile.holdcloseUserId,
     display_name: profile.displayName,
     username: profile.username ?? null,
     avatar_url: profile.avatarUrl,
@@ -182,13 +182,13 @@ type DeletionSummary = {
 // Hard-delete an account and everything tied to it. Ordered so a row is
 // only removed after the rows that reference it, since D1 does not enforce
 // FK cascades (see the DELETE /me comment). `profileId` keys the forum +
-// circle data; `careblazersUserId` is the JWT `sub` that keys llm_usage.
+// circle data; `holdcloseUserId` is the JWT `sub` that keys llm_usage.
 async function deleteAccount(
   db: Db,
   blobs: R2Bucket,
   media: R2Bucket,
   profileId: string,
-  careblazersUserId: string,
+  holdcloseUserId: string,
 ): Promise<DeletionSummary> {
   const summary: DeletionSummary = {
     profiles: 0,
@@ -351,10 +351,10 @@ async function deleteAccount(
     .returning({ id: circleMembers.id });
   summary.circle_memberships = deletedMemberships.length;
 
-  // --- LLM usage ledger (keyed by the JWT sub / careblazers_user_id) ---
+  // --- LLM usage ledger (keyed by the JWT sub / holdclose_user_id) ---
   const deletedUsage = await db
     .delete(llmUsage)
-    .where(eq(llmUsage.userId, careblazersUserId))
+    .where(eq(llmUsage.userId, holdcloseUserId))
     .returning({ id: llmUsage.id });
   summary.llm_usage = deletedUsage.length;
 
@@ -375,33 +375,33 @@ export const profilesRouter = () => {
   }>();
 
   router.post('/bootstrap', async (c) => {
-    const careblazersUserId = c.get('userId');
+    const holdcloseUserId = c.get('userId');
     const db = drizzle(c.env.FORUM_DB);
 
     const [existing] = await db
       .select()
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, careblazersUserId));
+      .where(eq(profiles.holdcloseUserId, holdcloseUserId));
     if (existing) {
       return c.json(meResponse(existing), 200);
     }
 
-    const displayName = await defaultDisplayName(careblazersUserId);
+    const displayName = await defaultDisplayName(holdcloseUserId);
     const [created] = await db
       .insert(profiles)
-      .values({ displayName, careblazersUserId })
+      .values({ displayName, holdcloseUserId })
       .returning();
     return c.json(meResponse(created), 201);
   });
 
   router.get('/me', async (c) => {
-    const careblazersUserId = c.get('userId');
+    const holdcloseUserId = c.get('userId');
     const db = drizzle(c.env.FORUM_DB);
 
     const [profile] = await db
       .select()
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, careblazersUserId));
+      .where(eq(profiles.holdcloseUserId, holdcloseUserId));
     if (!profile) {
       return c.json({ error: 'profile_not_found' }, 404);
     }
@@ -409,13 +409,13 @@ export const profilesRouter = () => {
   });
 
   router.patch('/me', async (c) => {
-    const careblazersUserId = c.get('userId');
+    const holdcloseUserId = c.get('userId');
     const db = drizzle(c.env.FORUM_DB);
 
     const [current] = await db
       .select()
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, careblazersUserId));
+      .where(eq(profiles.holdcloseUserId, holdcloseUserId));
     if (!current) {
       return c.json({ error: 'profile_not_found' }, 404);
     }
@@ -457,7 +457,7 @@ export const profilesRouter = () => {
         .where(
           and(
             eq(profiles.username, handle),
-            ne(profiles.careblazersUserId, careblazersUserId),
+            ne(profiles.holdcloseUserId, holdcloseUserId),
           ),
         );
       if (taken) {
@@ -508,7 +508,7 @@ export const profilesRouter = () => {
     const [updated] = await db
       .update(profiles)
       .set(updates)
-      .where(eq(profiles.careblazersUserId, careblazersUserId))
+      .where(eq(profiles.holdcloseUserId, holdcloseUserId))
       .returning();
     if (!updated) {
       return c.json({ error: 'profile_not_found' }, 404);
@@ -531,13 +531,13 @@ export const profilesRouter = () => {
   // the content-type whitelist below is a security control: an SVG or HTML
   // "avatar" would be an active document executing on our own origin.
   router.put('/avatar', async (c) => {
-    const careblazersUserId = c.get('userId');
+    const holdcloseUserId = c.get('userId');
     const db = drizzle(c.env.FORUM_DB);
 
     const [profile] = await db
       .select()
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, careblazersUserId));
+      .where(eq(profiles.holdcloseUserId, holdcloseUserId));
     if (!profile) {
       return c.json({ error: 'profile_not_found' }, 404);
     }
@@ -613,13 +613,13 @@ export const profilesRouter = () => {
   // circles.owner_profile_id FK would NOT cascade, orphaning shared care
   // data — hence the ownership transfer below.)
   router.delete('/me', async (c) => {
-    const careblazersUserId = c.get('userId');
+    const holdcloseUserId = c.get('userId');
     const db = drizzle(c.env.FORUM_DB);
 
     const [profile] = await db
       .select()
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, careblazersUserId));
+      .where(eq(profiles.holdcloseUserId, holdcloseUserId));
     if (!profile) {
       return c.json({ error: 'profile_not_found' }, 404);
     }
@@ -629,7 +629,7 @@ export const profilesRouter = () => {
       c.env.DOC_BLOBS,
       c.env.FORUM_MEDIA,
       profile.id,
-      careblazersUserId,
+      holdcloseUserId,
     );
     return c.json({ deleted: summary }, 200);
   });

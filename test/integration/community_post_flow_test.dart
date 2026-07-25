@@ -474,7 +474,7 @@ class _NotMyContentFake extends FakeForumApiClient {
   @override
   Future<ForumProfile> getMyProfile() async => ForumProfile(
         id: 'profile-not-mine',
-        careblazersUserId: 'cb-not-mine',
+        holdcloseUserId: 'cb-not-mine',
         displayName: 'Lurker',
         joinedAt: kHarnessClock.subtract(const Duration(days: 1)),
         role: 'user',

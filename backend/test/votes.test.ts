@@ -69,7 +69,7 @@ async function makeProfile(
     .insert(profiles)
     .values({
       displayName: options.displayName ?? sub,
-      careblazersUserId: sub,
+      holdcloseUserId: sub,
     })
     .returning();
   return row;

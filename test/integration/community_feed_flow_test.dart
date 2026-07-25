@@ -300,7 +300,7 @@ class _AdminFakeForumApiClient extends FakeForumApiClient {
 
   ForumProfile _adminProfile() => ForumProfile(
         id: 'demo-profile',
-        careblazersUserId: 'demo-user',
+        holdcloseUserId: 'demo-user',
         displayName: 'You',
         joinedAt: kHarnessClock.subtract(const Duration(days: 60)),
         role: forumAdminRole,

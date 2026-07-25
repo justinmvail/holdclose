@@ -76,7 +76,7 @@ const PNG_B64 =
 async function makeAdmin(sub: string) {
   await authedFetch('/api/v1/profiles/bootstrap', { method: 'POST', sub });
   await env.FORUM_DB.prepare(
-    'UPDATE profiles SET role = ? WHERE careblazers_user_id = ?',
+    'UPDATE profiles SET role = ? WHERE holdclose_user_id = ?',
   )
     .bind('admin', sub)
     .run();

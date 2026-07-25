@@ -146,12 +146,12 @@ export function feedbackRouter() {
   // the moderation queue.
   async function requireAdmin(
     db: ReturnType<typeof drizzle>,
-    careblazersUserId: string,
+    holdcloseUserId: string,
   ): Promise<boolean> {
     const [profile] = await db
       .select({ role: profiles.role })
       .from(profiles)
-      .where(eq(profiles.careblazersUserId, careblazersUserId));
+      .where(eq(profiles.holdcloseUserId, holdcloseUserId));
     return profile?.role === ADMIN_ROLE;
   }
 

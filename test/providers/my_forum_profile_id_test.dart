@@ -31,7 +31,7 @@ class _ProfileFake extends ForumApiClient {
     if (error != null) throw error!;
     return ForumProfile(
       id: profileId,
-      careblazersUserId: 'cb-1',
+      holdcloseUserId: 'cb-1',
       displayName: 'Me',
       joinedAt: _fixedNow.subtract(const Duration(days: 30)),
       role: 'user',

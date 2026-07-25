@@ -77,6 +77,6 @@ echo "→ installing $(du -h "$APK" | cut -f1) to $DEVICE"
 adb -s "$DEVICE" install -r "$APK"
 
 adb -s "$DEVICE" shell am start -n \
-  com.holdclose.holdclose/com.careblazers.careblazers.MainActivity >/dev/null
+  com.holdclose.holdclose/com.holdclose.holdclose.MainActivity >/dev/null
 
 echo "→ launched. Settings → About shows build stamp ${BUILD_NUMBER}."

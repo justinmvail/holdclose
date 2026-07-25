@@ -23,7 +23,7 @@ class _FakeForumApiClient extends ForumApiClient {
   @override
   Future<ForumProfile> getMyProfile() async => ForumProfile(
         id: 'me',
-        careblazersUserId: 'cb-1',
+        holdcloseUserId: 'cb-1',
         displayName: 'Me',
         joinedAt: _fixedNow.subtract(const Duration(days: 30)),
         role: role,

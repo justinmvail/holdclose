@@ -61,7 +61,7 @@ async function makeProfile(
     .values({
       displayName: options.displayName ?? sub,
       username: options.username ?? null,
-      careblazersUserId: sub,
+      holdcloseUserId: sub,
       role: options.role ?? 'user',
     })
     .returning();

@@ -22,4 +22,4 @@ FORUM_JWT_SECRET=dev-only-jwt-secret-change-me
 # APPLE_BUNDLE_ID=com.holdclose.holdclose
 # GOOGLE_PLAY_SA_EMAIL=
 # GOOGLE_PLAY_SA_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-# GOOGLE_PLAY_PACKAGE=com.careblazers.careblazers
+# GOOGLE_PLAY_PACKAGE=com.holdclose.holdclose

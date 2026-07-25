@@ -58,7 +58,7 @@ describe('POST /api/v1/profiles/bootstrap', () => {
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.careblazers_user_id).toBe('cb-user-1');
+    expect(body.holdclose_user_id).toBe('cb-user-1');
     expect(body.role).toBe('user');
     expect(body.avatar_url).toBeNull();
     expect(typeof body.display_name).toBe('string');
@@ -501,7 +501,7 @@ describe('GET /api/v1/profiles/by-username/:username', () => {
       display_name: 'findable',
       avatar_url: null,
     });
-    expect(body).not.toHaveProperty('careblazers_user_id');
+    expect(body).not.toHaveProperty('holdclose_user_id');
     expect(body).not.toHaveProperty('role');
   });
 });
@@ -582,8 +582,8 @@ describe('GET /api/v1/profiles/:id', () => {
       comment_count: 2,
     });
     expect(typeof body.joined_at).toBe('string');
-    // Public payload must not leak careblazers_user_id or role.
-    expect(body).not.toHaveProperty('careblazers_user_id');
+    // Public payload must not leak holdclose_user_id or role.
+    expect(body).not.toHaveProperty('holdclose_user_id');
     expect(body).not.toHaveProperty('role');
   });
 });

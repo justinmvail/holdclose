@@ -123,7 +123,7 @@ GOOGLE_PLAY_SA_EMAIL = ""                         # the Play service-account ema
 GOOGLE_PLAY_PACKAGE = "com.holdclose.holdclose"    # MUST match applicationId in
                                                    # android/app/build.gradle.kts. The old
                                                    # value here was the Kotlin *namespace*
-                                                   # (com.careblazers.careblazers), which is a
+                                                   # (com.holdclose.holdclose), which is a
                                                    # deliberate keep but is NOT the Play package.
                                                    # Play receipt verification would have 404'd.
 

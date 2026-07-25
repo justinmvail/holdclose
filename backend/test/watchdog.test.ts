@@ -210,11 +210,11 @@ describe('gatherDbMetrics', () => {
 
     const [authorA] = await orm
       .insert(profiles)
-      .values({ displayName: 'a', careblazersUserId: 'cb-a' })
+      .values({ displayName: 'a', holdcloseUserId: 'cb-a' })
       .returning();
     const [authorB] = await orm
       .insert(profiles)
-      .values({ displayName: 'b', careblazersUserId: 'cb-b' })
+      .values({ displayName: 'b', holdcloseUserId: 'cb-b' })
       .returning();
 
     const [recentPost] = await orm
@@ -272,7 +272,7 @@ describe('gatherDbMetrics', () => {
     const recent = new Date(NOW.getTime() - 86_400_000);
     const [author] = await orm
       .insert(profiles)
-      .values({ displayName: 'solo', careblazersUserId: 'cb-solo' })
+      .values({ displayName: 'solo', holdcloseUserId: 'cb-solo' })
       .returning();
     const [post] = await orm
       .insert(posts)

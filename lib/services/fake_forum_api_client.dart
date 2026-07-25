@@ -66,7 +66,7 @@ class FakeForumApiClient extends ForumApiClient {
   };
 
   /// The synthetic profile the demo signs in as. The fake auth
-  /// provider's user maps to `careblazers_user_id = 'demo-user'`.
+  /// provider's user maps to `holdclose_user_id = 'demo-user'`.
   static const String _demoUserHoldcloseId = 'demo-user';
   static const String _demoProfileId = 'demo-profile';
 
@@ -74,7 +74,7 @@ class FakeForumApiClient extends ForumApiClient {
     final DateTime now = _clock();
     _profiles[_demoUserHoldcloseId] = ForumProfile(
       id: _demoProfileId,
-      careblazersUserId: _demoUserHoldcloseId,
+      holdcloseUserId: _demoUserHoldcloseId,
       displayName: 'You',
       joinedAt: now.subtract(const Duration(days: 60)),
       role: 'user',
@@ -82,28 +82,28 @@ class FakeForumApiClient extends ForumApiClient {
 
     final ForumProfile sarah = ForumProfile(
       id: 'profile-sarah',
-      careblazersUserId: 'seed-sarah',
+      holdcloseUserId: 'seed-sarah',
       displayName: 'Sarah H.',
       joinedAt: now.subtract(const Duration(days: 320)),
       role: 'user',
     );
     final ForumProfile mei = ForumProfile(
       id: 'profile-mei',
-      careblazersUserId: 'seed-mei',
+      holdcloseUserId: 'seed-mei',
       displayName: 'Mei W.',
       joinedAt: now.subtract(const Duration(days: 210)),
       role: 'user',
     );
     final ForumProfile rob = ForumProfile(
       id: 'profile-rob',
-      careblazersUserId: 'seed-rob',
+      holdcloseUserId: 'seed-rob',
       displayName: 'Rob D.',
       joinedAt: now.subtract(const Duration(days: 90)),
       role: 'user',
     );
-    _profiles[sarah.careblazersUserId] = sarah;
-    _profiles[mei.careblazersUserId] = mei;
-    _profiles[rob.careblazersUserId] = rob;
+    _profiles[sarah.holdcloseUserId] = sarah;
+    _profiles[mei.holdcloseUserId] = mei;
+    _profiles[rob.holdcloseUserId] = rob;
 
     _seedPost(
       author: sarah,
@@ -171,7 +171,7 @@ class FakeForumApiClient extends ForumApiClient {
     if (p != null) return p;
     final ForumProfile fresh = ForumProfile(
       id: _demoProfileId,
-      careblazersUserId: _demoUserHoldcloseId,
+      holdcloseUserId: _demoUserHoldcloseId,
       displayName: 'You',
       joinedAt: _clock(),
       role: 'user',
@@ -232,14 +232,14 @@ class FakeForumApiClient extends ForumApiClient {
     }
     final ForumProfile next = ForumProfile(
       id: current.id,
-      careblazersUserId: current.careblazersUserId,
+      holdcloseUserId: current.holdcloseUserId,
       displayName: displayName ?? current.displayName,
       avatarUrl: avatarUrl ?? current.avatarUrl,
       joinedAt: current.joinedAt,
       role: current.role,
       username: nextUsername,
     );
-    _profiles[current.careblazersUserId] = next;
+    _profiles[current.holdcloseUserId] = next;
     return next;
   }
 
