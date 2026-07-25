@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:holdclose/app.dart';
+import 'package:holdclose/models/patient.dart' show CrisisMedication;
+import 'package:holdclose/seed/mary_henderson.dart' show maryHenderson;
 import 'package:holdclose/db/database.dart';
 import 'package:holdclose/models/chat.dart';
 import 'package:holdclose/models/forum.dart';
@@ -100,7 +102,21 @@ void main() {
       // caregiver authors the first entry on camera.
       final InMemoryStorageProvider storage = InMemoryStorageProvider();
       addTearDown(storage.dispose);
-      await SeedRepository(storage: storage).ensurePatient();
+      // Dementia-grounded showcase persona (Track-1 dementia focus): same
+      // Mary Henderson, re-diagnosed to Alzheimer's with the hallmark meds so
+      // Home, the Emergency Card, and the coach all read as dementia care.
+      await storage.upsertPatient(maryHenderson().copyWith(
+        diagnosis:
+            "Alzheimer's disease (dementia), diagnosed 2023; high blood pressure",
+        medications: const <CrisisMedication>[
+          CrisisMedication(
+              name: 'Donepezil', dose: '10 mg', schedule: 'every morning'),
+          CrisisMedication(
+              name: 'Memantine', dose: '10 mg', schedule: 'twice daily'),
+          CrisisMedication(
+              name: 'Lisinopril', dose: '10 mg', schedule: 'every morning'),
+        ],
+      ));
 
       final HoldcloseDatabase db =
           HoldcloseDatabase(NativeDatabase.memory());
@@ -112,13 +128,13 @@ void main() {
           MedicationRepository(db, clock: _fixedNow);
       await medRepo.upsertMedication(const Medication(
         id: 'med-don',
-        name: 'Lisinopril',
+        name: 'Donepezil',
         dosage: '10 mg',
         route: MedicationRoute.oral,
       ));
       await medRepo.upsertMedication(const Medication(
         id: 'med-mem',
-        name: 'Atorvastatin',
+        name: 'Memantine',
         dosage: '10 mg',
         route: MedicationRoute.oral,
       ));
