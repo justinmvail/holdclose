@@ -23,7 +23,18 @@ post-surgery recovery, dementia. Not one diagnosis.
 > dementia care, right alongside stroke recovery, post-surgery, and aging-parent
 > support.
 
-<!-- Screenshots: add 3–4 device captures here (Home, Chat coach, Scan-to-import, Emergency Card). -->
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/01_home.png" width="230" alt="Home — today's medication schedule" />
+  <img src="screenshots/05_chat.png" width="230" alt="Chat coach — grounded in the loved one's situation" />
+  <img src="screenshots/03_medications.png" width="230" alt="Medications & dose windows" />
+</p>
+<p align="center">
+  <img src="screenshots/02_care_hub.png" width="230" alt="Care hub" />
+  <img src="screenshots/04_emergency_card.png" width="230" alt="Emergency Card — paramedic/ER handoff" />
+  <img src="screenshots/06_community.png" width="230" alt="Caregiver community" />
+</p>
 
 ## What makes it different
 
