@@ -34,7 +34,7 @@ file(GLOB SPEECHPLAYER_SOURCES CONFIGURE_DEPENDS
 list(APPEND ESPEAK_SOURCES ${UCD_SOURCES} ${SPEECHPLAYER_SOURCES})
 
 if(ESPEAK_SOURCES)
-    message(STATUS "careblazers: espeak-ng sources present — JNI bridge will link the real library")
+    message(STATUS "holdclose: espeak-ng sources present — JNI bridge will link the real library")
     # Same flag set Home Assistant's iOS voice library uses, mirrored
     # from ios/Vendored/espeak-ng/espeak-ng.podspec. USE_ASYNC=0 keeps
     # espeak from spinning up its own playback thread (we drive
@@ -55,7 +55,7 @@ if(ESPEAK_SOURCES)
         "${ESPEAK_DIR}/speechPlayer/include"
     )
 else()
-    message(STATUS "careblazers: espeak-ng sources absent — JNI bridge will signal unavailable until tools/vendor_espeak_ng.sh runs")
+    message(STATUS "holdclose: espeak-ng sources absent — JNI bridge will signal unavailable until tools/vendor_espeak_ng.sh runs")
 endif()
 
 add_library(careblazers_espeak_ng SHARED

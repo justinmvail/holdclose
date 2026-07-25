@@ -25,7 +25,7 @@ enum TTSBridge {
     /// Registers the MethodChannel against a plugin registry. Called
     /// from AppDelegate once the implicit Flutter engine boots.
     static func register(with registry: FlutterPluginRegistry) {
-        guard let registrar = registry.registrar(forPlugin: "CareblazersBundledTTS") else {
+        guard let registrar = registry.registrar(forPlugin: "HoldcloseBundledTTS") else {
             return
         }
         let channel = FlutterMethodChannel(
@@ -85,7 +85,7 @@ final class TTSEngine {
         ]
     ]
 
-    private let workQueue = DispatchQueue(label: "careblazers.tts.work", qos: .userInitiated)
+    private let workQueue = DispatchQueue(label: "holdclose.tts.work", qos: .userInitiated)
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
 

@@ -187,13 +187,13 @@ void main() {
       await repo.appendMessage(buildStream(body: 'Hello', done: false));
       await repo.appendMessage(buildStream(body: 'Hello there', done: false));
       await repo.appendMessage(buildStream(
-        body: 'Hello there, Careblazer.',
+        body: 'Hello there, caregiver.',
         done: true,
       ));
 
       final List<Message> loaded = await repo.loadMessages('stream-convo');
       expect(loaded, hasLength(1));
-      expect(loaded.single.body, 'Hello there, Careblazer.');
+      expect(loaded.single.body, 'Hello there, caregiver.');
       expect(loaded.single.streamingDone, isTrue);
     });
 

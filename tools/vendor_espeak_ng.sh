@@ -31,7 +31,7 @@ UPSTREAM="https://github.com/espeak-ng/espeak-ng.git"
 VENDOR_DIR="${REPO_ROOT}/ios/Vendored/espeak-ng"
 ANDROID_DIR="${REPO_ROOT}/android/app/src/main/cpp/espeak-ng"
 ASSETS_DIR="${REPO_ROOT}/assets/tts/espeak-ng-data"
-SCRATCH="$(mktemp -d -t careblazers-espeak-ng-XXXXXX)"
+SCRATCH="$(mktemp -d -t holdclose-espeak-ng-XXXXXX)"
 trap 'rm -rf "${SCRATCH}"' EXIT
 
 echo "[vendor] cloning espeak-ng ${PINNED_TAG} into scratch=${SCRATCH}"

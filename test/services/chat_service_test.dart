@@ -240,7 +240,7 @@ void main() {
 
     test('appends the user message to the repository first', () async {
       final _ScriptedChatBackend backend = _ScriptedChatBackend(<ChatDelta>[
-        const ChatDeltaText('Hello, Careblazer.'),
+        const ChatDeltaText('Hello, caregiver.'),
       ]);
       final ChatService svc = ChatService(
         repository: repo,
@@ -401,7 +401,7 @@ void main() {
           id: 'prior-a',
           conversationId: 'convo-1',
           role: MessageRole.assistant,
-          body: 'hello, Careblazer',
+          body: 'hello, caregiver',
           citations: const <String>[],
           createdAt: _fixedClock().subtract(const Duration(minutes: 1)),
           streamingDone: true,
@@ -431,7 +431,7 @@ void main() {
               MessageRole.user,
             ]);
         expect(history.map((ChatTurn t) => t.content).toList(),
-            <String>['hi', 'hello, Careblazer', 'tell me more']);
+            <String>['hi', 'hello, caregiver', 'tell me more']);
       },
     );
 

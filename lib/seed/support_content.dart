@@ -22,7 +22,7 @@
 library;
 
 /// The 10 self-check statements (Phase 14.38). Each is a first-person
-/// statement the Careblazer rates on the 1–5 [burnoutScaleLabels] scale,
+/// statement the caregiver rates on the 1–5 [burnoutScaleLabels] scale,
 /// where a higher rating signals more strain. Order is fixed — the
 /// scoring sums the answers positionally.
 const List<String> burnoutQuestions = <String>[
@@ -162,7 +162,7 @@ const List<RespiteResource> crisisResources = <RespiteResource>[
 
 /// Web-search URL the "search local respite" link opens. A real local
 /// directory is deferred to a later phase; until then this hands the
-/// Careblazer to a plain web search seeded with a respite query.
+/// caregiver to a plain web search seeded with a respite query.
 Uri respiteSearchUrl() =>
     Uri.parse('https://www.google.com/search?q=respite+care+near+me');
 

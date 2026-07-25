@@ -1,4 +1,4 @@
-# Careblazers R8/ProGuard keep rules.
+# Holdclose R8/ProGuard keep rules.
 #
 # Why this file exists: alpha testers on Android release builds hit a hard
 # crash that froze appointment/medication saves (fb 2026-06-14):

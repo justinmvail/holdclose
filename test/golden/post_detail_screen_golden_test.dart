@@ -17,7 +17,7 @@ ForumPost _post({
   String body =
       "We dimmed the lights and put on her favorite Sinatra record. "
           "She settled in about ten minutes — sharing in case it helps "
-          'another Careblazer tonight.',
+          'another caregiver tonight.',
   int voteCount = 12,
   int commentCount = 3,
   Duration age = const Duration(minutes: 18),

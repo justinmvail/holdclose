@@ -877,7 +877,7 @@ Future<ChatActionOutcome?> _deleteTask(
 }
 
 // ---------------------------------------------------------------------------
-// Care routines — add a scheduled routine the Careblazer describes
+// Care routines — add a scheduled routine the caregiver describes
 // ---------------------------------------------------------------------------
 
 /// Map the coach's free-text frequency word to a [FrequencyKind]. Mirrors
@@ -986,7 +986,7 @@ Future<ChatActionOutcome?> _addRoutine(
 }
 
 // ---------------------------------------------------------------------------
-// Health log — record a vitals / symptom / note entry the Careblazer states
+// Health log — record a vitals / symptom / note entry the caregiver states
 // ---------------------------------------------------------------------------
 
 /// Map the coach's free-text kind word to a [HealthLogKind]; defaults to
@@ -1054,11 +1054,11 @@ Future<ChatActionOutcome?> _addHealthLog(
 }
 
 // ---------------------------------------------------------------------------
-// Dose log — record a medication dose the Careblazer says was taken/skipped
+// Dose log — record a medication dose the caregiver says was taken/skipped
 // ---------------------------------------------------------------------------
 
 /// Map the coach's free-text outcome word to a [DoseStatus]. "Taken" is the
-/// default — the common case is the Careblazer confirming a dose was given.
+/// default — the common case is the caregiver confirming a dose was given.
 DoseStatus _parseDoseStatus(String? raw) {
   switch ((raw ?? '').trim().toLowerCase()) {
     case 'skipped':
@@ -1114,7 +1114,7 @@ Future<ChatActionOutcome?> _logDose(
 }
 
 // ---------------------------------------------------------------------------
-// Navigation — take the Careblazer to a screen on request
+// Navigation — take the caregiver to a screen on request
 // ---------------------------------------------------------------------------
 
 /// Map a friendly [target] keyword (plus an optional [providerName] for a

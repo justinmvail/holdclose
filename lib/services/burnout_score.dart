@@ -34,7 +34,7 @@ class BurnoutResult {
   final String headline;
 
   /// The warm, de-escalating, non-clinical response copy. Never claims a
-  /// diagnosis; the higher bands point the Careblazer at professional
+  /// diagnosis; the higher bands point the caregiver at professional
   /// help and the respite resources on the same screen.
   final String message;
 

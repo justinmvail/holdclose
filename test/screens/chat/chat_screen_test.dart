@@ -328,7 +328,7 @@ void main() {
         conversationId: 'convo-send',
         deltas: const <ChatDelta>[
           ChatDeltaText('Hello '),
-          ChatDeltaText('Careblazer.'),
+          ChatDeltaText('caregiver.'),
         ],
       );
 
@@ -351,7 +351,7 @@ void main() {
         findsOneWidget,
       );
       // The assistant reply lands too.
-      expect(find.text('Hello Careblazer.'), findsAtLeastNWidgets(1));
+      expect(find.text('Hello caregiver.'), findsAtLeastNWidgets(1));
       // The persistence layer holds both turns now.
       final List<Message> persisted =
           await p.repo.loadMessages('convo-send');
@@ -359,7 +359,7 @@ void main() {
       expect(persisted.first.role, MessageRole.user);
       expect(persisted.first.body, 'What is sundowning?');
       expect(persisted.last.role, MessageRole.assistant);
-      expect(persisted.last.body, 'Hello Careblazer.');
+      expect(persisted.last.body, 'Hello caregiver.');
       expect(persisted.last.streamingDone, isTrue);
     });
 

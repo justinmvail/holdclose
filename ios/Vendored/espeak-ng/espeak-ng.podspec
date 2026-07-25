@@ -28,7 +28,7 @@
 Pod::Spec.new do |s|
   s.name             = 'espeak-ng'
   s.version          = '1.52.0'
-  s.summary          = 'Vendored espeak-ng for Careblazers iOS TTS phonemizer.'
+  s.summary          = 'Vendored espeak-ng for Holdclose iOS TTS phonemizer.'
   s.description      = <<-DESC
     Local pod that builds espeak-ng 1.52.0 as a static library for
     arm64 (device) + arm64-simulator. Consumed by TTSBridge.swift via
@@ -36,7 +36,7 @@ Pod::Spec.new do |s|
   DESC
   s.homepage         = 'https://github.com/espeak-ng/espeak-ng'
   s.license          = { :type => 'GPLv3', :file => 'LICENSE' }
-  s.author           = { 'Careblazers' => 'team@careblazers.app' }
+  s.author           = { 'Juno Code Studio' => 'team@holdclose.care' }
   s.source           = { :path => '.' }
   s.platform         = :ios, '16.0'
   s.requires_arc     = false

@@ -525,7 +525,7 @@ ForumApiClient _demoForumClient() {
       title: 'Sundowning hit hard at dusk again',
       body: 'We dimmed the lights and put on her favorite record. She '
           'settled in about ten minutes — sharing in case it helps another '
-          'Careblazer tonight.',
+          'caregiver tonight.',
       voteCount: 12,
       commentCount: 5,
       age: const Duration(minutes: 18),

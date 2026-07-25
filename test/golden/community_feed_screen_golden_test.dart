@@ -169,7 +169,7 @@ void main() {
                       body:
                           "We dimmed the lights and put on her favorite Sinatra "
                           'record. She settled in about ten minutes — sharing in '
-                          'case it helps another Careblazer tonight.',
+                          'case it helps another caregiver tonight.',
                       voteCount: 12,
                       commentCount: 5,
                       age: const Duration(minutes: 18),

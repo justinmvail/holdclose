@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local HTTP shim that wraps `claude --print` for the Careblazers
+"""Local HTTP shim that wraps `claude --print` for the Holdclose
 dev-mode LLM provider.
 
 Listens on http://127.0.0.1:8765 (SHIM_HOST/SHIM_PORT to change).
@@ -97,7 +97,7 @@ CLAUDE_CMD = "claude"
 # in the project dir made every chat reply load this repo's CLAUDE.md
 # (~10k tokens) and scan the tree before answering — pure waste for a chat
 # completion. An empty cwd drops all of it. Created once at startup.
-CHAT_CWD = tempfile.mkdtemp(prefix="careblazers-shim-chat-")
+CHAT_CWD = tempfile.mkdtemp(prefix="holdclose-shim-chat-")
 
 
 def _neutralize_at_mentions(text):
@@ -603,7 +603,7 @@ class Handler(BaseHTTPRequestHandler):
         """POST /phonemize {"text": "...", "voice": "en-us"} → 200
         {"phonemes": ["h","ə","l","ˈ","o","ʊ",...]}
 
-        Pitch-week interim for the careblazers BundledTTSProvider on iOS
+        Pitch-week interim for the holdclose BundledTTSProvider on iOS
         — Phase 9.3's Swift `EspeakNGPhonemizer` falls back to a
         character-by-character lookup that produces gibberish audio,
         and bundling espeak-ng on-device (the production fix) is
@@ -647,7 +647,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._bad(
                 501,
                 "piper_phonemize not installed — run `pip3 install "
-                "piper-phonemize` (the careblazers BundledTTSProvider "
+                "piper-phonemize` (the holdclose BundledTTSProvider "
                 "needs this for the iOS demo until Phase 10 lands "
                 "espeak-ng on-device)",
             )
@@ -683,7 +683,7 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     # flush=True: under output redirection (log files) these otherwise sit
     # in the block buffer forever and the log never confirms startup.
-    print(f"[shim] Careblazers LLM shim listening on http://{HOST}:{PORT}", flush=True)
+    print(f"[shim] Holdclose LLM shim listening on http://{HOST}:{PORT}", flush=True)
     print(f"[shim] Uses local `{CLAUDE_CMD}` binary (your Claude Max subscription).", flush=True)
     if SHIM_TOKENS:
         print(f"[shim] Accepting {len(SHIM_TOKENS)} bearer token(s).", flush=True)

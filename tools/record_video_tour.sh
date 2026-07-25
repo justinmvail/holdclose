@@ -16,7 +16,7 @@ set -euo pipefail
 SIM="${1:-A00DCDD5-063B-43DC-B733-49CB8DE92B9F}"   # iPhone 17 Pro
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT/demo_video"
-OUT="$OUT_DIR/careblazers_tour_$(date +%Y%m%d_%H%M%S).mp4"
+OUT="$OUT_DIR/holdclose_tour_$(date +%Y%m%d_%H%M%S).mp4"
 LOG="$OUT_DIR/video_tour_run.log"
 SYNC=/tmp/cb_video_sync
 

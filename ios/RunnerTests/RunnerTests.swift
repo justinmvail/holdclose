@@ -264,7 +264,7 @@ class RunnerTests: XCTestCase {
     /// Renders the three Phase 10.4 audio-quality acceptance scripts
     /// through the real espeak-ng phonemizer + Piper Amy and writes
     /// 16-bit PCM WAV files under `NSTemporaryDirectory()/
-    /// careblazers-tts-samples/<voice>/`. The operator pulls those
+    /// holdclose-tts-samples/<voice>/`. The operator pulls those
     /// WAVs out of the simulator with `tools/regen_tts_samples.sh` and
     /// drops them into `docs/tts_samples/<voice>/` for the manual ear-
     /// validation pass documented in TTS_BUNDLED.md.
@@ -311,7 +311,7 @@ class RunnerTests: XCTestCase {
         let phonemizer = EspeakNGPhonemizer(useEspeak: true)
 
         let outDir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("careblazers-tts-samples")
+            .appendingPathComponent("holdclose-tts-samples")
             .appendingPathComponent(voiceId)
         try FileManager.default.createDirectory(at: outDir,
                                                 withIntermediateDirectories: true)

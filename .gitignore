@@ -111,3 +111,5 @@ backend/.prod.vars
 /docs/
 /caregiver-ai-prize/
 tools/README.md
+# Operator-only dev-backend infra (exposes the live tester cert/log paths).
+tools/refresh_funnel_cert.sh
