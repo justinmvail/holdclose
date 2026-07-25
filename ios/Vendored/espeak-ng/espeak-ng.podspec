@@ -36,7 +36,7 @@ Pod::Spec.new do |s|
   DESC
   s.homepage         = 'https://github.com/espeak-ng/espeak-ng'
   s.license          = { :type => 'GPLv3', :file => 'LICENSE' }
-  s.author           = { 'Juno Code Studio' => 'team@holdclose.care' }
+  s.author           = { 'Juno Code Studio' => 'jcsvonellc@gmail.com' }
   s.source           = { :path => '.' }
   s.platform         = :ios, '16.0'
   s.requires_arc     = false

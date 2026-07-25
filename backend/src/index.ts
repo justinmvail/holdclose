@@ -110,7 +110,7 @@ app.route('/join', joinRouter());
 
 // Public legal pages, same worker-root/no-auth posture as /join. The
 // sign-in screen's Terms / Privacy links point at
-// https://holdclose.care/terms + /privacy, which route here once the
+// https://junocode.studio/holdclose/terms + /privacy, which route here once the
 // domain is attached to the Worker at deploy.
 app.route('/terms', termsRouter());
 app.route('/privacy', privacyRouter());

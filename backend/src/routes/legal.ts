@@ -60,7 +60,7 @@ const TERMS_HTML = legalPage(
 <p>You agree not to misuse the service — including attempting to access other users' data, probing or disrupting our systems, scraping the service, reselling access, or using the app to harass others or to violate any law.</p>
 
 <h2>6. Termination</h2>
-<p>You may stop using Holdclose and request deletion of your account at any time by emailing <a href="mailto:support@holdclose.care">support@holdclose.care</a>. We may suspend or terminate accounts that violate these terms, abuse the service, or create risk for other users, and we may discontinue the service or features of it with reasonable notice where practicable.</p>
+<p>You may stop using Holdclose and request deletion of your account at any time by emailing <a href="mailto:jcsvonellc@gmail.com">jcsvonellc@gmail.com</a>. We may suspend or terminate accounts that violate these terms, abuse the service, or create risk for other users, and we may discontinue the service or features of it with reasonable notice where practicable.</p>
 
 <h2>7. Disclaimers and limitation of liability</h2>
 <p>The service is provided "as is" and "as available", without warranties of any kind, express or implied, including fitness for a particular purpose and non-infringement. To the maximum extent permitted by law, JCSV One LLC and its members, officers, and contractors will not be liable for any indirect, incidental, special, consequential, or punitive damages, or for any loss of data, arising out of or relating to your use of the service; and our total aggregate liability for any claim will not exceed the greater of fifty US dollars ($50) or the amount you paid us for the service in the twelve months before the claim arose. Some jurisdictions do not allow certain limitations, so parts of this section may not apply to you.</p>
@@ -72,7 +72,7 @@ const TERMS_HTML = legalPage(
 <p>We may update these terms as the product evolves. If a change is material, we will give notice in the app or by email before it takes effect. Continuing to use Holdclose after a change takes effect means you accept the updated terms.</p>
 
 <h2>10. Contact</h2>
-<p>Juno Code Studio (JCSV One LLC) &middot; <a href="mailto:support@holdclose.care">support@holdclose.care</a></p>`,
+<p>Juno Code Studio (JCSV One LLC) &middot; <a href="mailto:jcsvonellc@gmail.com">jcsvonellc@gmail.com</a></p>`,
 );
 
 const PRIVACY_HTML = legalPage(
@@ -110,7 +110,7 @@ const PRIVACY_HTML = legalPage(
 <p>The care data stored on your device is encrypted at rest, with the encryption key held in your device's secure keychain/keystore. Sync and AI traffic is encrypted in transit. Access to backend data is limited to what is needed to operate the service. No system is perfectly secure, so please use a device passcode and keep your sign-in credentials private.</p>
 
 <h2>9. Data retention and deletion</h2>
-<p>Synced data is retained while your account is active so your care circle keeps working. You can request deletion of your account and its server-side data at any time by emailing <a href="mailto:support@holdclose.care">support@holdclose.care</a>; deleting the app from your device removes the local database.</p>
+<p>Synced data is retained while your account is active so your care circle keeps working. You can request deletion of your account and its server-side data at any time by emailing <a href="mailto:jcsvonellc@gmail.com">jcsvonellc@gmail.com</a>; deleting the app from your device removes the local database.</p>
 
 <h2>10. Children's privacy</h2>
 <p>Holdclose is intended for adult caregivers and is not directed at children under 13. We do not knowingly collect personal information from children under 13; if you believe a child has provided us personal information, contact us and we will delete it.</p>
@@ -119,14 +119,14 @@ const PRIVACY_HTML = legalPage(
 <p>We may update this policy as the product evolves. If a change is material, we will give notice in the app or by email before it takes effect.</p>
 
 <h2>12. Contact</h2>
-<p>Juno Code Studio (JCSV One LLC) &middot; <a href="mailto:support@holdclose.care">support@holdclose.care</a></p>`,
+<p>Juno Code Studio (JCSV One LLC) &middot; <a href="mailto:jcsvonellc@gmail.com">jcsvonellc@gmail.com</a></p>`,
 );
 
 /// Public legal pages (`GET /terms`, `GET /privacy`).
 ///
 /// Mounted at the WORKER ROOT — like `/join`, deliberately OUTSIDE the
 /// `/api/v1` sub-app and its JWT middleware — because they are plain web
-/// pages the sign-in screen links to (https://holdclose.care/terms and
+/// pages the sign-in screen links to (https://junocode.studio/holdclose/terms and
 /// /privacy) before any account exists. Static HTML, no DB work.
 export function termsRouter() {
   const router = new Hono<{ Bindings: Bindings; Variables: Variables }>();

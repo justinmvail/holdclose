@@ -207,7 +207,7 @@ void main() {
   });
 
   group('SignInScreen — Terms / Privacy links (store-review requirement)', () {
-    testWidgets('tapping Terms launches https://holdclose.care/terms',
+    testWidgets('tapping Terms launches https://junocode.studio/holdclose/terms',
         (WidgetTester tester) async {
       final RecordingLinkLauncher launcher = RecordingLinkLauncher();
       await _pumpSignIn(tester, linkLauncher: launcher);
@@ -216,11 +216,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(launcher.launched, <Uri>[
-        Uri.parse('https://holdclose.care/terms'),
+        Uri.parse('https://junocode.studio/holdclose/terms'),
       ]);
     });
 
-    testWidgets('tapping Privacy Policy launches https://holdclose.care/privacy',
+    testWidgets('tapping Privacy Policy launches https://junocode.studio/holdclose/privacy',
         (WidgetTester tester) async {
       final RecordingLinkLauncher launcher = RecordingLinkLauncher();
       await _pumpSignIn(tester, linkLauncher: launcher);
@@ -229,7 +229,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(launcher.launched, <Uri>[
-        Uri.parse('https://holdclose.care/privacy'),
+        Uri.parse('https://junocode.studio/holdclose/privacy'),
       ]);
     });
 
@@ -247,8 +247,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(launcher.launched, <Uri>[
-        Uri.parse('https://holdclose.care/terms'),
-        Uri.parse('https://holdclose.care/privacy'),
+        Uri.parse('https://junocode.studio/holdclose/terms'),
+        Uri.parse('https://junocode.studio/holdclose/privacy'),
       ]);
     });
   });

@@ -14,7 +14,7 @@ describe('GET /terms (public Terms of Service page)', () => {
     expect(body).toContain('Holdclose Terms of Service');
     expect(body).toContain('Juno Code Studio');
     expect(body).toContain('JCSV One LLC');
-    expect(body).toContain('support@holdclose.care');
+    expect(body).toContain('jcsvonellc@gmail.com');
     expect(body).toContain('Last updated: July 8, 2026');
     // The store-review-critical clauses.
     expect(body).toContain('personal, non-commercial');
@@ -46,7 +46,7 @@ describe('GET /privacy (public Privacy Policy page)', () => {
     const body = await response.text();
     expect(body).toContain('Holdclose Privacy Policy');
     expect(body).toContain('Juno Code Studio');
-    expect(body).toContain('support@holdclose.care');
+    expect(body).toContain('jcsvonellc@gmail.com');
     expect(body).toContain('Last updated: July 8, 2026');
     // The data-handling disclosures the sign-in link promises.
     expect(body).toContain('on your device by default');

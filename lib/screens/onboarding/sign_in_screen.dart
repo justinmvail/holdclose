@@ -455,11 +455,12 @@ class _TermsLine extends ConsumerWidget {
 
   final TextTheme textTheme;
 
-  // Both pages are served by the Cloudflare Worker at /terms + /privacy
-  // (backend/src/routes/legal.ts); holdclose.care routing to the Worker
-  // goes live with deploy.
-  static final Uri _termsUrl = Uri.parse('https://holdclose.care/terms');
-  static final Uri _privacyUrl = Uri.parse('https://holdclose.care/privacy');
+  // The canonical Terms + Privacy pages live on the Juno Code Studio site
+  // (junocode.studio/holdclose), deployed via Cloudflare Pages.
+  static final Uri _termsUrl =
+      Uri.parse('https://junocode.studio/holdclose/terms');
+  static final Uri _privacyUrl =
+      Uri.parse('https://junocode.studio/holdclose/privacy');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
