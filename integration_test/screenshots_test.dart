@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:holdclose/app.dart';
 import 'package:holdclose/models/patient.dart' show CrisisMedication;
+import 'package:holdclose/models/document.dart'
+    show EmergencyCard, EmergencyContact, Insurance, DonorStatus;
 import 'package:holdclose/seed/mary_henderson.dart' show maryHenderson;
 import 'package:holdclose/db/database.dart';
 import 'package:holdclose/models/chat.dart';
@@ -181,6 +183,38 @@ void main() {
       ));
 
       final ChatRepository chatRepo = ChatRepository(db);
+
+      // Dementia-grounded Emergency Card so the ICE screen reads as dementia
+      // care (conditions + the hallmark Alzheimer's meds).
+      final DocumentsRepository docsRepo = DocumentsRepository(db);
+      await docsRepo.upsertEmergencyCard(EmergencyCard(
+        id: 'demo-emergency',
+        patientId: 'demo-patient-mary',
+        updatedAt: _fixedNow(),
+        conditions: const <String>[
+          "Alzheimer's disease (dementia), diagnosed 2023",
+          'High blood pressure',
+        ],
+        medications: const <String>[
+          'Donepezil 10 mg',
+          'Memantine 10 mg',
+          'Lisinopril 10 mg',
+        ],
+        allergies: const <String>['Penicillin'],
+        emergencyContacts: const <EmergencyContact>[
+          EmergencyContact(
+            name: 'Sarah Henderson',
+            relation: 'Daughter',
+            phone: '(415) 555-0142',
+          ),
+        ],
+        insurance: const Insurance(
+          carrier: 'Medicare + Blue Shield',
+          policyNumber: '1EG4-TE5-MK72',
+          groupNumber: 'CA-0098',
+        ),
+        donorStatus: DonorStatus.donor,
+      ));
       await _seedThread(
         chatRepo,
         id: 'convo-mother',
@@ -240,8 +274,7 @@ void main() {
               .overrideWithValue(CareShiftsRepository(db)),
           expensesRepositoryBackendProvider
               .overrideWithValue(ExpensesRepository(db)),
-          documentsRepositoryBackendProvider
-              .overrideWithValue(DocumentsRepository(db)),
+          documentsRepositoryBackendProvider.overrideWithValue(docsRepo),
           forumApiClientProvider.overrideWithValue(_demoForumClient()),
         ],
       );
