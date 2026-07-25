@@ -11,7 +11,7 @@ part 'database.g.dart';
 /// Phase 11.2 + Phase 12.1 + Phase 12.5 + Phase 14.16 + Phase 14.18 +
 /// Phase 14.21).
 /// Holds seventeen tables:
-/// `journal_entries` (auto-logged decoder runs), `patients` (the loved
+/// `journal_entries` (free-text caregiver notes), `patients` (the loved
 /// one — one row per install), `app_settings` (single-row preferences
 /// blob), the chat pair `chat_conversations` + `chat_messages`
 /// (Phase 11 caregiving chatbot history), the medication-tracker

@@ -31,7 +31,7 @@ VOICE_ID="en_US-amy-medium"
 OUT_BASE="${REPO_ROOT}/docs/tts_samples/${VOICE_ID}"
 
 IOS_SIM="${IOS_SIM:-iPhone 16}"
-SCRIPT_SLUGS=("decoder_worried" "crisis_card_welcome" "settings_reset_confirmation")
+SCRIPT_SLUGS=("coach_worried" "crisis_card_welcome" "settings_reset_confirmation")
 
 DO_IOS=1
 DO_ANDROID=1

@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// boundary on the host.
 final DateTime _now = DateTime(2026, 5, 29, 12);
 
-/// Build a free-text journal entry. The decoder-era fixtures keyed off a
+/// Build a free-text journal entry. The earlier fixtures keyed off a
 /// structured [Behavior]; entries are now free text, so the falls rule
 /// scans [situationText] / [attemptsText] / [notes] for "fall" / "fell".
 JournalEntry _entry({

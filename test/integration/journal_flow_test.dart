@@ -101,7 +101,7 @@ void main() {
           await pumpHoldcloseApp(tester, extraOverrides: journalOverrides());
       // Three fall-mentioning rows inside the trailing 7-day window → the
       // §7.6 "3+ falls / 7 days" rule fires (behavior-keyed rules retired
-      // with the decoder; the falls rule scans the free-text fields).
+      // with any auto-logger; the falls rule scans the free-text fields).
       await _seed(container, <JournalEntry>[
         _entry(
           id: 'pat-1',
@@ -432,7 +432,7 @@ Future<void> _seed(
 }
 
 /// Build a caregiver-authored journal row (the free-text shape the
-/// post-decoder journal list + entry detail render): a situation +
+/// current journal list + entry detail render): a situation +
 /// attempts, plus optional notes.
 JournalEntry _entry({
   required String id,

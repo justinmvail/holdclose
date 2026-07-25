@@ -638,8 +638,8 @@ GoRouter buildRouter({
                 ],
               ),
               // Journal — the Care hub's "Journal" tile + Home quick
-              // actions + the decoder flow. In the Care branch so the tile
-              // keeps the tab bar; reaching it from Home/decoder activates
+              // actions. In the Care branch so the tile
+              // keeps the tab bar; reaching it from Home activates
               // the Care tab. `/journal/new` is registered before
               // `/journal/:id` so the literal `new` segment isn't swallowed
               // by the `:id` parameter.

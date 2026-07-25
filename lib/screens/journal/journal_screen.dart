@@ -20,7 +20,7 @@ import 'journal_wizard_screen.dart' show JournalWizardArgs;
 ///   stream emission is usually one microtask away, so this is rarely
 ///   visible in production but the AsyncValue requires it),
 /// * empty → the §5.5 "Your journal fills itself." promise + a CTA
-///   that pushes `/decoder/behavior`,
+///   that opens the add-entry sheet,
 /// * populated → "This week" summary card, an optional "Heads up"
 ///   pattern flag card, and the entries grouped Today / Yesterday /
 ///   Earlier with the newest first.

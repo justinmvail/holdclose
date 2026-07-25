@@ -26,7 +26,7 @@ void main() {
       bytes[2] == 0x44 && // D
       bytes[3] == 0x46; // F
 
-  /// Free-text journal entry (the post-decoder model). [at] doubles as the
+  /// Free-text journal entry (the current model). [at] doubles as the
   /// created/occurred timestamp.
   JournalEntry entry(
     String id,
@@ -89,7 +89,7 @@ void main() {
       final Patient mary = maryHenderson();
       // Same id + timestamp so only the body fields differ between the two
       // exports — a bigger output proves the situation/attempts/notes lines
-      // (the decoder-era "Behavior summary" + "What worked:" are gone) are
+      // (the earlier "Behavior summary" + "What worked:" are gone) are
       // actually rendered into the entry block.
       final Uint8List bare = await exp.exportRange(
         entries: <JournalEntry>[entry('j1', DateTime(2026, 6, 5, 18))],

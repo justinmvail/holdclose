@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-/// One auto-logged decoder run, mirroring [JournalEntry] (BUILD_SPEC.md
+/// One journal entry, mirroring [JournalEntry] (BUILD_SPEC.md
 /// §6.2 + §7.5). Stored as an opaque JSON [payload] keyed by [id], with
 /// [createdAtMs] lifted to its own column so the watch query can filter
 /// + order without parsing every row's blob.

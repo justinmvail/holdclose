@@ -188,7 +188,7 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
           'user': userMessage,
           // Opt into token streaming — the shim adds --include-partial-messages
           // so the reply streams in as it generates instead of landing all at
-          // once when it's finished (the decoder/recap leave this off).
+          // once when it's finished (the recap leaves this off).
           'partial': true,
         },
         options: Options(
@@ -1522,7 +1522,7 @@ class DemoChatBackend implements ChatLLMBackend {
 
 /// Riverpod-wired chat backend (TASKS.md Phase 11.3). Real shim-backed
 /// impl by default; the deterministic [DemoChatBackend] under the same
-/// fake-engine rule the decoder uses (`flutter test`, or an explicit
+/// fake-engine rule the recap uses (`flutter test`, or an explicit
 /// `--dart-define=USE_FAKE_LLM=true` — the DEMO_MODE pitch build sets
 /// it), so a demo run's chat never depends on the network. Test
 /// harnesses still override this provider with their own scripted

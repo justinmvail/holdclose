@@ -10,7 +10,7 @@ part 'patient_configured_provider.g.dart';
 /// The first-run flow is onboarding carousel → sign-in → **loved-one
 /// setup**. Until the caregiver saves a [Patient], the app has no
 /// "your person" to anchor the Emergency Card, the Medical header, or
-/// the decoder context on, so the router redirect (see
+/// the coach context on, so the router redirect (see
 /// `holdcloseRedirect`) funnels every authenticated location to
 /// `/setup`.
 ///

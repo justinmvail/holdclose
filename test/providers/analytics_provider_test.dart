@@ -39,7 +39,7 @@ void main() {
       // No assertion on side effects — there are none. The contract is
       // simply "no exception escapes" (BUILD_SPEC.md §6.5).
       expect(
-        () => noop.trackEvent('decoder_run', <String, Object?>{
+        () => noop.trackEvent('journal_autolog_run', <String, Object?>{
           'behavior': 'sundowning',
           'attempt': 1,
           'voice_played': true,
@@ -103,12 +103,12 @@ void main() {
       final AnalyticsProvider impl = container.read(analyticsProvider);
       expect(identical(impl, spy), isTrue);
 
-      impl.trackEvent('decoder_run', <String, Object?>{'behavior': 'upset'});
+      impl.trackEvent('journal_autolog_run', <String, Object?>{'behavior': 'upset'});
       impl.trackScreen('/journal/abc123');
       impl.setUser(userId: 'demo-user-sarah');
 
       expect(spy.events, hasLength(1));
-      expect(spy.events.single.key, 'decoder_run');
+      expect(spy.events.single.key, 'journal_autolog_run');
       expect(spy.events.single.value['behavior'], 'upset');
       expect(spy.screens, <String>['/journal/abc123']);
       expect(spy.users, <String>['demo-user-sarah']);

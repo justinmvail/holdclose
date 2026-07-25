@@ -97,7 +97,7 @@ class _AlreadyOnboarded extends OnboardingCompleted {
 /// and seed through them (TASKS.md Phase 15.1).
 ///
 /// Default overrides:
-/// - [FakeLLMProvider] for the decoder + chat + catch-me-up streams,
+/// - [FakeLLMProvider] for the chat + catch-me-up streams,
 /// - [FakeAuthProvider] (auto-signed-in as Sarah Henderson, Mary's
 ///   primary caregiver, when [demoMode] is true) so the shell lands on
 ///   Home instead of the sign-in gate,

@@ -20,7 +20,7 @@ import '_semantics_matchers.dart';
 /// is fed entries whose `createdAt` is computed off the same anchor.
 final DateTime _fixedNow = DateTime(2026, 5, 29, 12, 0);
 
-/// Build a caregiver-authored journal entry (the post-decoder shape:
+/// Build a caregiver-authored journal entry (the current shape:
 /// free-text situation + attempts, no behavior/triage/result).
 JournalEntry _entry({
   required String id,
@@ -87,7 +87,7 @@ void main() {
       expect(find.byKey(JournalScreen.entriesListKey), findsNothing);
     });
 
-    testWidgets('empty-state CTA opens the add sheet (not decoder nav)',
+    testWidgets('empty-state CTA opens the add sheet (opens the add sheet)',
         (WidgetTester tester) async {
       await _pumpJournal(tester);
 

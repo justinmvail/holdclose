@@ -67,7 +67,7 @@ enum JournalWhen {
 /// Three-step journal wizard at `/journal/new` — when / situation /
 /// attempts (BUILD_SPEC.md §5.5 home + chat-harness path).
 ///
-/// Replaces the legacy decoder-driven "auto-log" path for the cases
+/// Replaces the earlier "auto-log" path for the cases
 /// where the caregiver wants to keep a moment without walking the
 /// behavior picker. Submit lands a [JournalEntry.wizard] row in the
 /// same drift table the journal screen reads from, so the entry

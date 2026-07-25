@@ -14,6 +14,15 @@ post-surgery recovery, dementia. Not one diagnosis.
 
 🌐 **[holdclose.care](https://holdclose.care)** · iOS + Android · in active testing
 
+> **Entry in the ACL / HHS Caregiver AI Prize Challenge — Track 1 (AI for
+> family caregivers).** **Dementia caregiving is a first-class use case:** the
+> coach is grounded in a loved one's real situation — including dementia
+> behaviors, medications, and routines — and the medication + dose-window
+> tracking, journal pattern-detection (e.g. repeated falls or agitation), and
+> the paramedic-ready Emergency Card are built for the daily realities of
+> dementia care, right alongside stroke recovery, post-surgery, and aging-parent
+> support.
+
 <!-- Screenshots: add 3–4 device captures here (Home, Chat coach, Scan-to-import, Emergency Card). -->
 
 ## What makes it different

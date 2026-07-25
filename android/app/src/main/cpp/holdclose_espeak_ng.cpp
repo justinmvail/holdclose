@@ -84,7 +84,7 @@ Java_com_holdclose_holdclose_EspeakNGNative_nativeTextToPhonemes(
 
     // espeak_TextToPhonemes advances a `const void **` cursor through
     // the input until the trailing NUL. Multi-sentence scripts
-    // (decoder copy commonly spans two or three) need a loop, mirroring
+    // (coach copy commonly spans two or three) need a loop, mirroring
     // the iOS TTSBridge.swift `espeakIPA` helper.
     std::string aggregated;
     const void* cursor = static_cast<const void*>(text);

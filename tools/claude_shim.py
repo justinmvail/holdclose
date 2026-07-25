@@ -279,7 +279,7 @@ class Handler(BaseHTTPRequestHandler):
             system = payload["system"]
             user = _neutralize_at_mentions(payload["user"])
             # Opt-in token streaming. Only the chat endpoint sets this; the
-            # decoder + recap leave it off because their parsers accumulate a
+            # recap leaves it off because their parsers accumulate a
             # single final message (partial chunks would corrupt their JSON /
             # double the text). See --include-partial-messages below.
             partial = bool(payload.get("partial"))

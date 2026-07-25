@@ -13,7 +13,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart' show Override;
 
 final DateTime _fixedNow = DateTime(2026, 5, 29, 12, 0);
 
-/// Caregiver-authored journal entry (the post-decoder shape: free-text
+/// Caregiver-authored journal entry (the current shape: free-text
 /// situation + attempts, no behavior/triage/result).
 JournalEntry _entry({
   required String id,

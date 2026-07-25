@@ -728,7 +728,7 @@ final class EspeakNGPhonemizer: Phonemizer {
     /// Call `espeak_TextToPhonemes` over the input until the cursor
     /// reaches the trailing NUL. espeak processes one sentence per
     /// call and advances the cursor — looping covers multi-sentence
-    /// inputs (decoder scripts often span two or three).
+    /// inputs (coach scripts often span two or three).
     ///
     /// phonememode `0x02` selects IPA (Unicode) output with no
     /// separator character; we tokenize the result by Unicode scalar

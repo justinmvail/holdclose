@@ -196,7 +196,7 @@ String activityAppointmentSummary(Provider? provider) {
 // ---------------------------------------------------------------------------
 
 /// Map a journal entry onto a feed row — a wizard note shows the caregiver's
-/// situation text and a decoder auto-log shows the behavior label.
+/// situation text and a auto-logged note shows its label.
 @visibleForTesting
 ActivityFeedItem journalActivityFeedItem(JournalEntry entry) {
   return ActivityFeedItem(

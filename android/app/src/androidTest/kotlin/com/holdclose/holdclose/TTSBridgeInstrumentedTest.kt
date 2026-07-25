@@ -333,7 +333,7 @@ class TTSBridgeInstrumentedTest {
         }
 
         val scripts = listOf(
-            "decoder_worried" to
+            "coach_worried" to
                 "I can see this is really hard. I'm right here with you.",
             "crisis_card_welcome" to
                 "Hospital handoff card.",

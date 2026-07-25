@@ -67,7 +67,7 @@ class _SpyPhotoAttacher implements PhotoAttacher {
   }
 }
 
-/// Caregiver-authored journal entry (the post-decoder shape: a free-text
+/// Caregiver-authored journal entry (the current shape: a free-text
 /// situation + attempts, plus optional notes/voice/photo).
 JournalEntry _entry({
   String id = 'entry-1',

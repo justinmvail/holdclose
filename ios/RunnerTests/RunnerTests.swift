@@ -273,8 +273,8 @@ class RunnerTests: XCTestCase {
     /// `docs/tts_samples/README.md` and the Android mirror in
     /// `TTSBridgeInstrumentedTest.regenerateAudioQualitySamples`):
     ///
-    ///   1. `decoder_worried` — the canonical "I see you're worried…"
-    ///      decoder say-line. Pulled verbatim from `fakeLLMSeeds`'
+    ///   1. `coach_worried` — the canonical "I see you're worried…"
+    ///      coach say-line. Pulled verbatim from `fakeLLMSeeds`'
     ///      `upset` entry so the recording matches what a caregiver
     ///      actually hears in the app.
     ///   2. `crisis_card_welcome` — the crisis card AppBar title that
@@ -317,7 +317,7 @@ class RunnerTests: XCTestCase {
                                                 withIntermediateDirectories: true)
 
         let scripts: [(slug: String, text: String)] = [
-            ("decoder_worried",
+            ("coach_worried",
              "I can see this is really hard. I'm right here with you."),
             ("crisis_card_welcome",
              "Hospital handoff card."),
