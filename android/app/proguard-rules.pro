@@ -29,7 +29,7 @@
 
 # --- App code, incl. the espeak-ng JNI bridge (native methods are bound
 #     by class + method name, so R8 must not rename them) ---
--keep class com.careblazers.careblazers.** { *; }
+-keep class com.holdclose.holdclose.** { *; }
 
 # --- Flutter embedding (belt-and-suspenders for reflection-based plugins;
 #     most plugins ship their own consumer rules that R8 already applies) ---

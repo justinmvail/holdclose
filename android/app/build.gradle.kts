@@ -21,7 +21,7 @@ if (keystorePropertiesFile.exists()) {
 val hasReleaseSigning = keystoreProperties.getProperty("storeFile") != null
 
 android {
-    namespace = "com.careblazers.careblazers"
+    namespace = "com.holdclose.holdclose"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -66,7 +66,7 @@ android {
     }
 
     // Phase 10.3 — wire the cpp/CMakeLists.txt that compiles
-    // libcareblazers_espeak_ng.so. On a fresh checkout (no vendor
+    // libholdclose_espeak_ng.so. On a fresh checkout (no vendor
     // script run yet) CMake still produces the .so — the file(GLOB ...)
     // resolves to an empty source list and the JNI shim's
     // __has_include guards short-circuit. See cpp/README.md.

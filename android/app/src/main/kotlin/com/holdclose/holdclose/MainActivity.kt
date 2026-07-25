@@ -1,4 +1,4 @@
-package com.careblazers.careblazers
+package com.holdclose.holdclose
 
 import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity

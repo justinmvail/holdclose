@@ -99,7 +99,7 @@ final class TTSEngine {
     /// rate for this engine instance. Read by `ensureLoaded` to decide
     /// whether the `EspeakNGPhonemizer` should call the C library or
     /// fall back to character-by-character lookup.
-    #if CAREBLAZERS_HAS_ESPEAK_NG
+    #if HOLDCLOSE_HAS_ESPEAK_NG
     private var espeakReady: Bool = false
     #else
     private let espeakReady: Bool = false
@@ -114,20 +114,20 @@ final class TTSEngine {
         audioEngine.connect(playerNode,
                             to: audioEngine.mainMixerNode,
                             format: TTSEngine.outputFormat)
-        #if CAREBLAZERS_HAS_ESPEAK_NG
+        #if HOLDCLOSE_HAS_ESPEAK_NG
         espeakReady = TTSEngine.initializeEspeakNG()
         #endif
     }
 
     deinit {
-        #if CAREBLAZERS_HAS_ESPEAK_NG
+        #if HOLDCLOSE_HAS_ESPEAK_NG
         if espeakReady {
             espeak_Terminate()
         }
         #endif
     }
 
-    #if CAREBLAZERS_HAS_ESPEAK_NG
+    #if HOLDCLOSE_HAS_ESPEAK_NG
     /// Resolve the bundled espeak-ng data path and call
     /// `espeak_Initialize` once. AUDIO_OUTPUT_SYNCHRONOUS keeps the
     /// library from spinning up its own playback thread — we only use
@@ -623,7 +623,7 @@ protocol Phonemizer {
 ///     layout Piper's tokenizer is trained against.
 ///
 /// When the vendor script hasn't run (bridging-header `__has_include`
-/// short-circuits and `CAREBLAZERS_HAS_ESPEAK_NG` Swift flag is unset),
+/// short-circuits and `HOLDCLOSE_HAS_ESPEAK_NG` Swift flag is unset),
 /// or when `useEspeak` is `false` (test default), the call falls back
 /// to a character-by-character lookup against `phoneme_id_map`. The
 /// fallback produces non-empty IDs so the audio + integration tests
@@ -666,7 +666,7 @@ final class EspeakNGPhonemizer: Phonemizer {
     /// So: phonemize each clause on its own, then append the ORIGINAL terminator
     /// that ended it (plus a word gap), rebuilding the punctuation espeak ate.
     private func phonemize(_ text: String) -> [String] {
-        #if CAREBLAZERS_HAS_ESPEAK_NG
+        #if HOLDCLOSE_HAS_ESPEAK_NG
         if useEspeak {
             var tokens: [String] = []
             for (clause, terminator) in EspeakNGPhonemizer.splitClauses(text) {
@@ -724,7 +724,7 @@ final class EspeakNGPhonemizer: Phonemizer {
         return ids
     }
 
-    #if CAREBLAZERS_HAS_ESPEAK_NG
+    #if HOLDCLOSE_HAS_ESPEAK_NG
     /// Call `espeak_TextToPhonemes` over the input until the cursor
     /// reaches the trailing NUL. espeak processes one sentence per
     /// call and advances the cursor — looping covers multi-sentence

@@ -90,11 +90,11 @@ class RunnerTests: XCTestCase {
     /// reference impl is captured in `docs/tts_samples/` during Phase
     /// 10.4 manual validation; here we only assert the wiring.
     ///
-    /// Skips when `CAREBLAZERS_HAS_ESPEAK_NG` is 0 (no vendored sources)
+    /// Skips when `HOLDCLOSE_HAS_ESPEAK_NG` is 0 (no vendored sources)
     /// or when the voice config can't be loaded from the test bundle —
     /// same skip semantics as `testInferenceProducesNonSilentAudio`.
     func testEspeakPhonemizerProducesIpaBackedIdsForHelloWorld() throws {
-        #if CAREBLAZERS_HAS_ESPEAK_NG
+        #if HOLDCLOSE_HAS_ESPEAK_NG
         let voiceId = "en_US-amy-medium"
         guard let configPath = locateBundleResource(
             name: "\(voiceId).onnx", ext: "json") else {
@@ -194,13 +194,13 @@ class RunnerTests: XCTestCase {
     /// + tokenizer wiring is Phase 10.2's concern; this test only
     /// covers "the library loads and produces something."
     ///
-    /// Skips when `CAREBLAZERS_HAS_ESPEAK_NG` is 0 — that's the state
+    /// Skips when `HOLDCLOSE_HAS_ESPEAK_NG` is 0 — that's the state
     /// before `tools/vendor_espeak_ng.sh` runs. Once the vendor script
     /// drops the sources and `pod install` links the library, the
     /// `__has_include` in Runner-Bridging-Header.h flips the flag and
     /// this test starts running for real.
     func testEspeakNgVendorLoadsAndPhonemizes() throws {
-        #if CAREBLAZERS_HAS_ESPEAK_NG
+        #if HOLDCLOSE_HAS_ESPEAK_NG
         // Resolve the bundled espeak-ng-data path. CocoaPods drops
         // it under espeak-ng.bundle/espeak-ng-data/ in the Runner
         // app; the test bundle inherits the same path via the host
@@ -288,7 +288,7 @@ class RunnerTests: XCTestCase {
     /// `testInferenceProducesNonSilentAudio` /
     /// `testEspeakPhonemizerProducesIpaBackedIdsForHelloWorld`).
     func testRegenerateAudioQualitySamples() throws {
-        #if CAREBLAZERS_HAS_ESPEAK_NG
+        #if HOLDCLOSE_HAS_ESPEAK_NG
         let voiceId = "en_US-amy-medium"
         guard let modelPath = locateBundleResource(name: voiceId, ext: "onnx"),
               let configPath = locateBundleResource(name: "\(voiceId).onnx", ext: "json") else {

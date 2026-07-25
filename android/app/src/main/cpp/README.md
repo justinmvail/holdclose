@@ -1,4 +1,4 @@
-# JNI bridge — careblazers_espeak_ng
+# JNI bridge — holdclose_espeak_ng
 
 BUILD_SPEC.md Phase 10.3 — Android mirror of the iOS Phase 10.1 vendor
 drop at `ios/Vendored/espeak-ng/`.
@@ -8,7 +8,7 @@ drop at `ios/Vendored/espeak-ng/`.
 ```
 android/app/src/main/cpp/
   CMakeLists.txt              ← committed; wires the JNI shim + vendored sources
-  careblazers_espeak_ng.cpp   ← committed; JNI shim, __has_include guarded
+  holdclose_espeak_ng.cpp   ← committed; JNI shim, __has_include guarded
   README.md                   ← this file
   espeak-ng/                  ← NOT committed; written by tools/vendor_espeak_ng.sh
     libespeak-ng/*.c, *.h     ← ~80 files, ~20 MB
@@ -40,12 +40,12 @@ phoneme-for-phoneme aligned with the bundled Piper Amy voice.
 Until the vendor script runs, `espeak-ng/libespeak-ng/` is absent.
 The CMake `file(GLOB ...)` resolves to an empty source list and the
 `#if __has_include(<espeak-ng/espeak_ng.h>)` guard in
-`careblazers_espeak_ng.cpp` short-circuits — every native call returns
+`holdclose_espeak_ng.cpp` short-circuits — every native call returns
 `-1` / `null` / `false`. The Kotlin side
 (`EspeakNGNative.isAvailable()`) reads `false`, and
 `EspeakNGPhonemizer` falls through to the Phase 9.4 character-lookup
 fallback. The APK still ships
-`libcareblazers_espeak_ng.so`; it just doesn't carry espeak-ng.
+`libholdclose_espeak_ng.so`; it just doesn't carry espeak-ng.
 
 The autoloop's `flutter test` gate never invokes CMake, so it stays
 green on fresh checkouts. The
@@ -55,8 +55,8 @@ semantics as the iOS XCTest counterpart.
 
 ## Symbol naming
 
-`careblazers_espeak_ng.cpp` exposes four native methods bound to
-`com.careblazers.careblazers.EspeakNGNative` (a Kotlin `object`):
+`holdclose_espeak_ng.cpp` exposes four native methods bound to
+`com.holdclose.holdclose.EspeakNGNative` (a Kotlin `object`):
 
 | Native fn               | Returns          | Purpose                                      |
 | ----------------------- | ---------------- | -------------------------------------------- |

@@ -1,4 +1,4 @@
-package com.careblazers.careblazers
+package com.holdclose.holdclose
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -108,7 +108,7 @@ class TTSEngine(private val appContext: Context) {
     )
 
     private val workExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "careblazers.tts.work").apply { isDaemon = true }
+        Thread(runnable, "holdclose.tts.work").apply { isDaemon = true }
     }
 
     /// Playback runs on its OWN thread. `AudioTrack.write(..., WRITE_BLOCKING)`
@@ -118,7 +118,7 @@ class TTSEngine(private val appContext: Context) {
     /// stall between every sentence. Two threads let sentence 2 render while
     /// sentence 1 is still in the speaker.
     private val playExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "careblazers.tts.play").apply { isDaemon = true }
+        Thread(runnable, "holdclose.tts.play").apply { isDaemon = true }
     }
 
     private var ortEnv: OrtEnvironment? = null
@@ -686,7 +686,7 @@ interface Phonemizer {
 /// Wraps the espeak-ng C library via the `EspeakNGNative` JNI bridge.
 /// The native sources are populated by `tools/vendor_espeak_ng.sh` into
 /// `android/app/src/main/cpp/espeak-ng/` and compiled into
-/// `libcareblazers_espeak_ng.so` by the externalNativeBuild config in
+/// `libholdclose_espeak_ng.so` by the externalNativeBuild config in
 /// `app/build.gradle.kts`. See `android/app/src/main/cpp/README.md`
 /// for the layout + symbol naming.
 ///
@@ -763,8 +763,8 @@ class EspeakNGPhonemizer(private val useEspeak: Boolean = false) : Phonemizer {
 
 // MARK: - JNI bridge
 
-/// Singleton wrapper around `libcareblazers_espeak_ng.so`. The C++
-/// shim lives at `android/app/src/main/cpp/careblazers_espeak_ng.cpp`;
+/// Singleton wrapper around `libholdclose_espeak_ng.so`. The C++
+/// shim lives at `android/app/src/main/cpp/holdclose_espeak_ng.cpp`;
 /// CMake compiles it on every native build. `isAvailable` is true
 /// iff the .so loaded *and* the espeak-ng sources were linked into it
 /// (the JNI shim's `__has_include` guard flipped on when
@@ -780,10 +780,10 @@ object EspeakNGNative {
     init {
         var available = false
         try {
-            System.loadLibrary("careblazers_espeak_ng")
+            System.loadLibrary("holdclose_espeak_ng")
             available = nativeHasEspeakNG()
         } catch (e: UnsatisfiedLinkError) {
-            Log.w("TTSBridge", "libcareblazers_espeak_ng not loadable — bridge falls back to character phonemizer", e)
+            Log.w("TTSBridge", "libholdclose_espeak_ng not loadable — bridge falls back to character phonemizer", e)
         }
         isAvailable = available
     }
@@ -799,7 +799,7 @@ object EspeakNGNative {
     /// `espeak-ng-data/` — TTSEngine extracts the asset tree into
     /// `cacheDir/espeak-ng-data/` and passes `cacheDir` here. Returns
     /// the sample rate on success (>0), or a negative status code
-    /// (-1/-2/-3, see careblazers_espeak_ng.cpp) on failure.
+    /// (-1/-2/-3, see holdclose_espeak_ng.cpp) on failure.
     external fun nativeInitialize(dataParentPath: String): Int
 
     /// Wraps `espeak_TextToPhonemes` looped to consume the full input.

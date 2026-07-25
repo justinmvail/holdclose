@@ -1,4 +1,4 @@
-package com.careblazers.careblazers
+package com.holdclose.holdclose
 
 import android.app.Activity
 import android.content.Intent

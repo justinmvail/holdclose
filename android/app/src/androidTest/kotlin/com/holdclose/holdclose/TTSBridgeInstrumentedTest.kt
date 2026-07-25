@@ -1,4 +1,4 @@
-package com.careblazers.careblazers
+package com.holdclose.holdclose
 
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
@@ -194,7 +194,7 @@ class TTSBridgeInstrumentedTest {
     /// Skips when `EspeakNGNative.isAvailable` is false — that's the
     /// state before `tools/vendor_espeak_ng.sh` runs (the JNI shim's
     /// `__has_include` short-circuits and `nativeHasEspeakNG` returns
-    /// false) or when libcareblazers_espeak_ng.so failed to load.
+    /// false) or when libholdclose_espeak_ng.so failed to load.
     @Test
     fun espeakNgVendorLoadsAndPhonemizes() {
         assumeTrue(

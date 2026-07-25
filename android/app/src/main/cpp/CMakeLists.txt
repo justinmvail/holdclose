@@ -1,10 +1,10 @@
-# BUILD_SPEC.md Phase 10.3 — JNI build for libcareblazers_espeak_ng.so.
+# BUILD_SPEC.md Phase 10.3 — JNI build for libholdclose_espeak_ng.so.
 #
 # Mirror of ios/Vendored/espeak-ng/espeak-ng.podspec. The C sources +
 # headers under cpp/espeak-ng/ are populated by
 # tools/vendor_espeak_ng.sh; until that script runs they're absent and
 # the `file(GLOB ...)` below resolves to an empty list. The JNI shim
-# (careblazers_espeak_ng.cpp) keeps `__has_include` guards around every
+# (holdclose_espeak_ng.cpp) keeps `__has_include` guards around every
 # espeak symbol, so the library still compiles + ships in the APK on a
 # fresh checkout — it just signals "unavailable" through
 # `nativeHasEspeakNG()` and the Kotlin layer falls back to the Phase 9.4
@@ -12,7 +12,7 @@
 # header's `__has_include(<espeak-ng/espeak_ng.h>)`.
 
 cmake_minimum_required(VERSION 3.18.1)
-project(careblazers_espeak_ng LANGUAGES C CXX)
+project(holdclose_espeak_ng LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -58,8 +58,8 @@ else()
     message(STATUS "holdclose: espeak-ng sources absent — JNI bridge will signal unavailable until tools/vendor_espeak_ng.sh runs")
 endif()
 
-add_library(careblazers_espeak_ng SHARED
-    careblazers_espeak_ng.cpp
+add_library(holdclose_espeak_ng SHARED
+    holdclose_espeak_ng.cpp
     ${ESPEAK_SOURCES}
 )
 
@@ -67,7 +67,7 @@ add_library(careblazers_espeak_ng SHARED
 # them so the build log stays readable; none mask real bugs (mirror of
 # the iOS podspec's -Wno set).
 if(ESPEAK_SOURCES)
-    target_compile_options(careblazers_espeak_ng PRIVATE
+    target_compile_options(holdclose_espeak_ng PRIVATE
         -Wno-unused-parameter
         -Wno-unused-but-set-variable
         -Wno-shorten-64-to-32
@@ -76,4 +76,4 @@ if(ESPEAK_SOURCES)
 endif()
 
 find_library(log-lib log)
-target_link_libraries(careblazers_espeak_ng ${log-lib})
+target_link_libraries(holdclose_espeak_ng ${log-lib})

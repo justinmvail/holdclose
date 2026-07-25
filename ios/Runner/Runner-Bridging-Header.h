@@ -16,7 +16,7 @@
 //     headers reachable as <espeak_ng/…>
 //   * static-library build                            → <espeak-ng/…>
 // Only the hyphenated form was tested here, so on our framework build the guard
-// quietly failed, CAREBLAZERS_HAS_ESPEAK_NG became 0, every espeak call site was
+// quietly failed, HOLDCLOSE_HAS_ESPEAK_NG became 0, every espeak call site was
 // compiled OUT, and the phonemizer fell back to spelling words letter by letter.
 // The app built clean and spoke gibberish (2026-07-14).
 // Prefer the hyphenated SOURCE headers (the pod puts `src/include` on our header
@@ -28,7 +28,7 @@
 #if __has_include(<espeak-ng/espeak_ng.h>)
 #import <espeak-ng/espeak_ng.h>
 #import <espeak-ng/speak_lib.h>
-#define CAREBLAZERS_HAS_ESPEAK_NG 1
+#define HOLDCLOSE_HAS_ESPEAK_NG 1
 #else
-#define CAREBLAZERS_HAS_ESPEAK_NG 0
+#define HOLDCLOSE_HAS_ESPEAK_NG 0
 #endif

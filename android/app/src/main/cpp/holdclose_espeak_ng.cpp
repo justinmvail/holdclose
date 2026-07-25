@@ -1,6 +1,6 @@
 // BUILD_SPEC.md Phase 10.3 — JNI bridge for espeak-ng on Android.
 //
-// Mirror of ios/Runner/TTSBridge.swift's #if CAREBLAZERS_HAS_ESPEAK_NG
+// Mirror of ios/Runner/TTSBridge.swift's #if HOLDCLOSE_HAS_ESPEAK_NG
 // branch: same `espeak_Initialize` / `espeak_TextToPhonemes` /
 // `espeak_Terminate` API, same upstream commit
 // (4870adfa25b1a32b4361592f1be8a40337c58d6c, tag 1.52.0), same phoneme
@@ -21,9 +21,9 @@
 #if __has_include(<espeak-ng/espeak_ng.h>)
 #include <espeak-ng/espeak_ng.h>
 #include <espeak-ng/speak_lib.h>
-#define CAREBLAZERS_HAS_ESPEAK_NG 1
+#define HOLDCLOSE_HAS_ESPEAK_NG 1
 #else
-#define CAREBLAZERS_HAS_ESPEAK_NG 0
+#define HOLDCLOSE_HAS_ESPEAK_NG 0
 #endif
 
 extern "C" {
@@ -33,9 +33,9 @@ extern "C" {
 // INSTANCE jobject (unused here).
 
 JNIEXPORT jboolean JNICALL
-Java_com_careblazers_careblazers_EspeakNGNative_nativeHasEspeakNG(
+Java_com_holdclose_holdclose_EspeakNGNative_nativeHasEspeakNG(
     JNIEnv* /* env */, jobject /* thiz */) {
-#if CAREBLAZERS_HAS_ESPEAK_NG
+#if HOLDCLOSE_HAS_ESPEAK_NG
     return JNI_TRUE;
 #else
     return JNI_FALSE;
@@ -48,9 +48,9 @@ Java_com_careblazers_careblazers_EspeakNGNative_nativeHasEspeakNG(
 //   -2  espeak_Initialize returned non-positive rate (bad data path)
 //   -3  espeak_SetVoiceByName("en-us") failed (voicedata missing)
 JNIEXPORT jint JNICALL
-Java_com_careblazers_careblazers_EspeakNGNative_nativeInitialize(
+Java_com_holdclose_holdclose_EspeakNGNative_nativeInitialize(
     JNIEnv* env, jobject /* thiz */, jstring jPath) {
-#if CAREBLAZERS_HAS_ESPEAK_NG
+#if HOLDCLOSE_HAS_ESPEAK_NG
     if (jPath == nullptr) return -2;
     const char* path = env->GetStringUTFChars(jPath, nullptr);
     if (path == nullptr) return -2;
@@ -75,9 +75,9 @@ Java_com_careblazers_careblazers_EspeakNGNative_nativeInitialize(
 // since the input is plain ASCII for English caregiver scripts the
 // round-trip is identity in practice.
 JNIEXPORT jstring JNICALL
-Java_com_careblazers_careblazers_EspeakNGNative_nativeTextToPhonemes(
+Java_com_holdclose_holdclose_EspeakNGNative_nativeTextToPhonemes(
     JNIEnv* env, jobject /* thiz */, jstring jText) {
-#if CAREBLAZERS_HAS_ESPEAK_NG
+#if HOLDCLOSE_HAS_ESPEAK_NG
     if (jText == nullptr) return nullptr;
     const char* text = env->GetStringUTFChars(jText, nullptr);
     if (text == nullptr) return nullptr;
@@ -108,9 +108,9 @@ Java_com_careblazers_careblazers_EspeakNGNative_nativeTextToPhonemes(
 }
 
 JNIEXPORT void JNICALL
-Java_com_careblazers_careblazers_EspeakNGNative_nativeTerminate(
+Java_com_holdclose_holdclose_EspeakNGNative_nativeTerminate(
     JNIEnv* /* env */, jobject /* thiz */) {
-#if CAREBLAZERS_HAS_ESPEAK_NG
+#if HOLDCLOSE_HAS_ESPEAK_NG
     espeak_Terminate();
 #endif
 }
