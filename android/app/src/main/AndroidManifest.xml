@@ -12,9 +12,15 @@
          selects the real capture impls. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- Photo access: scoped media permission on Android 13+ (API 33),
-         legacy storage read capped at API 32 for older devices. -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Photo access. We deliberately DO NOT declare READ_MEDIA_IMAGES /
+         READ_MEDIA_VIDEO. image_picker's gallery pick goes through the OS
+         system picker (Android Photo Picker / ACTION_GET_CONTENT), which
+         grants a per-file URI with NO broad media permission — and Play
+         policy REJECTS those permissions for apps targeting API 33+ unless
+         the system picker is technically insufficient (it isn't for us; we
+         only need the user to pick one image). Adding READ_MEDIA_IMAGES back
+         re-breaks Play submission across all tracks. The capped legacy read
+         below covers gallery pick on API <= 32 only. -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
