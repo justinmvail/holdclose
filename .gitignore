@@ -101,3 +101,13 @@ integration_test/failures/
 tools/dev_defines.sh
 demo_video/
 backend/.prod.vars
+
+# Dev-internal docs — kept on disk for development, not published in the
+# public repo (they carry planning/spec/history detail judges don't need).
+/CLAUDE.md
+/BUILD_SPEC.md
+/TASKS.md
+/ROADMAP_TO_PRODUCTION.md
+/docs/
+/caregiver-ai-prize/
+tools/README.md

@@ -62,9 +62,9 @@ final DateTime kHarnessClock = DateTime(2026, 6, 1, 11, 0);
 /// Captures every URL handed to `url_launcher` instead of opening it
 /// (TASKS.md Phase 15.1 — used by 15.4 / 15.9 / 15.19 / 15.20 / 15.21).
 ///
-/// Wired in as the [linkLauncherProvider] override so the decoder
-/// result's "Talk to Natali" CTA, the Care Circle phone/email actions,
-/// and the Settings destructive-link surfaces all record their URIs here
+/// Wired in as the [linkLauncherProvider] override so the Care Circle
+/// phone/email actions and the Settings destructive-link surfaces all
+/// record their URIs here
 /// for assertion. [launch] always reports success so callers that branch
 /// on the bool stay on the happy path.
 class FakeUrlLauncher implements LinkLauncher {

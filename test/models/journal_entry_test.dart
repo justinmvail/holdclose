@@ -92,9 +92,9 @@ void main() {
       expect(JournalEntry.fromJson(entry.toJson()), equals(entry));
     });
 
-    test('legacy decoder-era JSON deserializes (extra keys ignored)', () {
-      // Older rows persisted by the (removed) behavior decoder carried
-      // extra `behavior` / `triage` / `result` / `outcome` keys; fromJson
+    test('legacy JSON with extra keys deserializes (extra keys ignored)', () {
+      // Older rows from a prior journal format carried extra
+      // `behavior` / `triage` / `result` / `outcome` keys; fromJson
       // must ignore them and yield a clean timestamped entry.
       final Map<String, dynamic> legacy = <String, dynamic>{
         'id': 'legacy-001',

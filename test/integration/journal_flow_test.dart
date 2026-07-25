@@ -15,8 +15,7 @@
 ///      [JournalEntryScreen] with the read-only situation + attempts
 ///      blocks and the saved notes.
 ///   5. **Empty CTA** — with zero entries the empty-state CTA opens the
-///      add-entry chooser sheet (it no longer hands off to the removed
-///      behavior decoder).
+///      add-entry chooser sheet.
 ///   6. **Wizard end-to-end** — the multi-step [JournalWizardScreen] →
 ///      step through when / situation / attempts → Save → back on the
 ///      list with the new entry rendered.
@@ -233,8 +232,7 @@ void main() {
 
       await tester.tap(find.byKey(JournalScreen.emptyCtaKey));
       await tester.pumpAndSettle();
-      // The CTA now opens the chooser sheet (quick note + guided entry),
-      // not the removed behavior decoder.
+      // The CTA opens the chooser sheet (quick note + guided entry).
       expect(find.byKey(JournalScreen.quickNoteOptionKey), findsOneWidget);
       expect(find.byKey(JournalScreen.wizardOptionKey), findsOneWidget);
       expect(find.text('Guided entry'), findsOneWidget);

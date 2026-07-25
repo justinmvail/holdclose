@@ -19,7 +19,7 @@ import '../../theme.dart';
 ///     and the run length; tapping deep-links to the video via
 ///     [linkLauncherProvider] (no in-app detail screen — alpha feedback
 ///     fb_1780932492880889). The whole section hides when no videos are
-///     seeded (the de-brand left the curated list empty for now).
+///     seeded (the curated list is empty for now).
 ///   * **Playbooks** — the seeded "what do I do when…" guides
 ///     ([learnPlaybooks]), grouped under their [LearnTopic] header. Each
 ///     row pushes `/community/learn/playbooks/:id`.

@@ -78,8 +78,8 @@ void main() {
       await _pumpScreen(tester);
 
       expect(find.text('Playbooks'), findsOneWidget);
-      // The de-brand emptied the curated video list; the whole Videos
-      // section (header + cards) hides until licensed videos are seeded.
+      // The curated video list is empty; the whole Videos section
+      // (header + cards) hides until licensed videos are seeded.
       expect(learnVideos, isEmpty);
       expect(find.text('Videos'), findsNothing);
     });

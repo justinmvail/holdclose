@@ -7,7 +7,7 @@ part 'chat.g.dart';
 /// (BUILD_SPEC.md / TASKS.md Phase 11.1).
 ///
 /// Two values: caregiver-typed input ([user]) and the streamed
-/// Dr. Natali-voiced coach reply ([assistant]). The string names match
+/// Coach reply ([assistant]). The string names match
 /// the Anthropic / Claude CLI role vocabulary so the
 /// [ChatService] (TASKS.md Phase 11.3) can pass them through to the
 /// LLM without translation.

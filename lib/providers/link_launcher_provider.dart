@@ -3,8 +3,8 @@ import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 part 'link_launcher_provider.g.dart';
 
-/// Outbound URL launcher (BUILD_SPEC.md §5.4 — decoder result's "Talk to
-/// Natali" CTA; §5.8 — future library card share/help links).
+/// Outbound URL launcher (share links, help links, and other outbound
+/// handoffs to the system browser).
 ///
 /// Behind an interface so widget tests can override the riverpod
 /// provider with [RecordingLinkLauncher] and assert what URL was passed
@@ -38,8 +38,8 @@ class RealLinkLauncher implements LinkLauncher {
 }
 
 /// Records every [launch] call without firing a platform call. Used by
-/// widget tests so they can assert the URL the decoder result screen
-/// hands off when the caregiver taps "I need to talk to Natali".
+/// widget tests so they can assert which URL a screen hands off to the
+/// browser without the platform plugin firing.
 class RecordingLinkLauncher implements LinkLauncher {
   RecordingLinkLauncher();
 

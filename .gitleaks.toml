@@ -1,0 +1,25 @@
+# gitleaks config — extends the default rules and allowlists the known
+# false positives so a scan of this repo reads clean.
+#
+# Every entry below was manually verified to contain NO real secret:
+#   * ios/Podfile.lock          — CocoaPods spec checksums (public SHA hashes)
+#   * backend/.dev.vars.example — a commented-out placeholder ("...\n...")
+#   * backend/test/billing.test.ts — a PEM generated at test runtime, no literal key
+#   * holdclose.db.sqlcipher_key.v1 — a keychain ENTRY NAME, not a key value
+# The real backend/.dev.vars is gitignored and has never been committed.
+
+title = "Holdclose gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Verified false positives (no real secrets)"
+paths = [
+  '''ios/Podfile\.lock''',
+  '''backend/\.dev\.vars\.example''',
+  '''backend/test/billing\.test\.ts''',
+]
+regexes = [
+  '''\w+\.db\.sqlcipher_key\.v1''',
+]

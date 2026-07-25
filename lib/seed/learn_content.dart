@@ -121,11 +121,9 @@ class LearnPlaybook {
 
 /// The seeded primer videos shown in the Learn tab's "Videos" section.
 ///
-/// Emptied during the de-brand (2026-06): the previous list embedded a
-/// third party's branded YouTube videos, which can't ship under the new
-/// product without permission. The Learn screen hides the Videos section
-/// while this is empty; populate it with licensed/original, diagnosis-
-/// agnostic caregiving primers when they're available.
+/// Empty for now — only licensed or original, diagnosis-agnostic caregiving
+/// primers ship here. The Learn screen hides the Videos section while this is
+/// empty; populate it when that content is available.
 const List<LearnVideo> learnVideos = <LearnVideo>[];
 
 /// The seeded playbooks (Phase 14.37), one or more per [LearnTopic]. The

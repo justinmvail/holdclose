@@ -14,7 +14,7 @@ part 'journal_entry.g.dart';
 /// table the journal screen reads from, so the entry shows up in the
 /// list immediately.
 ///
-/// Older rows persisted by the (removed) behavior decoder deserialize
+/// Older rows persisted under a prior journal format deserialize
 /// cleanly: their extra `behavior` / `triage` / `result` keys are simply
 /// ignored by `fromJson`, leaving a timestamped entry with no body.
 @freezed

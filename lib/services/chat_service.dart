@@ -210,7 +210,7 @@ class ClaudeShimChatBackend implements ChatLLMBackend {
 
     // Buffer raw bytes (not decoded text) so a multi-byte UTF-8
     // sequence split across two `Uint8List` reads doesn't get mangled
-    // into a replacement char — Dr. Natali's voice includes em-dashes
+    // into a replacement char — the coach voice includes em-dashes
     // and smart quotes the model echoes back.
     final List<int> rawBuffer = <int>[];
     // Tracks whether any incremental token chunk has streamed. Once one

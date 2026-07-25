@@ -1,164 +1,103 @@
 # Holdclose
 
-A Flutter mobile app — iOS + Android — that gives family caregivers an
-**AI coach that actually knows their loved one's situation**, wrapped in a
-full caregiving suite. It works for **any** care situation — aging
-parents, a disabled family member, recovery, dementia — not one diagnosis.
+**An AI coach that actually knows your loved one's situation — wrapped in a full caregiving suite.**
 
-> **Repo note:** the product began as "Careblazers" and was rebranded to
-> **Holdclose** (pivot completed 2026-06-23; folder + GitHub repo renamed
-> 2026-07-08). A few internal `careblazers` identifiers are deliberately
-> kept — see the top banner of [`CLAUDE.md`](CLAUDE.md) before "fixing"
-> any. Published under **Juno Code Studio** at **holdclose.care**.
+Holdclose is a mobile app (iOS + Android) for family caregivers. Family
+caregiving isn't one hard moment — it's thousands of them, usually with no
+training and no time to look anything up. Holdclose is the assistant to the
+caregiver: it tracks the medications, appointments, and history, and puts a
+coach — grounded in your loved one's *real* care data — one tap away for the
+hard moments.
+
+It's built for **any** care situation: aging parents, a disabled family member,
+post-surgery recovery, dementia. Not one diagnosis.
+
+🌐 **[holdclose.care](https://holdclose.care)** · iOS + Android · in active testing
+
+<!-- Screenshots: add 3–4 device captures here (Home, Chat coach, Scan-to-import, Emergency Card). -->
+
+## What makes it different
+
+Anyone can open a chatbot. The wedge here is a coach **grounded in your loved
+one's actual care record** — their medications and dose windows, appointments,
+history, journal, and care circle — so the guidance fits *your person*, not a
+blank box.
+
+## Responsible AI, by design
+
+Holdclose is built to the standard a family deserves, and its guardrails are
+structural — they don't depend on which model is running:
+
+- **Coaches the caregiver, never diagnoses the loved one.** No symptom checker,
+  no prognosis, no medication-dosing advice. When it's unsure, it says so and
+  points to a professional.
+- **Human-in-the-loop on every change.** Anything that would alter the care
+  record — including a scanned prescription or a voice-logged dose — waits for
+  the caregiver to confirm. Destructive actions never auto-execute.
+- **The vendor is invisible; the capability isn't.** The AI runs on our own
+  cloud (an open-weight model on Cloudflare Workers AI), so care data never
+  reaches a separate AI vendor.
+- **Validated.** An automated red-team of 41 inference cycles through the real
+  coach stack held all 41 safety guardrails (dosing, diagnosis, crisis,
+  prompt-injection, and unknown-instruction probes), backed by a code-side
+  crisis watchdog and prompt sanitization pinned by the test suite.
 
 ## Features
 
-- **Chat coach** — the wedge. A multi-turn caregiving companion grounded
-  in your loved one's real care data (meds, dose windows, appointments,
-  history, journal, the care circle) via `chat_context_builder` — that
-  grounding is the point: a coach that knows *your person* beats a blank
-  chatbox. Hands-free center-mic voice intent ("log that she didn't
-  sleep") and action tags record meds/doses/appointments/journal entries
-  on the caregiver's behalf. Destructive actions (delete/cancel) always go
-  through an in-thread confirm card. See
-  [`docs/CHAT_FEATURE.md`](docs/CHAT_FEATURE.md).
-- **Journal** — log moments and outcomes; a pattern detector surfaces
-  "3+ falls this week" / similar alerts.
-- **Care (hub tab)** — health log, care plan routines, medications + dose
-  windows + dose log, appointments, Emergency Card (the paramedic/ER
-  handoff sheet), and Cards & Docs scans. Plus a set of medical-
-  coordination helpers: **AI scan-to-import** for prescriptions,
-  appointments, and insurance cards (always human-approved before it
-  writes anything), **AI doctor-visit-prep** questions, **AI insurance-
-  appeal** letter drafts, **NPI provider search** (Find a provider), a
-  shareable **care-summary PDF**, **refill-runway alerts** (heads-up when
-  a med is about to run out), and **tap-to-call** for providers, pharmacy,
-  and insurance.
-- **Care Circle** — share caregiving across devices: server-backed sync
-  (Cloudflare Worker, `backend/`), single-use invite links/QR with an
-  explicit join confirmation, shared calendar/tasks/shifts/expenses/
-  activity.
-- **Community** — caregiver forum (posts, comments, votes, moderation,
-  crisis-keyword watchdog) plus Learn primers and Support resources as
-  in-page segments.
+- **Chat coach** — a multi-turn caregiving companion grounded in your loved
+  one's care data. Hands-free center-mic voice ("log that she didn't sleep")
+  records meds, doses, appointments, and journal entries on your behalf — each
+  change confirmed by you first.
+- **Medications & dose windows** — track doses so nothing slips, with
+  **refill-runway alerts** before a medication runs out.
+- **AI scan-to-import** — photograph a prescription, appointment card, or
+  insurance card and the AI reads it into structured fields; you review and
+  approve before anything is saved. Low-confidence fields are flagged, not
+  guessed.
+- **Care coordination** — AI doctor-visit-prep questions, AI insurance-appeal
+  letter drafts, NPI provider search, a shareable care-summary PDF, and
+  tap-to-call for providers, pharmacy, and insurance.
+- **Emergency Card** — a paramedic/ER handoff sheet: conditions, medications,
+  allergies, and contacts on one screen.
+- **Care Circle** — share caregiving across the family with server-backed sync,
+  single-use invite links with explicit join confirmation, and a shared
+  calendar, tasks, and shifts.
+- **Journal & community** — free-text logging with pattern detection, plus a
+  caregiver forum and Learn/Support resources.
 
-> The original **Behavior Decoder** (a dementia-behavior triage flow) was
-> removed in the 2026-06 pivot — alpha users preferred just using the
-> chat. See [`CLAUDE.md`](CLAUDE.md).
+## Under the hood
 
-## What's in this repo
+Flutter (Dart) · Riverpod · go_router · Drift (SQLite) · a Cloudflare Worker
+backend (Hono + D1 + R2 + Workers AI). Care data is **local-first** and
+encrypted at rest by the OS; care-circle sync is authenticated and TLS-encrypted.
 
-| File | Purpose |
-|---|---|
-| [`CLAUDE.md`](CLAUDE.md) | Project context loaded every session. Direction/pivot, code style, layout, invariants. **Start here.** |
-| [`BUILD_SPEC.md`](BUILD_SPEC.md) | The original build contract. Comprehensive, but predates the pivot — its Decoder / Dr. Natali / dementia-only sections are superseded (see its top banner). |
-| [`TASKS.md`](TASKS.md) | Historical autoloop task queue. |
-| `lib/` | Flutter source. |
-| `test/` | Unit + widget + golden tests. Required for every screen, service, provider. |
-| `integration_test/` | Scripted end-to-end walkthroughs (4-tab IA). |
-| `backend/` | Cloudflare Worker (Hono + drizzle + D1 + R2): auth, care-circle sync, forum, documents, crisis watchdog. `cd backend && npm test`. |
-| `tools/claude_shim.py` | Local HTTP shim that wraps the `claude` CLI for dev-mode LLM calls (bearer auth, size caps, subprocess watchdog). |
+Quality is enforced by a large automated suite — **~2,000 unit, widget, and
+golden tests** plus a backend suite — run on every change.
 
-## Building
+## Development
 
 ```bash
 flutter pub get
-cd ios && pod install && cd ..
-```
-
-### Run on a device — `tools/run_device.sh` (primary path)
-
-One env-configured script that builds + installs Holdclose to a device.
-Read its header for the full option list; the essentials:
-
-```bash
-tools/run_device.sh                       # AUTH=demo (default)
-AUTH=google tools/run_device.sh           # real Google sign-in + backend
-AUTH=google SEED=1 tools/run_device.sh    # ...plus a fresh seeded dataset
-```
-
-- **`AUTH=demo`** (default) — fake auth via `DEMO_MODE`, talks to the LAN
-  shim; no backend or Google sign-in needed. Quick dogfooding.
-- **`AUTH=google`** — real Google sign-in (`ALPHA_AUTH`) verified by the
-  backend; auto-sources `tools/dev_defines.sh` for the Google client ids +
-  `FORUM_API_URL` + shim token.
-- **`SEED=1`** (optional) — wipe the on-device DB and reseed the
-  comprehensive demo dataset on next launch (typically paired with
-  `AUTH=google`).
-- **`DEVICE=<id>`** / **`SHIM_URL=<url>`** (optional) — override the target
-  device or the LLM shim URL.
-
-Every dev build turns on the in-app feedback report button (`FEEDBACK`),
-and **every compile gets a distinct build number** (epoch) shown in
-Settings → About (via `lib/config/build_info.dart`) so you can confirm
-which binary is on the phone. Wireless installs need the phone unlocked +
-awake during the whole compile.
-
-For a release IPA whose `CFBundleVersion` also carries that distinct build
-number, use **`tools/build_ipa.sh`** (output: `build/ios/ipa/*.ipa`).
-
-Raw commands still work for a simulator fallback or quick checks:
-
-```bash
-flutter run -d <device>    # or an <ios-simulator-id>
-flutter test
+flutter test                 # full suite (unit + widget + golden)
 flutter analyze
+cd backend && npm test       # Cloudflare Worker suite
 ```
 
-## Dev mode (real LLM, local Claude Max subscription)
+The app runs against a backend for auth and sync; a local development shim wraps
+a CLI for dev-mode AI calls, so there are no API keys in source.
 
-```bash
-# In one terminal:
-python3 tools/claude_shim.py     # listens on localhost:8765
+## About
 
-# In another (or just use tools/run_device.sh):
-flutter run -d <simulator-id>
-```
+Holdclose is built by a U.S. Air Force veteran out of his own family's
+caregiving experience, and published under **Juno Code Studio** (JCSV One LLC).
+It shares a tested backbone with **Care Rounds**, a companion app for the paid
+direct-care workforce — two sides of one care team.
 
-The shim uses your local `claude` CLI — zero per-call cost. The Flutter
-app's `ClaudeCLIProvider` POSTs to `http://localhost:8765/generate`
-and streams the response back.
+Holdclose is an entry in the **ACL / HHS Caregiver AI Prize Challenge**
+(Track 1 — AI for family caregivers).
 
-## Demo tour (automated, no shim needed)
+## License
 
-```bash
-flutter test integration_test/demo_tour.dart --dart-define=DEMO_MODE=true
-```
-
-Uses `DemoChatBackend` for deterministic, offline responses. Clean state
-on every launch.
-
-## Audio
-
-The app reads coaching replies and content aloud via a bundled on-device
-neural voice (Piper Amy, ~30 MB, under `assets/tts/en_US-amy-medium/`).
-Settings → **High-quality bundled voice** toggles between that and the OS
-engine (`flutter_tts` — Samantha on iOS, Google TTS on Android). Where
-ONNX Runtime can't load the bundled model, the app transparently falls
-back to the OS voice. See [`docs/TTS_BUNDLED.md`](docs/TTS_BUNDLED.md).
-
-## What this is NOT
-
-- Not a symptom checker / diagnostic
-- Not a memory exercise app for the care recipient
-- Not a general longevity / brain-prevention tool
-- Not a replacement for medical care — there are guardrails throughout
-  against medication advice, prognosis claims, and diagnostic statements
-
-## Tests
-
-```bash
-flutter test                          # unit + widget + golden
-flutter test integration_test/ --dart-define=DEMO_MODE=true   # end-to-end
-flutter analyze                       # static
-cd backend && npm test                # Worker vitest suite
-```
-
-## Status
-
-Rebranded from "Careblazers" to **Holdclose** and shipped as a standalone
-product (the original Dr. Natali partnership pitch went unanswered). The
-pivot is complete: decoder removed, coach re-voiced for general
-caregiving, everything renamed. Remaining roadmap: paywall + affiliate
-attribution → Apple/Google **organization** enrollment → store
-submission. See [`CLAUDE.md`](CLAUDE.md) → **Direction**.
+© JCSV One LLC (Juno Code Studio). All rights reserved. The source is made
+available for evaluation and is **not** licensed for reuse, redistribution, or
+derivative works.

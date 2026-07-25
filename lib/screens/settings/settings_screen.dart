@@ -431,8 +431,8 @@ class _HourDropdown extends StatelessWidget {
 ///
 /// v1 ships one bundled voice — Amy, the en_US Piper voice the
 /// platform bridges play back from `assets/tts/en_US-hfc_female-medium/`. The
-/// dropdown is a single-item placeholder until the v1.1 catalog adds
-/// Dr. Natali + the other personalities the voicecloner repo produces.
+/// dropdown is a single-item placeholder until a later catalog adds
+/// additional bundled voices.
 class _VoicePicker extends StatelessWidget {
   const _VoicePicker({
     required this.settings,

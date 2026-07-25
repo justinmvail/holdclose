@@ -52,7 +52,7 @@ class PatternAlert {
 ///   Future: a structured tag on the entry rather than a text scan.
 ///
 /// The behavior-keyed rules (sundowning bursts, new-behavior spikes) were
-/// retired with the behavior decoder — journal entries are now free text,
+/// retired in an earlier iteration — journal entries are now free text,
 /// so there is no canonical behavior id to count. The UTI red-flag rule
 /// from BUILD_SPEC.md §7.6 remains out of scope: it needs structured tags
 /// the entry model doesn't carry.

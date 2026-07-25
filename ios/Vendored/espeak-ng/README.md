@@ -1,7 +1,7 @@
 # Vendored espeak-ng
 
-BUILD_SPEC.md Phase 10.1 — local CocoaPod that vendors espeak-ng for the
-Careblazers iOS bridge. The sources are not committed to this repo;
+Local CocoaPod that vendors espeak-ng for the Holdclose iOS on-device TTS
+bridge. The sources are not committed to this repo;
 `tools/vendor_espeak_ng.sh` clones them at the pinned commit on first
 setup, and the podspec in this directory wires them into the Runner
 build.
@@ -61,7 +61,7 @@ replaces `EspeakNGPhonemizer`'s character-loop with the real
 ## Why the sources aren't committed
 
 espeak-ng 1.52.0 ships ~20 MB of C sources. Committing them would
-bloat the repo by ~10× and force a careblazers fork to track every
+bloat the repo by ~10× and force a fork to track every
 upstream tag bump. The vendor-script-on-setup pattern follows the
 Home Assistant iOS voice library convention and keeps the repo
 focused on application code.
