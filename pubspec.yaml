@@ -91,7 +91,7 @@ dependencies:
   flutter_svg: ^2.0.0
   shared_preferences: ^2.3.0
 
-  # External URLs (decoder result "Talk to Natali" outbound link)
+  # External URLs (outbound share / help links)
   url_launcher: ^6.3.0
 
   # Share sheet (library card detail share action — BUILD_SPEC.md §5.8)

@@ -729,7 +729,7 @@ String displayNameForAuthor(
   // Strip a "profile-" prefix if one shows up so the rendered suffix
   // is actually distinguishing entropy rather than a shared header.
   String rest = authorId;
-  for (final String prefix in <String>['profile-', 'user-', 'careblazer-']) {
+  for (final String prefix in <String>['profile-', 'user-']) {
     if (rest.startsWith(prefix)) {
       rest = rest.substring(prefix.length);
       break;

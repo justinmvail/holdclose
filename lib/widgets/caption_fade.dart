@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Word-by-word fade-in caption used by the decoder result screen
+/// Word-by-word fade-in caption used by the streaming coach reply
 /// (BUILD_SPEC.md §5.4) and the library card detail screen (§5.8).
 ///
 /// Renders [text] — overridden by [stream] emissions when one is

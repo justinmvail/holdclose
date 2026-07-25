@@ -77,7 +77,7 @@ class OSTTSProvider implements TTSProvider {
   }) async {
     if (!_awaitWired) {
       // Block speak()'s future until the utterance completes, so the
-      // decoder result screen's per-line ▶ button can `await` one
+      // streaming coach reply's per-line ▶ button can `await` one
       // section before the next starts (BUILD_SPEC.md §7.4).
       await _tts.awaitSpeakCompletion(true);
       _awaitWired = true;

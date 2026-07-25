@@ -35,7 +35,7 @@ import 'conversation_list_screen.dart';
 ///     * Assistant messages: warm-coach styling — surfaceWarm bubble,
 ///       left-aligned, body text in `bodyLarge`. While the assistant
 ///       message is still streaming, the body fades in word-by-word via
-///       [CaptionFade] (same visual language as the decoder result
+///       [CaptionFade] (same visual language as the coach reply
 ///       screen, BUILD_SPEC.md §5.4 + §11.6).
 ///     * User messages: navy bubble, right-aligned, white text.
 ///   - Input row pinned to the bottom: multiline text field + circular
@@ -107,7 +107,7 @@ class ChatScreen extends ConsumerStatefulWidget {
   static const Key typingIndicatorKey = Key('chat-screen-typing-indicator');
 
   /// The always-visible one-line disclaimer under the composer — the
-  /// trusted, code-side counterpart of the decoder result's footer
+  /// trusted, code-side counterpart of the coach reply's footer
   /// (CLAUDE.md: medical-advice guardrails are non-negotiable).
   static const Key disclaimerKey = Key('chat-screen-disclaimer');
 
@@ -390,7 +390,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     // Open a fresh body-stream controller — CaptionFade reuses its
     // ticker across emissions and fades only the newly-appearing
-    // words, which is exactly the visual the decoder result screen
+    // words, which is exactly the visual the streaming coach reply
     // uses for its partial streaming output.
     await _streamingBodyController?.close();
     _streamingBodyController = StreamController<String>.broadcast();
@@ -641,7 +641,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               onSend: _send,
             ),
             // Trusted, code-side medical-advice reminder — the chat/voice
-            // counterpart of the decoder result's footer. Always visible;
+            // counterpart of the coach reply's footer. Always visible;
             // never sourced from model output.
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -758,7 +758,7 @@ class _EmptyHint extends StatelessWidget {
 ///     the streaming body stream.
 /// "Coach is thinking…" content shown inside the streaming assistant bubble
 /// while the shim composes a reply but hasn't streamed its first token yet —
-/// a brand-tinted spinner + calm line (same idiom as the decoder result
+/// a brand-tinted spinner + calm line (same idiom as the coach reply
 /// screen's loading state), in place of an otherwise-blank bubble.
 class _TypingIndicator extends StatelessWidget {
   const _TypingIndicator();
