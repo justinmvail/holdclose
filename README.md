@@ -94,17 +94,26 @@ encrypted at rest by the OS; care-circle sync is authenticated and TLS-encrypted
 Quality is enforced by a large automated suite — **~2,000 unit, widget, and
 golden tests** plus a backend suite — run on every change.
 
-## Serverless on Cloudflare — built to stay affordable
+## Serverless on Cloudflare — scales far, costs little
 
 The entire backend is **serverless on Cloudflare**: Workers for edge compute,
 D1 (SQLite) for data, R2 for files, and **Workers AI** for the coach — an
-**open-weight model running on Cloudflare's serverless GPU platform**.
-Serverless means there are no idle servers to pay for (compute scales to zero
-when no one is using it), and the AI is billed **per request** rather than as a
-dedicated GPU or a per-seat model-vendor contract. That keeps the cost of
-running the app **per caregiver extremely low** — which is what makes an
-affordable, and for many families free, caregiving tool genuinely sustainable
-instead of a launch-day promise. It also keeps the AI on **our own cloud**, so a
+**open-weight model on Cloudflare's serverless GPU platform**.
+
+**Scales without bottlenecks.** Compute and AI inference scale automatically
+across Cloudflare's global network — **no servers or GPUs to provision, no cold
+starts** — and fall to zero cost when idle. For a caregiving app there's no
+practical compute or inference ceiling to hit; the one part that needs deliberate
+scaling at very high volume is the database (D1 read replicas), which is standard
+for any architecture.
+
+**Costs a fraction of the usual stack.** Pay-per-request with scale-to-zero means
+**no idle burn** — unlike an always-on AWS deployment (EC2/RDS billed around the
+clock, S3 charging egress on every file served); R2 has **zero egress fees**. And
+running an **open-weight model on serverless GPUs costs roughly an order of
+magnitude less per token** than a frontier hosted API (a GPT‑4‑ or Claude‑class
+model). That's what makes a free / low-cost caregiving tool genuinely sustainable
+rather than a launch-day promise — and it keeps the AI on **our own cloud**, so a
 loved one's care data never reaches a separate AI vendor.
 
 ## Development
