@@ -43,6 +43,19 @@ one's actual care record** — their medications and dose windows, appointments,
 history, journal, and care circle — so the guidance fits *your person*, not a
 blank box.
 
+## You never have to type
+
+Every core action — add a medication, log a dose, record a symptom, schedule an
+appointment, write a journal note, even cancel or delete one — can be done
+**entirely by talking or by snapping a photo.** The hands-free center mic turns
+*"she skipped her evening pill"* into a logged dose and *"add a follow-up with
+Dr. Ortega next Tuesday"* into an appointment; the camera turns a prescription
+label into a medication record. Every voice- or photo-driven change still shows a
+**confirmation card** first — but you never sit and type into forms. That's what
+lets an exhausted caregiver with their hands full actually keep the record
+current, and it opens the app to caregivers who are older, less comfortable with
+technology, or not confident typing. **You just talk.**
+
 ## Responsible AI, by design
 
 Holdclose is built to the standard a family deserves, and its guardrails are
