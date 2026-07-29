@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../config/build_info.dart';
 import '../../models/settings.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/link_launcher_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/data_exporter.dart';
 import '../../services/forum_api_client.dart' show forumBackendConfigured;
@@ -1185,11 +1186,23 @@ class _AccountSection extends ConsumerWidget {
 // About (BUILD_SPEC.md §5.10)
 // ---------------------------------------------------------------------------
 
-class _AboutSection extends StatelessWidget {
+class _AboutSection extends ConsumerWidget {
   const _AboutSection();
 
+  /// Keys for the legal rows (Principle 1 — a caregiver must be able to find
+  /// what is collected and who can see it AFTER onboarding, not only on the
+  /// sign-in screen they saw once).
+  static const Key privacyKey = Key('settings-privacy');
+  static const Key termsKey = Key('settings-terms');
+
+  /// The canonical pages, same URLs the sign-in screen links to.
+  static final Uri privacyUrl =
+      Uri.parse('https://junocode.studio/holdclose/privacy');
+  static final Uri termsUrl =
+      Uri.parse('https://junocode.studio/holdclose/terms');
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // Version name + per-build stamp come from the single source of truth
     // (BuildInfo). run_device.sh injects the distinct epoch build number and
     // git/context; a plain `flutter run` shows "0.1.0 (build dev)" with no
@@ -1218,6 +1231,28 @@ class _AboutSection extends StatelessWidget {
                   ),
               ],
             ),
+          ),
+        ),
+        _SectionCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                key: privacyKey,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Privacy policy'),
+                subtitle: const Text('What is collected and who can see it'),
+                trailing: const Icon(Icons.open_in_new, size: 18),
+                onTap: () => ref.read(linkLauncherProvider).launch(privacyUrl),
+              ),
+              ListTile(
+                key: termsKey,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Terms of service'),
+                trailing: const Icon(Icons.open_in_new, size: 18),
+                onTap: () => ref.read(linkLauncherProvider).launch(termsUrl),
+              ),
+            ],
           ),
         ),
       ],
