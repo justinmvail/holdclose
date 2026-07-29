@@ -48,14 +48,43 @@ Future<String?> readImageAsBase64(String path) async {
 /// Find the first `{...}` JSON object in the model's reply text and decode
 /// it to a map. Tolerant of surrounding prose / code fences. Null when no
 /// object is present or it doesn't parse.
+/// Repair ONE specific malformation the open-weight model produces: it puts
+/// the key's closing quote in the wrong place, emitting
+///
+///   "concern: red patch on lower back",
+///   "tasks_done: [applied cream"],
+///
+/// instead of `"concern": "…"` / `"tasks_done": ["…"]`. Measured against the
+/// deployed model over 60 structured-output runs, this tic alone would have
+/// thrown away 12 otherwise-correct answers — the content was right and only
+/// a stray quote lost it.
+///
+/// Deliberately narrow: it only moves a quote in key position, and the result
+/// is still handed to the real JSON decoder, so anything it fails to fix is
+/// rejected exactly as before. It never invents or drops a field.
+String repairModelJson(String source) => source.replaceAllMapped(
+      RegExp(r'"([A-Za-z_][A-Za-z0-9_]*):\s*(\[?)'),
+      (Match m) => '"${m[1]}": ${m[2]!.isEmpty ? '"' : '["'}',
+    );
+
+/// Find the first `{...}` JSON object in the model's reply text and decode
+/// it to a map. Tolerant of surrounding prose / code fences. Null when no
+/// object is present or it doesn't parse.
 Map<String, dynamic>? jsonMapFromText(String text) {
   final int start = text.indexOf('{');
   final int end = text.lastIndexOf('}');
   if (start == -1 || end == -1 || end <= start) return null;
+  final String body = text.substring(start, end + 1);
   try {
-    final dynamic obj = json.decode(text.substring(start, end + 1));
+    final dynamic obj = json.decode(body);
     if (obj is Map<String, dynamic>) return obj;
   } catch (e) {
+    try {
+      final dynamic repaired = json.decode(repairModelJson(body));
+      if (repaired is Map<String, dynamic>) return repaired;
+    } catch (_) {
+      // Beyond the one malformation we know how to fix.
+    }
     // Not valid JSON — fall through to null (manual entry). The model
     // returning prose instead of JSON is EXACTLY the 2026-07-13 scan bug, and
     // it was invisible because this parse failure was silent. Trace it.

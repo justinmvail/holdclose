@@ -9,6 +9,9 @@ declare module 'cloudflare:test' {
     FORUM_JWT_SECRET: string;
     R2_PUBLIC_URL: string;
     GOOGLE_CLIENT_ID: string;
+    // Text model. /extract picks it over the vision model when a caller sends
+    // a prompt with no image (visit-prep, appeal drafts, visit notes).
+    CHAT_MODEL: string;
     // IAP receipt-verification creds (billing routes). Left UNSET in the
     // default test env so the misconfigured-platform case is exercisable; the
     // billing route tests inject a FakeVerifier and never depend on real

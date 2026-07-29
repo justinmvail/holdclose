@@ -32,6 +32,11 @@ export type ExtractBindings = AuthBindings & {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CF_AI_BASE_URL?: string;
   EXTRACT_MODEL?: string;
+  // Text model, used when a caller sends a prompt with NO image (visit-prep
+  // questions, insurance-appeal drafts, ambient visit notes, care-plan
+  // suggestions). Sending those to the vision model would work at best
+  // wastefully; the text model is what they are written for.
+  CHAT_MODEL?: string;
   // Reuses the same abuse stop as chat (per-user daily token quota).
   CHAT_USER_DAILY_TOKENS?: string;
   // Base64 image size ceiling (chars). A ~2048px JPEG the app pre-shrinks
@@ -55,6 +60,8 @@ const DEFAULTS = {
   // acceptance is a legal act for the operating company, so it is NOT
   // automated here. See backend/README.md → "Vision model licence".
   model: '@cf/meta/llama-3.2-11b-vision-instruct',
+  // Text-only fallback for the object-prompt callers (see CHAT_MODEL above).
+  textModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   userDailyTokens: 300_000,
   maxImageChars: 16 * 1024 * 1024, // ~12 MB image → base64 inflates ~33%
 } as const;
@@ -138,12 +145,19 @@ export function extractRouter() {
     } catch {
       return c.json({ error: 'bad_request' }, 400);
     }
-    if (!imageBase64) {
+    // An image is OPTIONAL. This route serves two callers: the scanners, which
+    // send a photo, and the object-prompt features (visit-prep, insurance
+    // appeal, ambient visit note, care-plan suggestions), which send prompt
+    // text alone. Rejecting the text-only shape made all of those silently
+    // no-op against the deployed Worker — the app's transport catches the 400
+    // and returns null, so the feature just quietly produced nothing.
+    if (!imageBase64 && !system && !user) {
       return c.json({ error: 'bad_request' }, 400);
     }
     if (
+      imageBase64 !== undefined &&
       imageBase64.length >
-      num(env.EXTRACT_MAX_IMAGE_CHARS, DEFAULTS.maxImageChars)
+        num(env.EXTRACT_MAX_IMAGE_CHARS, DEFAULTS.maxImageChars)
     ) {
       return c.json({ error: 'image_too_large' }, 413);
     }
@@ -170,8 +184,11 @@ export function extractRouter() {
       return c.json({ error: 'daily_limit' }, 429);
     }
 
-    // --- Call the vision model (non-streaming) ---------------------------
-    const model = env.EXTRACT_MODEL ?? DEFAULTS.model;
+    // --- Call the model (non-streaming) ----------------------------------
+    // Vision model when there's a photo to read, text model when there isn't.
+    const model = imageBase64
+      ? (env.EXTRACT_MODEL ?? DEFAULTS.model)
+      : (env.CHAT_MODEL ?? DEFAULTS.textModel);
     const prompt = [system, user].filter(Boolean).join('\n\n');
 
     let text = '';
@@ -180,13 +197,17 @@ export function extractRouter() {
         // Native binding. The Workers AI vision models take the image as a
         // byte array (not a data: URL — that's the OpenAI-compatible REST
         // shape below), alongside a flat prompt.
-        const bytes = base64ToBytes(imageBase64);
-        if (!bytes) {
-          return c.json({ error: 'bad_request' }, 400);
+        let image: number[] | undefined;
+        if (imageBase64) {
+          const bytes = base64ToBytes(imageBase64);
+          if (!bytes) {
+            return c.json({ error: 'bad_request' }, 400);
+          }
+          image = Array.from(bytes);
         }
         const result = (await env.AI.run(model, {
           prompt,
-          image: Array.from(bytes),
+          ...(image ? { image } : {}),
           max_tokens: 1024,
         })) as { response?: unknown; description?: unknown } | undefined;
         // Instruct-tuned vision models answer under `response`; the plain
@@ -218,13 +239,17 @@ export function extractRouter() {
             messages: [
               {
                 role: 'user',
-                content: [
-                  { type: 'text', text: prompt },
-                  {
-                    type: 'image_url',
-                    image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
-                  },
-                ],
+                content: imageBase64
+                  ? [
+                      { type: 'text', text: prompt },
+                      {
+                        type: 'image_url',
+                        image_url: {
+                          url: `data:image/jpeg;base64,${imageBase64}`,
+                        },
+                      },
+                    ]
+                  : prompt,
               },
             ],
           }),
@@ -242,7 +267,7 @@ export function extractRouter() {
     }
 
     // --- Meter usage (rough estimate; the image ≈ a fixed prompt cost) ---
-    const pt = estimateTokens(prompt) + 512;
+    const pt = estimateTokens(prompt) + (imageBase64 ? 512 : 0);
     const ct = estimateTokens(text);
     c.executionCtx.waitUntil(
       db
