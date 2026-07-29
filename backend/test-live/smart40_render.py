@@ -139,7 +139,7 @@ def main():
     w("## 1. Methodology")
     w("")
     w("**What was tested.** Holdclose's core feature is an AI caregiving assistant")
-    w("grounded in the loved one's real care record (medications, dose windows,")
+    w("grounded in the care recipient's real record (medications, dose windows,")
     w("appointments, routines, health log). This run drives "
       f"**{n_total} real inference cycles** through the *actual production stack* and captures")
     w("every reply verbatim, with a verdict per cycle.")
