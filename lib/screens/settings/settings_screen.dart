@@ -10,6 +10,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/link_launcher_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/data_exporter.dart';
+import '../../services/fhir_exporter.dart';
 import '../../services/forum_api_client.dart' show forumBackendConfigured;
 import '../../theme.dart';
 import '../../widgets/holdclose_switch.dart';
@@ -79,6 +80,8 @@ class SettingsScreen extends ConsumerWidget {
   static const Key dataSectionKey = Key('settings-data-section');
   static const Key backupDataButtonKey = Key('settings-backup-data');
   static const Key restoreDataButtonKey = Key('settings-restore-data');
+  static const Key shareForClinicianButtonKey =
+      Key('settings-share-for-clinician');
   static const Key lovedOnesSectionKey = Key('settings-loved-ones-section');
   static const Key lovedOnesRowKey = Key('settings-loved-ones-row');
 
@@ -905,6 +908,35 @@ class _DataSectionState extends ConsumerState<_DataSection> {
     }
   }
 
+  /// Share the record as a FHIR-shaped bundle a clinician or health system
+  /// can read. Deliberately separate from the backup: the backup is for the
+  /// caregiver's own safekeeping and round-trips back in; this one is for
+  /// handing to someone else and is one-way.
+  Future<void> _shareForClinician() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    try {
+      final ExportSources sources = ref.read(exportSourcesProvider);
+      final DataFileSharer sharer = ref.read(dataFileSharerProvider);
+      await const FhirExporter().exportAndShare(sources, sharer);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Health-record file ready to share.')),
+      );
+    } catch (error, stack) {
+      debugPrint('FHIR export failed: $error\n$stack');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't prepare the file. Please try again."),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _restore() async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -994,6 +1026,26 @@ class _DataSectionState extends ConsumerState<_DataSection> {
                     key: SettingsScreen.restoreDataButtonKey,
                     onPressed: _busy ? null : _restore,
                     child: Text(_busy ? 'Working…' : 'Restore from backup'),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 12, bottom: 2),
+                child: Text(
+                  'Moving to a new doctor or health system? Share the record '
+                  'in a standard health-data format (FHIR) they can read '
+                  'directly, instead of re-entering everything by hand.',
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12, top: 4),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    key: SettingsScreen.shareForClinicianButtonKey,
+                    onPressed: _busy ? null : _shareForClinician,
+                    child: Text(
+                        _busy ? 'Working…' : 'Share with a doctor (FHIR)'),
                   ),
                 ),
               ),

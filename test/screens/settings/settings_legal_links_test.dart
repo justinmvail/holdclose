@@ -46,6 +46,20 @@ Future<void> _tapRow(WidgetTester tester, Key key) async {
 }
 
 void main() {
+  group('Settings → Your data — clinician share', () {
+    testWidgets('the FHIR share row is present and reachable',
+        (WidgetTester tester) async {
+      await _pump(tester);
+      await tester.ensureVisible(
+          find.byKey(const Key('settings-share-for-clinician')));
+      await tester.pump();
+      expect(find.byKey(const Key('settings-share-for-clinician')),
+          findsOneWidget);
+      // The label must name the standard, not imply conformance.
+      expect(find.text('Share with a doctor (FHIR)'), findsOneWidget);
+    });
+  });
+
   group('Settings → About legal links', () {
     testWidgets('privacy row opens the published privacy page',
         (WidgetTester tester) async {
